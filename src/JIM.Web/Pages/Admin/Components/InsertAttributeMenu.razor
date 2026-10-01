@@ -1,0 +1,211 @@
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@using JIM.Web.Models
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Insert attribute" under an Attribute Flow's expression (#1750, mockup B). Lists the attributes the expression can
+   read, grouped by the accessor that reads them (mv["..."] for the Metaverse, cs["..."] for the Connected System), and
+   hands the chosen accessor to OnInsert, which the host passes to ExpressionEditor.InsertAtCursorAsync. The Metaverse
+   group is offered only where a Metaverse-Derived Attribute Flow is possible (an import rule, the feature on); the
+   host decides that by passing MetaverseAttributes or not. Metaverse attributes the save would refuse are listed but
+   disabled, saying why, rather than left out: an attribute that silently is not there reads as a fault.
+   Built on MudPopover rather than MudMenu, for the keyboard: opening puts the caret in the filter; Tab, Shift+Tab and
+   the arrow keys move through the filter and the enabled items on show; Enter in the filter chooses the first one, and
+   Enter or Space on an item chooses it; Escape closes. MudMenu closes on Tab, and its arrow keys kept walking the items
+   a filter had removed, so Enter could insert an attribute that was no longer listed. *@
+
+<div class="d-inline-block">
+    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               EndIcon="@Icons.Material.Filled.ArrowDropDown" Disabled="@Disabled" OnClick="ToggleAsync"
+               aria-haspopup="true" aria-expanded="@(_open ? "true" : "false")"
+               data-testid="jim-insert-attribute-button">Insert attribute</MudButton>
+    <MudPopover Open="@_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Paper="true" Elevation="8">
+        <div @ref="_list" @onkeydown="OnKeyDown" class="jim-insert-attribute-menu" data-testid="jim-insert-attribute-menu">
+            <div class="px-3 pt-2 pb-2">
+                <SearchField @ref="_search" @bind-Value="_filter" Placeholder="Filter attributes" Margin="Margin.Dense" />
+            </div>
+            <div class="jim-insert-attribute-list">
+                @if (_metaverseItems.Count > 0)
+                {
+                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-mv">From the Metaverse · mv[...]</MudText>
+                    @foreach (var item in Filtered(_metaverseItems))
+                    {
+                        @ItemButton(item, $"mv-{item.Id}")
+                    }
+                }
+                @if (_connectedSystemItems.Count > 0)
+                {
+                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-cs">From @(string.IsNullOrWhiteSpace(ConnectedSystemName) ? "the Connected System" : ConnectedSystemName) · cs[...]</MudText>
+                    @foreach (var item in Filtered(_connectedSystemItems))
+                    {
+                        @ItemButton(item, $"cs-{item.Id}")
+                    }
+                }
+                @if (!Filtered(_metaverseItems).Any() && !Filtered(_connectedSystemItems).Any())
+                {
+                    <MudText Class="px-4 py-2 mud-text-secondary">No attributes match "@_filter".</MudText>
+                }
+            </div>
+        </div>
+    </MudPopover>
+    @if (_open)
+    {
+        @* Closes the menu on a click anywhere else. Above the dialog the menu sits in, below the menu itself. *@
+        <MudOverlay Visible="true" OnClick="CloseAsync" DarkBackground="false" LightBackground="false" ZIndex="@OverlayZIndex" />
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The Metaverse Object Type's attributes, offered as <c>mv["..."]</c>. Null or empty leaves the Metaverse group out:
+    /// pass them only on an import rule with Metaverse-Derived Attribute Flows enabled.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<MetaverseAttribute>? MetaverseAttributes { get; set; }
+
+    /// <summary>
+    /// The Connected System Object Type's attributes, offered as <c>cs["..."]</c>. Credential attributes are never
+    /// offered: they travel through JIM's password channel, never through Attribute Flow.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<ConnectedSystemObjectTypeAttribute>? ConnectedSystemAttributes { get; set; }
+
+    /// <summary>
+    /// Names the Connected System group ("From HR · cs[...]").
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// The Metaverse attribute the flow writes, if chosen yet. Reading it would make it depend on itself, so it is
+    /// listed disabled.
+    /// </summary>
+    [Parameter]
+    public int? TargetMetaverseAttributeId { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Raised with the chosen attribute's accessor, for example <c>mv["Account Name"]</c>.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnInsert { get; set; }
+
+    private string? _filter;
+    private SearchField? _search;
+    private ElementReference _list;
+    private bool _open;
+
+    /// <summary>
+    /// The click-away overlay's z-index: above a dialog (MudBlazor's dialog layer is 1400) so a click anywhere in the
+    /// dialog closes the menu, and below the menu's own popover, which MudBlazor lifts above the dialog it opens in.
+    /// </summary>
+    private const int OverlayZIndex = 1401;
+
+    /// <summary>
+    /// How long to let the popover's content render before focusing the filter: it renders through the popover
+    /// provider, after this component's own render.
+    /// </summary>
+    private static readonly TimeSpan FocusAfterOpenDelay = TimeSpan.FromMilliseconds(100);
+
+    private async Task ToggleAsync()
+    {
+        if (_open)
+        {
+            await CloseAsync();
+            return;
+        }
+
+        _open = true;
+        StateHasChanged();
+        await Task.Delay(FocusAfterOpenDelay);
+        if (_search == null)
+            return;
+
+        try
+        {
+            await _search.FocusAsync();
+            await JS.InvokeVoidAsync("jimInterop.listKeyboard", _list, "[data-insert-item]");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nothing to focus.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available (prerendering, or a test renderer); the menu works by pointer alone.
+        }
+    }
+
+    private Task CloseAsync()
+    {
+        _open = false;
+        _filter = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task ChooseAsync(InsertableAttribute item)
+    {
+        await CloseAsync();
+        await OnInsert.InvokeAsync(item.Accessor);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+            await CloseAsync();
+    }
+
+    private List<InsertableAttribute> _metaverseItems = [];
+    private List<InsertableAttribute> _connectedSystemItems = [];
+
+    protected override void OnParametersSet()
+    {
+        _metaverseItems = (MetaverseAttributes ?? [])
+            .OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(candidate => MetaverseItem(candidate))
+            .ToList();
+        _connectedSystemItems = (ConnectedSystemAttributes ?? [])
+            .Where(candidate => !CredentialAttributes.IsCredentialAttribute(candidate.Name))
+            .OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(candidate => new InsertableAttribute(candidate.Id, candidate.Name, Accessor("cs", candidate.Name), null))
+            .ToList();
+    }
+
+    /// <summary>
+    /// A Metaverse attribute's entry, disabled with the reason where the save would refuse an expression reading it.
+    /// Mirrors the save's validator: a Reference input is not supported yet (#1861), and the flow's own target would be
+    /// a loop of one.
+    /// </summary>
+    private InsertableAttribute MetaverseItem(MetaverseAttribute candidate)
+    {
+        var accessor = Accessor("mv", candidate.Name);
+        if (candidate.Type == AttributeDataType.Reference)
+            return new InsertableAttribute(candidate.Id, candidate.Name, accessor, "Reference, not supported yet",
+                "Reference attributes cannot be read by a Derived Attribute Flow yet.");
+
+        return candidate.Id == TargetMetaverseAttributeId
+            ? new InsertableAttribute(candidate.Id, candidate.Name, accessor, "this flow's target",
+                $"Reading {candidate.Name} here would make {candidate.Name} depend on itself.")
+            : new InsertableAttribute(candidate.Id, candidate.Name, accessor, null);
+    }
+
+    private IEnumerable<InsertableAttribute> Filtered(IEnumerable<InsertableAttribute> items) =>
+        string.IsNullOrWhiteSpace(_filter)
+            ? items
+            : items.Where(item => item.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// <c>mv["Name"]</c>, with any backslash or quote in the name escaped so the inserted text is a valid string literal.
+    /// </summary>
+    private static string Accessor(string side, string name) =>
+        $"{side}[\"{name.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"]";
+
+    private RenderFragment ItemButton(InsertableAttribute item, string key) => @<button @key="key" type="button" class="jim-insert-attribute-item" data-insert-item disabled="@(item.DisabledReason != null)" title="@item.DisabledExplanation" @onclick="@(() => ChooseAsync(item))"><span class="d-flex justify-space-between align-center gap-4" data-testid="jim-insert-attribute-item">@if (item.DisabledReason != null){<span>@item.Name <span class="mud-text-secondary">(@item.DisabledReason)</span></span>}else{<span>@item.Name</span> <code class="jim-code-inline">@item.Accessor</code>}</span></button>;
+
+}

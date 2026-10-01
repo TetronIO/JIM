@@ -85,7 +85,7 @@ public partial class ConnectedSystemServer
             Name = string.IsNullOrEmpty(hostRule.Name) ? persistedHost?.Name ?? string.Empty : hostRule.Name,
             Direction = SyncRuleDirection.Import,
             ConnectedSystemId = hostRule.ConnectedSystemId > 0 ? hostRule.ConnectedSystemId : persistedHost?.ConnectedSystemId ?? 0,
-            MetaverseObjectTypeId = hostRule.MetaverseObjectTypeId,
+            MetaverseObjectTypeId = hostRule.ResolveMetaverseObjectTypeId(),
             Enabled = hostRule.Enabled
         };
         proposedHost.AttributeFlowRules.AddRange((persistedHost?.AttributeFlowRules ?? [])
@@ -136,7 +136,7 @@ public partial class ConnectedSystemServer
         if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return null;
 
-        var metaverseObjectTypeId = proposedRule.MetaverseObjectTypeId;
+        var metaverseObjectTypeId = proposedRule.ResolveMetaverseObjectTypeId();
         var persistedRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
         var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true)
             ?? proposedRule.MetaverseObjectType;
@@ -182,7 +182,7 @@ public partial class ConnectedSystemServer
 
         var flagKey = FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key;
         var enabled = await Application.FeatureFlags.IsEnabledAsync(flagKey);
-        var metaverseObjectTypeId = hostRule.MetaverseObjectTypeId;
+        var metaverseObjectTypeId = hostRule.ResolveMetaverseObjectTypeId();
         var persistedRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
 
         if (!enabled)
@@ -227,6 +227,6 @@ public partial class ConnectedSystemServer
     /// Whether a mapping is an import mapping (it targets a Metaverse attribute) whose expression reads <c>mv["..."]</c>.
     /// </summary>
     private static bool ReadsMetaverseAsImportMapping(SyncRuleMapping mapping) =>
-        (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id) != null &&
+        mapping.ResolveTargetMetaverseAttributeId() != null &&
         DerivedFlowGraph.ReadsMetaverse(mapping);
 }

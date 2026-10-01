@@ -6890,8 +6890,8 @@ public partial class ConnectedSystemServer
         if (syncRuleId == 0)
             return; // a rule still being composed has no persisted mappings; the whole-rule save path validates its collection
 
-        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id;
-        var targetConnectedSystemAttributeId = mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id;
+        var targetMetaverseAttributeId = mapping.ResolveTargetMetaverseAttributeId();
+        var targetConnectedSystemAttributeId = mapping.ResolveTargetConnectedSystemAttributeId();
         if (targetMetaverseAttributeId == null && targetConnectedSystemAttributeId == null)
             return; // no target yet; the model's own validation owns that problem
 
@@ -6899,9 +6899,9 @@ public partial class ConnectedSystemServer
         var duplicate = existingMappings.FirstOrDefault(existing =>
             existing.Id != mapping.Id &&
             ((targetMetaverseAttributeId != null &&
-              (existing.TargetMetaverseAttributeId ?? existing.TargetMetaverseAttribute?.Id) == targetMetaverseAttributeId) ||
+              existing.ResolveTargetMetaverseAttributeId() == targetMetaverseAttributeId) ||
              (targetConnectedSystemAttributeId != null &&
-              (existing.TargetConnectedSystemAttributeId ?? existing.TargetConnectedSystemAttribute?.Id) == targetConnectedSystemAttributeId)));
+              existing.ResolveTargetConnectedSystemAttributeId() == targetConnectedSystemAttributeId)));
         if (duplicate == null)
             return;
 
@@ -6928,8 +6928,8 @@ public partial class ConnectedSystemServer
             .Select(mapping => new
             {
                 Mapping = mapping,
-                MetaverseTargetId = mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id,
-                ConnectedSystemTargetId = mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id
+                MetaverseTargetId = mapping.ResolveTargetMetaverseAttributeId(),
+                ConnectedSystemTargetId = mapping.ResolveTargetConnectedSystemAttributeId()
             })
             .Where(candidate => candidate.MetaverseTargetId != null || candidate.ConnectedSystemTargetId != null)
             .GroupBy(candidate => (candidate.MetaverseTargetId, candidate.ConnectedSystemTargetId))
@@ -9321,13 +9321,10 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// The Metaverse attribute a mapping targets, read from the navigation property in preference to the scalar FK.
-    /// A whole-rule save arrives straight from the portal's editor, which binds the target to the navigation
-    /// (<see cref="SyncRuleMapping.TargetMetaverseAttribute"/>); EF only fixes the FK up at SaveChanges, so before
-    /// the write the scalar is still null on a new mapping and stale on a retargeted one. Null for export mappings.
+    /// The Metaverse attribute a mapping targets, read from the navigation property in preference to the scalar FK
+    /// (<see cref="SyncRuleMapping.ResolveTargetMetaverseAttributeId"/>, which says why). Null for export mappings.
     /// </summary>
-    private static int? GetTargetMetaverseAttributeId(SyncRuleMapping mapping) =>
-        mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
+    private static int? GetTargetMetaverseAttributeId(SyncRuleMapping mapping) => mapping.ResolveTargetMetaverseAttributeId();
 
     /// <summary>
     /// Validates the staged mapping removal choices a whole-rule save carries (#1537), refusing shapes that

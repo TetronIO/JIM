@@ -1,0 +1,127 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What the Attribute Flow dialog shows from its live analysis (#1750, mockups B and C), all from one
+   DerivedFlowAnalysis so the three can never disagree: the read-only Derived Attribute Flow panel (what the flow reads,
+   the step it runs in and the chain of steps that leads to it), the non-repeatable function warning, and the error the
+   save would refuse with. Nothing is shown for an ordinary flow, or before the first analysis has answered. *@
+
+@if (Analysis is { Status: DerivedFlowAnalysisStatus.Derived } derived)
+{
+    <MudPaper Outlined="true" Class="pa-3 mt-3" data-testid="jim-derived-flow-panel">
+        <div class="d-flex align-center flex-wrap gap-2">
+            <MudText Typo="Typo.subtitle2">Derived Attribute Flow</MudText>
+            @if (derived.Step is { } step)
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">
+                    <span data-testid="jim-derived-flow-panel-step">step @step of @derived.StepCount</span>
+                </MudChip>
+            }
+        </div>
+
+        <div class="d-flex align-center flex-wrap gap-1 mt-2">
+            <MudText>Reads</MudText>
+            @foreach (var input in derived.MetaverseInputs)
+            {
+                <AttributeChip @key="input" Kind="AttributeChipKind.Metaverse" Name="@input" />
+            }
+            <MudText>@ReadsSentenceEnding(derived)</MudText>
+        </div>
+
+        @if (derived.Step != null && derived.Steps.Count > 0)
+        {
+            <div class="d-flex align-center flex-wrap gap-1 mt-2">
+                @for (var i = 0; i < derived.Steps.Count; i++)
+                {
+                    var chainStep = derived.Steps[i];
+                    var isCurrent = chainStep.Step == derived.Step;
+                    var label = $"{chainStep.Step} {DerivedFlowWording.JoinNames(chainStep.AttributeNames)}";
+                    @if (i > 0)
+                    {
+                        <MudText Class="mud-text-secondary" aria-hidden="true">→</MudText>
+                    }
+                    <MudChip @key="chainStep.Step" T="string" Variant="Variant.Outlined" Color="@(isCurrent ? Color.Secondary : Color.Default)">
+                        <span data-testid="jim-derived-flow-chain-step">
+                            @if (isCurrent)
+                            {
+                                <span data-testid="jim-derived-flow-chain-current">@label</span>
+                            }
+                            else
+                            {
+                                @label
+                            }
+                        </span>
+                    </MudChip>
+                }
+            </div>
+        }
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@SequencingHelper(derived)</MudText>
+    </MudPaper>
+
+    @if (derived.Warnings.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-3">
+            @foreach (var warning in derived.Warnings)
+            {
+                <MudText @key="warning">@warning</MudText>
+            }
+            <MudText Class="mt-1">You can still save it.</MudText>
+        </MudAlert>
+    }
+
+    @if (derived.Errors.Count > 0)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">
+            @if (derived.Cycle is { } cycle)
+            {
+                <MudText>
+                    <strong>This Attribute Flow cannot be saved because it creates a loop.</strong>
+                    Each attribute below is worked out from the one before it, so none can be calculated first:
+                </MudText>
+                <ul class="mt-1 mb-1">
+                    @foreach (var link in DerivedFlowWording.CycleLinksInReadingOrder(cycle))
+                    {
+                        <li @key="link.MetaverseAttributeName">@DerivedFlowWording.DescribeCycleLink(link)</li>
+                    }
+                </ul>
+                <MudText>Change one of these expressions so it stops reading the next attribute in the loop.</MudText>
+            }
+            @foreach (var error in derived.Errors.Where(error => derived.Cycle == null || error != derived.Cycle.Message))
+            {
+                <MudText @key="error" data-testid="jim-derived-flow-error">@error</MudText>
+            }
+        </MudAlert>
+    }
+}
+
+@code {
+    /// <summary>
+    /// The latest analysis of the flow being edited, from <c>ConnectedSystemServer.AnalyseDerivedFlowAsync</c>; null
+    /// until the first one answers.
+    /// </summary>
+    [Parameter]
+    public DerivedFlowAnalysis? Analysis { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System whose synchronisation evaluates the flow (the rule's own).
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    private string PossessiveConnectedSystemName =>
+        string.IsNullOrWhiteSpace(ConnectedSystemName) ? "this Connected System's" : $"{ConnectedSystemName}'s";
+
+    private string SequencingHelper(DerivedFlowAnalysis derived) =>
+        $"When another Connected System changes {DerivedFlowWording.JoinNames(derived.MetaverseInputs, "or")}, JIM marks this " +
+        $"object so {PossessiveConnectedSystemName} next synchronisation picks it up. Synchronise the source first for the " +
+        "value to be right in the same cycle.";
+
+    private string ReadsSentenceEnding(DerivedFlowAnalysis derived) => derived.Step == null
+        ? "from the Metaverse."
+        : $"from the Metaverse. JIM runs it after {DerivedFlowWording.ResolvedPhrase(derived.MetaverseInputs)}, in " +
+          $"{PossessiveConnectedSystemName} own synchronisation.";
+}

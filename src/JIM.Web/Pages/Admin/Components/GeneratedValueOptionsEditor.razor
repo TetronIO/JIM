@@ -13,10 +13,17 @@
 
 @if (Mapping.Generation is { } generation)
 {
-    <ExpressionEditor Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
+    <ExpressionEditor @ref="_baseExpressionEditor" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
         Label="Base expression" Disabled="IsNumberTarget"
         Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
         Class="mt-5" HelperText="@BaseExpressionHelperText" />
+
+    @* The host's tools for the base expression (the Insert attribute menu and the derived flow analysis, #1750), handed
+       this editor's own insert-at-caret so they never reach into it. *@
+    @if (!IsNumberTarget && BaseExpressionTools != null)
+    {
+        @BaseExpressionTools(InsertIntoBaseExpressionAsync)
+    }
 
     @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
@@ -311,6 +318,22 @@
 
     [Parameter]
     public EventCallback OnChanged { get; set; }
+
+    /// <summary>
+    /// Rendered directly under the base expression (not for a Number target, which has none), given a function that
+    /// inserts text at the base expression's caret: the host's Insert attribute menu and derived flow analysis.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<Func<string, Task>>? BaseExpressionTools { get; set; }
+
+    private ExpressionEditor? _baseExpressionEditor;
+
+    /// <summary>
+    /// Inserts <paramref name="text"/> at the base expression's caret; the editor raises its change, which adds the
+    /// base source to the mapping and notifies the host exactly as typing does.
+    /// </summary>
+    private Task InsertIntoBaseExpressionAsync(string text) =>
+        _baseExpressionEditor?.InsertAtCursorAsync(text) ?? Task.CompletedTask;
 
     private IReadOnlyDictionary<string, string?> _sampleValues = new Dictionary<string, string?>();
 

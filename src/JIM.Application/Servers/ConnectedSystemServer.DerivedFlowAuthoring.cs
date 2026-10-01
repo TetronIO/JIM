@@ -42,7 +42,7 @@ public partial class ConnectedSystemServer
         if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return DerivedFlowAnalysis.NotApplicable;
 
-        var metaverseObjectTypeId = hostRule.MetaverseObjectTypeId;
+        var metaverseObjectTypeId = hostRule.ResolveMetaverseObjectTypeId();
         var (persistedRules, types) = await LoadImportRulesAndTypeAsync(metaverseObjectTypeId, hostRule.MetaverseObjectType);
         var rulesAfter = SubstituteMapping(persistedRules, hostRule, proposedMapping);
         var graph = new DerivedFlowGraph(rulesAfter, types, DerivedFlowGraphScope.AllMappings);
@@ -71,8 +71,39 @@ public partial class ConnectedSystemServer
             StepCount = stepCount,
             Steps = BuildStepChain(graph, rulesAfter, flow),
             Errors = validation.Errors,
+            Cycle = DescribeCycleLinks(graph, proposedMapping, validation.Errors),
             Warnings = validation.Warnings.Select(warning => warning.Message).ToList()
         };
+    }
+
+    /// <summary>
+    /// The loop the analysed flow closes, link by link from the flow itself, for the portal to list. Built from the
+    /// same cycle and in the same order as the validator's message (which starts from the proposed mapping), and
+    /// returned only when that message is among the errors, so the links can never describe a loop the save would not
+    /// refuse. Null for a knot of several interlocking loops, whose extra members only the message names.
+    /// </summary>
+    private static DerivedFlowAnalysisCycle? DescribeCycleLinks(DerivedFlowGraph graph, SyncRuleMapping analysedMapping, IReadOnlyList<string> errors)
+    {
+        var cycle = graph.Cycles.FirstOrDefault(candidate => candidate.Involves(analysedMapping));
+        if (cycle == null || cycle.AdditionalMembers.Count > 0)
+            return null;
+
+        var startIndex = cycle.Members.ToList().FindIndex(member => ReferenceEquals(member.Mapping, analysedMapping));
+        if (startIndex < 0)
+            return null;
+
+        var message = "Saving would create a dependency cycle: " + DerivedFlowValidator.DescribeCyclePath(cycle, startIndex);
+        if (!errors.Contains(message))
+            return null;
+
+        var links = cycle.Members.Skip(startIndex).Concat(cycle.Members.Take(startIndex))
+            .Select(member => new DerivedFlowAnalysisCycleLink(
+                member.MetaverseAttributeName,
+                member.ReadsMetaverseAttributeName,
+                member.SyncRule.Name,
+                ReferenceEquals(member.Mapping, analysedMapping)))
+            .ToList();
+        return new DerivedFlowAnalysisCycle(message, links);
     }
 
     /// <summary>
@@ -97,7 +128,7 @@ public partial class ConnectedSystemServer
         if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return new Dictionary<int, DerivedFlowStepInfo>();
 
-        var metaverseObjectTypeId = syncRule.MetaverseObjectTypeId;
+        var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
         var (persistedRules, types) = await LoadImportRulesAndTypeAsync(metaverseObjectTypeId, syncRule.MetaverseObjectType);
         // The caller's own instances stand in for the persisted rule, so each mapping is found in the graph by
         // reference, whatever its loaded graph looks like.
@@ -129,6 +160,105 @@ public partial class ConnectedSystemServer
         return syncRule == null
             ? new Dictionary<int, DerivedFlowStepInfo>()
             : await GetDerivedFlowStepsAsync(syncRule);
+    }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) that removing <paramref name="mapping"/> from the rule as the
+    /// editor holds it would leave with a missing input, for the portal to confirm before it stages the removal. Read
+    /// only: the staged rule is compared with and without the mapping, every other import rule of the Metaverse Object
+    /// Type as persisted. Inputs an earlier staged change already took away are not reported again.
+    /// </summary>
+    /// <param name="stagedRule">The rule as the editor holds it, with every change staged so far, the mapping included.</param>
+    /// <param name="mapping">The mapping about to be removed, by reference.</param>
+    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfMappingRemovalAsync(SyncRule stagedRule, SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(stagedRule);
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        return DetectDependentDerivedFlowsOfStagedChangeAsync(
+            stagedRule,
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules),
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules.Where(candidate => !ReferenceEquals(candidate, mapping))),
+            $"Removing an Attribute Flow from Synchronisation Rule {stagedRule.Id}");
+    }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) that an edit to one mapping would leave with a missing
+    /// input (disabling it, or changing what it reads or writes), for the portal to confirm before it applies the edit
+    /// to the rule it holds. Read only.
+    /// </summary>
+    /// <param name="stagedRule">The rule as the editor holds it, holding <paramref name="editedMapping"/>.</param>
+    /// <param name="mappingAsOpened">A copy of the mapping as it stood when the editor opened it.</param>
+    /// <param name="editedMapping">The mapping as edited, by reference among the staged rule's mappings.</param>
+    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfMappingEditAsync(SyncRule stagedRule, SyncRuleMapping mappingAsOpened, SyncRuleMapping editedMapping)
+    {
+        ArgumentNullException.ThrowIfNull(stagedRule);
+        ArgumentNullException.ThrowIfNull(mappingAsOpened);
+        ArgumentNullException.ThrowIfNull(editedMapping);
+
+        return DetectDependentDerivedFlowsOfStagedChangeAsync(
+            stagedRule,
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules.Select(candidate => ReferenceEquals(candidate, editedMapping) ? mappingAsOpened : candidate)),
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules),
+            $"Editing an Attribute Flow on Synchronisation Rule {stagedRule.Id}");
+    }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) that disabling the whole rule as the editor holds it would
+    /// leave with a missing input, for the portal to confirm before it saves the rule disabled. Only the disable is
+    /// judged: the staged rule is compared enabled and disabled, so changes staged (and confirmed) earlier are not
+    /// reported again. Read only.
+    /// </summary>
+    /// <param name="stagedRule">The rule as the editor holds it.</param>
+    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfRuleDisableAsync(SyncRule stagedRule)
+    {
+        ArgumentNullException.ThrowIfNull(stagedRule);
+
+        return DetectDependentDerivedFlowsOfStagedChangeAsync(
+            stagedRule,
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules, enabled: true),
+            CopyRuleShell(stagedRule, stagedRule.AttributeFlowRules, enabled: false),
+            $"Disabling Synchronisation Rule {stagedRule.Id}");
+    }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) that deleting a saved rule would leave with a missing input,
+    /// exactly as the deletion itself reports them, for the portal to confirm before it deletes. Read only.
+    /// </summary>
+    /// <param name="syncRule">The rule to be deleted.</param>
+    /// <returns>Nothing, and nothing read, when the feature is off, the rule is an export rule or it is not saved.</returns>
+    public async Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfRuleDeletionAsync(SyncRule syncRule)
+    {
+        ArgumentNullException.ThrowIfNull(syncRule);
+
+        if (syncRule.Id == 0 || syncRule.Direction != SyncRuleDirection.Import)
+            return [];
+
+        return await DetectDependentDerivedFlowsAsync(
+            () => Task.FromResult<int?>(syncRule.ResolveMetaverseObjectTypeId()),
+            rules => WithoutRule(rules, syncRule.Id),
+            $"Deleting Synchronisation Rule {syncRule.Id}");
+    }
+
+    /// <summary>
+    /// The shared core of the staged-change checks: every import rule of the Metaverse Object Type as persisted, with
+    /// the rule replaced by <paramref name="ruleBefore"/> on one side and <paramref name="ruleAfter"/> on the other, so
+    /// only what the change itself takes away is reported.
+    /// </summary>
+    private async Task<List<DependentDerivedFlow>> DetectDependentDerivedFlowsOfStagedChangeAsync(
+        SyncRule stagedRule, SyncRule ruleBefore, SyncRule ruleAfter, string changeDescription)
+    {
+        if (stagedRule.Direction != SyncRuleDirection.Import)
+            return [];
+
+        return await DetectDependentDerivedFlowsAsync(
+            () => Task.FromResult<int?>(stagedRule.ResolveMetaverseObjectTypeId()),
+            rules => SubstituteWholeRule(rules, ruleAfter),
+            changeDescription,
+            rules => SubstituteWholeRule(rules, ruleBefore));
     }
 
     /// <summary>
@@ -167,7 +297,7 @@ public partial class ConnectedSystemServer
         var metaverseObjectTypeIds = systemRules
             .Where(rule => rule.Direction == SyncRuleDirection.Import &&
                 (invalidatedRuleIds.Contains(rule.Id) || rule.AttributeFlowRules.Any(mapping => invalidatedMappingIds.Contains(mapping.Id))))
-            .Select(rule => rule.MetaverseObjectTypeId)
+            .Select(rule => rule.ResolveMetaverseObjectTypeId())
             .Distinct()
             .OrderBy(id => id)
             .ToList();
@@ -229,7 +359,7 @@ public partial class ConnectedSystemServer
             return;
 
         syncRule.SaveDependentDerivedFlows.AddRange(await DetectDependentDerivedFlowsAsync(
-            () => Task.FromResult<int?>(syncRule.MetaverseObjectTypeId),
+            () => Task.FromResult<int?>(syncRule.ResolveMetaverseObjectTypeId()),
             rules => SubstituteWholeRule(rules, syncRule),
             $"Saving Synchronisation Rule {syncRule.Id}"));
     }
@@ -245,18 +375,23 @@ public partial class ConnectedSystemServer
     /// change no import rule is involved in. Called only with the feature on.</param>
     /// <param name="applyChange">Builds the rules as they will stand after the change. Must not modify what it is given.</param>
     /// <param name="changeDescription">Names the change in the log summary.</param>
+    /// <param name="applyBaseline">Builds the rules the change is measured from, when that is not the persisted state
+    /// (a change the portal's editor is about to stage on top of others it already holds). Must not modify what it is
+    /// given; null measures from the rules as persisted.</param>
     private async Task<List<DependentDerivedFlow>> DetectDependentDerivedFlowsAsync(
         Func<Task<int?>> resolveMetaverseObjectTypeId,
         Func<List<SyncRule>, List<SyncRule>> applyChange,
-        string changeDescription)
+        string changeDescription,
+        Func<List<SyncRule>, List<SyncRule>>? applyBaseline = null)
     {
         if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return [];
         if (await resolveMetaverseObjectTypeId() is not { } metaverseObjectTypeId)
             return [];
 
-        var before = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
-        var after = applyChange(before);
+        var persisted = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
+        var before = applyBaseline?.Invoke(persisted) ?? persisted;
+        var after = applyChange(persisted);
 
         // With no derived flow on either side there is nothing to starve, so the Metaverse Object Type is not read.
         if (!before.Concat(after).SelectMany(rule => rule.AttributeFlowRules).Any(ReadsMetaverseAsImportMapping))
@@ -323,7 +458,7 @@ public partial class ConnectedSystemServer
     {
         var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         var rule = mapping.SyncRule ?? (syncRuleId > 0 ? await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId) : null);
-        return rule?.Direction == SyncRuleDirection.Import ? rule.MetaverseObjectTypeId : null;
+        return rule?.Direction == SyncRuleDirection.Import ? rule.ResolveMetaverseObjectTypeId() : null;
     }
 
     /// <summary>
@@ -364,7 +499,7 @@ public partial class ConnectedSystemServer
             Direction = rule.Direction,
             ConnectedSystemId = rule.ConnectedSystemId,
             ConnectedSystem = rule.ConnectedSystem,
-            MetaverseObjectTypeId = rule.MetaverseObjectTypeId,
+            MetaverseObjectTypeId = rule.ResolveMetaverseObjectTypeId(),
             MetaverseObjectType = rule.MetaverseObjectType,
             Enabled = enabled ?? rule.Enabled
         };
@@ -380,7 +515,7 @@ public partial class ConnectedSystemServer
     {
         var metaverseObjectTypeId = flow.MetaverseObjectTypeId;
         var derivedContributorsByTarget = rules
-            .Where(rule => rule.Direction == SyncRuleDirection.Import && rule.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .Where(rule => rule.Direction == SyncRuleDirection.Import && rule.ResolveMetaverseObjectTypeId() == metaverseObjectTypeId)
             .SelectMany(rule => rule.AttributeFlowRules)
             .Select(graph.GetDerivedFlow)
             .Where(contributor => contributor != null)

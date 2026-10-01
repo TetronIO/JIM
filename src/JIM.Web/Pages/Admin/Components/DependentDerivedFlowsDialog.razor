@@ -1,0 +1,104 @@
+@using JIM.Models.Logic.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The confirmation shown before a change leaves Metaverse-Derived Attribute Flows without an input (#1750, FR 3,
+   mockup D): removing or editing an Attribute Flow, or disabling or deleting a Synchronisation Rule. It appears only
+   when an attribute loses its LAST enabled contributor, which is what the Application layer's dependant checks
+   report; with none, the caller's ordinary confirmation runs unchanged. Includes dependants reached indirectly and
+   those on other Connected Systems. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Class="mr-2" />
+            @Title
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText data-testid="jim-dependent-derived-flows-intro">@DerivedFlowWording.DependantsIntro(Change, Dependants)</MudText>
+        <MudSimpleTable Outlined="true" Class="mt-3">
+            <thead>
+                <tr>
+                    <th>Derived Attribute Flow</th>
+                    <th>Synchronisation Rule</th>
+                    <th>Reads</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var dependant in Dependants)
+                {
+                    <tr @key="dependant.MappingId" data-testid="jim-dependent-derived-flow-row">
+                        <td>→ @dependant.TargetMetaverseAttributeName</td>
+                        <td>@dependant.SyncRuleName</td>
+                        <td>@string.Join(", ", dependant.MissingInputs.Select(DerivedFlowWording.DescribeReads))</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+            Each one then follows its Missing Input Behaviour at the next synchronisation. Values already on Metaverse Objects stay until then.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" data-testid="jim-dependent-derived-flows-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
+                   data-testid="jim-dependent-derived-flows-confirm">@ConfirmText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The question the dialog asks, for example "Remove Attribute Flow?".
+    /// </summary>
+    [Parameter]
+    public string Title { get; set; } = null!;
+
+    /// <summary>
+    /// The change, as the rest of a sentence after "After you", for example "remove the Attribute Flow to Account
+    /// Name" or "disable this Synchronisation Rule".
+    /// </summary>
+    [Parameter]
+    public string Change { get; set; } = null!;
+
+    /// <summary>
+    /// The derived flows the change would leave with a missing input.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<DependentDerivedFlow> Dependants { get; set; } = [];
+
+    /// <summary>
+    /// The action the confirm button names: Remove, Disable, Save or Delete.
+    /// </summary>
+    [Parameter]
+    public string ConfirmText { get; set; } = null!;
+
+    /// <summary>
+    /// Asks the administrator to confirm a change that leaves <paramref name="dependants"/> without an input.
+    /// </summary>
+    /// <returns>True to go ahead, false when the administrator cancelled.</returns>
+    public static async Task<bool> ConfirmAsync(IDialogService dialogService, string title, string change,
+        IReadOnlyList<DependentDerivedFlow> dependants, string confirmText)
+    {
+        var parameters = new DialogParameters<DependentDerivedFlowsDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Change, change },
+            { x => x.Dependants, dependants },
+            { x => x.ConfirmText, confirmText }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<DependentDerivedFlowsDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+}

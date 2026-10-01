@@ -164,10 +164,10 @@ public static class DerivedFlowDependentDetector
         {
             foreach (var mapping in rule.AttributeFlowRules.Where(mapping => mapping.Enabled))
             {
-                if ((mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id) is not { } targetId)
+                if (mapping.ResolveTargetMetaverseAttributeId() is not { } targetId)
                     continue;
 
-                var key = (rule.MetaverseObjectTypeId, targetId);
+                var key = (rule.ResolveMetaverseObjectTypeId(), targetId);
                 if (!contributors.TryGetValue(key, out var list))
                 {
                     list = [];

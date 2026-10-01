@@ -94,7 +94,7 @@ else if (_syncRule != null)
         }
 
         <MudTabPanel Text="Attribute Flow">
-            <SyncRuleAttributeFlowTab SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
+            <SyncRuleAttributeFlowTab @ref="_attributeFlowTab" SyncRule="_syncRule" MappingRemovalChoices="_mappingRemovalChoices" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
         @if (_syncRule.Id > 0)
@@ -357,6 +357,19 @@ else if (_syncRule != null)
     // update would silently persist nothing (e.g. toggling Enabled was lost this way).
     private JimApplication? _jim;
 
+    /// <summary>
+    /// The Attribute Flow tab while it is the tab on show (MudTabs renders only the active panel), so a save can
+    /// refresh its Derived chips: a flow added this session has no id, and so no step, until the save gives it one.
+    /// </summary>
+    private SyncRuleAttributeFlowTab? _attributeFlowTab;
+
+    /// <summary>
+    /// Whether the rule was enabled as loaded or last saved. Disabling a saved import rule can leave
+    /// Metaverse-Derived Attribute Flows without an input (#1750, FR 3); this tells a save that turns it off from one
+    /// that merely keeps it off.
+    /// </summary>
+    private bool _persistedEnabled;
+
     // Both /admin/sync-rules/new and /admin/sync-rules/{id} resolve to this component, so creating a rule and
     // navigating from /new to /{id} reuses the instance (OnInitializedAsync does not run again). Load from
     // OnParametersSetAsync keyed on the route id so the page re-loads cleanly into edit mode after a create.
@@ -402,6 +415,7 @@ else if (_syncRule != null)
             }
 
             _syncRuleNameOrCreate = _syncRule.Name;
+            _persistedEnabled = _syncRule.Enabled;
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
             _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
 
@@ -799,6 +813,13 @@ else if (_syncRule != null)
         // are we transitioning from new to existing?
         var isSyncRuleNew = _syncRule.Id == 0;
 
+        // FR 3 (#1750): turning a saved import rule off can take away the last contributor of an attribute
+        // Metaverse-Derived Attribute Flows read. Name them first; with none, the save goes on exactly as before.
+        if (!isSyncRuleNew && _persistedEnabled && !_syncRule.Enabled && await ConfirmDependantsAsync(
+                jim => jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDisableAsync(_syncRule),
+                "Disable Synchronisation Rule?", "disable this Synchronisation Rule", "Disable") == false)
+            return;
+
         // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
         // are saving it. A cosmetic edit (a rename, a description) shows nothing at all; cancelling aborts the save.
         // Where a destructive-toggle preview has run and still describes the form, its counts and verdict are stated
@@ -862,8 +883,11 @@ else if (_syncRule != null)
                 // the same tracked rule stays on the page, so what was just saved is the new baseline the preview
                 // buttons are offered against; a create re-loads the rule by its new URL and captures it there.
                 _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
+                _persistedEnabled = _syncRule.Enabled;
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
+                if (_attributeFlowTab != null)
+                    await _attributeFlowTab.RefreshDerivedFlowStepsAsync();
                 break;
             case false:
                 Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
@@ -905,8 +929,17 @@ else if (_syncRule != null)
         // administrator sees: a plain message box when there is nothing at stake beyond configuration, or the
         // recall-or-keep choice when there is (#1537). Count queries only; nothing is materialised.
         var summary = await _jim.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(_syncRule.Id);
+
+        // FR 3 (#1750): deleting an import rule can take away the last contributor of an attribute Metaverse-Derived
+        // Attribute Flows read. Name them first; that confirmation stands in for the plain one below.
+        var dependantsConfirmed = await ConfirmDependantsAsync(
+            jim => jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDeletionAsync(_syncRule),
+            "Delete Synchronisation Rule?", "delete this Synchronisation Rule", "Delete");
+        if (dependantsConfirmed == false)
+            return;
+
         var keepContributedValues = false;
-        if (summary.TotalValues == 0)
+        if (summary.TotalValues == 0 && dependantsConfirmed == null)
         {
             var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
             if (!confirmationResult.HasValue || !confirmationResult.Value)
@@ -947,6 +980,24 @@ else if (_syncRule != null)
         }
 
         NavManager.NavigateTo("/admin/sync-rules");
+    }
+
+    /// <summary>
+    /// Asks before a change to the whole rule that leaves Metaverse-Derived Attribute Flows without an input (#1750,
+    /// FR 3). The dependants are read on a context of their own, so nothing touches the tracked rule being edited.
+    /// </summary>
+    /// <returns>Null when there are no dependants (nothing was asked), otherwise whether the administrator went ahead.</returns>
+    private async Task<bool?> ConfirmDependantsAsync(
+        Func<JimApplication, Task<List<JIM.Models.Logic.DTOs.DependentDerivedFlow>>> detect, string title, string change, string confirmText)
+    {
+        List<JIM.Models.Logic.DTOs.DependentDerivedFlow> dependants;
+        using (var jim = JimFactory.Create())
+            dependants = await detect(jim);
+
+        if (dependants.Count == 0)
+            return null;
+
+        return await DependentDerivedFlowsDialog.ConfirmAsync(DialogService, title, change, dependants, confirmText);
     }
 
     public void Dispose()

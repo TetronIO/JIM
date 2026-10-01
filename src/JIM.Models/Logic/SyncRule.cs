@@ -80,6 +80,14 @@ public class SyncRule : IAuditable, IValidated
     /// </summary>
     public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
     public int MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object Type this rule flows to, as it stands now: the navigation when it is loaded, otherwise the
+    /// foreign key. A rule being created in the portal has the type chosen on the navigation, and the scalar stays 0
+    /// until the save copies it across, after the checks that run before the write (#1750). The rule-level sibling of
+    /// <see cref="SyncRuleMapping.ResolveTargetMetaverseAttributeId"/>.
+    /// </summary>
+    public int ResolveMetaverseObjectTypeId() => MetaverseObjectType?.Id ?? MetaverseObjectTypeId;
         
     /// <summary>
     /// Which direction should the data flow? Either in to JIM, or out from it.

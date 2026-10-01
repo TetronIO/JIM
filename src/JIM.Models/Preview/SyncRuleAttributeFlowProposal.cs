@@ -109,19 +109,21 @@ public record SyncRuleMappingProposal(
     /// This mapping as it currently stands on a Synchronisation Rule.
     /// </summary>
     /// <remarks>
-    /// Each attribute id falls back to its navigation property's id, because the editors build an UNSAVED mapping
-    /// when an administrator adds one: the navigation is set and the foreign key stays unassigned until the rule is
-    /// saved. Reading the key alone made a mapping the editor plainly shows invisible to the proposal, so a preview
-    /// of a just-added mapping refused it as naming no target attribute and, in the same breath, reported its
-    /// attribute as no longer written (#1450). A saved mapping carries both and is unaffected.
+    /// Each attribute id is read through <see cref="SyncRuleMapping.ResolveTargetMetaverseAttributeId"/> and its
+    /// Connected System sibling, which prefer the navigation property, because the editors bind the target to it. An
+    /// UNSAVED mapping has the navigation set and the foreign key unassigned until the rule is saved: reading the key
+    /// alone made a mapping the editor plainly shows invisible to the proposal, so a preview of a just-added mapping
+    /// refused it as naming no target attribute and, in the same breath, reported its attribute as no longer written
+    /// (#1450). A RETARGETED saved mapping still carries its old foreign key until the save, so reading the key first
+    /// previewed the target it was moving away from (#1750).
     /// </remarks>
     public static SyncRuleMappingProposal FromMapping(SyncRuleMapping mapping)
     {
         ArgumentNullException.ThrowIfNull(mapping);
 
         return new SyncRuleMappingProposal(
-            mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id,
-            mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id,
+            mapping.ResolveTargetMetaverseAttributeId(),
+            mapping.ResolveTargetConnectedSystemAttributeId(),
             [.. mapping.Sources.OrderBy(source => source.Order).Select(SyncRuleMappingSourceProposal.FromSource)],
             mapping.InboundValueProcessing,
             mapping.CaseNormalisation,

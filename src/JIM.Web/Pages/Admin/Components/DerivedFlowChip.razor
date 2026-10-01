@@ -1,0 +1,29 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Derived modifier chip (#1750, mockup A): an Attribute Flow whose expression reads the Metaverse is derived, and
+   the chip says so beside Disabled and Initial Export Only, with the step it runs in. "Derived" is a property of the
+   flow, not a kind of source, so the Type column stays Expression or Generated. Secondary, because every other
+   colour is taken on the row: Disabled is Warning, Initial Export Only Info, and the Type chips Info, Tertiary,
+   Warning and Primary. The tooltip names what the flow reads, so nobody has to open the dialog to learn the order. *@
+
+<MudTooltip Arrow="true" Placement="Placement.Top">
+    <TooltipContent><TooltipText Text="@DerivedFlowWording.ChipTooltip(StepInfo)" /></TooltipContent>
+    <ChildContent>
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">
+            <span data-testid="jim-derived-flow-chip">@DerivedFlowWording.ChipLabel(StepInfo)</span>
+        </MudChip>
+    </ChildContent>
+</MudTooltip>
+
+@code {
+    /// <summary>
+    /// Where the flow sits in its Metaverse Object Type's evaluation order, from
+    /// <c>ConnectedSystemServer.GetDerivedFlowStepsAsync</c>.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public DerivedFlowStepInfo StepInfo { get; set; } = null!;
+}

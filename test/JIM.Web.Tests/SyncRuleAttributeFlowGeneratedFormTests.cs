@@ -7,6 +7,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -42,6 +43,12 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         // generated form itself, so run with it enabled (test/CLAUDE.md > "Tests run with flags on"). The gate's
         // own visibility behaviour is covered by SyncRuleAttributeFlowTabFeatureFlagTests.
         repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // With every flag on, the dialog's live Metaverse-Derived Attribute Flow analysis (#1750) reads the Metaverse
+        // Object Type's import rules once a generated import mapping has a target; there are none here.
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRule>());
+        repo.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+        repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
         _jim = new JimApplication(repo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
