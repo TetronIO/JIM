@@ -14,7 +14,7 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// Value provenance (#399): where a Metaverse Object attribute value came from, why it won over the other
-/// candidates, and its history. See <c>engineering/plans/doing/SYNC_RULE_CAUSALITY_TRACKING.md</c> for the agreed
+/// candidates, and its history. See <c>engineering/plans/done/SYNC_RULE_CAUSALITY_TRACKING.md</c> for the agreed
 /// design. Kept as its own partial file (matching the <c>SyncEngine.*.cs</c> convention) so
 /// <see cref="MetaverseServer"/>'s main file stays uncluttered.
 /// </summary>

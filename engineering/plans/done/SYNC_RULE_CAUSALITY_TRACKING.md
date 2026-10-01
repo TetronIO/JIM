@@ -1,6 +1,6 @@
 # Synchronisation Rule Causality Tracking and Value Provenance
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#399](https://github.com/TetronIO/JIM/issues/399)
 - **Design:** [Value Provenance Options canvas](https://claude.ai/artifact/SLzG2C7hVkVUsTCXsVNmst) (see the "Recommended" row)
 
