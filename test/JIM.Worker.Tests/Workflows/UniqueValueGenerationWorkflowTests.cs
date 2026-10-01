@@ -41,8 +41,9 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             Assert.That(ResolvedAccountNames(ctx), Is.EquivalentTo(new[] { "joe.bloggs", "ada.lovelace" }));
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(2), "one assignment per object");
-            // A generated import-mode value starts Proposed. Nothing yet moves it to Committed: see #1904.
-            Assert.That(SyncRepo.GeneratedValueAssignments.Values.All(a => a.State == GeneratedValueAssignmentState.Proposed), Is.True);
+            // #1904 (option A): the page flush that persisted the Metaverse Objects committed their assignments.
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.All(a => a.State == GeneratedValueAssignmentState.Committed && a.CommittedAt != null), Is.True,
+                "an assignment whose object has been persisted is Committed, with CommittedAt set");
 
             var assignedOutcomes = activity.RunProfileExecutionItems
                 .SelectMany(r => r.SyncOutcomes)
@@ -377,7 +378,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"), "generation must never read a joined target's own value");
 
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed));
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
 
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
                 .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);

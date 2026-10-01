@@ -11,14 +11,18 @@ namespace JIM.Models.Transactional;
 public enum GeneratedValueAssignmentState
 {
     /// <summary>
-    /// The value has been generated for this synchronisation run but not yet committed to the
-    /// object; a placeholder held so incumbent detection sees the attribute as taken while the run completes.
+    /// The value has been generated in this synchronisation pass but not yet saved onto its object (#1904): it
+    /// exists only in memory until the page flush. A dry run (Sync Preview), a page that fails before its flush,
+    /// or a commit that loses the cross-run uniqueness race leaves it here, and it is never persisted.
     /// </summary>
     Proposed = 0,
 
     /// <summary>
-    /// The value is settled: applied to the object (import mode) or accepted by the target (export mode). Sticky;
-    /// never recomputed from the base expression.
+    /// The value has been saved onto its object (#1904, product-owner decision 2026-10-01): set, with
+    /// <see cref="GeneratedValueAssignment.CommittedAt"/>, by the page flush that persists the Metaverse Object
+    /// (import mode) or the Connected System Object, provisioning or existing (export mode). Sticky; never
+    /// recomputed from the base expression. It says nothing about whether a target system has accepted the value:
+    /// that is anchoring (release 4), derived from the connector space, never from this state.
     /// </summary>
     Committed = 1,
 

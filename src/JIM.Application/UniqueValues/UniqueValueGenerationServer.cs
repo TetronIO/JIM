@@ -134,9 +134,11 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// Persists the <see cref="GenerationOutcomeKind.Generated"/> outcomes' assignments, once the caller has persisted the objects themselves. <paramref name="objectIdResolver"/>
-    /// returns the now-persisted object id for a request (the caller correlates through
-    /// <see cref="GenerationRequest.CallerState"/>). Every other outcome kind is ignored.
+    /// Persists the <see cref="GenerationOutcomeKind.Generated"/> outcomes' assignments, once the caller has
+    /// persisted the objects themselves, as <see cref="GeneratedValueAssignmentState.Committed"/> with
+    /// <see cref="GeneratedValueAssignment.CommittedAt"/> set (#1904: Committed means saved onto the object).
+    /// <paramref name="objectIdResolver"/> returns the now-persisted object id for a request (the caller
+    /// correlates through <see cref="GenerationRequest.CallerState"/>). Every other outcome kind is ignored.
     /// <para>
     /// Tries the whole batch first; on <see cref="GeneratedValueConflictException"/> (the cross-assignment
     /// unique index caught a losing-run collision, plan decision 13), falls back to inserting one at a time to
@@ -168,6 +170,11 @@ public sealed class UniqueValueGenerationServer
         if (toCommit.Count == 0)
             return [];
 
+        // #1904 (product-owner decision 2026-10-01, option A): Committed means the value has been saved onto its
+        // object. This method's contract is that the caller has already persisted the objects (the page flush), so
+        // every assignment it saves is Committed, stamped now. Whether a target has accepted the value is a
+        // separate question (anchoring, release 4), never this state.
+        var committedAt = DateTime.UtcNow;
         foreach (var outcome in toCommit)
         {
             var assignment = outcome.Assignment!;
@@ -176,6 +183,10 @@ public sealed class UniqueValueGenerationServer
                 assignment.MetaverseObjectId = objectId;
             else
                 assignment.ConnectedSystemObjectId = objectId;
+
+            assignment.State = GeneratedValueAssignmentState.Committed;
+            assignment.CommittedAt = committedAt;
+            assignment.LastUpdated = committedAt;
         }
 
         var losers = new List<GenerationOutcome>();
@@ -198,6 +209,13 @@ public sealed class UniqueValueGenerationServer
                     losers.Add(outcome);
                 }
             }
+        }
+
+        // A loser was never saved, so it was never committed either: put it back as it was resolved.
+        foreach (var loser in losers)
+        {
+            loser.Assignment!.State = GeneratedValueAssignmentState.Proposed;
+            loser.Assignment.CommittedAt = null;
         }
 
         var saved = toCommit.Except(losers).ToList();

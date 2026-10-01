@@ -52,6 +52,9 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             Assert.That(assignment.ConnectedSystemObjectId, Is.EqualTo(ticketingCso.Id), "export-mode assignments key on the Connected System Object");
             Assert.That(assignment.MetaverseObjectId, Is.Null, "export-mode assignments never touch the Metaverse");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed),
+                "#1904: the page flush that persisted the provisioning Connected System Object committed it");
+            Assert.That(assignment.CommittedAt, Is.Not.Null);
 
             var assignedOutcomes = activity.RunProfileExecutionItems
                 .SelectMany(r => r.SyncOutcomes)

@@ -66,6 +66,57 @@ public class UniqueValueGenerationServerCommitTests
         }
     }
 
+    // ---- #1904 (product-owner decision 2026-10-01, option A): Committed = saved with its object ----
+
+    [TestCase(true, TestName = "CommitAssignmentsAsync_ImportMode_SavedAssignment_IsCommittedWithCommittedAtAsync")]
+    [TestCase(false, TestName = "CommitAssignmentsAsync_ExportMode_SavedAssignment_IsCommittedWithCommittedAtAsync")]
+    public async Task CommitAssignmentsAsync_SavedAssignment_IsCommittedWithCommittedAtAsync(bool importMode)
+    {
+        // CommitAssignmentsAsync is called once the caller has persisted the object (the page flush), so the
+        // assignment it saves holds a value that is now on the object: Committed, stamped.
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var server = new UniqueValueGenerationServer(repo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var request = importMode
+            ? UniqueValueTestHelpers.ImportRequest(generation, attributeId, null, baseValue: "joe.bloggs")
+            : UniqueValueTestHelpers.ExportRequest(generation, attributeId, null, baseValue: "joe.bloggs");
+
+        var before = DateTime.UtcNow;
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+        Assert.That(outcomes[0].Assignment!.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed), "resolved, not yet saved: Proposed");
+
+        var objectId = Guid.NewGuid();
+        await server.CommitAssignmentsAsync(outcomes, _ => objectId);
+
+        var persisted = importMode
+            ? await repo.GetGeneratedValueAssignmentAsync(objectId, attributeId)
+            : await repo.GetGeneratedValueAssignmentForConnectedSystemObjectAsync(objectId, attributeId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted!.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(persisted.CommittedAt, Is.Not.Null.And.GreaterThanOrEqualTo(before).And.LessThanOrEqualTo(DateTime.UtcNow));
+        }
+    }
+
+    [Test]
+    public async Task ResolveAsync_WithoutCommit_AssignmentStaysProposedWithNoCommittedAtAsync()
+    {
+        // A dry run (Sync Preview), or a page that fails before its flush, resolves but never commits.
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var request = UniqueValueTestHelpers.ImportRequest(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), null, baseValue: "joe.bloggs");
+
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options(dryRun: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Assignment!.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed));
+            Assert.That(outcomes[0].Assignment!.CommittedAt, Is.Null);
+            Assert.That(repo.GeneratedValueAssignments, Is.Empty, "nothing persisted");
+        }
+    }
+
     [Test]
     public async Task CommitAssignmentsAsync_NonGeneratedOutcomes_AreIgnoredAsync()
     {
@@ -146,6 +197,9 @@ public class UniqueValueGenerationServerCommitTests
 
             var savedWinner = await repo.GetGeneratedValueAssignmentAsync(winnerOutcome.Assignment!.MetaverseObjectId!.Value, attributeId);
             Assert.That(savedWinner, Is.Not.Null, "the non-conflicting outcome in the same batch must still be saved");
+            Assert.That(savedWinner!.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(loserOutcome.Assignment!.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed), "a loser was never saved, so it is not Committed (#1904)");
+            Assert.That(loserOutcome.Assignment!.CommittedAt, Is.Null);
         }
     }
 
