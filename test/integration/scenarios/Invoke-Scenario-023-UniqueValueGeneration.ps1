@@ -670,6 +670,39 @@ try {
         }
         Add-TestResult -Name "The export-mode generated value is not written to the Metaverse Object" -Passed ($exportedValues.Count -gt 0 -and $leaked.Count -eq 0) `
             -Detail $(if ($exportedValues.Count -eq 0) { "No exported values were sampled" } else { $leaked -join '; ' })
+
+        # Drift Detection (product-owner decision 2026-10-01): an export-mode generated value is checked like
+        # any export Attribute Flow, so a value changed in the directory outside JIM is corrected back to the
+        # assignment by the directory's own synchronisation, then exported. One object is enough.
+        Write-TestSection "Test 6b: Export mode drift is corrected back to the assignment"
+        if ($exportedValues.Count -gt 0) {
+            $driftTarget = $exportedValues[0]
+            $driftAccountName = ($population | Where-Object { $_.id -eq $driftTarget.MvoId } | Select-Object -First 1).attributes.'Account Name'
+            $driftUser = Get-LDAPUser -UserIdentifier $driftAccountName -DirectoryConfig $DirectoryConfig
+            $driftedValue = if ($driftTarget.Value -eq '000000') { '111111' } else { '000000' }
+            $driftLdif = @("dn: $($driftUser['dn'])", "changetype: modify", "replace: preferredLanguage", "preferredLanguage: $driftedValue") -join "`n"
+            $driftResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $driftLdif -Operation modify
+            if (-not $driftResult.Success) {
+                throw "Failed to change preferredLanguage outside JIM for '$driftAccountName': $($driftResult.Output)"
+            }
+
+            foreach ($run in @(
+                @{ Profile = $config.LDAPDeltaImportProfileId; Name = "Directory Delta Import (drift)" },
+                @{ Profile = $config.LDAPDeltaSyncProfileId;   Name = "Directory Delta Sync (drift)" },
+                @{ Profile = $config.LDAPExportProfileId;      Name = "Directory Export (drift correction)" },
+                @{ Profile = $config.LDAPDeltaImportProfileId; Name = "Directory Delta Import (confirming)" },
+                @{ Profile = $config.LDAPDeltaSyncProfileId;   Name = "Directory Delta Sync (confirming)" }
+            )) {
+                $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $run.Profile -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $r.activityId -Name $run.Name
+            }
+
+            $correctedUser = Get-LDAPUser -UserIdentifier $driftAccountName -DirectoryConfig $DirectoryConfig
+            $correctedValue = if ($correctedUser) { $correctedUser['preferredLanguage'] } else { $null }
+            Add-TestResult -Name "A preferredLanguage changed in the directory outside JIM is corrected back to the generated value" `
+                -Passed ($correctedValue -eq $driftTarget.Value) `
+                -Detail "$($driftTarget.DisplayName): expected '$($driftTarget.Value)', directory holds '$correctedValue' (was changed to '$driftedValue')"
+        }
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
