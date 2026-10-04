@@ -1356,7 +1356,7 @@ Samba AD and OpenLDAP.
 
 #### Scenario 026: Metaverse-Derived Attribute Flows
 
-**Status**: implemented for [#1750](https://github.com/TetronIO/JIM/issues/1750) Phase 7; the Small sign-off runs on Samba AD and OpenLDAP are still to be recorded here. The feature is behind the In development `Features.MetaverseDerivedAttributeFlows` flag (removal [#1878](https://github.com/TetronIO/JIM/issues/1878)); `Setup-Scenario-001.ps1 -DeriveFromAccountName` enables it, together with `Features.UniqueValueGeneration` through `-GenerateAccountName`. Small is the sign-off template on both Samba AD and OpenLDAP.
+**Status**: implemented for [#1750](https://github.com/TetronIO/JIM/issues/1750) Phase 7; signed off on 2026-10-04 at Medium on Samba AD and OpenLDAP (both passed). The feature is behind the In development `Features.MetaverseDerivedAttributeFlows` flag (removal [#1878](https://github.com/TetronIO/JIM/issues/1878)); `Setup-Scenario-001.ps1 -DeriveFromAccountName` enables it, together with `Features.UniqueValueGeneration` through `-GenerateAccountName`. Medium is the sign-off template on both Samba AD and OpenLDAP, because Small fits in one synchronisation page.
 
 **Purpose**: prove derived Attribute Flows end to end: ordering inside one synchronisation, the hosting-system rule, the derived-input mark that makes the hosting system's next synchronisation (delta included) pick up an object whose input changed in another system, and the save-time and authoring surfaces. The unit and workflow tiers cover the engine with the in-memory repository; this is the only coverage against PostgreSQL, a real directory and the real Run Profile sequence.
 
@@ -2472,7 +2472,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 021 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
 | Scenario 022 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
 | Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
-| Scenario 026 | ⏳ Pending sign-off run | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
+| Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
