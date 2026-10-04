@@ -531,15 +531,18 @@
                 case "Expression":
                     <ExpressionEditor @ref="_expressionEditor" @bind-Value="_attributeFlowMappingSource.Expression"
                         @bind-Value:after="ScheduleDerivedFlowAnalysisAsync" Id="attribute-flow-expression"
-                        Label="Expression" Placeholder="e.g. IIF(mv[&quot;Active&quot;] == true, Upper(cs[&quot;Name&quot;]), null)"
+                        Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
+                            ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
+                            : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
                         Required="true" Class="mt-5" />
 
                     @* ─── Insert attribute (#1750, mockup B): puts mv["..."] or cs["..."] at the caret ─── *@
                     <div class="mt-1">
                         <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
-                                             ConnectedSystemAttributes="SyncRule.ConnectedSystemObjectType?.Attributes"
+                                             ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                              ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
                                              TargetMetaverseAttributeId="_attributeFlowMapping.ResolveTargetMetaverseAttributeId()"
+                                             Direction="SyncRule.Direction"
                                              OnInsert="InsertIntoExpressionAsync" />
                     </div>
 
@@ -672,9 +675,10 @@
                                 @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                                 <div class="mt-1">
                                     <InsertAttributeMenu MetaverseAttributes="InsertableMetaverseAttributes"
-                                                         ConnectedSystemAttributes="SyncRule.ConnectedSystemObjectType?.Attributes"
+                                                         ConnectedSystemAttributes="InsertableConnectedSystemAttributes"
                                                          ConnectedSystemName="@SyncRule.ConnectedSystem?.Name"
                                                          TargetMetaverseAttributeId="_attributeFlowMapping.ResolveTargetMetaverseAttributeId()"
+                                                         Direction="SyncRule.Direction"
                                                          OnInsert="insertIntoBaseExpression" />
                                 </div>
                                 <DerivedFlowPanel Analysis="_derivedFlowAnalysis" ConnectedSystemName="@SyncRule.ConnectedSystem?.Name" />
@@ -1110,11 +1114,23 @@
         mapping.Id > 0 && _derivedFlowSteps.TryGetValue(mapping.Id, out var stepInfo) ? stepInfo : null;
 
     /// <summary>
-    /// The Metaverse attributes the Insert attribute menu offers as <c>mv["..."]</c>: on an import rule with the
-    /// feature on, where an expression reading the Metaverse is a derived flow. Null leaves the group out.
+    /// The Metaverse attributes the Insert attribute menu offers as <c>mv["..."]</c>: always on an export rule, whose
+    /// expressions are evaluated against the Metaverse Object (long before derived flows existed), and on an import
+    /// rule only with the feature on, where an expression reading the Metaverse is a derived flow. Null leaves the
+    /// group out.
     /// </summary>
     private IEnumerable<MetaverseAttribute>? InsertableMetaverseAttributes =>
-        _derivedFlowsEnabled && SyncRule.Direction == SyncRuleDirection.Import ? SyncRule.MetaverseObjectType?.Attributes : null;
+        SyncRule.Direction == SyncRuleDirection.Export || (_derivedFlowsEnabled && SyncRule.Direction == SyncRuleDirection.Import)
+            ? SyncRule.MetaverseObjectType?.Attributes
+            : null;
+
+    /// <summary>
+    /// The Connected System attributes the Insert attribute menu offers as <c>cs["..."]</c>: on an import rule only. An
+    /// export expression is evaluated against the Metaverse Object alone, so <c>cs["..."]</c> resolves to nothing
+    /// there. Null leaves the group out.
+    /// </summary>
+    private IEnumerable<ConnectedSystemObjectTypeAttribute>? InsertableConnectedSystemAttributes =>
+        SyncRule.Direction == SyncRuleDirection.Import ? SyncRule.ConnectedSystemObjectType?.Attributes : null;
 
     private Task InsertIntoExpressionAsync(string accessor) =>
         _expressionEditor?.InsertAtCursorAsync(accessor) ?? Task.CompletedTask;

@@ -107,6 +107,40 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
         return rule;
     }
 
+    /// <summary>
+    /// An export rule writing the directory's mail from the Metaverse's Email through an Expression.
+    /// </summary>
+    private static SyncRule BuildExportRule()
+    {
+        var mail = new ConnectedSystemObjectTypeAttribute { Id = 21, Name = "mail", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        var connectedSystemObjectType = new ConnectedSystemObjectType { Id = 2, Name = "person" };
+        connectedSystemObjectType.Attributes.Add(mail);
+
+        var rule = new SyncRule
+        {
+            Id = 13,
+            Name = "HR Outbound",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemId = 5,
+            ConnectedSystem = new ConnectedSystem { Name = "HR" },
+            ConnectedSystemObjectType = connectedSystemObjectType,
+            MetaverseObjectType = User,
+            MetaverseObjectTypeId = UserTypeId
+        };
+        var mapping = new SyncRuleMapping
+        {
+            Id = 4,
+            SyncRule = rule,
+            SyncRuleId = rule.Id,
+            TargetConnectedSystemAttribute = mail,
+            TargetConnectedSystemAttributeId = mail.Id
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Email\"]" });
+        rule.AttributeFlowRules.Add(mapping);
+        return rule;
+    }
+
     private static void AddExpression(SyncRule rule, int id, MetaverseAttribute target, string expression)
     {
         var mapping = new SyncRuleMapping
@@ -192,6 +226,26 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
 
         provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
         Assert.That(provider.FindComponent<InsertAttributeMenu>().Instance.MetaverseAttributes, Is.Null);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void EditDialog_ExportRule_OffersOnlyTheMetaverseGroupWhateverTheFlag(bool flagEnabled)
+    {
+        // An export expression is evaluated against the Metaverse Object alone (cs[...] resolves to nothing there), and
+        // reading mv on export long predates Metaverse-Derived Attribute Flows, so the flag has no say.
+        _flagEnabled = flagEnabled;
+        var (provider, tab) = RenderCards(BuildExportRule());
+        OpenEdit(tab, 0);
+
+        provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
+        var menu = provider.FindComponent<InsertAttributeMenu>().Instance;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(menu.MetaverseAttributes!.Select(a => a.Name), Is.EquivalentTo(User.Attributes.Select(a => a.Name)));
+            Assert.That(menu.ConnectedSystemAttributes, Is.Null, "cs[...] resolves to nothing on export");
+            Assert.That(menu.Direction, Is.EqualTo(SyncRuleDirection.Export));
+        }
     }
 
     [Test]

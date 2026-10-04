@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
+### Fixed
+
+- 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
+
 ## [0.16.0] - 2026-09-29
 
 ### Added
