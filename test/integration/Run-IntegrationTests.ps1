@@ -2981,8 +2981,9 @@ $env:DIRSRV_IMAGE_PRIMARY = $null
 # starts, and the scenario never runs).
 # S023 (Unique Value Generation) is included: its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, so the "OUs only, no test users" snapshot is exactly what it wants too - a
-# schema-ready, empty target directory, faster than live population.
-if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23) {
+# schema-ready, empty target directory, faster than live population. S026 (Metaverse-Derived Attribute
+# Flows) composes the same substrate (-GenerateAccountName -DeriveFromAccountName) and wants the same.
+if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23, 26) {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario-001"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -3039,10 +3040,11 @@ if ($DirectoryType -eq "OpenLDAP") {
     # one probe user, and its Scenario 001 substrate needs an EMPTY ou=People).
     # S023 (Unique Value Generation) is the same shape again: its substrate is Setup-Scenario-001.ps1
     # -GenerateAccountName, and every value it generates depends on the target directory starting
-    # empty, so it must not be pre-populated with general test data either.
+    # empty, so it must not be pre-populated with general test data either. S026 (Metaverse-Derived
+    # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3141,8 +3143,8 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # come from the fixture's Get-DirsrvBuildHash.ps1 (dot-sourced above), so the snapshot hash, the
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
-    # verified: a snapshot baked from a stale base is stale.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
+    # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3562,8 +3564,8 @@ elseif ($isActiveDirectoryRun) {
 # set is the one the old "*Scenario1*" wildcard selected, carried over unchanged (#1762).
 # S023 (Unique Value Generation) needs the same clean Corp OU as S001 when it runs live (no snapshot):
 # its substrate is Setup-Scenario-001.ps1 -GenerateAccountName, and it supports Samba AD as well as
-# OpenLDAP.
-if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
+# OpenLDAP. S026 (Metaverse-Derived Attribute Flows) composes the same substrate.
+if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23, 26 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -3682,8 +3684,9 @@ if ($adPopulateEntries.Count -gt 0) {
 # ou=People that must start empty; the general population would fill it.
 # Skip for S023 (Unique Value Generation): its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
-# directory must start empty exactly as it must for S001.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23 -and -not $script:UsingRfcDirectorySnapshots) {
+# directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
+# the same substrate and asserts on every account it provisions, so it too needs an empty directory.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"

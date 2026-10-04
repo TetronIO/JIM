@@ -94,6 +94,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-022-OpenLdapPasswordPolicy"    # OpenLDAP password policy discovery (#1702, OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-024-ActiveDirectoryPasswordPolicy" -DirectoryType ActiveDirectory  # Active Directory password policy and Fine-Grained Password Policy (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-025-ActiveDirectoryDeltaImportIntegrity" -DirectoryType ActiveDirectory  # Delta Import with the Recycle Bin on and off; restore from backup (lab only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-026-DerivedAttributeFlows" -Template Small  # Metaverse-Derived Attribute Flows (#1750, Samba AD or OpenLDAP)
 
 # Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
 ./test/integration/Run-IntegrationTests.ps1 -Scenario 005                # Scenario-005-MatchingRules
@@ -118,6 +119,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-024-ActiveDirectoryPasswordPolicy" -DirectoryType ActiveDirectory -Step Discovery  # Scenario 024 (cumulative): Policy, Discovery, Provision, Override (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-025-ActiveDirectoryDeltaImportIntegrity" -DirectoryType ActiveDirectory -Step RestoreFromBackup  # Scenario 025 (independent steps): RecycleBin, RestoreFromBackup (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-023-UniqueValueGeneration" -Step Brownfield  # Scenario 023 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-026-DerivedAttributeFlows" -Step WrongOrder  # Scenario 026 (cumulative): Ordering, Stability, CrossSystem, WrongOrder, MissingInput, Cycle, SurfaceParity
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Template Small -Step All
@@ -174,7 +176,7 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 is Samba AD only; Scenario 023 supports OpenLDAP and Samba AD only (it is skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024 and 025 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015 and 016 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 is Samba AD only; Scenarios 023 and 026 support OpenLDAP and Samba AD only (they are skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024 and 025 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015 and 016 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
@@ -202,6 +204,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-022-OpenLdapPasswordPolicy` | OpenLDAP password policy discovery end to end ([#1702](https://github.com/TetronIO/JIM/issues/1702)): a `ppolicy` overlay with a default policy (minimum length 12, history 5, maximum age 90 days, `pwdCheckQuality` 2) is proven to enforce by a refused 5-character change, JIM reads it as published, provisions accounts as a non-root account with generated Initial Passwords and parks none, and notices a `pwdPolicySubentry`. OpenLDAP only; `-Template` is ignored | openldap-primary (Yellowstone suffix) |
 | `Scenario-024-ActiveDirectoryPasswordPolicy` | Active Directory password policy discovery end to end (PRD functional requirement 17), Scenario 022's counterpart for a real domain controller: the domain policy is set to complexity on, minimum length 12 and history 24, proven to enforce by a refused 5-character change by an ordinary account holder, and a Fine-Grained Password Policy (minimum length 16) is proven to be in force on one account. JIM reads the domain policy as it stands, reports the Fine-Grained Password Policy as CouldNotDetermine to svc-jim (which cannot see the Password Settings Container) and as Present to a Connected System bound as the domain administrator, provisions accounts with generated Initial Passwords and parks none, and parks an account whose static Initial Password only a domain controller can refuse (it contains part of the account's display name), with the directory's own 0000052D words, then releases it when the rule is corrected. Active Directory lab only; `-Template` is ignored (one Micro export) | dc-primary (PANOPLY.LOCAL) |
 | `Scenario-025-ActiveDirectoryDeltaImportIntegrity` | Delta Import against a real domain controller (PRD functional requirements 18 and 19). `RecycleBin`: a user created out of band is one add, its deletion is reported exactly once and marks its Connected System Object Obsolete, and the Delta Import after that reports nothing, with the Active Directory Recycle Bin on (dc-primary) and off (dc-source). `RestoreFromBackup`: dc-primary is reverted to its `baseline` checkpoint mid-scenario, which renews its invocationId as a restore from backup does, and the next Delta Import fails fast naming the previous and current invocationId and the Full Import remedy and importing nothing; a Full Import then succeeds and a Delta Import after it is clean. Active Directory lab only; `-Template` is ignored | dc-primary, dc-source |
+| `Scenario-026-DerivedAttributeFlows` | Metaverse-Derived Attribute Flows ([#1750](https://github.com/TetronIO/JIM/issues/1750)): import Attribute Flows reading `mv["..."]`, evaluated in dependency order. Account Name is generated, Email is derived from it and User Principal Name from Email, so all three carry the same suffix; a derived flow on the HR rule reads an attribute the Training system contributes and is re-evaluated by HR's next Delta Synchronisation whichever order the two run in (the derived-input mark); stability, Missing Input Behaviour, cycle refusal and surface parity. Samba AD or OpenLDAP; Small is the sign-off template | samba-ad-primary / openldap-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -1349,6 +1352,30 @@ Samba AD and OpenLDAP.
 
 **Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 001 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag.
 
+**Derived Email and User Principal Name.** Since Metaverse-Derived Attribute Flows ([#1750](https://github.com/TetronIO/JIM/issues/1750)) Phase 7, `Setup-Scenario-023.ps1` also passes `-DeriveFromAccountName`, so Email is `mv["Account Name"] + "@panoply.local"` and User Principal Name is `mv["Email"]` rather than a separately generated Email. Test 2 asserts that each same-named joiner's Email and User Principal Name carry that joiner's own Account Name suffix, in the Metaverse and the directory.
+
+#### Scenario 026: Metaverse-Derived Attribute Flows
+
+**Status**: implemented for [#1750](https://github.com/TetronIO/JIM/issues/1750) Phase 7; the Small sign-off runs on Samba AD and OpenLDAP are still to be recorded here. The feature is behind the In development `Features.MetaverseDerivedAttributeFlows` flag (removal [#1878](https://github.com/TetronIO/JIM/issues/1878)); `Setup-Scenario-001.ps1 -DeriveFromAccountName` enables it, together with `Features.UniqueValueGeneration` through `-GenerateAccountName`. Small is the sign-off template on both Samba AD and OpenLDAP.
+
+**Purpose**: prove derived Attribute Flows end to end: ordering inside one synchronisation, the hosting-system rule, the derived-input mark that makes the hosting system's next synchronisation (delta included) pick up an object whose input changed in another system, and the save-time and authoring surfaces. The unit and workflow tiers cover the engine with the in-memory repository; this is the only coverage against PostgreSQL, a real directory and the real Run Profile sequence.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-026-DerivedAttributeFlows.ps1` and `test/integration/Setup-Scenario-026.ps1`, which composes `Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName` (the HR CSV is generated with `-OmitItOwnedAttributes`) and adds Training Summary: `"Training " + mv["Training Status"]` on the HR rule, Missing Input Behaviour ContributeNoValue, exported to `physicalDeliveryOfficeName`. Training Status is contributed only by the Training Records Source system, and 85% of people have a training record, so the same flow serves the cross-system and missing-input rows.
+
+| Test | PRD | Assertion |
+|------|-----|-----------|
+| 1 Ordering | Scenario 1 | After the initial load (HR, then Training, then the HR Delta Synchronisation the Training marks bring in, export, confirming import) every person's Email is Account Name + `@panoply.local` and User Principal Name equals Email; in the directory `mail` is the account name + `@panoply.local` and (Active Directory) `userPrincipalName` equals `mail`; two same-named joiners are `marisol.fenwick` and `marisol.fenwick1` and carry those suffixes in all three. Training Summary exists for exactly the people with a Training Status and reaches the directory |
+| 2 Stability | Scenario 6 | A following Full Synchronisation of HR and Training stages no new Pending Export and changes no derived value |
+| 3 CrossSystem | Scenario 2 | A Training CSV edit: the Training Delta Synchronisation updates Training Status but not Training Summary (a derived flow runs only in its hosting system's synchronisation); the HR Delta Synchronisation, with the HR CSV unchanged, re-derives it; the export carries it to the directory |
+| 4 WrongOrder | Scenario 2 | The same edit with HR synchronised first: Training Summary is stale after the cycle, and the next HR Delta Synchronisation corrects it (the mark) |
+| 5 MissingInput | Scenario 4 | A person with no training record has no Training Summary (ContributeNoValue); once a record arrives, the next HR Delta Synchronisation contributes `Training InProgress` |
+| 6 Cycle | Scenario 3 | Cycle Probe A (HR rule) reads Cycle Probe B; creating Cycle Probe B reading Cycle Probe A on the Training rule is refused with 400 over raw REST, the message naming both attributes and both Synchronisation Rules, and `New-JIMSyncRuleMapping` relays the same text; nothing is saved |
+| 7 SurfaceParity | FR 12, FR 3 | `Get-JIMSyncRuleMapping` and raw REST return the derived expressions verbatim with `derived` step facts (Email step 2 of 3, User Principal Name step 3 of 3, Training Summary step 2 of 3) and ContributeNoValue; disabling the generated Account Name flow reports Email (missing Account Name) and User Principal Name (missing Account Name through Email) in `dependentDerivedFlows`, as warnings too, and nothing else |
+
+PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4's rows; the workflow tests cover the out-of-synchronisation marking path now.
+
+**Runner handling.** Excluded from snapshot use on OpenLDAP and from the general directory population (an empty target, like Scenario 023); on Samba AD it uses the same "OUs only" snapshot as Scenario 001. Rejects 389 Directory Server. Unlike Scenario 023 it does not default to OpenLDAP. `-Step` is cumulative: Ordering, Stability, CrossSystem, WrongOrder, MissingInput, Cycle, SurfaceParity.
+
 #### Scenario 024: Active Directory Password Policy
 
 **Status**: written for [PRD functional requirement 17](prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md) and checked everywhere but on a domain controller (it parses, every helper and cmdlet it calls exists with the parameters it passes, ScriptAnalyzer is clean, and a mocked dry run of every step passes). **Not yet run against the lab**, which needs `-DirectoryType ActiveDirectory`. Active Directory lab only.
@@ -2286,7 +2313,8 @@ JIM/
         ├── Setup-Scenario-019.ps1                            # Configures JIM for Scenario 019
         ├── Setup-Scenario-020.ps1                            # Configures JIM for Scenario 020 (composes Setup-Scenario-017)
         ├── Setup-Scenario-022.ps1                            # Configures JIM for Scenario 022
-        ├── Setup-Scenario-023.ps1                            # Configures JIM for Scenario 023 (composes Setup-Scenario-001 -GenerateAccountName)
+        ├── Setup-Scenario-023.ps1                            # Configures JIM for Scenario 023 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
+        ├── Setup-Scenario-026.ps1                            # Configures JIM for Scenario 026 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
         ├── New-Scenario-016-TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 016
         ├── Add-Scenario-008-Schedules.ps1                      # Optional schedule wiring for Scenario 008
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 001, 004, 005, etc.)
@@ -2335,6 +2363,7 @@ JIM/
         │   ├── Invoke-Scenario-021-RunProfileSafeguards.ps1       # Run Profile export and deletion-detection limits
         │   ├── Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1     # OpenLDAP password policy discovery (OpenLDAP only)
         │   ├── Invoke-Scenario-023-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
+        │   ├── Invoke-Scenario-026-DerivedAttributeFlows.ps1      # Metaverse-Derived Attribute Flows (OpenLDAP or Samba AD)
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 011 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 004, 005)
         ├── docker/
@@ -2443,6 +2472,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 021 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
 | Scenario 022 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
 | Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
+| Scenario 026 | ⏳ Pending sign-off run | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 

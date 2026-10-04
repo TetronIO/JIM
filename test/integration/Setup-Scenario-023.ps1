@@ -11,8 +11,11 @@
     composed exactly like Scenario 022's, with two differences that are this scenario's whole point:
 
       - Setup-Scenario-001.ps1 -GenerateAccountName replaces the ordinary samAccountName -> Account
-        Name import mapping with a generated one (OnlyIfTaken, Number suffix), and derives Email
-        from the names.
+        Name import mapping with a generated one (OnlyIfTaken, Number suffix), and, with
+        -DeriveFromAccountName (Metaverse-Derived Attribute Flows, #1750), derives Email
+        (mv["Account Name"] + "@panoply.local") and User Principal Name (mv["Email"]) from it, so
+        both carry exactly the collision suffix the generated Account Name carries. That turns on the
+        In development Features.MetaverseDerivedAttributeFlows flag as well.
       - The HR CSV is expected to have been generated with Generate-TestCSV.ps1
         -OmitItOwnedAttributes (Invoke-Scenario-023-UniqueValueGeneration.ps1 does this before calling
         this script), so samAccountName/email/userPrincipalName are genuinely absent, the shape this
@@ -122,7 +125,7 @@ if ($DirectoryConfig.DirectoryType -notin @("OpenLDAP", "SambaAD", "ActiveDirect
 Write-TestSection "Scenario 023 Setup: Unique Value Generation ($($DirectoryConfig.ConnectedSystemName))"
 
 # Step 1: Build the provisioning substrate (HR CSV, generated Account Name -> OpenLDAP/Samba AD)
-Write-TestStep "Step 1" "Running Setup-Scenario-001.ps1 -GenerateAccountName for the provisioning substrate"
+Write-TestStep "Step 1" "Running Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName for the provisioning substrate"
 
 $setupScript = "$PSScriptRoot/Setup-Scenario-001.ps1"
 if (-not (Test-Path $setupScript)) {
@@ -135,6 +138,7 @@ $setupParams = @{
     Template = $Template
     DirectoryConfig = $DirectoryConfig
     GenerateAccountName = $true
+    DeriveFromAccountName = $true
 }
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
     $setupParams.ExportConcurrency = $ExportConcurrency

@@ -42,13 +42,26 @@
     Name reads (Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local", OnlyIfTaken,
     Number, the suffix placed before the "@"). It has to be generated rather than merely derived:
     Active Directory refuses a duplicate userPrincipalName, so two same-named people cannot share an
-    address. Import mappings evaluate against the Connected System only, so Email cannot yet be read
-    from the generated Account Name itself (mv[...] reads arrive with the Metaverse-Derived Attribute
-    Flows PRD, release 2), and the two can in principle carry different suffixes until then.
+    address. Generated this way, Email and Account Name can in principle carry different suffixes;
+    -DeriveFromAccountName (below) derives Email from the generated Account Name instead, so they cannot.
 
     Without this switch, setup is unchanged: the ordinary samAccountName -> Account Name mapping is
     created exactly as before, and the feature flag is left alone. Scenario 001 itself is not converted
     in this phase; Invoke-Scenario-001-HRToIdentityDirectory.ps1 is unaffected either way.
+
+.PARAMETER DeriveFromAccountName
+    Opt-in (Metaverse-Derived Attribute Flows, #1750). Requires -GenerateAccountName. Enables the In
+    development Features.MetaverseDerivedAttributeFlows feature flag and derives the identifiers that
+    follow from the generated Account Name instead of generating them separately:
+      - Email = mv["Account Name"] + "@panoply.local" (step 2), replacing the generated Email mapping
+        (and the ordinary email -> Email mapping, when the CSV carries an "email" column);
+      - User Principal Name = mv["Email"] (step 3);
+      - on Active Directory (Samba AD and the Active Directory lab), User Principal Name ->
+        userPrincipalName on export, in place of Email -> userPrincipalName. An RFC directory has no
+        userPrincipalName attribute, so there User Principal Name stays in the Metaverse.
+    Email and User Principal Name then carry exactly the suffix the generated Account Name carries, so
+    two same-named people get marisol.fenwick / marisol.fenwick@panoply.local and marisol.fenwick1 /
+    marisol.fenwick1@panoply.local, never mismatched suffixes. Without this switch nothing changes.
 
 .NOTES
     This script requires the JIM PowerShell module and assumes:
@@ -78,7 +91,10 @@ param(
     [hashtable]$DirectoryConfig,
 
     [Parameter(Mandatory=$false)]
-    [switch]$GenerateAccountName
+    [switch]$GenerateAccountName,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DeriveFromAccountName
 )
 
 Set-StrictMode -Version Latest
@@ -87,6 +103,11 @@ $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive 
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
+
+# Email and User Principal Name are derived from the generated Account Name, so there must be one.
+if ($DeriveFromAccountName -and -not $GenerateAccountName) {
+    throw "-DeriveFromAccountName requires -GenerateAccountName: Email and User Principal Name are derived from the generated Account Name."
+}
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {
@@ -911,6 +932,13 @@ try {
             $importMappings = @($importMappings | Where-Object { $_.CsAttr -ne 'samAccountName' })
         }
 
+        # Metaverse-Derived Attribute Flows (#1750): -DeriveFromAccountName derives Email from the
+        # generated Account Name further below, so an "email" column, when the CSV has one, must not
+        # contribute to Email from this Rule as well.
+        if ($DeriveFromAccountName) {
+            $importMappings = @($importMappings | Where-Object { $_.CsAttr -ne 'email' })
+        }
+
         $exportMappings = if ($isRfcDirectory) {
             @(
                 @{ MvAttr = "Account Name";          LdapAttr = "uid" }
@@ -942,6 +970,14 @@ try {
                 # Training export mappings (Training Status → description, Training Course Count → info)
                 # are created later in the Training configuration section, after Training MV attributes exist.
             )
+        }
+
+        # -DeriveFromAccountName (#1750): userPrincipalName is fed by the derived User Principal Name
+        # rather than by Email. The values are equal by construction (User Principal Name = mv["Email"]);
+        # the point is that the exported value comes from the third step of the derived chain.
+        if ($DeriveFromAccountName -and -not $isRfcDirectory) {
+            $exportMappings = @($exportMappings | Where-Object { $_.LdapAttr -ne 'userPrincipalName' }) +
+                @(@{ MvAttr = "User Principal Name"; LdapAttr = "userPrincipalName" })
         }
 
         # Expression-based mappings for computed values
@@ -1034,8 +1070,8 @@ try {
             if (-not $existingAccountNameMapping) {
                 # OnlyIfTaken (JIM's own default) with a Number suffix starting at 1: try the bare
                 # "first.last" value, and only append a collision suffix once it is taken. The base
-                # expression reads cs[...] rather than mv[...]: import mappings evaluate against the
-                # Connected System only (Metaverse-Derived Attribute Flows land in release 2).
+                # expression reads cs[...]: Account Name is the root of the derived chain
+                # (-DeriveFromAccountName), so it reads nothing from the Metaverse itself.
                 New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
                     -TargetMetaverseAttributeId $accountNameMvAttr.id `
                     -Expression 'Lower(cs["firstName"]) + "." + Lower(cs["lastName"])' `
@@ -1054,7 +1090,39 @@ try {
             # address, and Active Directory refuses a duplicate userPrincipalName. The suffix goes
             # before the "@" (marisol.fenwick1@panoply.local), which is the email-shaped placement rule.
             $csvEmailAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'email' }
-            if (-not $csvEmailAttr) {
+            if ($DeriveFromAccountName) {
+                # Metaverse-Derived Attribute Flows (#1750): Email and User Principal Name follow the
+                # generated Account Name instead of being generated separately, so they always carry
+                # the suffix Account Name carries. JIM orders the three itself: Account Name (generated,
+                # step 1), then Email (reads it, step 2), then User Principal Name (reads Email, step 3).
+                # In development: an import mapping reading mv["..."] is refused (HTTP 400) until this is on.
+                Enable-JIMFeature -Name "Features.MetaverseDerivedAttributeFlows" -AllowInDevelopment | Out-Null
+                Write-Host "  ✓ Enabled Features.MetaverseDerivedAttributeFlows (In development)" -ForegroundColor Green
+
+                $derivedMappings = @(
+                    @{ MvAttr = "Email";               Expression = 'mv["Account Name"] + "@panoply.local"' }
+                    @{ MvAttr = "User Principal Name"; Expression = 'mv["Email"]' }
+                )
+                foreach ($derived in $derivedMappings) {
+                    $derivedMvAttr = $mvAttributes | Where-Object { $_.name -eq $derived.MvAttr }
+                    if (-not $derivedMvAttr) {
+                        throw "Setup failed: Metaverse attribute '$($derived.MvAttr)' not found; cannot derive it."
+                    }
+                    $existingDerivedMapping = $existingImportMappings | Where-Object {
+                        $_.targetMetaverseAttributeId -eq $derivedMvAttr.id
+                    }
+                    if (-not $existingDerivedMapping) {
+                        New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
+                            -TargetMetaverseAttributeId $derivedMvAttr.id `
+                            -Expression $derived.Expression -ErrorAction Stop | Out-Null
+                        Write-Host "  ✓ Derived $($derived.MvAttr) mapping created: $($derived.Expression)" -ForegroundColor Green
+                    }
+                    else {
+                        Write-Host "  $($derived.MvAttr) mapping already exists; leaving it as configured" -ForegroundColor Gray
+                    }
+                }
+            }
+            elseif (-not $csvEmailAttr) {
                 $emailMvAttr = $mvAttributes | Where-Object { $_.name -eq 'Email' }
                 if (-not $emailMvAttr) {
                     throw "Setup failed: Metaverse attribute 'Email' not found; cannot derive it from names."

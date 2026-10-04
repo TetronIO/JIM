@@ -19,7 +19,8 @@
     error, which its end-of-run log scan does not today).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
-    Setup-Scenario-001.ps1 -GenerateAccountName), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
+    Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName, so Email and User Principal Name
+    are derived from the generated Account Name, Metaverse-Derived Attribute Flows, #1750), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
     -OmitItOwnedAttributes so samAccountName, email and userPrincipalName are genuinely absent, the
     shape this feature exists to make representative. The target directory starts empty: every Account
     Name, Staff Number and Badge Code is generated, not sourced.
@@ -495,12 +496,41 @@ try {
         Add-TestResult -Name "Intra-batch collision resolves to {marisol.fenwick, marisol.fenwick1}" -Passed (($marisolValues -join ',') -eq ($expectedMarisol -join ',')) `
             -Detail "Expected $($expectedMarisol -join ', '); got $($marisolValues -join ', ')"
 
-        # Email is generated as well when the HR feed carries none (Setup-Scenario-001.ps1 -GenerateAccountName),
-        # and an email-shaped value takes its suffix before the "@", not after it.
+        # Email is derived from the generated Account Name (Setup-Scenario-001.ps1 -DeriveFromAccountName),
+        # so the suffix lands before the "@", not after it.
         $marisolEmails = @($marisolGroup | ForEach-Object { (Get-MvoAttributeValue -MvoId $_.id -AttributeName "Email").ToLower() } | Sort-Object)
         $expectedEmails = @(@('marisol.fenwick@panoply.local', 'marisol.fenwick1@panoply.local') | Sort-Object)
         Add-TestResult -Name "Same-name joiners get distinct Emails with the suffix before the '@'" -Passed (($marisolEmails -join ',') -eq ($expectedEmails -join ',')) `
             -Detail "Expected $($expectedEmails -join ', '); got $($marisolEmails -join ', ')"
+
+        # Metaverse-Derived Attribute Flows (#1750; Setup-Scenario-023.ps1 composes Setup-Scenario-001.ps1
+        # -DeriveFromAccountName): Email is derived from the generated Account Name and User Principal Name
+        # from Email, so each person's three values carry the SAME suffix, whichever of the pair got it.
+        # The set assertion above cannot tell that apart from two independent generations that happened to
+        # agree; this pairs the values per person, in the Metaverse and in the directory.
+        $suffixMismatches = @()
+        foreach ($person in $marisolGroup) {
+            $accountName = $person.attributes.'Account Name'
+            $email = Get-MvoAttributeValue -MvoId $person.id -AttributeName "Email"
+            $upn = Get-MvoAttributeValue -MvoId $person.id -AttributeName "User Principal Name"
+            $expectedEmail = "$accountName@panoply.local"
+            if ($email -ne $expectedEmail -or $upn -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': Email '$email', User Principal Name '$upn' (expected '$expectedEmail' for both)"
+            }
+            $directoryUser = Get-LDAPUser -UserIdentifier $accountName -DirectoryConfig $DirectoryConfig
+            if (-not $directoryUser) {
+                $suffixMismatches += "Account Name '$accountName': no directory entry"
+                continue
+            }
+            if ($directoryUser['mail'] -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': directory mail '$($directoryUser['mail'])' (expected '$expectedEmail')"
+            }
+            if (-not $isRfcDirectory -and $directoryUser['userPrincipalName'] -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': directory userPrincipalName '$($directoryUser['userPrincipalName'])' (expected '$expectedEmail')"
+            }
+        }
+        Add-TestResult -Name "Email and User Principal Name follow each joiner's suffixed generated Account Name (derived, in the Metaverse and the directory)" `
+            -Passed ($marisolGroup.Count -eq 2 -and $suffixMismatches.Count -eq 0) -Detail ($suffixMismatches -join '; ')
 
         $reusedBase = Get-GeneratedBaseValue -FirstName $existingPerson.FirstName -LastName $existingPerson.LastName
         $reusedGroup = @($population | Where-Object { $_.attributes.'First Name' -eq $existingPerson.FirstName -and $_.attributes.'Last Name' -eq $existingPerson.LastName })
