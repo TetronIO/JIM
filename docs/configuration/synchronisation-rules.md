@@ -565,7 +565,7 @@ An expression that reads its own target (`mv["Email"]` in the flow to Email) is 
 
 **In the portal.** The Attribute Flow tab marks each derived flow with a **Derived · step N** chip beside its target; hover over it to see what it reads and when it runs. In the Attribute Flow dialog:
 
-- **Insert attribute**<br /> Under the Expression (and a generated value's base expression), this menu puts `mv["..."]` or `cs["..."]` at the cursor. Type in its filter to narrow the list. Metaverse attributes that cannot be read are listed but greyed out, saying why: a Reference attribute (not supported yet) and the flow's own target.
+- **Insert attribute**<br /> Under the Expression (and a generated value's base expression), this menu puts `mv["..."]` or `cs["..."]` at the cursor. Type in its filter to narrow the list. Metaverse attributes that cannot be read are listed but greyed out, saying why: a Reference attribute (not supported yet) and the flow's own target. On an export Synchronisation Rule the menu offers every Metaverse attribute, whether or not Metaverse-Derived Attribute Flows are enabled, and no Connected System attributes, because an export expression reads the Metaverse Object alone.
 - **The Derived Attribute Flow panel**<br /> While the expression reads the Metaverse, a panel states what it reads, its step and the chain of steps leading to it, updating as you type.
 - **Checked as you type**<br /> A loop is shown as soon as you type it, listing each attribute and the attribute it is worked out from, and **Update Attribute Flow** stays disabled until you break it; the same check refuses the save. A non-repeatable function shows its warning, and you can still save.
 

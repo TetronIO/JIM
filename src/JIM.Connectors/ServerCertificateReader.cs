@@ -22,6 +22,7 @@ public class ServerCertificateReader : IServerCertificateReader
             endpoint.Timeout,
             Log.Logger,
             endpoint.ServerDescription,
-            endpoint.SecureTransportName);
+            endpoint.SecureTransportName,
+            endpoint.HandshakeFraming);
     }
 }

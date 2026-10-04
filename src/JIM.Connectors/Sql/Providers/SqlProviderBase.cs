@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Connectors;
 using JIM.Models.Core;
 using System.Data.Common;
 using System.Globalization;
@@ -48,6 +49,12 @@ internal abstract class SqlProviderBase : ISqlProvider
     /// overrides this so an administrator reads the term their own documentation uses.
     /// </summary>
     public virtual string SecureTransportName => "TLS";
+
+    /// <summary>
+    /// A TLS listener speaks TLS from the first byte, as Oracle Database's TCPS listener does. A dialect
+    /// whose protocol wraps the handshake overrides this.
+    /// </summary>
+    public virtual SecureHandshakeFraming SecureHandshakeFraming => SecureHandshakeFraming.DirectTls;
 
     /// <summary>
     /// Off unless a dialect's driver genuinely offers the mechanism. Answering true without one would

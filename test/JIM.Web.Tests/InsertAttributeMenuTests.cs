@@ -4,6 +4,7 @@
 using Bunit;
 using Bunit.Rendering;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Shared;
@@ -30,26 +31,34 @@ public class InsertAttributeMenuTests : JimComponentTestContext
 
     private readonly List<string> _inserted = [];
 
-    private RenderFragment Menu(bool withMetaverse) => builder =>
+    private RenderFragment Menu(bool withMetaverse, SyncRuleDirection direction) => builder =>
     {
+        // An export rule's host passes no Connected System attributes: cs[...] resolves to nothing on export.
+        var export = direction == SyncRuleDirection.Export;
         builder.OpenComponent<MudPopoverProvider>(0);
         builder.CloseComponent();
         builder.OpenComponent<InsertAttributeMenu>(1);
         builder.AddComponentParameter(2, nameof(InsertAttributeMenu.MetaverseAttributes), withMetaverse ? new[] { AccountName, Email, Manager } : null);
-        builder.AddComponentParameter(3, nameof(InsertAttributeMenu.ConnectedSystemAttributes), new[] { FirstName, Password });
+        builder.AddComponentParameter(3, nameof(InsertAttributeMenu.ConnectedSystemAttributes), export ? null : new[] { FirstName, Password });
         builder.AddComponentParameter(4, nameof(InsertAttributeMenu.ConnectedSystemName), "HR");
-        builder.AddComponentParameter(5, nameof(InsertAttributeMenu.TargetMetaverseAttributeId), (int?)Email.Id);
-        builder.AddComponentParameter(6, nameof(InsertAttributeMenu.OnInsert), EventCallback.Factory.Create<string>(this, text => _inserted.Add(text)));
+        builder.AddComponentParameter(5, nameof(InsertAttributeMenu.TargetMetaverseAttributeId), export ? null : (int?)Email.Id);
+        builder.AddComponentParameter(6, nameof(InsertAttributeMenu.Direction), direction);
+        builder.AddComponentParameter(7, nameof(InsertAttributeMenu.OnInsert), EventCallback.Factory.Create<string>(this, text => _inserted.Add(text)));
         builder.CloseComponent();
     };
 
-    private async Task<IRenderedComponent<ContainerFragment>> OpenAsync(bool withMetaverse = true)
+    private async Task<IRenderedComponent<ContainerFragment>> OpenAsync(bool withMetaverse = true, SyncRuleDirection direction = SyncRuleDirection.Import)
     {
-        var cut = Render(Menu(withMetaverse));
+        var cut = Render(Menu(withMetaverse, direction));
         await cut.Find("[data-testid='jim-insert-attribute-button']").ClickAsync(new MouseEventArgs());
-        cut.WaitForElement("[data-testid='jim-insert-attribute-group-cs']");
+        cut.WaitForElement("[data-testid='jim-insert-attribute-menu'] [data-insert-item]");
         return cut;
     }
+
+    private static Dictionary<string, (bool Disabled, string? Title)> Buttons(IRenderedComponent<ContainerFragment> cut) =>
+        cut.FindAll("button[data-insert-item]").ToDictionary(
+            b => b.QuerySelector("[data-testid='jim-insert-attribute-item']")!.TextContent.Trim(),
+            b => (Disabled: b.HasAttribute("disabled"), Title: b.GetAttribute("title")));
 
     private static IReadOnlyList<string> Items(IRenderedComponent<ContainerFragment> cut) =>
         cut.FindAll("[data-testid='jim-insert-attribute-item']").Select(e => e.TextContent.Trim()).ToList();
@@ -72,9 +81,7 @@ public class InsertAttributeMenuTests : JimComponentTestContext
     {
         var cut = await OpenAsync();
 
-        var buttons = cut.FindAll("button[data-insert-item]").ToDictionary(
-            b => b.QuerySelector("[data-testid='jim-insert-attribute-item']")!.TextContent.Trim(),
-            b => (Disabled: b.HasAttribute("disabled"), Title: b.GetAttribute("title")));
+        var buttons = Buttons(cut);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(buttons["Account Name mv[\"Account Name\"]"].Disabled, Is.False);
@@ -147,5 +154,34 @@ public class InsertAttributeMenuTests : JimComponentTestContext
         await search.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("name"));
 
         cut.WaitForAssertion(() => Assert.That(Items(cut), Is.EqualTo(new[] { "Account Name mv[\"Account Name\"]", "firstName cs[\"firstName\"]" })));
+    }
+
+    [Test]
+    public async Task InsertAttributeMenu_ExportRule_ListsEveryMetaverseAttributeEnabledAsync()
+    {
+        // An export expression reads the Metaverse Object's persisted values: a Reference reads as the referenced
+        // object's identifier, there is no derived-flow loop to close, and no save-time check refuses any of them.
+        var cut = await OpenAsync(direction: SyncRuleDirection.Export);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-insert-attribute-group-cs']"), Is.Empty);
+            Assert.That(Buttons(cut), Is.EqualTo(new Dictionary<string, (bool, string?)>
+            {
+                ["Account Name mv[\"Account Name\"]"] = (false, null),
+                ["Email mv[\"Email\"]"] = (false, null),
+                ["Manager mv[\"Manager\"]"] = (false, null)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task InsertAttributeMenu_ExportRule_InsertsTheMetaverseAccessorAsync()
+    {
+        var cut = await OpenAsync(direction: SyncRuleDirection.Export);
+
+        await cut.FindAll("[data-testid='jim-insert-attribute-item']").First(e => e.TextContent.Contains("Manager")).ClickAsync(new MouseEventArgs());
+
+        Assert.That(_inserted, Is.EqualTo(new[] { "mv[\"Manager\"]" }));
     }
 }

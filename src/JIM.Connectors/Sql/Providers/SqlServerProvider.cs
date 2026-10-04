@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Connectors;
 using JIM.Models.Core;
 using JIM.Utilities;
 using Microsoft.Data.SqlClient;
@@ -35,6 +36,14 @@ internal class SqlServerProvider : SqlProviderBase
     public override string ConnectivityTestCommandText => "SELECT 1";
 
     public override int GetDefaultPort(SqlConnectionEncryption encryption) => DefaultPort;
+
+    /// <summary>
+    /// SQL Server answers a bare TLS handshake by dropping the connection: a TDS 7.x client agrees
+    /// encryption in a PRELOGIN exchange first, then carries the handshake inside PRELOGIN packets.
+    /// Reading the certificate any other way sees nothing, so every refusal would be reported as a
+    /// connectivity failure and a certificate in Admin &gt; Certificates would never be offered (#1472).
+    /// </summary>
+    public override SecureHandshakeFraming SecureHandshakeFraming => SecureHandshakeFraming.TdsPreLogin;
 
     /// <summary>
     /// <c>Microsoft.Data.SqlClient</c> takes a path to a certificate file and accepts the server's

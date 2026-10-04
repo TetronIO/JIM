@@ -280,9 +280,10 @@ if ($DeltaImportMode) {
 if ($Provider -eq "SqlServer") {
     $settings[(Get-SettingId "Database Name")] = @{ stringValue = $config.DatabaseName }
 
-    # The container presents a self-signed certificate that nothing trusts, and the connector offers no
-    # blanket trust-server-certificate toggle by design. Encryption is therefore off for this test; the
-    # certificate trust path is the SCIM scenario's territory, not this matrix's.
+    # Deliberately unencrypted. The container presents a self-signed certificate that nothing trusts, and the
+    # connector offers no blanket trust-server-certificate toggle by design. This matrix is about what flows
+    # through the connection, not how it is secured: encrypted connections with certificate validation applied
+    # are the RequiresSqlTls tier's job (SqlServerTlsCertificateValidationTests, the sql-tls-tests CI job).
     $settings[(Get-SettingId "Encrypt Connection")] = @{ checkboxValue = $false }
 }
 else {
