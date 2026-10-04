@@ -16,9 +16,11 @@ namespace JIM.Models.Connectors;
 /// <param name="Timeout">How long to wait for the connection and handshake, from the system's own timeout setting.</param>
 /// <param name="ServerDescription">What to call the far end, for example "directory server" or "SCIM service provider".</param>
 /// <param name="SecureTransportName">The secure transport in use, for example "LDAPS" or "HTTPS".</param>
+/// <param name="HandshakeFraming">How the TLS handshake has to reach the server for its certificate to be read. Plain TLS unless the protocol wraps it, as Microsoft SQL Server's does.</param>
 public sealed record SecureEndpoint(
     string Host,
     int Port,
     TimeSpan Timeout,
     string ServerDescription,
-    string SecureTransportName);
+    string SecureTransportName,
+    SecureHandshakeFraming HandshakeFraming = SecureHandshakeFraming.DirectTls);
