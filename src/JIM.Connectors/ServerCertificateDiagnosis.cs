@@ -73,7 +73,7 @@ public static class ServerCertificateDiagnosis
             var diagnostic = probe != null
                 ? probe(endpoint, trustedCertificates)
                 : ServerCertificateProbe.Probe(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout,
-                    logger, endpoint.ServerDescription, endpoint.SecureTransportName);
+                    logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming);
 
             // Nothing wrong with the certificate, or the server could not be reached to look at one. Either way the
             // original failure stands: blaming the certificate would send an administrator after a problem that is

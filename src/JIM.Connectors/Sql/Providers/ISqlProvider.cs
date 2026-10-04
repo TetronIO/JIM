@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Connectors;
 using JIM.Models.Core;
 using System.Data.Common;
 
@@ -134,6 +135,12 @@ internal interface ISqlProvider
     /// a server's certificate is refused ("TLS", "TCPS").
     /// </summary>
     string SecureTransportName { get; }
+
+    /// <summary>
+    /// How a TLS handshake has to reach this dialect's server for JIM to read the certificate it presents
+    /// when a connection is refused. Only the certificate probe uses it; the driver frames its own.
+    /// </summary>
+    SecureHandshakeFraming SecureHandshakeFraming { get; }
 
     /// <summary>
     /// Whether this dialect's driver can be told to accept one specific server certificate, supplied as

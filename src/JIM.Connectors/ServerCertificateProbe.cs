@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Sql;
 using JIM.Models.Connectors;
 using JIM.Utilities;
 using Serilog;
@@ -32,6 +33,7 @@ public static class ServerCertificateProbe
     /// <param name="logger">Logger for the calling operation.</param>
     /// <param name="serverDescription">What to call the far end in the remediation text, for example "directory server" or "SCIM service provider".</param>
     /// <param name="secureTransportName">The secure transport being attempted, for example "LDAPS" or "HTTPS", named in the remediation text.</param>
+    /// <param name="handshakeFraming">How the TLS handshake has to reach the server; see <see cref="SecureEndpoint.HandshakeFraming"/>.</param>
     /// <returns>What the server presented and why it fails, or null when the server could not be reached at all, which is a different problem.</returns>
     public static ServerCertificateDiagnostic? Probe(
         string host,
@@ -40,9 +42,10 @@ public static class ServerCertificateProbe
         TimeSpan timeout,
         ILogger logger,
         string serverDescription = "directory server",
-        string secureTransportName = "LDAPS")
+        string secureTransportName = "LDAPS",
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
     {
-        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName)?.Diagnostic;
+        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming)?.Diagnostic;
     }
 
     /// <summary>
@@ -59,7 +62,8 @@ public static class ServerCertificateProbe
         TimeSpan timeout,
         ILogger logger,
         string serverDescription = "directory server",
-        string secureTransportName = "LDAPS")
+        string secureTransportName = "LDAPS",
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
     {
         X509Certificate2? presented = null;
         var presentedChain = new List<X509Certificate2>();
@@ -74,7 +78,15 @@ public static class ServerCertificateProbe
                 return null;
             }
 
-            using var sslStream = new SslStream(client.GetStream(), false, (_, certificate, chain, _) =>
+            // Without a deadline on reads, a server that accepts the connection and then says nothing would hold the
+            // caller for ever; the timeout already bounds the connect, and now bounds every exchange after it too.
+            client.ReceiveTimeout = client.SendTimeout = (int)Math.Min(timeout.TotalMilliseconds, int.MaxValue);
+
+            var transport = OpenHandshakeTransport(client.GetStream(), handshakeFraming, host, port, logger);
+            if (transport == null)
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName);
+
+            using var sslStream = new SslStream(transport, false, (_, certificate, chain, _) =>
             {
                 if (certificate != null)
                     presented = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
@@ -107,18 +119,7 @@ public static class ServerCertificateProbe
         try
         {
             if (presented == null)
-            {
-                return new ServerCertificateReading
-                {
-                    Diagnostic = new ServerCertificateDiagnostic
-                    {
-                        Host = host,
-                        Port = port,
-                        FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
-                        Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
-                    }
-                };
-            }
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName);
 
             var issuer = FindIssuer(presented, presentedChain);
             var diagnostic = Describe(presented, host, port, trustedCertificates, serverDescription);
@@ -144,6 +145,43 @@ public static class ServerCertificateProbe
             foreach (var certificate in presentedChain)
                 certificate.Dispose();
         }
+    }
+
+    /// <summary>
+    /// The stream the TLS handshake runs over, framed the way the server expects to receive it.
+    /// </summary>
+    /// <returns>The stream, or null where the server has said it will not encrypt at all, so there is no certificate to see.</returns>
+    /// <exception cref="IOException">The server does not speak the framing asked for.</exception>
+    private static Stream? OpenHandshakeTransport(NetworkStream network, SecureHandshakeFraming handshakeFraming, string host, int port, ILogger logger)
+    {
+        if (handshakeFraming != SecureHandshakeFraming.TdsPreLogin)
+            return network;
+
+        // Microsoft SQL Server drops a connection that opens with a bare TLS handshake. A TDS 7.x client agrees
+        // encryption in a PRELOGIN exchange first and then carries the handshake inside PRELOGIN packets, which is
+        // the only way to reach the certificate; a server configured for TDS 8.0 strict encryption alone refuses this
+        // too, and the original failure then stands unexplained, as it did before.
+        if (TdsPreLogin.NegotiateEncryption(network) == TdsEncryption.NotSupported)
+        {
+            logger.Debug("ServerCertificateProbe: {Host}:{Port} answered PRELOGIN saying it does not support encryption, so it has no certificate to present", LogSanitiser.Sanitise(host), port);
+            return null;
+        }
+
+        return new TdsPreLoginTlsStream(network);
+    }
+
+    private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName)
+    {
+        return new ServerCertificateReading
+        {
+            Diagnostic = new ServerCertificateDiagnostic
+            {
+                Host = host,
+                Port = port,
+                FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
+                Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
+            }
+        };
     }
 
     /// <summary>
