@@ -1,10 +1,10 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Doing (Phases 0 to 6 delivered; Phase 7 remains)
+- **Status:** Doing (Phases 0 to 7 delivered; stays Doing until the feature flag is removed, [#1878](https://github.com/TetronIO/JIM/issues/1878), with #242's [#1803](https://github.com/TetronIO/JIM/issues/1803); the changelog entry waits for the same)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`UNIQUE_VALUE_GENERATION.md`](UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
-- **Last Updated:** 2026-10-01 (Phase 6 delivered, portal included; Phase 6 backend, REST, PowerShell and docs delivered earlier the same day); 2026-09-29 (drafted from the PRD against the current code; product-owner decisions of 2026-09-28 and 2026-09-29 applied)
+- **Last Updated:** 2026-10-04 (Phase 7 delivered: Scenario 026, Scenario 023's derived row, `Setup-Scenario-001.ps1 -DeriveFromAccountName`, Developer Guide 3e, causality note; the plan's "Scenario 24" is Scenario 026, since 024 and 025 were taken); 2026-10-01 (Phase 6 delivered, portal included; Phase 6 backend, REST, PowerShell and docs delivered earlier the same day); 2026-09-29 (drafted from the PRD against the current code; product-owner decisions of 2026-09-28 and 2026-09-29 applied)
 
 ## Overview
 
@@ -252,15 +252,26 @@ Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as
 2. `DerivedFlowDependentDetector` (built in Phase 5, with its unit tests; only the surfaces remain); `dependentDerivedFlows` on the responses; PowerShell warnings; API and Pester tests; schema refresh dependents.
 3. Docs: `docs/configuration/synchronisation-rules.md` (deriving Metaverse attributes, ordering, cycles, which synchronisation evaluates them, sequencing sources first, the marking), `docs/concepts/expressions.md`, the Initialising JIM and Schedules guidance, PowerShell and API reference. `CHANGELOG.md` entry withheld until the flag is removed (the #242 precedent).
 
-### Phase 7: Integration and release
+### Phase 7: Integration and release ✅
+
+**Delivered (2026-10-04), with these specifics the plan left open.**
+- **Scenario 026, not 24.** Scenarios 024 and 025 (the Active Directory lab) were numbered after this plan was written; the scenario is `Invoke-Scenario-026-DerivedAttributeFlows.ps1` with `Setup-Scenario-026.ps1`, registered in the runner wherever Scenario 023 is (empty target directory, no OpenLDAP snapshot or general population, Samba AD "OUs only" snapshot) and in `Get-ScenarioDirectoryTypes.ps1` as Samba AD, OpenLDAP and the Active Directory lab, refusing 389 Directory Server. Unlike 023 it does not default to OpenLDAP.
+- **`-DeriveFromAccountName`** also drops the ordinary `email -> Email` import mapping when the CSV has an `email` column, and on an RFC directory exports nothing for User Principal Name (there is no `userPrincipalName`), so there it stays a Metaverse value.
+- **The cross-system rows use a new derived flow rather than reshaping the Training Records Source system.** Training Summary, `"Training " + mv["Training Status"]` on the HR rule with Missing Input Behaviour ContributeNoValue, exported to `physicalDeliveryOfficeName`. Training Status comes only from Training, and only 85% of people have a training record, so one flow serves the correct-order, wrong-order and missing-input rows. The CSV connector has no Delta Import, so "Training delta" is a Full Import followed by a Delta Synchronisation, which processes only the changed object; the HR CSV is untouched, so only the mark brings the HR object into HR's Delta Synchronisation. The correct-order row also asserts that Training's own synchronisation leaves Training Summary alone (the hosting-system rule).
+- **Ordering** runs the initial load as HR, then Training, then an HR Delta Synchronisation (HR projects, so it must synchronise first; Training's join marks every trained HR object), so the first cycle already exercises the mark at Small scale.
+- **Cycle** uses two throwaway attributes (Cycle Probe A on the HR rule, Cycle Probe B on the Training rule), asserts the 400 over raw REST and the same text from `New-JIMSyncRuleMapping`, then removes the half that saved.
+- **Surface parity** also asserts the `derived` step facts (Email 2 of 3, User Principal Name 3 of 3, Training Summary 2 of 3) agree between `Get-JIMSyncRuleMapping` and raw REST, and that disabling the Account Name flow reports Email directly and User Principal Name through Email, as `dependentDerivedFlows` and as warnings, and nothing else.
+- **Scenario 023** now always composes `-DeriveFromAccountName` (its setup turns both flags on) rather than gaining an opt-in switch: its separately generated Email was the stand-in for exactly this, and an opt-in row the runner never passes would never run. The new row, in Test 2 (Gates), pairs each same-named joiner's Account Name with their Email and User Principal Name in the Metaverse and the directory.
+- **Sign-off runs** (2026-10-04, sandbox, Medium so the runs cross a synchronisation page boundary): Scenario 026 on Samba AD, Medium, passed (45 assertions, 9 min 38 s); Scenario 026 on OpenLDAP, Medium, passed (9 min 42 s); Scenario 023 with the new row on Samba AD, Medium, passed (58 assertions, 10 min 21 s); Scenario 001 on Samba AD, Micro, without the switch, passed (13 min 56 s). A first Scenario 026 run at Small passed every row but the PowerShell warning check, which exposed the runner shadowing `Write-Warning` (fixed in the same PR).
+- **Status stays Doing.** The PRD and this plan move to `done/` with the flag removal ([#1878](https://github.com/TetronIO/JIM/issues/1878), no later than #242's [#1803](https://github.com/TetronIO/JIM/issues/1803)), which also brings the `CHANGELOG.md` entry and Scenario 001's conversion (#242 Phase 6).
 
 1. `Setup-Scenario1.ps1 -DeriveFromAccountName` (requires `-GenerateAccountName`; enables both flags): Email = `mv["Account Name"] + "@panoply.local"`, User Principal Name = `mv["Email"]`, export User Principal Name → `userPrincipalName`; removes the generated Email mapping.
-2. New `Invoke-Scenario24-DerivedAttributeFlows.ps1` (below). Scenario 23 gains one row asserting Email and UPN follow a suffixed generated Account Name.
+2. New `Invoke-Scenario-026-DerivedAttributeFlows.ps1` (below; planned as Scenario 24, renumbered because 024 and 025 were taken). Scenario 23 gains one row asserting Email and UPN follow a suffixed generated Account Name.
 3. Developer guide section 3e (graph, derived pass, marking, interleave with 3d); `engineering/CAUSALITY_REFERENCE.md` note that derived changes are ordinary Attribute Flow; #242 plan Phase 5 marked Delivered.
 
 ## Integration testing
 
-**Scenario 24, Metaverse-Derived Attribute Flows** (Samba AD and OpenLDAP, Small template, setup via `Setup-Scenario1.ps1 -GenerateAccountName -DeriveFromAccountName`):
+**Scenario 026, Metaverse-Derived Attribute Flows** (planned as Scenario 24; Samba AD and OpenLDAP, Small template, setup via `Setup-Scenario1.ps1 -GenerateAccountName -DeriveFromAccountName`):
 
 | Row | PRD | Assertion |
 |---|---|---|

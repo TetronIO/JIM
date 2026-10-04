@@ -46,6 +46,12 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
+    It 'restricts Scenario 026 (Metaverse-Derived Attribute Flows) to Samba AD, OpenLDAP and the Active Directory lab, excluding 389 Directory Server' {
+        $result = Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 26
+        $result | Should -Be @('SambaAD', 'OpenLDAP', 'ActiveDirectory')
+        $result | Should -Not -Contain 'DirectoryServer389'
+    }
+
     It 'restricts Scenarios 024 and 025 (Active Directory lab only) to ActiveDirectory' {
         foreach ($number in 24, 25) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')

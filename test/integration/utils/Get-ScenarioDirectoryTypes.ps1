@@ -70,6 +70,11 @@ function Get-ScenarioSupportedDirectoryTypes {
         # Server adds nothing this scenario needs.
         23 { return @('SambaAD', 'OpenLDAP', 'ActiveDirectory') }
 
+        # Scenario 026 (Metaverse-Derived Attribute Flows) composes Scenario 023's substrate (Setup-Scenario-001.ps1
+        # -GenerateAccountName) and refuses 389 Directory Server in its setup for the same reason: the derived pass
+        # is directory-independent, so OpenLDAP already covers the RFC-directory shape.
+        26 { return @('SambaAD', 'OpenLDAP', 'ActiveDirectory') }
+
         # Scenarios 024 (Active Directory Password Policy) and 025 (Active Directory Delta Import
         # Integrity) run on the Active Directory lab only. 024 asserts a Windows domain controller's
         # password policy and a Fine-Grained Password Policy; 025 asserts the Active Directory Recycle

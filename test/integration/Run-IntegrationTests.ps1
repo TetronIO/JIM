@@ -2404,7 +2404,10 @@ function Write-Failure {
     Write-Host "  ${RED}$Message${NC}"
 }
 
-function Write-Warning {
+# Not named Write-Warning: a script function of that name shadows the cmdlet for everything the runner invokes,
+# scenarios and the JIM module included, turning every warning into host text that no `3>&1` or
+# -WarningVariable can capture (it hid the dependent derived flow warnings Scenario 026 asserts on).
+function Write-RunnerWarning {
     param([string]$Message)
     Write-Host "  ${YELLOW}$Message${NC}"
 }
@@ -2588,7 +2591,7 @@ $sambaImageTag = "ghcr.io/tetronio/jim-samba-ad:primary"
 $primaryCheck = Test-SambaImageNeedsRebuild -ImageTag $sambaImageTag
 
 if ($primaryCheck.NeedsRebuild) {
-    Write-Warning "Samba AD Primary image needs rebuilding: $($primaryCheck.Reason)"
+    Write-RunnerWarning "Samba AD Primary image needs rebuilding: $($primaryCheck.Reason)"
     Write-Step "Building Samba AD Primary image (this takes ~2-3 minutes)..."
 
     if (-not (Test-Path $buildScript)) {
@@ -2622,7 +2625,7 @@ if ($scenarioNumber -in 2, 8 -and -not $isRfcDirectoryRun) {
     $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
 
     if ($sourceCheck.NeedsRebuild) {
-        Write-Warning "Samba AD Source image needs rebuilding: $($sourceCheck.Reason)"
+        Write-RunnerWarning "Samba AD Source image needs rebuilding: $($sourceCheck.Reason)"
         Write-Step "Building Samba AD Source image (this takes ~2-3 minutes)..."
 
         if (-not (Test-Path $buildScript)) {
@@ -2654,7 +2657,7 @@ if ($scenarioNumber -in 2, 8 -and -not $isRfcDirectoryRun) {
     $targetCheck = Test-SambaImageNeedsRebuild -ImageTag $targetImageTag
 
     if ($targetCheck.NeedsRebuild) {
-        Write-Warning "Samba AD Target image needs rebuilding: $($targetCheck.Reason)"
+        Write-RunnerWarning "Samba AD Target image needs rebuilding: $($targetCheck.Reason)"
         Write-Step "Building Samba AD Target image (this takes ~2-3 minutes)..."
 
         if (-not (Test-Path $buildScript)) {
@@ -2794,7 +2797,7 @@ if (-not $SkipReset) {
 }
 else {
     Write-Section "Step 1: Reset Skipped"
-    Write-Warning "Using existing environment (SkipReset specified)"
+    Write-RunnerWarning "Using existing environment (SkipReset specified)"
 }
 $timings["1. Reset"] = (Get-Date) - $step1Start
 
@@ -2817,11 +2820,11 @@ if (-not $SkipBuild -and -not $SkipReset) {
 }
 elseif ($SkipBuild) {
     Write-Section "Step 2: Build Skipped"
-    Write-Warning "Using existing images (SkipBuild specified)"
+    Write-RunnerWarning "Using existing images (SkipBuild specified)"
 }
 else {
     Write-Section "Step 2: Build Skipped"
-    Write-Warning "Using existing images (SkipReset implies existing environment)"
+    Write-RunnerWarning "Using existing images (SkipReset implies existing environment)"
 }
 $timings["2. Build"] = (Get-Date) - $step2Start
 
@@ -2981,8 +2984,9 @@ $env:DIRSRV_IMAGE_PRIMARY = $null
 # starts, and the scenario never runs).
 # S023 (Unique Value Generation) is included: its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, so the "OUs only, no test users" snapshot is exactly what it wants too - a
-# schema-ready, empty target directory, faster than live population.
-if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23) {
+# schema-ready, empty target directory, faster than live population. S026 (Metaverse-Derived Attribute
+# Flows) composes the same substrate (-GenerateAccountName -DeriveFromAccountName) and wants the same.
+if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23, 26) {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario-001"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2993,7 +2997,7 @@ if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 
         Write-Host "  ${YELLOW}No snapshot found for $s1Tag — building (first run only)...${NC}"
         & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario-001 -Template $Template
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Snapshot build failed — falling back to live population"
+            Write-RunnerWarning "Snapshot build failed — falling back to live population"
         } elseif (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
             $env:SAMBA_IMAGE_PRIMARY = $s1Tag
             $script:UsingSnapshots = $true
@@ -3016,7 +3020,7 @@ if ($DirectoryType -eq "OpenLDAP") {
     $olBaseImageMissing = $LASTEXITCODE -ne 0
     if ($olBaseImageMissing -or "$olBaseBuildHash" -ne $expectedOlBuildHash) {
         $olRebuildReason = if ($olBaseImageMissing) { "not found" } else { "stale (hash $olBaseBuildHash != $expectedOlBuildHash)" }
-        Write-Warning "OpenLDAP base image needs rebuilding: $olRebuildReason"
+        Write-RunnerWarning "OpenLDAP base image needs rebuilding: $olRebuildReason"
         Write-Step "Building OpenLDAP base image..."
         & "$scriptRoot/docker/openldap/Build-OpenLdapImage.ps1"
         if ($LASTEXITCODE -ne 0) {
@@ -3039,10 +3043,11 @@ if ($DirectoryType -eq "OpenLDAP") {
     # one probe user, and its Scenario 001 substrate needs an EMPTY ou=People).
     # S023 (Unique Value Generation) is the same shape again: its substrate is Setup-Scenario-001.ps1
     # -GenerateAccountName, and every value it generates depends on the target directory starting
-    # empty, so it must not be pre-populated with general test data either.
+    # empty, so it must not be pre-populated with general test data either. S026 (Metaverse-Derived
+    # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3055,13 +3060,13 @@ if ($DirectoryType -eq "OpenLDAP") {
             Write-Host "  ${YELLOW}No current OpenLDAP snapshot for $olTag - building...${NC}"
             & "$scriptRoot/Build-OpenLDAPSnapshots.ps1" -Scenario $olSnapshotScenario -Template $Template
             if ($LASTEXITCODE -ne 0) {
-                Write-Warning "OpenLDAP snapshot build failed - falling back to live population"
+                Write-RunnerWarning "OpenLDAP snapshot build failed - falling back to live population"
             } elseif (Test-OpenLDAPSnapshotCurrent -ImageTag $olTag -ExpectedSnapshotHash $olHash -ExpectedBaseHash $expectedOlBuildHash) {
                 $env:OPENLDAP_IMAGE_PRIMARY = $olTag
                 $script:UsingRfcDirectorySnapshots = $true
                 Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
             } else {
-                Write-Warning "OpenLDAP snapshot $olTag was built but is still not current (reason above) - falling back to live population"
+                Write-RunnerWarning "OpenLDAP snapshot $olTag was built but is still not current (reason above) - falling back to live population"
             }
         }
     }
@@ -3115,7 +3120,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     $dsBaseImageMissing = $LASTEXITCODE -ne 0
     if ($dsBaseImageMissing -or "$dsBaseBuildHash" -ne $expectedDsBuildHash) {
         $dsRebuildReason = if ($dsBaseImageMissing) { "not found" } else { "stale (hash $dsBaseBuildHash != $expectedDsBuildHash)" }
-        Write-Warning "389 Directory Server image needs rebuilding: $dsRebuildReason"
+        Write-RunnerWarning "389 Directory Server image needs rebuilding: $dsRebuildReason"
         Write-Step "Building 389 Directory Server image..."
         & "$scriptRoot/docker/dirsrv/Build-DirsrvImage.ps1"
         if ($LASTEXITCODE -ne 0) {
@@ -3141,8 +3146,8 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # come from the fixture's Get-DirsrvBuildHash.ps1 (dot-sourced above), so the snapshot hash, the
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
-    # verified: a snapshot baked from a stale base is stale.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
+    # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3155,13 +3160,13 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
             Write-Host "  ${YELLOW}No current 389 Directory Server snapshot for $dsTag - building...${NC}"
             & "$scriptRoot/Build-DirsrvSnapshots.ps1" -Scenario $dsSnapshotScenario -Template $Template
             if ($LASTEXITCODE -ne 0) {
-                Write-Warning "389 Directory Server snapshot build failed - falling back to live population"
+                Write-RunnerWarning "389 Directory Server snapshot build failed - falling back to live population"
             } elseif (Test-DirsrvSnapshotCurrent -ImageTag $dsTag -ExpectedSnapshotHash $dsSnapshotHash -ExpectedBaseHash $expectedDsBuildHash) {
                 $env:DIRSRV_IMAGE_PRIMARY = $dsTag
                 $script:UsingRfcDirectorySnapshots = $true
                 Write-Host "  ${GREEN}389 Directory Server snapshot built and ready: $dsTag${NC}"
             } else {
-                Write-Warning "389 Directory Server snapshot $dsTag was built but is still not current (reason above) - falling back to live population"
+                Write-RunnerWarning "389 Directory Server snapshot $dsTag was built but is still not current (reason above) - falling back to live population"
             }
         }
     }
@@ -3275,7 +3280,7 @@ if ($scenarioNumber -eq 8 -and $usesSambaContainers) {
             Write-Host "  ${YELLOW}No snapshots found for Scenario 008 — building (first run only)...${NC}"
             & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario-008 -Template $Template
             if ($LASTEXITCODE -ne 0) {
-                Write-Warning "Snapshot build failed — falling back to live population"
+                Write-RunnerWarning "Snapshot build failed — falling back to live population"
             } elseif ((Test-SnapshotAvailable -ImageTag $s8SourceTag -ExpectedHash $s8Hash) -and
                       (Test-SnapshotAvailable -ImageTag $s8TargetTag -ExpectedHash $s8Hash)) {
                 $env:SAMBA_IMAGE_SOURCE = $s8SourceTag
@@ -3425,7 +3430,7 @@ else {
         }
     }
     else {
-        Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
+        Write-RunnerWarning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
         Start-Sleep -Seconds 60
     }
 }
@@ -3562,8 +3567,8 @@ elseif ($isActiveDirectoryRun) {
 # set is the one the old "*Scenario1*" wildcard selected, carried over unchanged (#1762).
 # S023 (Unique Value Generation) needs the same clean Corp OU as S001 when it runs live (no snapshot):
 # its substrate is Setup-Scenario-001.ps1 -GenerateAccountName, and it supports Samba AD as well as
-# OpenLDAP.
-if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
+# OpenLDAP. S026 (Metaverse-Derived Attribute Flows) composes the same substrate.
+if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23, 26 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -3576,7 +3581,7 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:
         Write-Success "OU does not exist (clean state)"
     }
     else {
-        Write-Warning "Could not delete OU Corp: $result (continuing anyway)"
+        Write-RunnerWarning "Could not delete OU Corp: $result (continuing anyway)"
     }
 
     # Create the Corp base OU and its sub-OUs (Users, Groups)
@@ -3589,7 +3594,7 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:
         Write-Success "OU already exists: Corp"
     }
     else {
-        Write-Warning "Failed to create OU Corp: $result"
+        Write-RunnerWarning "Failed to create OU Corp: $result"
     }
 
     # Create Users OU under Corp
@@ -3601,7 +3606,7 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:
         Write-Success "OU already exists: Users"
     }
     else {
-        Write-Warning "Failed to create OU Users: $result"
+        Write-RunnerWarning "Failed to create OU Users: $result"
     }
 
     # Create Groups OU under Corp
@@ -3613,7 +3618,7 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:
         Write-Success "OU already exists: Groups"
     }
     else {
-        Write-Warning "Failed to create OU Groups: $result"
+        Write-RunnerWarning "Failed to create OU Groups: $result"
     }
 
     # The subtree delete above took the image's baked delegation over OU=Corp with it, so grant it
@@ -3682,8 +3687,9 @@ if ($adPopulateEntries.Count -gt 0) {
 # ou=People that must start empty; the general population would fill it.
 # Skip for S023 (Unique Value Generation): its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
-# directory must start empty exactly as it must for S001.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23 -and -not $script:UsingRfcDirectorySnapshots) {
+# directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
+# the same substrate and asserts on every account it provisions, so it too needs an empty directory.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -3737,8 +3743,8 @@ if ($SetupOnly) {
     } else { $null }
 
     if (-not $setupScript) {
-        Write-Warning "No dedicated setup script found for '$Scenario'"
-        Write-Warning "SetupOnly mode requires a Setup-Scenario*.ps1 script"
+        Write-RunnerWarning "No dedicated setup script found for '$Scenario'"
+        Write-RunnerWarning "SetupOnly mode requires a Setup-Scenario*.ps1 script"
         Write-Host "${GRAY}Environment is running but not configured with scenario-specific connected systems.${NC}"
     }
     else {
@@ -4143,7 +4149,7 @@ finally {
             Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
         }
         else {
-            Write-Warning "Docker stats sampler survived the stop (PIDs: $($samplerSurvivors.Id -join ', ')); the CSV may keep growing"
+            Write-RunnerWarning "Docker stats sampler survived the stop (PIDs: $($samplerSurvivors.Id -join ', ')); the CSV may keep growing"
         }
     }
 
@@ -4228,7 +4234,7 @@ Write-Section "Step 6: Capturing Performance Metrics"
 # Use -CaptureMetrics to force capture regardless of template size.
 $metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
-    Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
+    Write-RunnerWarning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"
 
     # Save wall-clock duration so we can still compare total run time between runs
@@ -4390,7 +4396,7 @@ if ($operations) {
 }
 
 if ($metrics.Operations.Count -eq 0) {
-    Write-Warning "No performance metrics found in worker logs"
+    Write-RunnerWarning "No performance metrics found in worker logs"
 }
 else {
     Write-Success "Captured $($metrics.Operations.Count) operation timings"
@@ -4627,7 +4633,7 @@ if ($metricsStreamJob) {
             -ResultFile $(if ($currentFile) { $currentFile } else { "" })
     }
     catch {
-        Write-Warning "MetricsSubmission: Failed to submit results: $($_.Exception.Message)"
+        Write-RunnerWarning "MetricsSubmission: Failed to submit results: $($_.Exception.Message)"
     }
 }
 
@@ -4770,7 +4776,7 @@ Write-Host ""
             Invoke-ActiveDirectoryLabToolbox -Action Stop
         }
         catch {
-            Write-Warning "Could not stop the LDAP toolbox: $($_.Exception.Message)"
+            Write-RunnerWarning "Could not stop the LDAP toolbox: $($_.Exception.Message)"
         }
     }
 }
