@@ -86,7 +86,8 @@ namespace JIM.PostgresData.Migrations
             //
             // The column list is RetiredGeneratedValueBulkColumns.RetiredGeneratedValues, written out because a
             // trigger cannot read a C# constant; RetiredGeneratedValueRegisterDatabaseTests asserts this function
-            // names every column in that list. The Connected System Object name follows ObjectNaming's candidates.
+            // names every column in that list. The literals 1 (GeneratedValueTokenKind.Sequence) and 3
+            // (RetiredGeneratedValueReason.Recalled) are persisted ordinals, pinned by the enum ordinal tests.
             migrationBuilder.Sql("""
                 CREATE OR REPLACE FUNCTION jim_retire_generated_values_on_generation_delete() RETURNS trigger AS $$
                 BEGIN
@@ -100,15 +101,10 @@ namespace JIM.PostgresData.Migrations
                                LOWER(a."NormalisedValue"),
                                now(),
                                3,
-                               CASE WHEN a."MetaverseObjectId" IS NOT NULL THEN mvo."CachedDisplayName"
-                                    ELSE (SELECT v."StringValue"
-                                          FROM "ConnectedSystemObjectAttributeValues" v
-                                          INNER JOIN "ConnectedSystemAttributes" ca ON ca."Id" = v."AttributeId"
-                                          WHERE v."ConnectedSystemObjectId" = a."ConnectedSystemObjectId"
-                                            AND LOWER(ca."Name") IN ('displayname', 'cn', 'name')
-                                            AND BTRIM(COALESCE(v."StringValue", '')) <> ''
-                                          ORDER BY CASE LOWER(ca."Name") WHEN 'displayname' THEN 0 WHEN 'cn' THEN 1 ELSE 2 END
-                                          LIMIT 1) END,
+                               -- A Metaverse holder's stored display name. An export holder is recorded by id only:
+                               -- naming it would mean copying ObjectNaming's attribute catalogue into SQL, where it
+                               -- would drift; it normally still exists, and the register links to it by id.
+                               mvo."CachedDisplayName",
                                COALESCE(a."MetaverseObjectId", a."ConnectedSystemObjectId"),
                                NULL
                         FROM "GeneratedValueAssignments" a

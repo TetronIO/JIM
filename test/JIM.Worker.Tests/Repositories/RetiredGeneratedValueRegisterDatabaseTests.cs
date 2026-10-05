@@ -323,6 +323,26 @@ public class RetiredGeneratedValueRegisterDatabaseTests
     }
 
     [Test]
+    public async Task GeneratedExportFlowRemoved_TriggerRecordsTheHolderByIdWithoutGuessingItsNameAsync()
+    {
+        // The trigger cannot see ObjectNaming's catalogue, so it does not copy it: an export holder is recorded by
+        // id only (it normally still exists when its flow is removed, and the register links to it by id).
+        var estate = await SeedEstateAsync();
+        await AddExportAssignmentAsync(estate, "jbloggs");
+
+        await using (var ctx = NewContext())
+            await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""SyncRuleMappingGenerations"" WHERE ""Id"" = {0}", estate.ExportGenerationId);
+
+        var stored = await SingleRetiredAsync(csAttributeId: estate.CsTextAttributeId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Reason, Is.EqualTo(RetiredGeneratedValueReason.Recalled));
+            Assert.That(stored.FromObjectId, Is.EqualTo(estate.CsoId));
+            Assert.That(stored.FromObjectDisplayName, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task DeleteSyncRule_GeneratedFlowGoesByCascade_TriggerStillRetiresAsync()
     {
         var estate = await SeedEstateAsync();
