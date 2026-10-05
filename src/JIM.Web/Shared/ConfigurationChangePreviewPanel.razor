@@ -264,10 +264,14 @@
                                                system spells it. "objects" after it is what says the row covers a
                                                population rather than one of them, without inflecting a name JIM does
                                                not own; the system it belongs to is prose beside that. *@
-                                            <span class="jim-code-inline">@row.Item.MetaverseObjectTypeName</span>
-                                            <span> objects</span>
-                                            @* A takeover's system is where the value now comes from, not where the objects are. *@
-                                            <span>@ConfigurationChangePreviewWording.SystemClause(row.Item.TransitionType, row.Item.ConnectedSystemName)</span>
+                                            @* One line, as every cell of a virtualised grid must be; the whole phrase is the tooltip.
+                                               A takeover's system is where the value now comes from, not where the objects are. *@
+                                            var systemClause = ConfigurationChangePreviewWording.SystemClause(row.Item.TransitionType, row.Item.ConnectedSystemName);
+                                            <span class="jim-one-line" title="@($"{row.Item.MetaverseObjectTypeName} objects{systemClause}")">
+                                                <span class="jim-code-inline">@row.Item.MetaverseObjectTypeName</span>
+                                                <span> objects</span>
+                                                <span>@systemClause</span>
+                                            </span>
                                         }
                                     </CellTemplate>
                                 </TemplateColumn>

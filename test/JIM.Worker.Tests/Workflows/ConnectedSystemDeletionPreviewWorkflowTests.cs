@@ -43,6 +43,8 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
             Assert.That(cleared.Select(d => d.AttributeName), Is.EquivalentTo(new[] { "DisplayName", "EmployeeId", "Description" }),
                 "every attribute HR alone contributes must be reported cleared");
             Assert.That(cleared.All(d => d.MetaverseObjectId == mvo.Id && d.NewValue == null), Is.True);
+            Assert.That(cleared.Select(d => d.ConnectedSystemId), Is.All.Null,
+                "a cleared value happens on the Metaverse Object, so it names no Connected System to group or label it under");
             Assert.That(cleared.Single(d => d.AttributeName == "Description").OldValue, Is.EqualTo(HrDescription));
 
             Assert.That(exports.Select(d => d.AttributeName), Is.EquivalentTo(new[] { "DisplayName", "Description" }),
@@ -145,6 +147,7 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         {
             Assert.That(eligibility?.MetaverseObjectId, Is.EqualTo(mvo.Id));
             Assert.That(eligibility?.NewValue, Is.EqualTo("Eligible for deletion immediately"));
+            Assert.That(eligibility?.ConnectedSystemId, Is.Null, "eligibility is the Metaverse Object's, not any system's");
             Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor), Is.Empty,
                 "an object deleted outright has nothing recalled first");
         }

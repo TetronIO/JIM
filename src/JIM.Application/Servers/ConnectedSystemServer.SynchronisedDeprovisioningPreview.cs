@@ -208,7 +208,6 @@ public partial class ConnectedSystemServer
                     ObjectTypeName: mvo.Type?.Name,
                     MetaverseObjectTypeId: mvo.Type?.Id,
                     MetaverseObjectId: mvo.Id,
-                    ConnectedSystemId: pass.ConnectedSystemId,
                     AttributeName: PreviewDeletionEligibilityEvaluator.DeletionEligibilityAttributeName,
                     OldValue: PreviewDeletionEligibilityEvaluator.NotDeletionEligible,
                     NewValue: PreviewDeletionEligibilityEvaluator.DescribeDeletionOutcome(decision)));
@@ -242,7 +241,6 @@ public partial class ConnectedSystemServer
                         ObjectTypeName: mvo.Type?.Name,
                         MetaverseObjectTypeId: mvo.Type?.Id,
                         MetaverseObjectId: mvo.Id,
-                        ConnectedSystemId: pass.ConnectedSystemId,
                         NewValue: keptCount == 1 ? "1 value kept" : $"{keptCount} values kept"));
                 }
             }
@@ -349,7 +347,6 @@ public partial class ConnectedSystemServer
             ObjectTypeName: mvo.Type?.Name,
             MetaverseObjectTypeId: mvo.Type?.Id,
             MetaverseObjectId: mvo.Id,
-            ConnectedSystemId: disconnectedSystemIds[0],
             AttributeName: PreviewDeletionEligibilityEvaluator.DeletionEligibilityAttributeName,
             OldValue: PreviewDeletionEligibilityEvaluator.NotDeletionEligible,
             NewValue: PreviewDeletionEligibilityEvaluator.DescribeDeletionOutcome(decision));
@@ -425,8 +422,11 @@ public partial class ConnectedSystemServer
             var oldValue = PreviewValueRenderer.Join(removed.Select(PreviewValueRenderer.Render));
             var newValue = PreviewValueRenderer.Join(added.Select(PreviewValueRenderer.Render));
 
+            // Only a takeover names a Connected System: the surviving contributor the value now comes from. A cleared or
+            // withdrawn value happens on the Metaverse Object, and naming the deleted system on it would group and label
+            // Metaverse Objects as though they lived in the system being deleted.
             ActivityRunProfileExecutionItemSyncOutcomeType transition;
-            int? connectedSystemId = removed.Select(av => av.ContributedBySystemId).FirstOrDefault(id => id.HasValue);
+            int? connectedSystemId = null;
             if (clearedAttributeIds.Contains(attributeId))
             {
                 transition = ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor;
