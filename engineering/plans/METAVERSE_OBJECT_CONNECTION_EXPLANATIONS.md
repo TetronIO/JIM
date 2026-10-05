@@ -54,8 +54,8 @@ The PRD settles *what*; this plan settles *how*, and records four research findi
 
 | # | Finding | Effect |
 |---|---|---|
-| F1 | Export evaluation runs only when an object's attribute values change. A new export rule, provisioning switched on, or widened criteria do not provision already-in-scope objects until their data changes. | The PRD's "Provisions at next sync" reason was a false promise; renamed **Not yet provisioned**, worded truthfully. Whether the engine behaviour is a defect goes to its own issue once a test confirms it (Phase 0). |
-| F2 | The synchronisation rule loader includes scoping groups two levels deep; the editor allows any depth. A third-level group would be missing at evaluation, and its parent could evaluate as an empty (met) group. | Probable synchronisation integrity defect. Must be confirmed (Phase 0) and, if real, fixed first in its own stack layer, because the explanation must load exactly the tree synchronisation loads. |
+| F1 | Export evaluation runs only when an object's attribute values change. A new export rule, provisioning switched on, or widened criteria do not provision already-in-scope objects until their data changes. | **Confirmed** (Phase 0) and filed as [#1925](https://github.com/TetronIO/JIM/issues/1925). The PRD's "Provisions at next sync" reason was a false promise; renamed **Not yet provisioned**, worded truthfully. |
+| F2 | Every rule loader includes scoping groups two levels deep; the editor allows any depth. A third-level group is missing at evaluation, and its parent evaluates as an empty (met) group. | **Confirmed** (Phase 0): a Sales user is reported in scope of a rule requiring Finance. Also affects the editor loader, REST scoping-group endpoints, configuration snapshots and attribute-in-use checks. Fixed first in its own stack layer (approach pending: any depth, or a two-level cap). |
 | F3 | No join rule is recorded on the CSO; history is partial and ages out. | Decided: record it durably on the CSO (D4), with derivation as the fallback for existing objects. |
 | F4 | "Provisioning under way" and "Object Type conflict" always involve a joined CSO. | Both move to the joined rows' expansion; Not connected keeps three scope reasons plus Rule misconfigured. |
 | F5 | Activity pages show per-run CSO and Metaverse Object changes to every signed-in user. | Decided: the planned interim Inspect / Changes restriction is dropped; all three are re-evaluated together in the RBAC work. |
@@ -164,11 +164,16 @@ Durable join record (D4): `ConnectedSystemObject.JoinSyncRuleId` (`int?`, FK to 
 
 Work lands as a stack (see `/stack-pr`), bottom-up. Phase 0 decides whether layer 1 exists.
 
-### Phase 0: Verify the findings (tests only)
+### Phase 0: Verify the findings (tests only) ✅
 
 1. **F2, nested depth:** a `RequiresPostgres` database test that saves an export rule with a three-level scoping tree through the real repository, loads it with `GetSyncRulesAsync`, and asserts the tree is complete; plus a worker-level test showing the scope outcome a missing third level produces. Red confirms the defect.
 2. **F1, provisioning trigger:** a worker test that creates an export rule with provisioning on for an existing, unchanged, in-scope Metaverse Object, runs a full synchronisation, and asserts whether a Create Pending Export is staged. This pins current behaviour either way; if it is not staged, file a separate issue (search first) and link it from the PRD, and word Not yet provisioned accordingly.
-3. **Multi-valued first-value behaviour:** a unit test that pins today's semantics, so the explanation's "further values not evaluated" flag has a fixed reference. The semantics themselves are decided and fixed under [#1923](https://github.com/TetronIO/JIM/issues/1923).
+3. **Multi-valued first-value behaviour:** not pinned by a test here; a test asserting known-wrong behaviour would only have to be reversed by [#1923](https://github.com/TetronIO/JIM/issues/1923), and the explanation's agreement tests (Phase 1) already guarantee it reports whatever the evaluator does.
+
+Results (2026-10-05):
+
+- **0.1 confirmed.** `SyncRuleScopingDepthDatabaseTests` (real PostgreSQL): a three-level tree persists (3 groups, 1 criterion), but `GetSyncRulesAsync()` and `GetSyncRuleAsync(id)` both return the child group with no grandchild, and `IsMvoInScopeForExportRule` reports a Sales user in scope of a rule requiring Finance. Also found: the per-system loader full and delta synchronisation use (`GetSyncRulesAsync(connectedSystemId, ...)`) includes no scoping criteria at all; its rules receive their groups only because a tracked `GetAllSyncRulesAsync` in the same context fixes them up. The test is the first commit of layer 1.
+- **0.2 confirmed.** `ExportRuleAddedLaterWorkflowTests`: switching provisioning on and running a Full Synchronisation stages nothing for three in-scope objects (configuration change detected, no attribute changed). Filed as [#1925](https://github.com/TetronIO/JIM/issues/1925) with the test; it lands with that fix, not here.
 
 ### Layer 1 (conditional on Phase 0.1): Load scoping trees at full depth
 
