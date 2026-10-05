@@ -711,9 +711,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
                     // Sound on every count JIM checks, which leaves only one explanation for the refusal:
                     // what vouches for it is JIM's certificate store rather than the operating system's
                     // bundle, and the driver only knows about the latter.
-                    if (reading is { Diagnostic.FailureReason: ServerCertificateFailureReason.None, Chain.Leaf: { } leaf } &&
-                        IsVouchedForByJimCertificateStore(leaf.Data, trustedCertificates))
-                        vouchedForCertificate = leaf.Data;
+                    if (reading is { Diagnostic.FailureReason: ServerCertificateFailureReason.None, Chain: { } chain } &&
+                        IsVouchedForByJimCertificateStore(chain, trustedCertificates))
+                        vouchedForCertificate = chain.Leaf.Data;
 
                     return reading?.Diagnostic;
                 });
@@ -804,33 +804,33 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     }
 
     /// <summary>
-    /// Whether the certificate a server presented chains to something an administrator added in
-    /// Admin &gt; Certificates.
+    /// Whether the certificate chain a server presented holds something an administrator added in
+    /// Admin &gt; Certificates: its root, an intermediate, or the server's own certificate.
     /// </summary>
     /// <remarks>
-    /// Deliberately narrower than "would this validate": the operating system's own anchors are
-    /// excluded, because a certificate they already vouch for and that a driver still refused was
-    /// refused for some other reason, and accepting it anyway would waive that reason.
+    /// The same rule as every other connector (<see cref="JimCertificateStoreTrust"/>), judged on what the
+    /// server sent rather than anything JIM downloaded. Deliberately narrower than "would this validate": the
+    /// operating system's own anchors are excluded, because a certificate they already vouch for and that a
+    /// driver still refused was refused for some other reason, and accepting it anyway would waive that reason.
     /// </remarks>
-    private static bool IsVouchedForByJimCertificateStore(byte[] derEncodedCertificate, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    private static bool IsVouchedForByJimCertificateStore(PresentedServerCertificateChain chain, IReadOnlyCollection<X509Certificate2> trustedCertificates)
     {
-        if (trustedCertificates.Count == 0)
-            return false;
+        var sent = chain.All
+            .Skip(1)
+            .Where(certificate => certificate.Source == ServerCertificateChainElementSource.SentByServer)
+            .Select(certificate => X509CertificateLoader.LoadCertificate(certificate.Data))
+            .ToList();
 
-        using var certificate = X509CertificateLoader.LoadCertificate(derEncodedCertificate);
-        using var chain = new X509Chain();
-
-        // Air-gapped deployments cannot reach a revocation list or responder, matching the connection itself.
-        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-
-        foreach (var trustedCertificate in trustedCertificates)
+        try
         {
-            chain.ChainPolicy.CustomTrustStore.Add(trustedCertificate);
-            chain.ChainPolicy.ExtraStore.Add(trustedCertificate);
+            using var certificate = X509CertificateLoader.LoadCertificate(chain.Leaf.Data);
+            return JimCertificateStoreTrust.VouchesFor(certificate, sent, trustedCertificates);
         }
-
-        return chain.Build(certificate);
+        finally
+        {
+            foreach (var sentCertificate in sent)
+                sentCertificate.Dispose();
+        }
     }
     #endregion
 

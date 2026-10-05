@@ -1,5 +1,6 @@
 @using JIM.Models.Connectors
 @using JIM.Models.Staging
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 
@@ -8,7 +9,8 @@
 
 @*
     Trusting the certificate a Connected System's server presents, in the two steps the decision actually has:
-    choosing what to trust (skipped where the server sent only its own certificate), then confirming it.
+    choosing which certificate in its chain to trust (skipped where JIM found only the server's own), then confirming
+    it. Every certificate in the chain makes the connection work; the choice is how long the decision lasts.
 
     The certificate is read from the server again when the confirmation is given, not carried from the failure that
     reported it. That is what makes the third state below possible: a server presenting something other than what
@@ -27,33 +29,31 @@
             case Step.Choose:
                 <MudStack Spacing="4">
                     <MudText Typo="Typo.body1">
-                        @Diagnostic.Host sent its own certificate and the authority that issued it. Trusting the
-                        authority covers this server and anything else it issues for.
+                        Each choice makes this connection work. They differ in how long the decision lasts and in what
+                        else it covers.
                     </MudText>
                     <MudRadioGroup T="string" @bind-Value="_selectedThumbprint">
-                        <div class="jim-trust-option @(IsIssuerSelected ? "jim-trust-option-selected" : "")">
-                            <MudRadio T="string" Value="@IssuerThumbprint" Color="Color.Primary">
-                                <div class="jim-trust-option-title">
-                                    @CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
-                                </div>
-                                <div class="jim-trust-option-note">
-                                    The authority that issued this certificate. Survives renewal, so this decision
-                                    holds when the server's own certificate is replaced.
-                                </div>
-                                <div class="jim-trust-option-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.IssuerThumbprint)</div>
-                            </MudRadio>
-                        </div>
-                        <div class="jim-trust-option @(IsIssuerSelected ? "" : "jim-trust-option-selected")">
-                            <MudRadio T="string" Value="@LeafThumbprint" Color="Color.Primary">
-                                <div class="jim-trust-option-title">@CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject)</div>
-                                <div class="jim-trust-option-note">
-                                    This server's own certificate, and nothing else. You will need to trust the new
-                                    one when it is renewed@(Diagnostic.ValidTo.HasValue ? $" in {ValidToText}" : "").
-                                </div>
-                                <div class="jim-trust-option-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.Thumbprint)</div>
-                            </MudRadio>
-                        </div>
+                        @foreach (var option in _options)
+                        {
+                            <div class="jim-trust-option @(option.Thumbprint == _selectedThumbprint ? "jim-trust-option-selected" : "")">
+                                <MudRadio T="string" Value="@option.Thumbprint" Color="Color.Primary">
+                                    <div class="jim-trust-option-title">
+                                        @option.CommonName
+                                        @if (option.IsRecommended)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
+                                        }
+                                    </div>
+                                    <div class="jim-trust-option-note">@DescribeDurability(option)</div>
+                                    <div class="jim-trust-option-note">@DescribeSource(option)</div>
+                                    @if (option.AlsoStored.Count > 0)
+                                    {
+                                        <div class="jim-trust-option-note">@DescribeAlsoStored(option)</div>
+                                    }
+                                    <div class="jim-trust-option-thumbprint">@CertificateDisplay.FormatThumbprint(option.Thumbprint)</div>
+                                </MudRadio>
+                            </div>
+                        }
                     </MudRadioGroup>
                 </MudStack>
                 break;
@@ -61,16 +61,25 @@
             case Step.Confirm:
                 <MudStack Spacing="4">
                     <MudText Typo="Typo.body1">
-                        JIM will trust @(IsIssuerSelected ? "every certificate this authority issues" : "this certificate"),
+                        JIM will trust @(Selected.Role == ServerCertificateChainRole.Server ? "this certificate" : $"every certificate {Selected.CommonName} issues"),
                         until you remove it from <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>.
+                        @if (Selected.Role == ServerCertificateChainRole.Server)
+                        {
+                            <text>@DescribeDurability(Selected)</text>
+                        }
                         Check the thumbprint against the one the server's administrator gives you before you continue.
                     </MudText>
+
+                    @if (Selected.AlsoStored.Count > 0)
+                    {
+                        <MudText Typo="Typo.body1">@DescribeAlsoStored(Selected)</MudText>
+                    }
 
                     <MudSimpleTable Dense="true" Elevation="0" Outlined="true">
                         <tbody>
                             <tr>
                                 <td class="mud-text-secondary">Trusting</td>
-                                <td>@SelectedName</td>
+                                <td>@Selected.CommonName</td>
                             </tr>
                             <tr>
                                 <td class="mud-text-secondary">Presented by</td>
@@ -179,32 +188,18 @@
     private string? _presentedThumbprint;
     private string? _failureMessage;
 
-    private string LeafThumbprint => Diagnostic.Thumbprint ?? string.Empty;
+    private List<ServerCertificateTrustOption> _options = [];
 
-    private string IssuerThumbprint => Diagnostic.IssuerThumbprint ?? string.Empty;
-
-    private bool IsIssuerSelected => Diagnostic.IsIssuerCertificateAvailable && _selectedThumbprint == IssuerThumbprint;
-
-    private string SelectedName => IsIssuerSelected
-        ? CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)
-        : CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject);
-
-    private string ValidToText => Diagnostic.ValidTo.HasValue ? Diagnostic.ValidTo.Value.ToString("MMMM yyyy") : string.Empty;
+    private ServerCertificateTrustOption Selected =>
+        _options.FirstOrDefault(option => option.Thumbprint == _selectedThumbprint) ?? _options[0];
 
     protected override void OnInitialized()
     {
-        // Where the server sent the authority that issued its certificate, trusting the authority is the durable
-        // choice and is offered first. Where it did not, the server's own certificate is the only thing there is.
-        if (Diagnostic.IsIssuerCertificateAvailable)
-        {
-            _selectedThumbprint = IssuerThumbprint;
-            _step = Step.Choose;
-        }
-        else
-        {
-            _selectedThumbprint = LeafThumbprint;
-            _step = Step.Confirm;
-        }
+        // The most durable choice is offered first and selected. Where JIM found nothing above the server's own
+        // certificate, that certificate is the only thing there is, and there is nothing to choose between.
+        _options = ServerCertificateTrustOption.For(Diagnostic);
+        _selectedThumbprint = _options[0].Thumbprint;
+        _step = _options.Count > 1 ? Step.Choose : Step.Confirm;
 
         _changeReason = string.IsNullOrEmpty(ConnectedSystemName)
             ? $"Unblocking the connection to {Diagnostic.Host}."
@@ -216,10 +211,48 @@
         Step.Choose => "Which certificate should JIM trust?",
         Step.Refused => "The certificate has changed",
         Step.Failed => "JIM could not trust this certificate",
-        _ => "Trust this certificate?"
+        _ => $"Trust {Selected.CommonName}?"
     };
 
-    private void Continue() => _step = Step.Confirm;
+    private static string DescribeDurability(ServerCertificateTrustOption option) => option.Role switch
+    {
+        ServerCertificateChainRole.Root =>
+            "Survives renewal of every certificate beneath it. Also trusts every other certificate issued under this root.",
+        ServerCertificateChainRole.Intermediate =>
+            $"Survives renewal of the server's certificate, until this certificate authority's own certificate is renewed{FormatRenewal(option.Element.ValidTo)}. Also trusts every certificate it issues.",
+        _ => $"This server only. Needs trusting again when its certificate is renewed{FormatRenewal(option.Element.ValidTo)}."
+    };
+
+    /// <summary>
+    /// Where the certificate came from. A download address is given in full, because it was named by a certificate
+    /// nothing vouches for yet.
+    /// </summary>
+    private static string DescribeSource(ServerCertificateTrustOption option) => option.Element.Source switch
+    {
+        ServerCertificateChainElementSource.Downloaded when option.AddressGivenBy != null =>
+            $"Downloaded from {option.Element.DownloadedFrom}, the address in {option.AddressGivenBy}'s certificate.",
+        ServerCertificateChainElementSource.Downloaded => $"Downloaded from {option.Element.DownloadedFrom}.",
+        ServerCertificateChainElementSource.JimCertificateStore => "Already in Trusted Certificates.",
+        ServerCertificateChainElementSource.OperatingSystem => "Found in the operating system's certificate store.",
+        _ => "Sent by the server."
+    };
+
+    private static string DescribeAlsoStored(ServerCertificateTrustOption option) =>
+        $"JIM also adds {string.Join(" and ", option.AlsoStored.Select(element => CertificateDisplay.FormatDistinguishedName(element.Subject)))}, which the server does not send, so connections can link {option.CommonName} to the server's certificate.";
+
+    private static string FormatRenewal(DateTime validTo) => validTo == default ? string.Empty : $", on {validTo:d MMM yyyy}";
+
+    private void Continue() => MoveTo(Step.Confirm);
+
+    /// <summary>
+    /// The title is rendered by the dialog provider rather than this component, so it only follows a change of step
+    /// when the dialog instance is told to re-render as well.
+    /// </summary>
+    private void MoveTo(Step step)
+    {
+        _step = step;
+        MudDialog.StateHasChanged();
+    }
 
     private async Task TrustAsync()
     {
@@ -244,12 +277,12 @@
                 case ServerCertificateTrustOutcome.ThumbprintMismatch:
                     _expectedThumbprint = result.ExpectedThumbprint;
                     _presentedThumbprint = result.PresentedThumbprint;
-                    _step = Step.Refused;
+                    MoveTo(Step.Refused);
                     return;
 
                 default:
                     _failureMessage = result.Message ?? "JIM could not trust this certificate.";
-                    _step = Step.Failed;
+                    MoveTo(Step.Failed);
                     return;
             }
         }

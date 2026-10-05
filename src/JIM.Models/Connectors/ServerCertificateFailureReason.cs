@@ -45,5 +45,12 @@ public enum ServerCertificateFailureReason
     /// <summary>
     /// A certificate was presented and refused, but for a reason JIM could not narrow down.
     /// </summary>
-    Unknown = 6
+    Unknown = 6,
+
+    /// <summary>
+    /// A certificate authority in the server's chain cannot be relied on: expired or not yet valid, not marked as a
+    /// certificate authority, or with a signature that does not verify. Trusting anything in JIM does not help; the
+    /// chain has to be fixed on the server.
+    /// </summary>
+    InvalidChain = 7
 }
