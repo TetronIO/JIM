@@ -257,7 +257,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresSqlTls"
 
 Tear down with `Start-SqlServerTlsTestServer.ps1 -Stop`.
 
-**Running in CI**: the `sql-tls-tests` job in `.github/workflows/ci.yml` runs the script, which appends the variables to `$GITHUB_ENV`, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresSqlTls"` and tears the server down. It runs on every PR, alongside `ldaps-tests`.
+**Running in CI**: the `sql-tls-tests` job in `.github/workflows/ci.yml` runs the script, which appends the variables to `$GITHUB_ENV`, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresSqlTls"` and tears the server down. It runs on every PR, alongside `ldaps-tests`, and is a required status check, so a failure blocks the merge.
 
 **Oracle Database is not covered, deliberately.** Its two encrypted modes split the question differently from SQL Server's one:
 - *Native Network Encryption* (the SQL Connector's Oracle default) has no certificate at either end; it is negotiated inside the Oracle Net session. There is no certificate validation to apply, so there is nothing for this tier to test, and `ResolveSecureEndpoint` correctly answers null for it (pinned by unit tests in `SqlConnectorTests`).
