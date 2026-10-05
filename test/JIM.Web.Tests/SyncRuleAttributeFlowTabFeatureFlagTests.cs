@@ -118,8 +118,12 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
         repo.Setup(r => r.ServiceSettings).Returns(flagEnabled
             ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
             : new InMemoryServiceSettingsRepository());
+        // The tab reads the retired values register's counts for its generated rows (#242, Phase 6).
+        var syncRepo = new Mock<ISyncRepository>();
+        syncRepo.Setup(r => r.GetRetiredGeneratedValueCountsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<JIM.Models.Transactional.RetiredGeneratedValueCount>());
         _factory.Current?.Dispose();
-        _factory.Current = new JimApplication(repo.Object);
+        _factory.Current = new JimApplication(repo.Object, syncRepository: syncRepo.Object);
     }
 
     private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab) OpenAddDialog()

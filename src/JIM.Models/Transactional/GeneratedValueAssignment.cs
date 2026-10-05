@@ -13,7 +13,7 @@ namespace JIM.Models.Transactional;
 /// object's attribute, and is deleted (by cascade) the moment that stops being true, whether because the object
 /// or the generated mapping is deleted, or because page-flush reconciliation finds another contributor has won
 /// the attribute. History lives in Activities and causality; a deleted assignment's value is remembered, when
-/// "never reuse" applies, by the retired values register (release 2).
+/// "never reuse" applies, by the retired values register (<see cref="RetiredGeneratedValue"/>).
 /// <para>
 /// Exactly one of two modes is populated, matching whether the flow that produced it is an import or export
 /// mapping: <see cref="MetaverseObjectId"/>/<see cref="MetaverseAttributeId"/> for import mode, or

@@ -6,15 +6,15 @@ namespace JIM.Models.Transactional;
 /// <summary>
 /// The outcome of "Start again" on a generated mapping (Unique Value Generation, #242, Phase 3, plan "The
 /// service": <c>StartAgainAsync</c>). For a Sequence mapping, the counter is moved back (or forward) to the
-/// flow's configured start value; existing values and assignments are left untouched (there is no recall). For
-/// every other token kind this is a documented no-op: there is no counter to reset, and the retired values
-/// register (release 2) does not exist yet, so <see cref="RetiredValuesForgotten"/> is always 0 in this release.
+/// flow's configured start value, and the target attribute's retired values are forgotten (Phase 6); existing values
+/// and assignments are left untouched (there is no recall). For every other token kind this is a documented no-op:
+/// "Start again" is offered only for Sequence flows, and only it purges the register.
 /// </summary>
 public class GeneratedValueRestartResult
 {
     /// <summary>
-    /// How many retired values were forgotten for this attribute. Always 0 in release 1: the retired values
-    /// register ships in release 2 (Phase 6).
+    /// How many retired values were forgotten for the target attribute, and so can be issued again. Always 0 for a
+    /// mapping that is not a Sequence.
     /// </summary>
     public int RetiredValuesForgotten { get; set; }
 

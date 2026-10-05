@@ -906,16 +906,43 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Objects
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        await using var ownTransaction = await BeginTransactionIfNoneAsync();
+
+        // Retire any export-mode generated values the object held before it goes (Unique Value Generation, #242,
+        // Phase 6): its assignments are removed by the deletion's foreign-key cascade.
+        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, [connectedSystemObject.Id]);
         await ClearReferencesToConnectedSystemObjectsAsync([connectedSystemObject.Id]);
         Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
     }
 
     public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
-        await ClearReferencesToConnectedSystemObjectsAsync(connectedSystemObjects.Select(cso => cso.Id).ToList());
+        await using var ownTransaction = await BeginTransactionIfNoneAsync();
+
+        var csoIds = connectedSystemObjects.Select(cso => cso.Id).ToList();
+        // Retire any export-mode generated values these objects held before they go (#242, Phase 6).
+        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
+        await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
         Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
+    }
+
+    /// <summary>
+    /// Begins a transaction on the shared context when none is open, so a deletion and the retirement written
+    /// beside it land together; returns null when the caller already holds one, which the work then joins.
+    /// </summary>
+    private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BeginTransactionIfNoneAsync()
+    {
+        return Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
     }
 
     /// <summary>
@@ -7185,6 +7212,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // owns and commits its own transaction. Npgsql does not support nested transactions, hence the ownership check.
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
+        // 0a. Retire the export-mode generated values these Connected System Objects hold (Unique Value Generation,
+        // #242, Phase 6), first: their assignments go with the objects in step 8, and the holder names the register
+        // records are read from the attribute values step 6 deletes. When the whole Connected System is being
+        // deleted, its attributes, and so these register entries, go too, later in the same transaction.
+        await RetiredGeneratedValueSql.RetireForConnectedSystemAsync(Repository.Database, connectedSystemId);
 
         // 0. Post-clear reconciliation (#1605): record which Metaverse Objects are joined to this system
         // RIGHT NOW, before anything below removes the evidence. A re-clear before the sweep has consumed

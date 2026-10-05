@@ -1020,6 +1020,71 @@ Get-JIMGeneratedValue -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGeneratedValue
 ```
 
+### Get-JIMRetiredGeneratedValue
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+Lists an attribute's retired generated values, newest first: the values JIM issued for it and will never issue again, whichever Attribute Flow generates it. Every page is read, so the whole list is returned. Read-only; the only way to forget retired values is `Restart-JIMGeneratedValues` on a sequence. See [Retired values](../configuration/synchronisation-rules.md#retired-values) for when a value is retired.
+
+#### Syntax
+
+```powershell
+# An import flow's Metaverse Attribute, by ID
+Get-JIMRetiredGeneratedValue -MetaverseAttributeId <int> [-Search <string>]
+
+# An import flow's Metaverse Attribute, by name
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName <string> [-Search <string>]
+
+# An export flow's Connected System attribute
+Get-JIMRetiredGeneratedValue -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeId <int> [-Search <string>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseAttributeId` | `int` | Yes (by ID) | | The Metaverse Attribute's ID. Accepts pipeline input by property name, so a Metaverse Attribute from `Get-JIMMetaverseAttribute` pipes straight in. Alias: `Id` |
+| `MetaverseAttributeName` | `string` | Yes (by name) | | The Metaverse Attribute's name, for example `Account Name` |
+| `ConnectedSystemId` | `int` | Yes (export) | | The Connected System whose attribute an export flow generates |
+| `ObjectTypeId` | `int` | Yes (export) | | The Connected System Object Type the attribute belongs to |
+| `AttributeId` | `int` | Yes (export) | | The Connected System attribute's ID |
+| `Search` | `string` | No | | Text matched, ignoring case, against the value and the name of the object that held it |
+
+#### Output
+
+One `PSCustomObject` per retired value:
+
+| Property | Description |
+|----------|--------------|
+| `Id` | The entry's own identifier |
+| `MetaverseAttributeId` | The Metaverse Attribute (import flow); empty for an export flow |
+| `ConnectedSystemObjectTypeAttributeId` | The Connected System attribute (export flow); empty for an import flow |
+| `AttributeName` | The attribute's name |
+| `Value` | The value as it was issued |
+| `RetiredAt` | When it was retired (UTC) |
+| `Reason` | `ObjectDeleted`, `Superseded` or `Recalled` (`Regenerated` is reserved for a later release) |
+| `FromObjectId` | The object that held it: a Metaverse Object, or for an export flow a Connected System Object |
+| `FromObjectDisplayName` | That object's name, as it was when the value was retired |
+| `FromObjectExists` | Whether that object still exists |
+| `ActivityId` | The Activity during which it was retired, when one was recorded (a removed flow records none) |
+| `HeldBy` | `FromObjectDisplayName` for reading, with `(deleted)` added once the object is gone |
+
+#### Examples
+
+```powershell title="List every retired Account Name"
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name"
+```
+
+```powershell title="Find out whether a leaver's account name is retired, and why"
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name" -Search "fenwick" |
+    Select-Object Value, RetiredAt, Reason, HeldBy
+```
+
+```powershell title="Pipe a Metaverse Attribute straight in"
+Get-JIMMetaverseAttribute -Name "Employee Number" | Get-JIMRetiredGeneratedValue
+```
+
 ---
 
 ## Set-JIMMetaverseObjectPassword

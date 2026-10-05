@@ -520,7 +520,7 @@ public class DeletionCascadeExportReportingTests
     /// </summary>
     private sealed class BulkDeleteFailingSyncRepository : SyncRepository
     {
-        public override Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+        public override Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
             => throw new InvalidOperationException("Simulated bulk deletion failure");
     }
 

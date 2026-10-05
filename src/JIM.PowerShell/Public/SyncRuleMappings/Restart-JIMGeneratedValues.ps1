@@ -8,18 +8,19 @@ function Restart-JIMGeneratedValues {
         (Unique Value Generation, #242).
 
     .DESCRIPTION
-        In this release, this command does exactly one thing: for a generated Sequence mapping, it moves
-        the target attribute's counter back to the mapping's configured Sequence Start (the move can go
-        either direction; "back" is the common case, but a lower configured start is honoured too).
+        For a generated Sequence mapping, this command moves the target attribute's counter back to the
+        mapping's configured Sequence Start (the move can go either direction; "back" is the common case,
+        but a lower configured start is honoured too), and forgets the attribute's retired values.
 
         It changes NOTHING else. No existing generated value on any object is changed. Nothing is
         exported, and no synchronisation runs as a result of this command. For every other token kind
         (OnlyIfTaken, Random) this is a documented no-op that still succeeds.
 
-        There are no retired values to bring back in this release: the retired values register does not
-        exist yet (it ships in release 2), so RetiredValuesForgotten on the result is always 0. A number
-        already issued by this flow is simply skipped over the next time the counter reaches it, exactly
-        as it always is; nothing about that changes.
+        The retired values forgotten are the numbers JIM had stopped issuing because the object that held
+        them was deleted, or JIM stopped managing them (see Get-JIMRetiredGeneratedValue); once forgotten
+        they can be issued again. RetiredValuesForgotten on the result says how many. A number still held
+        by a Metaverse Object is simply skipped over the next time the counter reaches it, exactly as it
+        always is; nothing about that changes.
 
     .PARAMETER SyncRuleId
         The unique identifier of the Synchronisation Rule the mapping belongs to. Also accepts pipeline
@@ -33,7 +34,7 @@ function Restart-JIMGeneratedValues {
 
         | Property                | Description                                                          |
         |--------------------------|------------------------------------------------------------------------|
-        | RetiredValuesForgotten   | Always 0 in this release; no retired values register exists yet      |
+        | RetiredValuesForgotten   | How many retired values were forgotten and can be issued again       |
         | CounterFrom              | The counter's position before this call, for a Sequence mapping      |
         | CounterTo                | The counter's position after this call (the mapping's Sequence Start) |
 

@@ -4260,6 +4260,7 @@ public class SynchronisationController(
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity).ToList();
         AttachDerivedFlowInfo(dtos, await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
+        await AttachRetiredValueCountsAsync(dtos);
         return Ok(dtos);
     }
 
@@ -4287,7 +4288,75 @@ public class SynchronisationController(
 
         var dto = SyncRuleMappingDto.FromEntity(mapping);
         AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
+        await AttachRetiredValueCountsAsync([dto]);
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// Fills each generated mapping's <see cref="SyncRuleMappingGenerationDto.RetiredValueCount"/> from one grouped
+    /// count of the retired values register (#242, Phase 6), however many mappings there are.
+    /// </summary>
+    private async Task AttachRetiredValueCountsAsync(IReadOnlyList<SyncRuleMappingDto> dtos)
+    {
+        var generated = dtos.Where(d => d.Generation != null).ToList();
+        if (generated.Count == 0)
+            return;
+
+        var counts = await _application.UniqueValues.GetRetiredValueCountsAsync(
+            generated.Where(d => d.TargetMetaverseAttributeId.HasValue).Select(d => d.TargetMetaverseAttributeId!.Value).Distinct().ToList(),
+            generated.Where(d => d.TargetConnectedSystemAttributeId.HasValue).Select(d => d.TargetConnectedSystemAttributeId!.Value).Distinct().ToList());
+
+        foreach (var dto in generated)
+        {
+            dto.Generation!.RetiredValueCount = counts
+                .Where(c => (dto.TargetMetaverseAttributeId.HasValue && c.MetaverseAttributeId == dto.TargetMetaverseAttributeId)
+                    || (dto.TargetConnectedSystemAttributeId.HasValue && c.ConnectedSystemObjectTypeAttributeId == dto.TargetConnectedSystemAttributeId))
+                .Sum(c => c.Count);
+        }
+    }
+
+    /// <summary>
+    /// List a Connected System attribute's retired generated values
+    /// </summary>
+    /// <remarks>
+    /// The retired values register for an attribute an export Attribute Flow generates (Unique Value Generation):
+    /// values JIM issued for it and will never issue again, whichever flow generates it, newest first. Optionally
+    /// narrowed by <c>search</c>, matched case-insensitively against the value and the name of the object that held
+    /// it. Read-only: the only way to forget retired values is "Start again" on a Sequence flow.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Connected System Object Type.</param>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="search">Optional text to match against the value or the holder's name.</param>
+    /// <response code="200">A page of the attribute's retired values.</response>
+    /// <response code="404">Connected System, Object Type or attribute not found.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes/{attributeId:int}/retired-generated-values", Name = "GetRetiredGeneratedValuesForConnectedSystemAttribute")]
+    [ProducesResponseType(typeof(PaginatedResponse<RetiredGeneratedValueDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRetiredGeneratedValuesForConnectedSystemAttributeAsync(
+        int connectedSystemId, int objectTypeId, int attributeId, [FromQuery] PaginationRequest pagination, [FromQuery] string? search = null)
+    {
+        _logger.LogTrace("Requested retired generated values for attribute {AttributeId} of Connected System {SystemId}", attributeId, connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var attribute = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
+        if (attribute == null ||
+            attribute.ConnectedSystemObjectType.Id != objectTypeId ||
+            attribute.ConnectedSystemObjectType.ConnectedSystemId != connectedSystemId)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of Connected System {connectedSystemId}."));
+        }
+
+        var (items, total) = await _application.UniqueValues.GetRetiredValuesAsync(
+            null, attributeId, search, pagination.Skip, pagination.PageSize, includeTotalCount: true);
+
+        return Ok(PaginatedResponse<RetiredGeneratedValueDto>.Create(
+            items.Select(RetiredGeneratedValueDto.FromModel), total ?? 0, pagination.Page, pagination.PageSize));
     }
 
     /// <summary>
@@ -4730,9 +4799,10 @@ public class SynchronisationController(
     /// <remarks>
     /// For a generated Sequence mapping, moves the target attribute's counter back to the mapping's configured
     /// Sequence Start (the move can go either direction; "back" is the common case, but a lower configured start
-    /// is honoured too). Existing values and assignments are left untouched: this is not a recall. For every
-    /// other token kind this is a documented no-op. Retired values are not returned to circulation in this
-    /// release; <c>retiredValuesForgotten</c> is always 0 until the retired values register ships (release 2).
+    /// is honoured too), and forgets the target attribute's retired values so they can be issued again;
+    /// <c>retiredValuesForgotten</c> says how many. Existing values and assignments are left untouched: this is not
+    /// a recall, and a number an object still holds is skipped when the counter reaches it. For every other token
+    /// kind this is a documented no-op.
     /// </remarks>
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping.</param>

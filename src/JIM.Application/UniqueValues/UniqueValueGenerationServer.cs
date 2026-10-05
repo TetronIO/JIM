@@ -15,7 +15,7 @@ namespace JIM.Application.UniqueValues;
 /// <summary>
 /// The caller-agnostic unique value service (Unique Value Generation, #242, FR 21). Resolves a batch of
 /// <see cref="GenerationRequest"/>s to <see cref="GenerationOutcome"/>s: sticky first, then candidate
-/// generation through four ordered gates, then, once the caller has persisted the objects, saving the
+/// generation through five ordered gates, then, once the caller has persisted the objects, saving the
 /// assignments it proposed. Precedence is not this service's concern: the caller only raises a request where the
 /// generated mapping is the attribute's winning contributor under the ordinary Attribute Flow priority model, and
 /// the mapping then contributes its existing assignment if it has one and generates one otherwise (generate once;
@@ -42,7 +42,7 @@ public sealed class UniqueValueGenerationServer
     /// <summary>
     /// Resolves every request in <paramref name="requests"/> against <paramref name="options"/>'s reservation
     /// set and run-scoped caches, in the order described in the plan's "Behaviour (ResolveAsync)" section:
-    /// sticky, then candidate generation through the reservation, Metaverse (or
+    /// sticky, then candidate generation through the reservation, retired values register, Metaverse (or
     /// Connected System), connector space, and other-live-assignment gates in that order, batched per
     /// (attribute, gate) within this call. Returns exactly one outcome per request, in the same order.
     /// <para>
@@ -277,6 +277,72 @@ public sealed class UniqueValueGenerationServer
         EvictDeletedAssignments(options.KnownConnectedSystemAssignments, idSet);
     }
 
+    /// <summary>
+    /// Deletes the given assignments and, in the same statement, retires each value whose generated mapping never
+    /// reuses values (Unique Value Generation, #242, Phase 6; plan decision 4, "Assignment lifecycle" row 3): the
+    /// page-flush reconciliation's path for a value that is no longer generated because another Attribute Flow took
+    /// the attribute over or the value was cleared. Drops the assignments from <paramref name="options"/>'s run cache
+    /// in the same call, as <see cref="DeleteAssignmentsAsync"/> does. Returns what was actually retired, so the
+    /// caller can record a <c>GeneratedValueRetired</c> outcome for each; a flow with "Never reuse a value" off, or a
+    /// value already retired, contributes nothing.
+    /// </summary>
+    public async Task<IReadOnlyList<GeneratedValueRetirement>> RetireAndDeleteAssignmentsAsync(
+        IReadOnlyCollection<Guid> assignmentIds, RetiredGeneratedValueReason reason, Guid? activityId, UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(assignmentIds);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (assignmentIds.Count == 0)
+            return [];
+
+        var retired = await _repository.RetireAndDeleteGeneratedValueAssignmentsAsync(assignmentIds, reason, activityId);
+
+        var idSet = assignmentIds as HashSet<Guid> ?? assignmentIds.ToHashSet();
+        EvictDeletedAssignments(options.KnownMetaverseAssignments, idSet);
+        EvictDeletedAssignments(options.KnownConnectedSystemAssignments, idSet);
+
+        return retired;
+    }
+
+    /// <summary>
+    /// How many values the retired values register holds for <paramref name="mapping"/>'s target attribute (the
+    /// register is per attribute, so this counts what every flow generating it has retired). Zero for a mapping with
+    /// no target attribute.
+    /// </summary>
+    public async Task<int> GetRetiredValueCountAsync(SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        int[] mvAttributeIds = mapping.TargetMetaverseAttributeId is { } mvId ? [mvId] : [];
+        int[] csAttributeIds = mapping.TargetConnectedSystemAttributeId is { } csId ? [csId] : [];
+        if (mvAttributeIds.Length == 0 && csAttributeIds.Length == 0)
+            return 0;
+
+        var counts = await _repository.GetRetiredGeneratedValueCountsAsync(mvAttributeIds, csAttributeIds);
+        return counts.Sum(c => c.Count);
+    }
+
+    /// <summary>
+    /// The register's size for every attribute in the two lists that has any entries, in one grouped query: what an
+    /// Attribute Flow list loads once per page to show each generated row's "N retired" chip.
+    /// </summary>
+    public Task<List<RetiredGeneratedValueCount>> GetRetiredValueCountsAsync(IReadOnlyCollection<int> metaverseAttributeIds, IReadOnlyCollection<int> connectedSystemObjectTypeAttributeIds)
+        => _repository.GetRetiredGeneratedValueCountsAsync(metaverseAttributeIds, connectedSystemObjectTypeAttributeIds);
+
+    /// <summary>
+    /// One window of an attribute's retired values, newest first, optionally narrowed by <paramref name="search"/>
+    /// (the value or the holder's name). Exactly one attribute id must be given. A null total means "not counted".
+    /// </summary>
+    public Task<(List<RetiredGeneratedValueHeader> Items, int? TotalCount)> GetRetiredValuesAsync(
+        int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, string? search, int offset, int count, bool includeTotalCount)
+        => _repository.GetRetiredGeneratedValueHeadersRangeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, search, offset, count, includeTotalCount);
+
+    /// <summary>
+    /// Every value retired from one object, newest first: the retirement events on its change history.
+    /// </summary>
+    public Task<List<RetiredGeneratedValueHeader>> GetRetiredValuesForObjectAsync(Guid fromObjectId)
+        => _repository.GetRetiredGeneratedValueHeadersForObjectAsync(fromObjectId);
+
     private static void EvictDeletedAssignments(
         ConcurrentDictionary<Guid, ConcurrentBag<GeneratedValueAssignment>> cache, HashSet<Guid> deletedIds)
     {
@@ -385,10 +451,14 @@ public sealed class UniqueValueGenerationServer
                 drawn.Add(i);
             }
 
-            // Gates (a), (c), (d), (e) in order, each narrowing the survivor list; a request a gate rejects is
+            // Gates (a) to (e) in order (reservation, retired, Metaverse or connector-space value, connector space,
+            // other live assignments), each narrowing the survivor list; a request a gate rejects is
             // never passed to a later gate this round (the short-circuit the test suite proves), and is instead
             // retried with a fresh candidate next round.
             var survivors = FilterReservationGate(drawn, requests, candidates, options, ownerId, claimedThisCall, lastRejectionGate);
+
+            if (survivors.Count > 0)
+                survivors = await FilterRetiredGateAsync(survivors, requests, candidates, lastRejectionGate);
 
             if (survivors.Count > 0)
                 survivors = await FilterValueGateAsync(survivors, requests, candidates, lastRejectionGate);
@@ -401,7 +471,7 @@ public sealed class UniqueValueGenerationServer
 
             var rejectedThisRound = drawn.Except(survivors).ToList();
 
-            // Every request still surviving here cleared all four gates this round: claim the candidate and
+            // Every request still surviving here cleared every gate this round: claim the candidate and
             // finalise the outcome. A request that loses the reservation race here (a genuinely concurrent
             // parallel batch claimed the same value first) simply retries next round too.
             foreach (var i in survivors)
@@ -455,6 +525,45 @@ public sealed class UniqueValueGenerationServer
 
         return survivors;
     }
+
+    /// <summary>
+    /// Gate (b), the retired gate (Unique Value Generation, #242, Phase 6; plan decision 4): a value in the
+    /// attribute's retired values register is taken, case-insensitively, for a flow that never reuses values
+    /// ("Never reuse a value" on, or a Sequence token, which always never reuses). A flow with the switch off skips
+    /// the gate, so a rehire may receive a previous holder's value; that is the switch's whole purpose. Batched per
+    /// attribute (one query per attribute per round, whichever objects ask), and never excludes the requesting
+    /// object: a retired value belongs to nobody, so not even the object that once held it gets it back.
+    /// </summary>
+    private async Task<List<int>> FilterRetiredGateAsync(
+        List<int> active,
+        IReadOnlyList<GenerationRequest> requests,
+        Dictionary<int, (string Text, long? Numeric)> candidates,
+        string?[] lastRejectionGate)
+    {
+        var taken = new HashSet<int>();
+
+        foreach (var group in active.Where(i => NeverReuses(requests[i].Generation)).GroupBy(i => (requests[i].Mode, AttributeAndScope(requests[i]).AttributeId)))
+        {
+            var values = group.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var mvAttributeId = group.Key.Mode == GeneratedValueMode.Import ? group.Key.AttributeId : (int?)null;
+            var csAttributeId = group.Key.Mode == GeneratedValueMode.Export ? group.Key.AttributeId : (int?)null;
+
+            var retired = await _repository.GetRetiredGeneratedValuesInUseAsync(mvAttributeId, csAttributeId, values);
+
+            // taken.Add doubles as the predicate and the record of the rejection.
+            foreach (var i in group.Where(i => retired.Contains(candidates[i].Text.ToLowerInvariant())).Where(taken.Add))
+                lastRejectionGate[i] = "the retired values register (it was issued before and is never reused)";
+        }
+
+        return active.Where(i => !taken.Contains(i)).ToList();
+    }
+
+    /// <summary>
+    /// Whether a generated mapping never reuses a value: "Never reuse a value" on, or a Sequence token, whose numbers
+    /// are never reused whatever the stored switch says (plan decision 4).
+    /// </summary>
+    internal static bool NeverReuses(SyncRuleMappingGeneration generation) =>
+        generation.NeverReuse || generation.TokenKind == GeneratedValueTokenKind.Sequence;
 
     /// <summary>
     /// Gate (c): batched per (attribute, excluded object id) so that, in the common case of a page of brand new
@@ -849,13 +958,18 @@ public sealed class UniqueValueGenerationServer
         if (generation == null || generation.TokenKind != GeneratedValueTokenKind.Sequence)
             return new GeneratedValueRestartResult { RetiredValuesForgotten = 0, CounterFrom = null, CounterTo = null };
 
+        // Forget the attribute's retired values first (Phase 6; FR 33): numbers it burnt can be issued again, but the
+        // Metaverse and connector-space gates still skip any number an object holds when the counter reaches it.
+        // Purged whether or not the counter has been seeded: a register can hold values a since-removed flow retired.
+        var forgotten = await _repository.DeleteRetiredGeneratedValuesForAttributeAsync(
+            mapping.TargetMetaverseAttributeId, mapping.TargetConnectedSystemAttributeId);
+
         var previous = await _repository.ResetGeneratedValueSequenceAsync(
             mapping.TargetMetaverseAttributeId, mapping.TargetConnectedSystemAttributeId, generation.SequenceStart, mapping.Id);
 
         return new GeneratedValueRestartResult
         {
-            // The retired values register does not exist until release 2 (Phase 6); always 0 here.
-            RetiredValuesForgotten = 0,
+            RetiredValuesForgotten = forgotten,
             CounterFrom = previous,
             CounterTo = previous.HasValue ? generation.SequenceStart : null
         };

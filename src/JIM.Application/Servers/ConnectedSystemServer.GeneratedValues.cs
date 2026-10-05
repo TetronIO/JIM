@@ -75,9 +75,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.RestartGeneratedValues,
-            Message = result.CounterFrom.HasValue
-                ? $"Started the {targetName} counter again: moved from {result.CounterFrom} to {result.CounterTo}."
-                : $"\"Start again\" was requested for {targetName}, but its counter had not issued any numbers yet, so nothing moved."
+            Message = DescribeRestart(targetName, result)
         };
 
         if (initiatedByApiKey != null)
@@ -87,6 +85,33 @@ public partial class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
+    }
+
+    /// <summary>
+    /// The Activity message for "Start again": what moved, and how many retired values were forgotten (#242, Phase 6).
+    /// </summary>
+    private static string DescribeRestart(string targetName, GeneratedValueRestartResult result)
+    {
+        var counter = result.CounterFrom.HasValue
+            ? $"Started the {targetName} counter again: moved from {result.CounterFrom} to {result.CounterTo}."
+            : $"\"Start again\" was requested for {targetName}, but its counter had not issued any numbers yet, so it did not move.";
+
+        return result.RetiredValuesForgotten switch
+        {
+            0 => counter,
+            1 => $"{counter} 1 retired value was forgotten and can be issued again.",
+            var forgotten => $"{counter} {forgotten:N0} retired values were forgotten and can be issued again."
+        };
+    }
+
+    /// <summary>
+    /// How many values the retired values register holds for a generated mapping's target attribute (#242, Phase 6):
+    /// what "Start again" would forget, for its confirmation. Zero for an unknown mapping or one with no target.
+    /// </summary>
+    public async Task<int> GetRetiredGeneratedValueCountAsync(int mappingId)
+    {
+        var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        return mapping == null ? 0 : await Application.UniqueValues.GetRetiredValueCountAsync(mapping);
     }
 
     /// <summary>
