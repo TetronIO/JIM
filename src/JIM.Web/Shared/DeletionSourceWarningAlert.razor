@@ -1,0 +1,54 @@
+@using JIM.Web.Models
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Deletion Rules panel's warning about Connected Systems that project into the object type without being one of
+   its selected authoritative sources (#1256). The host works out which systems from the edited selection, through
+   DeletionSourceAdvisor, so the warning follows the checkboxes as they are ticked. Renders nothing when there are none. *@
+@if (SystemNames.Count > 0)
+{
+    var names = DerivedFlowWording.JoinNames(SystemNames);
+    var several = SystemNames.Count > 1;
+    <MudAlert Severity="Severity.Warning" Class="mt-4" data-testid="jim-deletion-source-warning">
+        <MudText Typo="Typo.body1"><strong>@(several
+            ? $"{SystemNames.Count} projecting systems are not authoritative sources"
+            : $"{names} can project {ObjectTypeName} objects but is not an authoritative source")</strong></MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            @names @(several ? "have" : "has") a Synchronisation Rule that projects @ObjectTypeName objects to the
+            Metaverse, but @(several ? "they are" : "it is") not selected above:
+        </MudText>
+        <ul class="mt-1 mb-0 pl-5">
+            <li><MudText Typo="Typo.body2"><strong>Never deleted:</strong> a @ObjectTypeName projected by @names that no
+                selected source also holds will never be deleted automatically, nor will its target accounts.</MudText></li>
+            <li><MudText Typo="Typo.body2"><strong>Deleted while still present:</strong> a @ObjectTypeName that leaves
+                every selected source is deleted even if @names still @(several ? "hold" : "holds") it.</MudText></li>
+        </ul>
+        @if (NoGracePeriod)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-deletion-source-no-grace">
+                No grace period is set, so that deletion would happen immediately.
+            </MudText>
+        }
+        <MudText Typo="Typo.body2" Class="mt-2">
+            Select @(several ? "them as authoritative sources" : "it as an authoritative source"), or turn projection off
+            if @(several ? "they" : "it") should only contribute attributes. Saving is not blocked.
+        </MudText>
+    </MudAlert>
+}
+
+@code {
+    /// <summary>The projecting Connected Systems that are not selected authoritative sources, by name.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<string> SystemNames { get; set; } = [];
+
+    /// <summary>The Metaverse Object Type the deletion settings belong to.</summary>
+    [Parameter, EditorRequired]
+    public string ObjectTypeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True when the edited grace period is zero, so a deletion triggered by a stale source list would happen at once
+    /// rather than waiting for an administrator to notice.
+    /// </summary>
+    [Parameter]
+    public bool NoGracePeriod { get; set; }
+}

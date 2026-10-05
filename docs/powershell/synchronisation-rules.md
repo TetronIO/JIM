@@ -141,7 +141,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 
 ### Output
 
-With `-PassThru`, returns the created Synchronisation Rule object. Without it, returns nothing.
+With `-PassThru`, returns the created Synchronisation Rule object, including `DeletionSourceWarning`. Without it, returns nothing. Either way, when the new rule projects into a Metaverse Object Type deleted `WhenAuthoritativeSourceDisconnected` from a Connected System that is not one of the type's authoritative sources, that warning is written with `Write-Warning`; the rule is created regardless. See [projecting systems that are not authoritative sources](../configuration/metaverse.md#authoritative-source-trigger-modes).
 
 **ShouldProcess impact level:** Medium.
 
@@ -235,7 +235,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 
 ### Output
 
-With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings` and `DependentDerivedFlows`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`.
+With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings`, `DependentDerivedFlows` and `DeletionSourceWarning`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`, and then `DeletionSourceWarning` when the update took the rule into projecting (enabling it, or switching projection on) from a Connected System that is not an authoritative source of a type deleted `WhenAuthoritativeSourceDisconnected`. Re-saving a rule that already projected does not repeat it.
 
 **ShouldProcess impact level:** Medium.
 

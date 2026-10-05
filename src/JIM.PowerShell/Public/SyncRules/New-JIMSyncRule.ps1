@@ -55,7 +55,10 @@ function New-JIMSyncRule {
         If specified, returns the created Synchronisation Rule object.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Synchronisation Rule object.
+        If -PassThru is specified, returns the created Synchronisation Rule object, including DeletionSourceWarning:
+        set when the rule projects into a Metaverse Object Type deleted When Authoritative Source Disconnected from a
+        Connected System that is not one of the type's authoritative sources, otherwise null. The warning is also
+        written with Write-Warning whether or not -PassThru is supplied.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse
@@ -182,6 +185,12 @@ function New-JIMSyncRule {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules" -Method 'POST' -Body $body
 
                 Write-Verbose "Created Synchronisation Rule: $($result.id) ($($result.name))"
+
+                # The new rule projects into a Metaverse Object Type deleted When Authoritative Source Disconnected, from a
+                # system that is not one of its authoritative sources (#1256): reported, never blocking.
+                if ($result.deletionSourceWarning) {
+                    Write-Warning $result.deletionSourceWarning
+                }
 
                 if ($PassThru) {
                     $result

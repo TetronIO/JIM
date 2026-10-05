@@ -430,6 +430,34 @@ Describe 'New-JIMSyncRule' {
         }
     }
 
+    Context 'Deletion source warning (#1256)' {
+
+        It 'Surfaces the deletion source warning the API attaches as a warning' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test'; deletionSourceWarning = 'Partner Portal will project Person objects it can never delete.' } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 1
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+            }
+        }
+
+        It 'Emits no warning when the API attaches no deletion source warning' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test'; deletionSourceWarning = $null } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
@@ -546,6 +574,34 @@ Describe 'Set-JIMSyncRule' {
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     -not $Body.ContainsKey('description')
                 }
+            }
+        }
+    }
+
+    Context 'Deletion source warning (#1256)' {
+
+        It 'Surfaces the deletion source warning the API attaches as a warning' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test'; deletionSourceWarning = 'Partner Portal will project Person objects it can never delete.' } }
+
+                Set-JIMSyncRule -Id 1 -Name 'Test' -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 1
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+            }
+        }
+
+        It 'Emits no warning when the API attaches no deletion source warning' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test'; deletionSourceWarning = $null } }
+
+                Set-JIMSyncRule -Id 1 -Name 'Test' -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
             }
         }
     }
