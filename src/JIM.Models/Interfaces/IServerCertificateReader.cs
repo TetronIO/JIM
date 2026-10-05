@@ -20,7 +20,6 @@ public interface IServerCertificateReader
     /// </summary>
     /// <param name="endpoint">Where to look, resolved from a Connected System's own settings.</param>
     /// <param name="trustedCertificates">Certificates from the JIM certificate store, treated as additional trust anchors.</param>
-    /// <param name="suppliedCertificates">Certificates an administrator supplied to complete a chain JIM could not complete itself. Used only to assemble the chain; nothing is trusted by reading.</param>
     /// <returns>What the server presented, or null when it could not be reached at all, which is a different problem.</returns>
-    ServerCertificateReading? Read(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, IReadOnlyCollection<X509Certificate2>? suppliedCertificates = null);
+    ServerCertificateReading? Read(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates);
 }

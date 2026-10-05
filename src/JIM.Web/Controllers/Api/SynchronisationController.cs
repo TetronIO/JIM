@@ -2780,15 +2780,17 @@ public class SynchronisationController(
     /// Reads the certificate from the server again, checks it against the thumbprint supplied, and adds it to the
     /// JIM certificate store through the audited path. The thumbprint is required and a mismatch is refused: reading
     /// again at the moment of the decision is what makes a certificate that changed since it was shown detectable
-    /// rather than waved through. Supplying the authority's thumbprint trusts the authority, which survives the
-    /// server's own certificate being renewed.
+    /// rather than waved through. Any certificate in the server's chain can be named: the server's own, an
+    /// intermediate certificate authority, or the root (<c>rootThumbprint</c> in the read), which survives the renewal
+    /// of everything beneath it. Intermediates JIM had to download, rather than the server sending them, are stored
+    /// alongside a certificate above them and listed in <c>storedIntermediates</c>.
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
     /// <param name="request">The thumbprint being trusted, and optionally why.</param>
     /// <returns>The outcome, including the certificate as it now sits in the store.</returns>
     /// <response code="201">The certificate was added to the JIM certificate store.</response>
     /// <response code="200">The certificate was already in the store, so there was nothing to do.</response>
-    /// <response code="400">No thumbprint was supplied, or the Connected System is not configured to make an encrypted connection.</response>
+    /// <response code="400">No thumbprint was supplied, the Connected System is not configured to make an encrypted connection, or a certificate authority in the server's chain cannot be relied on (outcome <c>InvalidChain</c>).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
     /// <response code="409">The server is presenting a different certificate from the one named, so nothing was trusted.</response>
     /// <response code="502">The server could not be reached to read its certificate again, so nothing was trusted.</response>

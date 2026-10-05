@@ -3854,6 +3854,57 @@ html[lang] .jim-kv-table td:first-child {
     text-align: left;
 }
 
+/* The chain JIM assembled, root first: one row per certificate, its name, where JIM found it, and its part in the
+   chain. Left-aligned like the remediation above it, because each row is read rather than glanced at. */
+.jim-certificate-chain {
+    margin-top: 14px;
+    text-align: left;
+}
+
+.jim-certificate-chain .jim-certificate-label {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.jim-certificate-chain-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    font-size: 0.875rem;
+}
+
+.jim-certificate-chain-row + .jim-certificate-chain-row {
+    margin-top: 4px;
+}
+
+/* A certificate JIM could not find is drawn as a gap in the chain rather than as one of its links. */
+.jim-certificate-chain-row-missing {
+    border-style: dashed;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-chain-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 500;
+}
+
+.jim-certificate-chain-source,
+.jim-certificate-chain-role {
+    flex: 0 0 auto;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.jim-certificate-chain-role {
+    min-width: 6.5em;
+    text-align: right;
+}
+
 /* The action sits below its own rule, so the decision reads as something offered after the verdict rather than as
    part of the certificate's own text. Left-aligned, because the note beside it is a sentence to read. */
 .jim-certificate-actions {

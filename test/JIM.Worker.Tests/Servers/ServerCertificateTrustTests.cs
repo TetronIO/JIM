@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
+using JIM.Worker.Tests.Connectors;
 using Moq;
 using NUnit.Framework;
 using System.Security.Cryptography;
@@ -112,8 +113,10 @@ public class ServerCertificateTrustTests
         _issuer = Describe(authority);
     }
 
-    private static PresentedServerCertificate Describe(X509Certificate2 certificate) => new()
+    private static PresentedServerCertificate Describe(X509Certificate2 certificate,
+        ServerCertificateChainElementSource source = ServerCertificateChainElementSource.SentByServer) => new()
     {
+        Source = source,
         Thumbprint = certificate.Thumbprint,
         Subject = certificate.Subject,
         Issuer = certificate.Issuer,
@@ -181,6 +184,29 @@ public class ServerCertificateTrustTests
         };
     }
 
+    /// <summary>
+    /// A server whose certificate was issued by an intermediate beneath a root, the intermediate having reached JIM
+    /// from <paramref name="intermediateSource"/>.
+    /// </summary>
+    private (PresentedServerCertificate Root, PresentedServerCertificate Intermediate, PresentedServerCertificate Leaf) GivenTheServerPresentsAThreeTierChain(
+        ServerCertificateChainElementSource intermediateSource)
+    {
+        using var rootCertificate = TestPki.CreateRoot("Corp Root CA");
+        using var intermediateCertificate = TestPki.CreateIntermediate("Corp Issuing CA 3", rootCertificate);
+        using var leafCertificate = TestPki.CreateServer("hr.corp.local", intermediateCertificate);
+
+        var root = Describe(rootCertificate, ServerCertificateChainElementSource.Downloaded);
+        var intermediate = Describe(intermediateCertificate, intermediateSource);
+        var leaf = Describe(leafCertificate);
+
+        var reading = Reading(leaf, root);
+        reading.Diagnostic.IssuerThumbprint = intermediate.Thumbprint;
+        reading.Chain!.Intermediates.Add(intermediate);
+        _mockReader.Setup(r => r.Read(It.IsAny<SecureEndpoint>(), It.IsAny<IReadOnlyCollection<X509Certificate2>>())).Returns(reading);
+
+        return (root, intermediate, leaf);
+    }
+
     private void GivenTheServerPresents(PresentedServerCertificate? leaf, PresentedServerCertificate? issuer)
     {
         if (leaf == null)
@@ -222,6 +248,74 @@ public class ServerCertificateTrustTests
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
             Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(_issuer.Thumbprint));
             Assert.That(result.Certificate!.Name, Is.EqualTo("Corp Issuing CA 2"));
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WithAnIntermediatesThumbprint_AddsThatIntermediateAsync()
+    {
+        // #1914: only the leaf and the certificate directly above it could be chosen, so in a three-tier chain the
+        // root could not be trusted at all, and nor could any intermediate a script named.
+        var (_, intermediate, _) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, intermediate.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(intermediate.Thumbprint));
+            Assert.That(result.StoredIntermediates, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WithTheRootAboveAnIntermediateTheServerSends_AddsOnlyTheRootAsync()
+    {
+        var (root, _, _) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, root.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(root.Thumbprint));
+            Assert.That(result.StoredIntermediates, Is.Empty, "The server sends the intermediate every time, so there is nothing to keep.");
+            _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Once);
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WithTheRootAboveAnIntermediateJimDownloaded_AlsoStoresTheIntermediateAsync()
+    {
+        // A connection cannot always download the intermediate itself (the LDAP Connector never does, and an
+        // air-gapped deployment cannot), so trusting the root alone would report success and still fail.
+        var (root, intermediate, _) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.Downloaded);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, root.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(root.Thumbprint));
+            Assert.That(result.StoredIntermediates.Select(c => c.Thumbprint), Is.EqualTo(new[] { intermediate.Thumbprint }));
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WhenACertificateAuthorityInTheChainCannotBeReliedOn_TrustsNothingAsync()
+    {
+        var reading = Reading(_leaf, _issuer);
+        reading.Diagnostic.FailureReason = ServerCertificateFailureReason.InvalidChain;
+        reading.Diagnostic.Remediation = "Corp Issuing CA 2 expired on 1 Jan 2026.";
+        _mockReader.Setup(r => r.Read(It.IsAny<SecureEndpoint>(), It.IsAny<IReadOnlyCollection<X509Certificate2>>())).Returns(reading);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _issuer.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.InvalidChain));
+            Assert.That(result.Message, Does.Contain("expired"));
+            _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
         }
     }
 

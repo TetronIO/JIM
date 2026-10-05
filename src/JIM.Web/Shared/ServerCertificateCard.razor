@@ -1,5 +1,6 @@
 @using JIM.Models.Connectors
 @using JIM.Models.Staging
+@using JIM.Web.Models
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -89,6 +90,32 @@
                     <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
                 }
 
+                @* The chain JIM assembled, from the root down to the server, with where each certificate came from: a
+                   certificate the server sent, or one downloaded from an address another certificate named, has not
+                   been vouched for by anyone yet, which is worth knowing before trusting it. *@
+                @if (Diagnostic.Chain.Count > 0)
+                {
+                    <div class="jim-certificate-chain">
+                        <div class="jim-certificate-label">Certificate chain</div>
+                        @if (!Diagnostic.IsChainComplete && !string.IsNullOrEmpty(Diagnostic.MissingIssuer))
+                        {
+                            <div class="jim-certificate-chain-row jim-certificate-chain-row-missing" data-testid="jim-certificate-chain-missing">
+                                <span class="jim-certificate-chain-name">@CertificateDisplay.FormatDistinguishedName(Diagnostic.MissingIssuer) and above</span>
+                                <span class="jim-certificate-chain-source">Not sent, and not downloadable</span>
+                                <span class="jim-certificate-chain-role">Not found</span>
+                            </div>
+                        }
+                        @foreach (var link in ChainFromTheTop)
+                        {
+                            <div class="jim-certificate-chain-row" data-testid="jim-certificate-chain-element">
+                                <span class="jim-certificate-chain-name">@link.CommonName</span>
+                                <span class="jim-certificate-chain-source">@CertificateDisplay.FormatSource(link.Element.Source)</span>
+                                <span class="jim-certificate-chain-role">@CertificateDisplay.FormatRole(link.Role)</span>
+                            </div>
+                        }
+                    </div>
+                }
+
                 @* The decision is offered where the problem is reported, so the administrator does not have to go and
                    obtain the certificate by other means. Only for an untrusted issuer: for an expired certificate or
                    a name mismatch, trusting cannot fix the failure, and a button that cannot work invites the click. *@
@@ -104,19 +131,29 @@
                                     will need trusting again when it is renewed.
                                 </text>
                             }
+                            else if (HasAChoice)
+                            {
+                                <text>
+                                    Trust any certificate in this chain. Trusting the root keeps working through
+                                    renewals of everything beneath it. JIM reads the chain from the server again first,
+                                    adds your choice to <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>,
+                                    and records who trusted it and why.
+                                </text>
+                            }
                             else
                             {
                                 <text>
-                                    Adds it to the <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>
-                                    store, where you can remove it later. JIM reads it from the server again first, and
-                                    records who trusted it and why.
+                                    JIM can only offer the server's own certificate, which needs trusting again when it
+                                    is renewed. To trust its certificate authority instead, which survives renewals, add
+                                    the authority's certificate under
+                                    <MudLink Href="/admin/certificates">Trusted Certificates</MudLink> and test again.
                                 </text>
                             }
                         </span>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
                                    StartIcon="@Icons.Material.Filled.VerifiedUser" Disabled="_trusting"
                                    OnClick="TrustAsync" data-testid="jim-certificate-trust">
-                            Trust this certificate
+                            @(HasAChoice ? "Choose what to trust" : "Trust this certificate")
                         </MudButton>
                     </div>
                 }
@@ -177,6 +214,14 @@
         Diagnostic?.FailureReason == ServerCertificateFailureReason.UntrustedIssuer &&
         !string.IsNullOrEmpty(Diagnostic.Thumbprint);
 
+    /// <summary>
+    /// The certificates in the chain, the root first, as the trust dialog will offer them.
+    /// </summary>
+    private List<ServerCertificateTrustOption> ChainFromTheTop =>
+        Diagnostic == null ? [] : ServerCertificateTrustOption.For(Diagnostic);
+
+    private bool HasAChoice => ChainFromTheTop.Count > 1;
+
     private async Task TrustAsync()
     {
         if (_trusting || Diagnostic == null || !ConnectedSystemId.HasValue)
@@ -209,12 +254,14 @@
         ServerCertificateFailureReason.NameMismatch => Icons.Material.Filled.WrongLocation,
         ServerCertificateFailureReason.UntrustedIssuer => Icons.Material.Filled.GppMaybe,
         ServerCertificateFailureReason.NoCertificatePresented => Icons.Material.Filled.NoEncryption,
+        ServerCertificateFailureReason.InvalidChain => Icons.Material.Filled.LinkOff,
         _ => Icons.Material.Filled.WorkspacePremium
     };
 
     private static string DescribeReason(ServerCertificateFailureReason reason) => reason switch
     {
-        ServerCertificateFailureReason.UntrustedIssuer => "Not trusted: JIM has not been given this certificate's issuer",
+        ServerCertificateFailureReason.UntrustedIssuer => "Not trusted: nothing in this chain is in Trusted Certificates",
+        ServerCertificateFailureReason.InvalidChain => "Broken chain: a certificate authority in it cannot be relied on",
         ServerCertificateFailureReason.NameMismatch => "Wrong name: this certificate was not issued for the host JIM connected to",
         ServerCertificateFailureReason.Expired => "Expired",
         ServerCertificateFailureReason.NotYetValid => "Not valid yet",

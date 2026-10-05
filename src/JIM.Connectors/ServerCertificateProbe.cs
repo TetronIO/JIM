@@ -24,11 +24,16 @@ namespace JIM.Connectors;
 public static class ServerCertificateProbe
 {
     /// <summary>
+    /// The longest JIM waits for each issuer certificate it downloads while assembling the chain.
+    /// </summary>
+    private static readonly TimeSpan MaximumIssuerDownloadTime = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Fetches the certificate a server presents and works out why it would be refused.
     /// </summary>
     /// <param name="host">Host being connected to, as configured on the Connected System. The certificate's names are checked against this.</param>
     /// <param name="port">Port being connected to.</param>
-    /// <param name="trustedCertificates">Certificates from the JIM certificate store, treated as additional trust anchors when judging the issuer.</param>
+    /// <param name="trustedCertificates">Certificates from the JIM certificate store. The server is trusted when any certificate in its chain is one of them.</param>
     /// <param name="timeout">How long to wait for the connection and handshake.</param>
     /// <param name="logger">Logger for the calling operation.</param>
     /// <param name="serverDescription">What to call the far end in the remediation text, for example "directory server" or "SCIM service provider".</param>
@@ -63,11 +68,10 @@ public static class ServerCertificateProbe
         ILogger logger,
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
-        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
-        IReadOnlyCollection<X509Certificate2>? suppliedCertificates = null)
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
     {
         X509Certificate2? presented = null;
-        var presentedChain = new List<X509Certificate2>();
+        var sentByServer = new List<X509Certificate2>();
         var readAt = DateTime.UtcNow;
 
         try
@@ -92,11 +96,13 @@ public static class ServerCertificateProbe
                 if (certificate != null)
                     presented = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
 
-                // The chain the platform built from what the server sent is disposed as soon as this callback
-                // returns, so copy what is needed out of it now. Its elements are what let JIM offer the issuer,
-                // which is the choice that survives the server's certificate being renewed.
+                // The platform hands the chain builder exactly what the server sent beyond its own certificate, in
+                // the extra store; the chain's elements would mix in whatever the platform found elsewhere. Copied,
+                // because the chain is disposed as soon as this callback returns.
                 if (chain != null)
-                    presentedChain.AddRange(chain.ChainElements.Select(element => X509CertificateLoader.LoadCertificate(element.Certificate.RawData)));
+                    sentByServer.AddRange(chain.ChainPolicy.ExtraStore
+                        .Where(sent => !string.Equals(sent.Thumbprint, presented?.Thumbprint, StringComparison.OrdinalIgnoreCase))
+                        .Select(sent => X509CertificateLoader.LoadCertificate(sent.RawData)));
 
                 // Always refuse. Nothing is being connected to here; the handshake exists only to see the certificate.
                 return false;
@@ -122,9 +128,16 @@ public static class ServerCertificateProbe
             if (presented == null)
                 return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName);
 
-            var issuer = FindIssuer(presented, presentedChain);
-            var diagnostic = Describe(presented, host, port, trustedCertificates, serverDescription);
-            diagnostic.IssuerThumbprint = issuer?.Thumbprint;
+            // Downloading an issuer is bounded separately from the handshake, and more tightly: a dead address in a
+            // certificate should not hold up the explanation of a failure for as long as the server itself may.
+            using var assembled = CertificateChainAssembler.Assemble(presented, sentByServer, trustedCertificates, Min(timeout, MaximumIssuerDownloadTime));
+            var diagnostic = Describe(presented, host, port, assembled, serverDescription);
+            var elements = assembled.Elements.Select(Describe).ToList();
+
+            // Everything between the server's certificate and the root; a self-signed certificate is both, with
+            // nothing between.
+            var root = assembled.IsComplete ? elements[^1] : null;
+            var intermediates = elements.Skip(1).Where(element => !ReferenceEquals(element, root)).ToList();
 
             return new ServerCertificateReading
             {
@@ -135,15 +148,17 @@ public static class ServerCertificateProbe
                     Port = port,
                     ReadAt = readAt,
                     IsSelfSigned = diagnostic.IsSelfSigned,
-                    Leaf = Describe(presented),
-                    Root = issuer == null ? null : Describe(issuer)
+                    Leaf = elements[0],
+                    Intermediates = intermediates,
+                    Root = root,
+                    MissingIssuer = assembled.MissingIssuer
                 }
             };
         }
         finally
         {
             presented?.Dispose();
-            foreach (var certificate in presentedChain)
+            foreach (var certificate in sentByServer)
                 certificate.Dispose();
         }
     }
@@ -186,28 +201,11 @@ public static class ServerCertificateProbe
     }
 
     /// <summary>
-    /// The certificate that issued the presented one, from what the server sent alongside it.
+    /// Copies a certificate in the chain into the transferable form the trust decision acts on, DER encoded.
     /// </summary>
-    /// <remarks>
-    /// A self-signed certificate is its own issuer, so it is deliberately not returned here: offering an
-    /// administrator "the authority that issued this" when that is the same certificate would be a choice between
-    /// one thing and itself.
-    /// </remarks>
-    private static X509Certificate2? FindIssuer(X509Certificate2 presented, List<X509Certificate2> presentedChain)
+    private static PresentedServerCertificate Describe(AssembledCertificateChainElement element)
     {
-        if (string.Equals(presented.Subject, presented.Issuer, StringComparison.Ordinal))
-            return null;
-
-        return presentedChain.FirstOrDefault(candidate =>
-            string.Equals(candidate.Subject, presented.Issuer, StringComparison.Ordinal) &&
-            !string.Equals(candidate.Thumbprint, presented.Thumbprint, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Copies a certificate into the transferable form the trust decision acts on, DER encoded.
-    /// </summary>
-    private static PresentedServerCertificate Describe(X509Certificate2 certificate)
-    {
+        var certificate = element.Certificate;
         return new PresentedServerCertificate
         {
             Thumbprint = certificate.Thumbprint,
@@ -215,9 +213,33 @@ public static class ServerCertificateProbe
             Issuer = certificate.Issuer,
             ValidFrom = certificate.NotBefore.ToUniversalTime(),
             ValidTo = certificate.NotAfter.ToUniversalTime(),
-            Data = certificate.Export(X509ContentType.Cert)
+            Data = certificate.Export(X509ContentType.Cert),
+            Source = element.Source,
+            DownloadedFrom = element.DownloadedFrom
         };
     }
+
+    /// <summary>
+    /// Describes a certificate in the chain for display.
+    /// </summary>
+    private static ServerCertificateChainElement DescribeForDisplay(AssembledCertificateChainElement element)
+    {
+        var certificate = element.Certificate;
+        return new ServerCertificateChainElement
+        {
+            Subject = certificate.Subject,
+            Issuer = certificate.Issuer,
+            Thumbprint = certificate.Thumbprint,
+            ValidFrom = certificate.NotBefore.ToUniversalTime(),
+            ValidTo = certificate.NotAfter.ToUniversalTime(),
+            IsCertificateAuthority = certificate.Extensions.OfType<X509BasicConstraintsExtension>().Any(constraints => constraints.CertificateAuthority),
+            IsSelfSigned = CertificateChainAssembler.IsSelfSigned(certificate),
+            Source = element.Source,
+            DownloadedFrom = element.DownloadedFrom
+        };
+    }
+
+    private static TimeSpan Min(TimeSpan first, TimeSpan second) => first < second ? first : second;
 
     /// <summary>
     /// Works out which check the certificate fails, in the order an administrator would act on them: a name mismatch
@@ -228,7 +250,7 @@ public static class ServerCertificateProbe
         X509Certificate2 certificate,
         string host,
         int port,
-        IReadOnlyCollection<X509Certificate2> trustedCertificates,
+        AssembledCertificateChain chain,
         string serverDescription)
     {
         var diagnostic = new ServerCertificateDiagnostic
@@ -242,7 +264,13 @@ public static class ServerCertificateProbe
             ValidTo = certificate.NotAfter.ToUniversalTime(),
             Thumbprint = certificate.Thumbprint,
             SignatureAlgorithm = certificate.SignatureAlgorithm.FriendlyName,
-            IsSelfSigned = string.Equals(certificate.Subject, certificate.Issuer, StringComparison.Ordinal)
+            IsSelfSigned = CertificateChainAssembler.IsSelfSigned(certificate),
+            Chain = chain.Elements.Select(DescribeForDisplay).ToList(),
+            IsChainComplete = chain.IsComplete,
+            MissingIssuer = chain.MissingIssuer,
+            RootThumbprint = chain.Root?.Thumbprint,
+            RootSubject = chain.Root?.Subject,
+            IssuerThumbprint = chain.Elements.Count > 1 ? chain.Elements[1].Certificate.Thumbprint : null
         };
 
         var now = DateTime.UtcNow;
@@ -267,12 +295,17 @@ public static class ServerCertificateProbe
             return diagnostic;
         }
 
-        if (!ChainsToATrustedIssuer(certificate, trustedCertificates))
+        if (!chain.IsTrusted)
         {
+            if (chain.Problem != null)
+            {
+                diagnostic.FailureReason = ServerCertificateFailureReason.InvalidChain;
+                diagnostic.Remediation = $"{chain.Problem} Trusting a certificate in JIM does not get past this; the certificate chain has to be fixed on the {serverDescription}.";
+                return diagnostic;
+            }
+
             diagnostic.FailureReason = ServerCertificateFailureReason.UntrustedIssuer;
-            diagnostic.Remediation = diagnostic.IsSelfSigned
-                ? $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}."
-                : "The issuing certificate authority is not trusted. Add it, and any intermediates, to the JIM certificate store (Admin > Certificates).";
+            diagnostic.Remediation = DescribeWhatToTrust(diagnostic, chain, serverDescription);
             return diagnostic;
         }
 
@@ -284,32 +317,18 @@ public static class ServerCertificateProbe
     }
 
     /// <summary>
-    /// Builds the certificate's chain with the JIM certificate store supplied as additional trust anchors, mirroring
-    /// what the platform LDAP client is given.
+    /// What to trust to accept the server, most durable first: the root survives the renewal of everything beneath it.
     /// </summary>
-    private static bool ChainsToATrustedIssuer(X509Certificate2 certificate, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    private static string DescribeWhatToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
     {
-        using var chain = new X509Chain();
+        if (diagnostic.IsSelfSigned)
+            return $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}.";
 
-        // Air-gapped deployments cannot reach a revocation list or responder, matching the LDAP connection itself.
-        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreNotTimeValid;
+        if (chain.Root != null)
+            return $"Nothing in the certificate chain is trusted. Add '{PresentedServerCertificate.CommonNameOf(chain.Root.Subject)}', the root of the chain, to the JIM certificate store (Admin > Certificates) so that renewals of everything beneath it are trusted too. Any other certificate in the chain also works, until it is renewed.";
 
-        foreach (var trustedCertificate in trustedCertificates)
-        {
-            chain.ChainPolicy.CustomTrustStore.Add(trustedCertificate);
-            chain.ChainPolicy.ExtraStore.Add(trustedCertificate);
-        }
-
-        if (chain.Build(certificate))
-            return true;
-
-        // Nothing in the JIM certificate store vouched for it; fall back to the operating system's own anchors.
-        using var systemChain = new X509Chain();
-        systemChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        systemChain.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreNotTimeValid;
-        return systemChain.Build(certificate);
+        var highest = chain.Elements[^1].Certificate;
+        return $"Nothing in the certificate chain is trusted, and JIM could not find '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}', the certificate authority that issued '{PresentedServerCertificate.CommonNameOf(highest.Subject)}'. Trust a certificate JIM did find, or add '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}' to the JIM certificate store (Admin > Certificates) so that renewals are trusted too.";
     }
 
     /// <summary>

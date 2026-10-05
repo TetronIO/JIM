@@ -11,17 +11,15 @@ namespace JIM.Connectors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// JIM trusts a server when its chain ends at a root in the JIM certificate store (or one the operating system already
-/// trusts). The certificate authorities in between are never trusted themselves, but every one of them has to be
-/// available, or the chain cannot be built: an intermediate in the store, or the server's own certificate, is not a
-/// trust anchor. This was established against .NET's chain builder directly, which is what JIM's own checks and the
-/// SQL Connector's driver both rely on, and it matches how OpenSSL treats the trust directory the LDAP Connector uses.
+/// The chain is built from everything JIM can lay hands on, so an administrator is shown as much of it as can be
+/// found: what the server sent, what JIM already holds, and what can be downloaded from the address each certificate
+/// names for its issuer (Authority Information Access). Revocation is not checked, matching the connections
+/// themselves, because air-gapped deployments cannot reach a revocation list or responder.
 /// </para>
 /// <para>
-/// The chain is built from everything JIM can lay hands on: what the server sent, what JIM already holds, what an
-/// administrator supplied, and what can be downloaded from the address each certificate names for its issuer
-/// (Authority Information Access). Revocation is not checked, matching the connections themselves, because
-/// air-gapped deployments cannot reach a revocation list or responder.
+/// Whether the chain is trusted is judged more narrowly, on what a connection would have: what the server sent and
+/// what the JIM certificate store holds (<see cref="JimCertificateStoreTrust"/>), or else the operating system's own
+/// trust. A certificate JIM had to download does not count until it is in the store.
 /// </para>
 /// </remarks>
 internal static class CertificateChainAssembler
@@ -32,13 +30,11 @@ internal static class CertificateChainAssembler
     /// <param name="leaf">The server's certificate.</param>
     /// <param name="sentByServer">The other certificates the server sent during the handshake.</param>
     /// <param name="trustedCertificates">The JIM certificate store.</param>
-    /// <param name="suppliedCertificates">Certificates an administrator supplied to complete the chain. Never trusted by being supplied.</param>
     /// <param name="downloadTimeout">How long to wait for each issuer certificate JIM downloads.</param>
     internal static AssembledCertificateChain Assemble(
         X509Certificate2 leaf,
         IReadOnlyCollection<X509Certificate2> sentByServer,
         IReadOnlyCollection<X509Certificate2> trustedCertificates,
-        IReadOnlyCollection<X509Certificate2> suppliedCertificates,
         TimeSpan downloadTimeout)
     {
         ArgumentNullException.ThrowIfNull(leaf);
@@ -47,7 +43,7 @@ internal static class CertificateChainAssembler
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.UrlRetrievalTimeout = downloadTimeout;
         chain.ChainPolicy.DisableCertificateDownloads = false;
-        chain.ChainPolicy.ExtraStore.AddRange(sentByServer.Concat(trustedCertificates).Concat(suppliedCertificates).ToArray());
+        chain.ChainPolicy.ExtraStore.AddRange(sentByServer.Concat(trustedCertificates).ToArray());
         chain.Build(leaf);
 
         var elements = new List<AssembledCertificateChainElement>();
@@ -58,7 +54,7 @@ internal static class CertificateChainAssembler
             var certificate = X509CertificateLoader.LoadCertificate(element.Certificate.RawData);
             var (source, downloadedFrom) = elements.Count == 0
                 ? (ServerCertificateChainElementSource.SentByServer, (string?)null)
-                : SourceOf(certificate, below!, sentByServer, trustedCertificates, suppliedCertificates);
+                : SourceOf(certificate, below!, sentByServer, trustedCertificates);
 
             elements.Add(new AssembledCertificateChainElement(certificate, source, downloadedFrom));
             below = certificate;
@@ -68,40 +64,29 @@ internal static class CertificateChainAssembler
         var isComplete = IsSelfSigned(top) && !chain.ChainStatus.Any(status => status.Status == X509ChainStatusFlags.PartialChain);
         var root = isComplete ? top : null;
 
-        var chainThumbprints = elements.Select(element => element.Certificate.Thumbprint).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var unrelated = suppliedCertificates
-            .Where(certificate => !chainThumbprints.Contains(certificate.Thumbprint))
-            .Select(certificate => X509CertificateLoader.LoadCertificate(certificate.RawData))
-            .ToList();
-
         return new AssembledCertificateChain(
             elements,
             root,
             missingIssuer: isComplete ? null : top.Issuer,
-            unrelated,
-            isTrusted: isComplete && IsTrusted(leaf, elements, trustedCertificates),
-            problem: isComplete ? FindProblem(elements) : null);
+            isTrusted: IsTrusted(leaf, sentByServer, trustedCertificates),
+            problem: FindProblem(elements));
     }
 
     /// <summary>
     /// Where a certificate in the chain came from, in the order an administrator would want it described: the
-    /// server's own word first, then JIM's own store, then the administrator's files, then the network.
+    /// server's own word first, then JIM's own store, then the network.
     /// </summary>
     private static (ServerCertificateChainElementSource Source, string? DownloadedFrom) SourceOf(
         X509Certificate2 certificate,
         X509Certificate2 below,
         IReadOnlyCollection<X509Certificate2> sentByServer,
-        IReadOnlyCollection<X509Certificate2> trustedCertificates,
-        IReadOnlyCollection<X509Certificate2> suppliedCertificates)
+        IReadOnlyCollection<X509Certificate2> trustedCertificates)
     {
         if (Contains(sentByServer, certificate))
             return (ServerCertificateChainElementSource.SentByServer, null);
 
         if (Contains(trustedCertificates, certificate))
             return (ServerCertificateChainElementSource.JimCertificateStore, null);
-
-        if (Contains(suppliedCertificates, certificate))
-            return (ServerCertificateChainElementSource.Supplied, null);
 
         // Not handed to the chain builder by anyone, so it found it itself: either at the address the certificate
         // below names for its issuer, or in the operating system's own stores.
@@ -127,48 +112,31 @@ internal static class CertificateChainAssembler
     }
 
     /// <summary>
-    /// Whether the chain ends at something trusted: a root in the JIM certificate store, or one the operating system
-    /// trusts. Built with the assembled chain available, so certificate authorities the server sent count.
+    /// Whether a connection would accept the chain: the JIM certificate store vouches for it, or the operating system
+    /// trusts it. Judged on what the server sent, never on what JIM downloaded.
     /// </summary>
-    private static bool IsTrusted(X509Certificate2 leaf, List<AssembledCertificateChainElement> elements, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    private static bool IsTrusted(X509Certificate2 leaf, IReadOnlyCollection<X509Certificate2> sentByServer, IReadOnlyCollection<X509Certificate2> trustedCertificates)
     {
-        var intermediates = elements.Skip(1).Select(element => element.Certificate).ToList();
-
-        if (trustedCertificates.Count > 0)
-        {
-            using var custom = new X509Chain();
-            custom.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-            custom.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-            custom.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreNotTimeValid;
-            custom.ChainPolicy.DisableCertificateDownloads = true;
-            custom.ChainPolicy.CustomTrustStore.AddRange(trustedCertificates.ToArray());
-            custom.ChainPolicy.ExtraStore.AddRange(intermediates.Concat(trustedCertificates).ToArray());
-            if (custom.Build(leaf))
-                return true;
-        }
+        if (JimCertificateStoreTrust.VouchesFor(leaf, sentByServer, trustedCertificates))
+            return true;
 
         using var system = new X509Chain();
         system.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        system.ChainPolicy.VerificationFlags = X509VerificationFlags.IgnoreNotTimeValid;
         system.ChainPolicy.DisableCertificateDownloads = true;
-        system.ChainPolicy.ExtraStore.AddRange(intermediates.ToArray());
+        system.ChainPolicy.ExtraStore.AddRange(sentByServer.ToArray());
         return system.Build(leaf);
     }
 
     /// <summary>
-    /// Why a complete chain could not be relied on even with its root trusted, or null when it can. Checks the
-    /// certificate authorities only: the server certificate's own dates and name are judged, and reported, by the
-    /// caller.
+    /// Why the chain could not be relied on whatever JIM trusted, or null when it can. Checks the certificate
+    /// authorities only: the server certificate's own dates and name are judged, and reported, by the caller.
     /// </summary>
     private static string? FindProblem(List<AssembledCertificateChainElement> elements)
     {
-        var root = elements[^1].Certificate;
-
         using var chain = new X509Chain();
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
         chain.ChainPolicy.DisableCertificateDownloads = true;
-        chain.ChainPolicy.CustomTrustStore.Add(root);
         chain.ChainPolicy.ExtraStore.AddRange(elements.Select(element => element.Certificate).ToArray());
         chain.Build(elements[0].Certificate);
 
@@ -226,14 +194,12 @@ internal sealed class AssembledCertificateChain : IDisposable
         IReadOnlyList<AssembledCertificateChainElement> elements,
         X509Certificate2? root,
         string? missingIssuer,
-        IReadOnlyList<X509Certificate2> unrelated,
         bool isTrusted,
         string? problem)
     {
         Elements = elements;
         Root = root;
         MissingIssuer = missingIssuer;
-        Unrelated = unrelated;
         IsTrusted = isTrusted;
         Problem = problem;
     }
@@ -256,17 +222,13 @@ internal sealed class AssembledCertificateChain : IDisposable
     internal string? MissingIssuer { get; }
 
     /// <summary>
-    /// Supplied certificates that are not part of this chain.
-    /// </summary>
-    internal IReadOnlyList<X509Certificate2> Unrelated { get; }
-
-    /// <summary>
-    /// Whether the chain ends at a root the JIM certificate store or the operating system trusts.
+    /// Whether a connection would accept the chain: a certificate in it is in the JIM certificate store, or the
+    /// operating system trusts it.
     /// </summary>
     internal bool IsTrusted { get; }
 
     /// <summary>
-    /// Why a complete chain cannot be relied on even with its root trusted, or null when it can.
+    /// Why the chain cannot be relied on whatever JIM trusted, or null when it can.
     /// </summary>
     internal string? Problem { get; }
 
@@ -274,8 +236,5 @@ internal sealed class AssembledCertificateChain : IDisposable
     {
         foreach (var element in Elements)
             element.Certificate.Dispose();
-
-        foreach (var certificate in Unrelated)
-            certificate.Dispose();
     }
 }

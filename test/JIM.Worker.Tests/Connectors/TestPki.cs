@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
@@ -40,7 +39,8 @@ internal static class TestPki
     }
 
     /// <summary>
-    /// A server certificate for <paramref name="hostName"/>, issued by <paramref name="issuer"/>.
+    /// A server certificate for <paramref name="hostName"/>, issued by <paramref name="issuer"/>, and in date whatever the
+    /// issuer's own dates, as a server whose issuing CA has expired would present.
     /// </summary>
     internal static X509Certificate2 CreateServer(string hostName, X509Certificate2 issuer, string? issuerDownloadUrl = null)
     {
@@ -65,20 +65,6 @@ internal static class TestPki
         using var issuerKey = issuer.GetRSAPrivateKey() ?? throw new InvalidOperationException("The issuer has no private key to sign with.");
         var generator = X509SignatureGenerator.CreateForRSA(issuerKey, RSASignaturePadding.Pkcs1);
         return request.Create(issuer.SubjectName, generator, notBefore, notAfter, RandomNumberGenerator.GetBytes(8));
-    }
-
-    /// <summary>
-    /// A server certificate issued by an expired certificate authority, valid only within the issuer's own (past)
-    /// validity period, since no issuer can sign a certificate that outlives it.
-    /// </summary>
-    internal static X509Certificate2 CreateServerAllowingExpiredIssuer(string hostName, X509Certificate2 issuer)
-    {
-        using var key = RSA.Create(2048);
-        var request = NewRequest(hostName, key, isCertificateAuthority: false);
-        AddAuthorityExtensions(request, issuer, issuerDownloadUrl: null);
-        using var certificate = SignedBy(request, issuer, issuer.NotBefore, issuer.NotAfter);
-        using var withKey = certificate.CopyWithPrivateKey(key);
-        return Exportable(withKey);
     }
 
     /// <summary>
@@ -112,42 +98,4 @@ internal static class TestPki
     /// </summary>
     private static X509Certificate2 Exportable(X509Certificate2 certificate) =>
         X509CertificateLoader.LoadPkcs12(certificate.Export(X509ContentType.Pkcs12), null);
-
-    /// <summary>
-    /// The certificates as a PEM bundle, the way a PKI team usually hands a chain over.
-    /// </summary>
-    internal static byte[] ToPemBundle(params X509Certificate2[] certificates) =>
-        System.Text.Encoding.ASCII.GetBytes(string.Concat(certificates.Select(certificate => certificate.ExportCertificatePem() + "\n")));
-
-    /// <summary>
-    /// The certificates as a degenerate PKCS#7 SignedData structure, the .p7b format Windows exports chains in.
-    /// </summary>
-    internal static byte[] ToPkcs7(params X509Certificate2[] certificates)
-    {
-        var writer = new AsnWriter(AsnEncodingRules.DER);
-        using (writer.PushSequence())
-        {
-            writer.WriteObjectIdentifier("1.2.840.113549.1.7.2");
-            using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0)))
-            using (writer.PushSequence())
-            {
-                writer.WriteInteger(1);
-                using (writer.PushSetOf()) { }
-                using (writer.PushSequence())
-                {
-                    writer.WriteObjectIdentifier("1.2.840.113549.1.7.1");
-                }
-
-                using (writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, 0)))
-                {
-                    foreach (var certificate in certificates)
-                        writer.WriteEncodedValue(certificate.RawData);
-                }
-
-                using (writer.PushSetOf()) { }
-            }
-        }
-
-        return writer.Encode();
-    }
 }

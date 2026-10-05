@@ -27,12 +27,7 @@ public enum ServerCertificateReadOutcome
     /// <summary>
     /// The server could not be reached, which is a connectivity problem rather than a certificate one.
     /// </summary>
-    ServerUnreachable,
-
-    /// <summary>
-    /// A certificate the administrator supplied could not be read.
-    /// </summary>
-    InvalidCertificate
+    ServerUnreachable
 }
 
 /// <summary>
@@ -72,28 +67,9 @@ public enum ServerCertificateTrustOutcome
     ServerUnreachable,
 
     /// <summary>
-    /// The thumbprint names a certificate in the chain that is not its root: the server's own certificate, or a
-    /// certificate authority between it and the root. Trusting either would never make the connection work, so
-    /// nothing was trusted; the result names the root to trust instead, where JIM has it.
+    /// A certificate authority in the server's chain cannot be relied on: it has expired or is not yet valid, is not
+    /// marked as a certificate authority, or its signature does not verify. Nothing trusted in JIM would make the
+    /// connection work, so nothing was trusted; the chain has to be fixed on the server.
     /// </summary>
-    NotTheRoot,
-
-    /// <summary>
-    /// JIM could not complete the chain up to a root, even with any certificates supplied, so there is nothing that
-    /// could be trusted to make the connection work. The result names the certificate that is missing.
-    /// </summary>
-    ChainIncomplete,
-
-    /// <summary>
-    /// A supplied certificate is not part of this server's chain. Nothing was trusted, so a mistaken file is never
-    /// stored.
-    /// </summary>
-    CertificateNotInChain,
-
-    /// <summary>
-    /// A certificate in the chain cannot be relied on: a supplied file could not be read, a certificate authority in
-    /// the chain is expired or not yet valid, is not marked as a certificate authority, or a signature does not
-    /// verify. Nothing was trusted.
-    /// </summary>
-    InvalidCertificate
+    InvalidChain
 }

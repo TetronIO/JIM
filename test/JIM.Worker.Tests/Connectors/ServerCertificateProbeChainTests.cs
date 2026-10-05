@@ -18,8 +18,8 @@ namespace JIM.Worker.Tests.Connectors;
 /// </summary>
 /// <remarks>
 /// The probe's verdict drives what an administrator is offered to trust, and for the SQL Connector whether a
-/// certificate is handed to the driver at all. Each case pins what JIM concludes from what a server sent, what JIM
-/// holds, and what was supplied.
+/// certificate is handed to the driver at all. Each case pins what JIM concludes from what a server sent and what JIM
+/// holds.
 /// </remarks>
 [TestFixture]
 public class ServerCertificateProbeChainTests
@@ -88,64 +88,86 @@ public class ServerCertificateProbeChainTests
     }
 
     [Test]
-    public void Read_IntermediateInTheJimStore_IsStillUntrusted()
+    public void Read_IntermediateInTheJimStore_FindsNothingWrong()
     {
+        // #1914: the probe demanded a root in the store, so an intermediate an administrator had added was still
+        // reported as untrusted, while the SCIM and LDAP Connectors accepted it.
         using var server = new TlsServer(_leaf, _intermediate, _root);
 
         var reading = Read(server, trusted: [TestPki.PublicOnly(_intermediate)]);
 
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
+    }
+
+    [Test]
+    public void Read_ServerCertificateInTheJimStore_FindsNothingWrong()
+    {
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_leaf)]);
+
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
+    }
+
+    [Test]
+    public void Read_ExpiredIntermediateUnderATrustedRoot_ReportsTheBrokenChainRatherThanOfferingTrust()
+    {
+        using var expired = TestPki.CreateIntermediate("Expired CA", _root, notAfter: DateTimeOffset.UtcNow.AddHours(-2));
+        using var leaf = TestPki.CreateServer(HostName, expired);
+        using var server = new TlsServer(leaf, expired, _root);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)]);
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
-            Assert.That(reading.Diagnostic.IsChainComplete, Is.True);
-            Assert.That(reading.Diagnostic.RootThumbprint, Is.EqualTo(_root.Thumbprint), "The root, not the intermediate, is what would make this work.");
+            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.InvalidChain));
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("Expired CA"));
         }
     }
 
     [Test]
-    public void Read_ServerSendsItsWholeChain_OffersTheRootItSent()
+    public void Read_RootDownloadableFromTheAddressTheIntermediateNames_OffersTheRootAndSaysWhereFrom()
     {
-        using var server = new TlsServer(_leaf, _intermediate, _root);
+        // A server that sends its root is covered against a real directory (ServerCertificateProbeTests); .NET's own
+        // TLS server will not send one, so here the root comes from the address the intermediate names for it.
+        using var download = new CertificateDownloadServer(_root);
+        using var intermediate = TestPki.CreateIntermediate("Corp Issuing CA 3", _root, issuerDownloadUrl: download.Url);
+        using var leaf = TestPki.CreateServer(HostName, intermediate);
+        using var server = new TlsServer(leaf, intermediate);
 
         var reading = Read(server, trusted: []);
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
             Assert.That(reading.Diagnostic.IsChainComplete, Is.True);
             Assert.That(reading.Diagnostic.RootThumbprint, Is.EqualTo(_root.Thumbprint));
             Assert.That(reading.Diagnostic.RootSubject, Is.EqualTo(_root.Subject));
-            Assert.That(reading.Diagnostic.IssuerThumbprint, Is.EqualTo(_intermediate.Thumbprint));
+            Assert.That(reading.Diagnostic.IssuerThumbprint, Is.EqualTo(intermediate.Thumbprint));
+            Assert.That(reading.Diagnostic.Chain[2].DownloadedFrom, Is.EqualTo(download.Url));
             Assert.That(reading.Chain!.Root!.Thumbprint, Is.EqualTo(_root.Thumbprint));
-            Assert.That(reading.Chain!.Root!.Source, Is.EqualTo(ServerCertificateChainElementSource.SentByServer));
+            Assert.That(reading.Chain!.Root!.Source, Is.EqualTo(ServerCertificateChainElementSource.Downloaded));
+            Assert.That(reading.Chain!.Intermediates.Single().Source, Is.EqualTo(ServerCertificateChainElementSource.SentByServer));
             Assert.That(reading.Diagnostic.Remediation, Does.Contain("Corp Root CA"));
         }
     }
 
     [Test]
-    public void Read_ServerSendsOnlyItsOwnCertificateAndTheRestIsSupplied_AssemblesTheChainFromTheSuppliedCertificates()
+    public void Read_ServerSendsOnlyItsOwnCertificate_StillOffersItAndNamesWhatIsMissing()
     {
         using var server = new TlsServer(_leaf);
 
-        var reading = Read(server, trusted: [], supplied: [TestPki.PublicOnly(_intermediate), TestPki.PublicOnly(_root)]);
+        var reading = Read(server, trusted: []);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(reading.Diagnostic.IsChainComplete, Is.True);
-            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer), "Supplying certificates proposes them; nothing is trusted until the root is added.");
-            Assert.That(reading.Diagnostic.Chain.Skip(1).Select(e => e.Source), Is.All.EqualTo(ServerCertificateChainElementSource.Supplied));
-            Assert.That(reading.Chain!.Intermediates.Single().Source, Is.EqualTo(ServerCertificateChainElementSource.Supplied));
+            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
+            Assert.That(reading.Diagnostic.IsChainComplete, Is.False);
+            Assert.That(reading.Diagnostic.IssuerThumbprint, Is.Null);
+            Assert.That(reading.Diagnostic.MissingIssuer, Is.EqualTo(_intermediate.Subject));
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("Corp Issuing CA 2"));
+            Assert.That(reading.Chain!.All.Select(c => c.Thumbprint), Is.EqualTo(new[] { _leaf.Thumbprint }));
         }
-    }
-
-    [Test]
-    public void Read_SuppliedCertificateFromAnotherHierarchy_IsReportedAsUnrelated()
-    {
-        using var otherRoot = TestPki.CreateRoot("Web CA");
-        using var server = new TlsServer(_leaf, _intermediate);
-
-        var reading = Read(server, trusted: [], supplied: [TestPki.PublicOnly(otherRoot)]);
-
-        Assert.That(reading.Chain!.Unrelated.Select(c => c.Thumbprint), Is.EqualTo(new[] { otherRoot.Thumbprint }));
     }
 
     [Test]
@@ -166,10 +188,10 @@ public class ServerCertificateProbeChainTests
         }
     }
 
-    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted, X509Certificate2[]? supplied = null)
+    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted)
     {
         var reading = ServerCertificateProbe.Read(HostName, server.Port, trusted, TimeSpan.FromSeconds(10), _logger,
-            "database server", "TLS", SecureHandshakeFraming.DirectTls, supplied);
+            "database server", "TLS", SecureHandshakeFraming.DirectTls);
 
         Assert.That(reading, Is.Not.Null, "The server answered, so the probe must have seen its certificate.");
         return reading!;

@@ -8,10 +8,10 @@ namespace JIM.Models.Connectors;
 /// own certificate, the certificate authorities between it and the root, and the root where JIM could reach one.
 /// </summary>
 /// <remarks>
-/// JIM trusts a server when its chain ends at a root in the JIM certificate store. The certificate authorities in
-/// between are not trusted themselves, but JIM needs every one of them to complete the chain, so the ones the server
-/// did not send are stored alongside the root when it is trusted. A self-signed server certificate is its own root,
-/// with nothing in between.
+/// JIM trusts a server when any certificate in its chain is in the JIM certificate store, so any of them can be
+/// chosen. The higher the choice, the longer it lasts: the root survives the renewal of everything below it, the
+/// server's own certificate has to be trusted again at every renewal. A self-signed server certificate is its own
+/// root, with nothing in between.
 /// </remarks>
 public class PresentedServerCertificateChain
 {
@@ -36,16 +36,10 @@ public class PresentedServerCertificateChain
     public List<PresentedServerCertificate> Intermediates { get; init; } = [];
 
     /// <summary>
-    /// The root at the top of the chain, where JIM reached one: the certificate to trust. The leaf itself for a
-    /// self-signed server certificate. Null when the chain is incomplete.
+    /// The root at the top of the chain, where JIM reached one: the most durable certificate to trust. The leaf
+    /// itself for a self-signed server certificate. Null when the chain is incomplete.
     /// </summary>
     public PresentedServerCertificate? Root { get; init; }
-
-    /// <summary>
-    /// Certificates the administrator supplied that did not turn out to belong to this chain. Nothing is trusted
-    /// while there are any, so a mistaken file is never stored.
-    /// </summary>
-    public List<PresentedServerCertificate> Unrelated { get; init; } = [];
 
     /// <summary>
     /// The subject of the first certificate JIM could not find, where the chain is incomplete.
@@ -53,6 +47,12 @@ public class PresentedServerCertificateChain
     public string? MissingIssuer { get; init; }
 
     public bool IsComplete => Root != null;
+
+    /// <summary>
+    /// Every certificate in the chain, the server's own first and the root, where there is one, last.
+    /// </summary>
+    public IEnumerable<PresentedServerCertificate> All =>
+        Root == null || string.Equals(Root.Thumbprint, Leaf.Thumbprint, StringComparison.OrdinalIgnoreCase) ? [Leaf, .. Intermediates] : [Leaf, .. Intermediates, Root];
 
     public bool IsSelfSigned { get; init; }
 }

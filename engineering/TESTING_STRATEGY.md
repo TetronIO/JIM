@@ -232,7 +232,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 
 **Characteristics**:
 - One SQL Server container, presenting a certificate for `localhost` issued by a run-time CA that nothing trusts; certificates are generated on every run, never committed
-- Covers, on that one server: an unencrypted connection (connects), an encrypted connection with the issuer in the JIM certificate store (connects), an encrypted connection with an empty store (refused, reported as `UntrustedIssuer`), an encrypted connection by a name the certificate does not carry (`127.0.0.1`; refused, reported as `NameMismatch`), and the certificate read behind the "trust this certificate" prompt
+- Covers, on that one server: an unencrypted connection (connects), an encrypted connection with the issuer in the JIM certificate store (connects), an encrypted connection with the server's own certificate in the store (connects; #1914), an encrypted connection with an empty store (refused, reported as `UntrustedIssuer`), an encrypted connection by a name the certificate does not carry (`127.0.0.1`; refused, reported as `NameMismatch`), and the certificate read behind the "trust this certificate" prompt
 - Refusals assert the reported reason (a `ServerCertificateRejectedException` and its `FailureReason`), never merely that the connection failed
 - Needs no root: no hosts entries and no change to the machine trust store, unlike the LDAPS tier
 

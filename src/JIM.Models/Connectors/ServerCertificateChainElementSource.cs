@@ -30,10 +30,5 @@ public enum ServerCertificateChainElementSource
     /// <summary>
     /// Already in the operating system's certificate stores on the machine JIM runs on.
     /// </summary>
-    OperatingSystem = 3,
-
-    /// <summary>
-    /// Supplied by the administrator to complete a chain JIM could not complete itself.
-    /// </summary>
-    Supplied = 4
+    OperatingSystem = 3
 }

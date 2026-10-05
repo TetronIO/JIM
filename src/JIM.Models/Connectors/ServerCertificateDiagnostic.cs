@@ -56,12 +56,18 @@ public class ServerCertificateDiagnostic
     public bool IsSelfSigned { get; set; }
 
     /// <summary>
-    /// SHA-1 thumbprint of the certificate authority directly above this certificate, where JIM has it. Informational:
-    /// what JIM trusts is the root at the top of the chain (<see cref="RootThumbprint"/>), because a chain is only
-    /// trusted when it ends at a root in the JIM certificate store. Null for a self-signed certificate, and where
-    /// JIM could not find the issuer.
+    /// SHA-1 thumbprint of the certificate authority directly above this certificate, where JIM has it. Null for a
+    /// self-signed certificate, and where JIM could not find the issuer. Any certificate in <see cref="Chain"/> can be
+    /// trusted; this one and <see cref="RootThumbprint"/> are named because they are the ones usually wanted.
     /// </summary>
     public string? IssuerThumbprint { get; set; }
+
+    /// <summary>
+    /// Whether JIM has the certificate authority that issued this certificate, so it can be trusted directly.
+    /// Self-signed certificates have no separate authority and so never do. Kept for scripts written before
+    /// <see cref="Chain"/> described every certificate.
+    /// </summary>
+    public bool IsIssuerCertificateAvailable => !string.IsNullOrEmpty(IssuerThumbprint);
 
     /// <summary>
     /// The certificate chain JIM assembled, starting with the server's certificate and ending with the root where
@@ -71,8 +77,8 @@ public class ServerCertificateDiagnostic
     public List<ServerCertificateChainElement> Chain { get; set; } = [];
 
     /// <summary>
-    /// Whether the chain reaches a root (a self-signed certificate authority). When it does not, nothing JIM could be
-    /// asked to trust would make the connection work until the missing certificates are supplied.
+    /// Whether the chain reaches a root (a self-signed certificate authority). When it does not, the certificates JIM
+    /// has can still be trusted; the root just is not among them.
     /// </summary>
     public bool IsChainComplete { get; set; }
 
@@ -83,8 +89,8 @@ public class ServerCertificateDiagnostic
     public string? MissingIssuer { get; set; }
 
     /// <summary>
-    /// The root at the top of a complete chain: the certificate to trust. For a self-signed server certificate this
-    /// is the server's certificate itself.
+    /// The root at the top of a complete chain: the most durable certificate to trust, since it survives the renewal
+    /// of everything below it. For a self-signed server certificate this is the server's certificate itself.
     /// </summary>
     public string? RootThumbprint { get; set; }
 

@@ -13,7 +13,7 @@ namespace JIM.Connectors;
 /// </summary>
 public class ServerCertificateReader : IServerCertificateReader
 {
-    public ServerCertificateReading? Read(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, IReadOnlyCollection<X509Certificate2>? suppliedCertificates = null)
+    public ServerCertificateReading? Read(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates)
     {
         return ServerCertificateProbe.Read(
             endpoint.Host,
@@ -23,7 +23,6 @@ public class ServerCertificateReader : IServerCertificateReader
             Log.Logger,
             endpoint.ServerDescription,
             endpoint.SecureTransportName,
-            endpoint.HandshakeFraming,
-            suppliedCertificates);
+            endpoint.HandshakeFraming);
     }
 }
