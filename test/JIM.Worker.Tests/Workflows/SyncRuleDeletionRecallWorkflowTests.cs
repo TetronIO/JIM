@@ -252,6 +252,33 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task ExecuteSyncRuleDeletionRecallAsync_RecallTakesObjectOutOfExportScope_DeprovisionsTargetAsync()
+    {
+        // The export rule's scope depends on Description, which only HR contributes. Recalling HR's values takes
+        // the Metaverse Object out of that scope, and a synchronisation that withdrew the value would then
+        // deprovision the target per the rule's Outbound Deprovision Action (Delete here). The recall must do
+        // the same, or the target account stays provisioned with nothing left to notice it.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true);
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, activity) = await DisableRuleAndBuildTaskAsync(ctx.HrImportRule);
+        var recallResult = await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
+
+        var stagedPendingExport = SyncRepo.PendingExports.Values
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == targetCso.Id);
+        var rpei = DbContext.ActivityRunProfileExecutionItems.Single(item => item.ActivityId == activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stagedPendingExport?.ChangeType, Is.EqualTo(PendingExportChangeType.Delete),
+                "the target left the export rule's scope, so it must be staged for deletion");
+            Assert.That(recallResult.PendingExportsStaged, Is.EqualTo(1), "the deprovisioning must be counted");
+            Assert.That(rpei.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
+                Is.True, "the deprovisioning must be recorded on the object's execution item");
+        }
+    }
+
+    [Test]
     public async Task ExecuteSyncRuleDeletionRecallAsync_FailurePartway_RuleSurvivesDisabledAndActivityFailsAsync()
     {
         var ctx = await SetUpSoleContributorWithExportTargetAsync();
@@ -397,10 +424,10 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
     /// Sole-contributor topology plus a downstream export target: HR projects and flows DisplayName,
     /// EmployeeId and Description; a target system maps DisplayName and Description outbound.
     /// </summary>
-    private async Task<RecallExecutionContext> SetUpSoleContributorWithExportTargetAsync()
+    private async Task<RecallExecutionContext> SetUpSoleContributorWithExportTargetAsync(bool exportScopedOnDescription = false)
     {
         var (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr) = await SetUpHrContributorAsync();
-        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr);
+        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr, exportScopedOnDescription);
         return new RecallExecutionContext(hrSystem, null, hrImportRule, 0, mvDescriptionAttr.Id,
             mvDisplayNameAttr.Id, target.System, target.DescriptionAttribute, target.DisplayNameAttribute);
     }
@@ -495,7 +522,8 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectTypeAttribute DisplayNameAttribute);
 
     private async Task<ExportTarget> AddExportTargetAsync(
-        MetaverseObjectType mvType, MetaverseAttribute mvDisplayNameAttr, MetaverseAttribute mvDescriptionAttr)
+        MetaverseObjectType mvType, MetaverseAttribute mvDisplayNameAttr, MetaverseAttribute mvDescriptionAttr,
+        bool scopedOnDescription = false)
     {
         var targetSystem = await CreateConnectedSystemAsync("AD Target");
         var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -530,6 +558,27 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
             TargetConnectedSystemAttributeId = targetDescriptionAttr.Id,
             Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescriptionAttr, MetaverseAttributeId = mvDescriptionAttr.Id } }
         });
+
+        if (scopedOnDescription)
+        {
+            // Only objects whose Description is the HR value are in scope, so withdrawing Description takes the
+            // object out of scope; the rule deletes what leaves it.
+            exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+            exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+            {
+                Type = JIM.Models.Search.SearchGroupType.All,
+                Criteria = new List<SyncRuleScopingCriteria>
+                {
+                    new()
+                    {
+                        MetaverseAttribute = mvDescriptionAttr,
+                        ComparisonType = JIM.Models.Search.SearchComparisonType.Equals,
+                        StringValue = HrDescription,
+                        CaseSensitive = true
+                    }
+                }
+            });
+        }
 
         DbContext.SyncRules.Add(exportRule);
         await DbContext.SaveChangesAsync();

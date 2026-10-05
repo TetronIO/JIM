@@ -30,6 +30,47 @@ public class ConfigurationChangePreviewVerdictTests
     }
 
     [Test]
+    public void Lines_StatesEachTransitionAsItsOwnSentenceWorstFirst()
+    {
+        // A space too small for the verdict's paragraph (the delete dialog's preview slot) lists the same sentences in
+        // the same order, each with the tone that orders it.
+        var counts = new[]
+        {
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 40_000),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 2),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 0)
+        };
+
+        var lines = ConfigurationChangePreviewVerdict.Lines(counts);
+
+        Assert.That(lines, Is.EqualTo(new[]
+        {
+            new PreviewVerdictLine(Severity.Error, "2 objects would become eligible for deletion."),
+            new PreviewVerdictLine(OutcomeSeverity(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope), "40,000 objects would leave import scope.")
+        }));
+    }
+
+    [Test]
+    public void Describe_SameValueTakeovers_AreLeftOut()
+    {
+        // A contributor changing with the value staying identical changes nothing anyone would notice; stating it in the
+        // leading sentence would bury the consequences that do matter under the largest, most harmless number.
+        var counts = new[]
+        {
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue, 11_950),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 662)
+        };
+
+        var verdict = ConfigurationChangePreviewVerdict.Describe(counts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(verdict!.Lead, Is.EqualTo("662 objects would have a value cleared."));
+            Assert.That(verdict!.Detail, Is.Null);
+        }
+    }
+
+    [Test]
     public void Describe_EveryCountIsZero_SaysNothing()
     {
         var counts = new[] { Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 0) };
@@ -123,4 +164,7 @@ public class ConfigurationChangePreviewVerdictTests
 
     private static PreviewImpactCount Count(ActivityRunProfileExecutionItemSyncOutcomeType transition, int objectCount) =>
         new(transition, objectCount, null, null);
+
+    private static Severity OutcomeSeverity(ActivityRunProfileExecutionItemSyncOutcomeType transition) =>
+        ConfigurationChangePreviewVerdict.Describe([Count(transition, 1)])!.Severity;
 }

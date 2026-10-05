@@ -569,6 +569,84 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Connected System deletion previews (#134)' {
+        It 'Posts a deletion preview of that Connected System, with no proposal to state' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -Deletion | Out-Null
+
+                # Deleting a system has no settings to choose between, so the request is the system and nothing else.
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/deletion/preview'
+                $script:capturedBody.Keys.Count | Should -Be 0
+            }
+        }
+
+        It 'Asks for the full data set only when -FullDataSet is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -Deletion -FullDataSet | Out-Null
+
+                $script:capturedBody.deltaPersistence | Should -Be 'Full'
+            }
+        }
+
+        It 'Accepts ConnectedSystemId from the pipeline by property name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                [PSCustomObject]@{ ConnectedSystemId = 8 } | New-JIMConfigurationChangePreview -Deletion | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/8/deletion/preview'
+            }
+        }
+
+        It 'Leaves -ConnectedSystemId on its own previewing the scope selection, so a deletion is only previewed when asked for' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/scope-selection/preview'
+            }
+        }
+
+        It 'Cannot be combined with another surface''s proposal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+
+                # A deletion with a schema proposal attached would be asking two questions at once.
+                { New-JIMConfigurationChangePreview -ConnectedSystemId 5 -Deletion -SchemaObjectType @(@{ objectTypeId = 9 }) -ErrorAction Stop } |
+                    Should -Throw -ErrorId 'AmbiguousParameterSet,New-JIMConfigurationChangePreview'
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+    }
+
     Context 'Waiting' {
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {

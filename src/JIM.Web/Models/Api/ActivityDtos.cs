@@ -485,6 +485,13 @@ public class ActivityDetailDto
     public ConfigurationSnapshot? ConfigurationChangeSnapshot { get; set; }
 
     /// <summary>
+    /// For a change made after reading a Configuration Change Preview, the preview's Activity id, as recorded by the
+    /// change's <c>previewActivityId</c>; read it with <c>GET /api/v1/previews/{activityId}</c>. Null when no preview
+    /// informed the change, and for every other kind of activity.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+
+    /// <summary>
     /// For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded;
     /// null for every other kind of activity.
     /// </summary>
@@ -576,6 +583,7 @@ public class ActivityDetailDto
             ScheduledByScheduleName = activity.ScheduledByScheduleName,
             ChangeReason = activity.ChangeReason,
             ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
+            PreviewActivityId = activity.PreviewActivityId,
             ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot),
             ClearedPendingExportCount = activity.ClearedPendingExportCount,
             ClearedConnectedSystemObjectCount = activity.ClearedConnectedSystemObjectCount,

@@ -77,6 +77,11 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] = CausalityLane.Identity,
             // Its retaining sibling: the kept join is a Metaverse-side fact, exactly as the disconnect is.
             [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = CausalityLane.Identity,
+            // The Connected System deletion preview (#134): a takeover changes the Metaverse Object's attribute, the
+            // corrective update it causes is a statement about the target system.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] = CausalityLane.Downstream,

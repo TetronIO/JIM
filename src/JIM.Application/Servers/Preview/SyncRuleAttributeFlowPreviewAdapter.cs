@@ -880,30 +880,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     /// Renders a staged export value for display, mirroring the inbound summary's own rendering so the two
     /// directions of this preview read alike.
     /// </summary>
-    private static string? RenderExportValue(PendingExportAttributeValueChange change)
-    {
-        if (change.StringValue != null)
-            return change.StringValue;
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (change.LongValue.HasValue)
-            return change.LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (change.DecimalValue.HasValue)
-            return change.DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-        if (change.BoolValue.HasValue)
-            return change.BoolValue.Value.ToString();
-        if (change.GuidValue.HasValue)
-            return change.GuidValue.Value.ToString();
-        if (change.UnresolvedReferenceValue != null)
-            return change.UnresolvedReferenceValue;
-        if (change.ResolvedReferenceCsoId.HasValue)
-            return change.ResolvedReferenceCsoId.Value.ToString();
-        if (change.ByteValue != null)
-            return $"{change.ByteValue.Length} bytes";
-        return null;
-    }
+    private static string? RenderExportValue(PendingExportAttributeValueChange change) => PreviewValueRenderer.Render(change);
 
     /// <summary>
     /// The proposal as a rule the engine can be asked about, with every target and source attribute entity attached.

@@ -218,7 +218,10 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = Icons.Material.Filled.MoveToInbox,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = Icons.Material.Filled.Archive,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = Icons.Material.Filled.PublishedWithChanges,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt
+            [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = Icons.Material.Filled.ChangeCircle,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = Icons.Material.Filled.CompareArrows,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = Icons.Material.Filled.CloudUpload
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

@@ -116,7 +116,13 @@ public class SyncOutcomeTypeOrdinalTests
 
         // A joined Connected System Object left import scope under an Inbound Out-of-Scope Action of RemainJoined
         // and kept its Metaverse Object join (#1649). It used to be recorded as a stray AttributeFlow (8).
-        [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = 51
+        [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = 51,
+
+        // Connected System deletion impact preview (#134): a contributed value taken over by another Connected System,
+        // with a changed or an identical value, and a corrective update staged to a target Connected System.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = 52,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = 53,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = 54
     };
 
     [Test]

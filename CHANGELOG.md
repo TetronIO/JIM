@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
+- ✨ Preview what deleting a Connected System would do (values taken over or cleared, identities made eligible for deletion, downstream corrections) from its Danger Zone tab, `New-JIMConfigurationChangePreview -Deletion` or REST; the deletion's Activity records the preview. (#134)
+- ✨ REST and `Get-JIMActivity -Id` now return a change's `PreviewActivityId`, so a script can read back which Configuration Change Preview informed it. (#134)
 - ✨ JIM can now generate unique values such as account names, employee numbers and badge codes: a **Generated Value** Attribute Flow adds a number only if a value is taken, or uses a forward-only sequence or a random token, and keeps each value once issued. (#242)
 - ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
 - ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
@@ -25,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
+- 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
+- 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it. It used to linger unseen and stop the Connected System it compared ever being deleted; systems already affected can be deleted again. (#134)
+- 🐛 REST: a Connected System's deletion preview now fills in `mvosWithOtherConnectorsCount` and `mvosWithGracePeriodCount`, which always read 0. (#134)
 - 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
 - 🐛 Trusting an intermediate certificate authority or a server's own certificate now works for SQL Server, as for LDAPS and SCIM; it used to report "Certificate trusted." and still be refused, and the card kept saying untrusted. (#1914)
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)

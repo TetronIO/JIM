@@ -358,4 +358,62 @@ public class ConnectedSystemDeletionDatabaseTests
                 "the orphan goes with it rather than being left behind");
         }
     }
+
+    /// <summary>
+    /// Scoping Criteria orphaned the same way: removing a group or a criterion from a Synchronisation Rule used to null
+    /// its optional link to the rule or the group rather than delete it, leaving a criterion that still referenced the
+    /// Connected System attribute it compared. The sequence removes criteria through the system's rules, so an orphan
+    /// matched nothing, refused the attribute delete with 23503, and the system could never be deleted. Found by
+    /// Scenario 014, whose Out-of-Scope step removes a group before its final step deletes the system. Existing
+    /// deployments may already hold such orphans, so the sequence has to sweep them, in both shapes.
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemAsync_WithOrphanedScopingCriteria_DeletesItAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (systemId, _) = await SeedSystemAsync(suffix);
+
+        int criterionInOrphanedGroupId;
+        int criterionWithoutGroupId;
+        await using (var ctx = NewContext())
+        {
+            var objectType = new ConnectedSystemObjectType { ConnectedSystemId = systemId, Name = "user", Selected = true };
+            ctx.ConnectedSystemObjectTypes.Add(objectType);
+            await ctx.SaveChangesAsync();
+
+            var attribute = new ConnectedSystemObjectTypeAttribute { ConnectedSystemObjectType = objectType, Name = "employeeNumber" };
+            ctx.ConnectedSystemAttributes.Add(attribute);
+            await ctx.SaveChangesAsync();
+
+            // A group severed from its rule, still holding its criterion; and a criterion severed from its group.
+            var orphanedGroup = new SyncRuleScopingCriteriaGroup
+            {
+                Criteria = [new SyncRuleScopingCriteria { ConnectedSystemAttributeId = attribute.Id, StringValue = "S14-4" }]
+            };
+            var criterionWithoutGroup = new SyncRuleScopingCriteria { ConnectedSystemAttributeId = attribute.Id, StringValue = "S14-5" };
+            ctx.SyncRuleScopingCriteriaGroups.Add(orphanedGroup);
+            ctx.SyncRuleScopingCriteria.Add(criterionWithoutGroup);
+            await ctx.SaveChangesAsync();
+            criterionInOrphanedGroupId = orphanedGroup.Criteria[0].Id;
+            criterionWithoutGroupId = criterionWithoutGroup.Id;
+        }
+
+        await using (var deleteCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(deleteCtx);
+
+            Assert.That(async () => await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId),
+                Throws.Nothing,
+                "orphaned Scoping Criteria must not make a Connected System undeletable; their attribute references " +
+                "have to be swept before the attributes are deleted");
+        }
+
+        await using var assertCtx = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await assertCtx.ConnectedSystems.AnyAsync(cs => cs.Id == systemId), Is.False);
+            Assert.That(await assertCtx.SyncRuleScopingCriteria.AnyAsync(c => c.Id == criterionInOrphanedGroupId || c.Id == criterionWithoutGroupId),
+                Is.False, "the orphans go with it rather than being left behind");
+        }
+    }
 }

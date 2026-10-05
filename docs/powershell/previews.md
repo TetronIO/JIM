@@ -54,9 +54,12 @@ New-JIMConfigurationChangePreview -ConnectedSystemId <int> -MatchingRule <hashta
 
 New-JIMConfigurationChangePreview -ConnectedSystemId <int> -SchemaObjectType <hashtable[]>
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -Deletion
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
+Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection, or, with `-Deletion`, deleting it altogether. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
 
 ### Parameters
 
@@ -83,6 +86,7 @@ Which identifier you pass selects the entity, and the parameters beside it selec
 | `MatchingRule` | `hashtable[]` | Yes | | The proposed Object Matching Rules, one hashtable per rule. Each takes an `Order`, the parent it belongs to (`ConnectedSystemObjectTypeId` in Simple mode, `SyncRuleId` in Advanced), a `MetaverseObjectTypeId`, a `TargetMetaverseAttributeId`, `CaseSensitive`, and a `Sources` array of `Order` and `ConnectedSystemAttributeId`. |
 | `ObjectMatchingRuleMode` | `string` | No | stored mode | `ConnectedSystem` (Simple) or `SyncRule` (Advanced). Pass it to preview the switch between them. |
 | `SchemaObjectType` | `hashtable[]` | Yes | | The proposed schema selection, one hashtable per Connected System Object Type being changed. Each needs `objectTypeId`, and then only the keys being changed: `selected`, `removeContributedAttributesOnObsoletion`, and `selectedAttributeIds`. |
+| `Deletion` | `switch` | Yes | | Previews deleting the Connected System named by `-ConnectedSystemId`, rather than changing it. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
@@ -96,6 +100,8 @@ An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetav
 `AttributeFlowMapping` is mandatory for the same reason, and `@()` likewise proposes removing every mapping, so the rule flows nothing. Pass `Priority` deliberately on an import mapping: it defaults to the lowest, so a mapping proposed for an attribute another rule already contributes to would be evaluated and then write nothing, and the preview reports that as a validation finding rather than as values that would never be written.
 
 `SchemaObjectType` is mandatory, and every omission inside it means "leave this as it stands", at both levels: an Object Type not named is left alone, and a key not set keeps that Type's stored value. That matters more here than on the other surfaces, because every type default is the destructive answer: an absent `selected` read as `$false` would propose taking a whole Object Type out of management on a request that meant to change one attribute. Send the whole attribute set for a Type rather than the attributes that changed; External IDs are selected implicitly and need not be listed, and deselecting one is refused with a blocking finding.
+
+`-Deletion` previews what [`Remove-JIMConnectedSystem`](connected-systems.md#remove-jimconnectedsystem) does by default: deprovisioning the system through synchronisation. It reports which Metaverse attribute values another Connected System would take over (`WouldTakeOverContributedValue`) and which would be cleared because nothing else contributes them (`NoContributor`), which Metaverse Objects would become eligible for deletion (`WouldBecomeDeletionEligible`), and which updates and deletions would be staged for the other Connected Systems (`WouldStageUpdateExport`, `WouldStageDeleteExport`). There is nothing to propose beyond the system itself. Deleting with `-DeleteImmediately` skips all of that work, keeping the system's values without provenance, so this preview does not describe it. Pass the finished preview's `ActivityId` to `Remove-JIMConnectedSystem -PreviewActivityId` and the deletion's Activity records that it was looked at first.
 
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
@@ -195,6 +201,28 @@ if (-not $preview.HasFailed -and ($preview.ImpactCounts | Measure-Object ObjectC
     Set-JIMSyncRule -Id 42 -InboundOutOfScopeAction Disconnect -PreviewActivityId $preview.ActivityId
 }
 ```
+
+```powershell title="Preview deleting a Connected System"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+```
+
+```powershell title="List the Metaverse attribute values a deletion would clear"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -FullDataSet -Wait
+Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId -All |
+    Where-Object TransitionType -eq 'NoContributor'
+```
+
+Keeps every detail row and lists each value that would be left empty because no other Connected System contributes it, which is the list to check before the deletion goes ahead.
+
+```powershell title="Delete a Connected System after previewing it, recording the preview"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -Wait
+if ($preview.IsComplete) {
+    Remove-JIMConnectedSystem -Id 3 -PreviewActivityId $preview.ActivityId
+}
+```
+
+Deprovisions the Connected System (prompting for confirmation) only once its deletion preview has finished, and records the preview on the deletion's Activity.
 
 ---
 

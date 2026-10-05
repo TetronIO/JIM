@@ -2066,6 +2066,27 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// Of the MVOs deleting the specified Connected System would mark for deletion, counts those whose type has a
+    /// grace period, so their deletion is scheduled rather than immediate.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being considered for deletion.</param>
+    /// <returns>The number of MVOs whose deletion would be scheduled after a grace period.</returns>
+    public async Task<int> GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Counts the MVOs joined to the specified Connected System that also hold a connector in another one.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being considered for deletion.</param>
+    /// <returns>The number of MVOs joined both to this system and to another.</returns>
+    public async Task<int> GetMvosJoinedToOtherConnectedSystemsCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Metaverse.GetMvosJoinedToOtherConnectedSystemsCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Quantifies the Metaverse attribute values contributed by ANY of a Connected System's Synchronisation
     /// Rules (by <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> provenance) and the
     /// distinct Metaverse Objects holding them, for the Connected System deletion preview's deprovisioning

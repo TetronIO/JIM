@@ -586,6 +586,9 @@ public static class CausalityModelBuilder
                 // sits here rather than beside the import-side pair in the Identity lane.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope
+                // Preview-only (#134): a corrective update staged to a target system. The takeovers that cause it are
+                // changes to the Metaverse Object's attributes, so they stay in the Identity lane by default.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport
                 // Unique Value Generation (#242): Collision Remediation is recorded on the export item, like
                 // Exported, not on the Metaverse Object's attributes.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated

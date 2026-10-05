@@ -221,6 +221,14 @@
         Frank's Primary disconnect the expression is rebuilt from the re-elected Secondary value, and
         the produced string is read back over LDAP and asserted to have non-empty values in every RDN
         component: the "CN=,OU=..." output an unfallen-back-to null would have produced.
+    20. DeletionImpactPreview - the Connected System deletion impact preview (#134). Primary's deletion is
+        previewed with every detail row kept, then Primary is deleted by deprovisioning through
+        synchronisation, citing the preview, and the deletion is checked against it row by row: every
+        scalar value the preview said Secondary would take over now holds Secondary's value with
+        Secondary's provenance, every value it said would be cleared is gone, every Metaverse Object it
+        said would become eligible for deletion is gone or marked, and the deletion's Activity records
+        the preview. Deleting Primary ends the fixture, so this step runs last; it asserts the preview
+        against whatever state the earlier steps left rather than predicting that state itself.
 
     Step composition under -Step All: RecallReElection through NoContributorCleared were each
     given a distinct subject (Alice, Bob, Carol, Erin) precisely so they compose safely when run
@@ -290,7 +298,7 @@
     EnforceStateCorrectsMultiValuedSet, ScopedExceptionWriteback,
     GraceFreezesSoleSource,
     GraceExpiryDeletesAndExports, GraceFallbackFlowsAndExports, GraceAssertedNullBeatsSurvivor,
-    GraceExpressionInputFallback, All).
+    GraceExpressionInputFallback, DeletionImpactPreview, All).
     Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
     single named -Step run starts from a fresh environment with no synchronised state; the script
     therefore establishes the baseline (both systems fully imported and synchronised) before
@@ -337,7 +345,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "RemovedMappingRecall", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "RemovedMappingRecall", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "DisabledExceptionKeepsSlot", "EnforceStateCorrectsMultiValuedSet", "ScopedExceptionWriteback", "GraceFreezesSoleSource", "GraceExpiryDeletesAndExports", "GraceFallbackFlowsAndExports", "GraceAssertedNullBeatsSurvivor", "GraceExpressionInputFallback", "DeletionImpactPreview", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -3801,6 +3809,139 @@ userPassword: Test@123!
                 Name = "GraceExpressionInputFallback"
                 Success = $graceExpressionSuccess
                 Note = ($graceExpressionNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 20: DeletionImpactPreview
+    # ========================================================================
+    if ($Step -eq "DeletionImpactPreview" -or $Step -eq "All") {
+        Write-TestSection "Test 20: Deletion Impact Preview Matches the Deletion (Primary)"
+
+        $deletionPreviewSuccess = $true
+        $deletionPreviewNotes = @()
+
+        try {
+            # Deleting a person when their last connector goes, at once, so any user only Primary still holds
+            # becomes eligible, which is the consequence the preview leads with.
+            Set-Scenario14UserTypeDeletionPolicy -DeletionRule "WhenLastConnectorDisconnected" -GracePeriod ([TimeSpan]::Zero) | Out-Null
+
+            # 1. The preview, keeping every detail row so each one can be held to what the deletion does.
+            Write-Host "Previewing the deletion of Primary..." -ForegroundColor Gray
+            $preview = New-JIMConfigurationChangePreview -ConnectedSystemId $primarySystem.id -Deletion -FullDataSet -Wait -TimeoutSeconds 600
+            if (-not $preview.IsComplete -or $preview.HasFailed) {
+                throw "The deletion preview did not finish (IsComplete=$($preview.IsComplete), HasFailed=$($preview.HasFailed), status $($preview.ActivityStatus)): $($preview.ErrorMessage)"
+            }
+            $blocking = @($preview.ValidationFindings | Where-Object { $_.Severity -eq "Blocking" })
+            if ($blocking.Count -gt 0) {
+                throw "The deletion preview was blocked: $($blocking.Message -join '; ')"
+            }
+            $deltas = @(Get-JIMConfigurationChangePreviewDelta -ActivityId $preview.ActivityId -All)
+            Write-Host "  OK Preview complete: $($deltas.Count) detail rows across $(@($preview.ImpactCounts).Count) consequences" -ForegroundColor Green
+
+            # Primary outranks Secondary on every attribute, and Secondary holds values of its own for Dave (the
+            # control) whatever the earlier steps did, so a preview handing nothing over evaluated nothing.
+            $takeovers = @($deltas | Where-Object { $_.TransitionType -eq "WouldTakeOverContributedValue" })
+            if ($takeovers.Count -eq 0) {
+                throw "The deletion preview reported no value taken over by Secondary; with Primary outranking Secondary on every attribute, that means it evaluated nothing."
+            }
+
+            # Previewing changed nothing: Primary is still in service and still wins.
+            $primaryAfterPreview = Get-JIMConnectedSystem -Id $primarySystem.id
+            if ($primaryAfterPreview.status -ne "Active") {
+                throw "Primary's status is '$($primaryAfterPreview.status)' after previewing its deletion; a preview must leave the system in service."
+            }
+
+            # 2. The deletion, citing the preview.
+            Write-Host "Deleting Primary by deprovisioning through synchronisation, citing the preview..." -ForegroundColor Gray
+            $tracking = Remove-JIMConnectedSystem -Id $primarySystem.id -PreviewActivityId $preview.ActivityId -Force
+            if (-not $tracking -or -not $tracking.ActivityId) {
+                throw "Remove-JIMConnectedSystem returned no tracking object; deprovisioning always queues."
+            }
+
+            $terminalStatuses = @("Complete", "CompleteWithWarning", "CompleteWithError", "FailedWithError", "Cancelled")
+            $deletionActivity = $null
+            $elapsed = 0
+            while ($elapsed -lt 600) {
+                $deletionActivity = Get-JIMActivity -Id $tracking.ActivityId
+                if ($deletionActivity.status -in $terminalStatuses) { break }
+                Start-Sleep -Seconds 3
+                $elapsed += 3
+            }
+            Assert-ActivitySuccess -ActivityId $tracking.ActivityId -Name "Deprovisioning Primary"
+
+            if ([string]$deletionActivity.previewActivityId -ne [string]$preview.ActivityId) {
+                throw "The deletion's Activity records preview '$($deletionActivity.previewActivityId)'; expected '$($preview.ActivityId)'."
+            }
+            Write-Host "  OK The deletion's Activity records the preview that informed it" -ForegroundColor Green
+
+            if (@(Get-JIMConnectedSystem | Where-Object { $_.name -eq $primarySystemName }).Count -gt 0) {
+                throw "Primary still exists after its deprovisioning run completed."
+            }
+
+            # 3. The deletion did what the preview said, row by row, for the attributes held one value at a time.
+            # (Manager and Other Telephones are reported too, but as rendered text; their exact shape is the
+            # subject of the earlier steps.)
+            $scalarAttributes = @("Account Name", "Employee ID", "First Name", "Last Name", "Display Name", "Email", "Description", "Job Title", "Common Name")
+            $eligibleMvoIds = @($deltas | Where-Object { $_.TransitionType -eq "WouldBecomeDeletionEligible" } |
+                ForEach-Object { [string]$_.MetaverseObjectId } | Sort-Object -Unique)
+
+            foreach ($mvoId in $eligibleMvoIds) {
+                $stillThere = $null
+                try { $stillThere = Get-JIMMetaverseObject -Id $mvoId -ErrorAction Stop } catch { $stillThere = $null }
+                if ($stillThere -and -not (Get-MvoDeletionMarkers -MvoId $mvoId).IsMarkedForDeletion) {
+                    throw "Metaverse Object $mvoId was previewed as becoming eligible for deletion, but is neither deleted nor marked."
+                }
+            }
+
+            $handedOver = @($deltas | Where-Object {
+                $_.TransitionType -in @("WouldTakeOverContributedValue", "WouldTakeOverSameValue") -and
+                $_.AttributeName -in $scalarAttributes -and
+                [string]$_.MetaverseObjectId -notin $eligibleMvoIds
+            })
+            foreach ($delta in $handedOver) {
+                $mvo = Get-JIMMetaverseObject -Id $delta.MetaverseObjectId -ErrorAction Stop
+                $row = @($mvo.attributeValues | Where-Object { $_.attributeName -ceq $delta.AttributeName -and -not $_.nullValue })
+                $actual = if ($row.Count -eq 1) { [string]$row[0].stringValue } else { "<$($row.Count) values>" }
+                if ($actual -ne [string]$delta.NewValue) {
+                    throw "$($delta.ObjectDisplayName)'s $($delta.AttributeName) is '$actual' after the deletion; the preview said '$($delta.NewValue)'."
+                }
+                if ($row[0].contributedBySystemId -ne $delta.ConnectedSystemId) {
+                    throw "$($delta.ObjectDisplayName)'s $($delta.AttributeName) is contributed by Connected System $($row[0].contributedBySystemId); the preview said $($delta.ConnectedSystemId) would take it over."
+                }
+            }
+            Write-Host "  OK $($handedOver.Count) value(s) handed over exactly as previewed, value and source" -ForegroundColor Green
+
+            $cleared = @($deltas | Where-Object {
+                $_.TransitionType -eq "NoContributor" -and
+                $_.AttributeName -in $scalarAttributes -and
+                [string]$_.MetaverseObjectId -notin $eligibleMvoIds
+            })
+            foreach ($delta in $cleared) {
+                Assert-MvoAttributeValue -MvoId $delta.MetaverseObjectId -AttributeName $delta.AttributeName -ExpectNoValue `
+                    -Name "$($delta.ObjectDisplayName)'s $($delta.AttributeName) (previewed as cleared)"
+            }
+
+            # Common Name has no Secondary mapping (Setup-Scenario-014.ps1), so every user holding one loses it: a
+            # deletion that cleared nothing here means the preview stopped reporting what has no other source.
+            if (@($cleared | Where-Object { $_.AttributeName -eq "Common Name" }).Count -eq 0) {
+                throw "The preview reported no Common Name cleared; Primary is its only source, so deleting Primary must clear it."
+            }
+
+            $deletionPreviewNotes += "$($handedOver.Count) handed over and $($cleared.Count) cleared as previewed; $($eligibleMvoIds.Count) previewed as eligible for deletion went; the Activity records the preview"
+        }
+        catch {
+            $deletionPreviewSuccess = $false
+            $deletionPreviewNotes += "Error: $_"
+            throw
+        }
+        finally {
+            Restore-Scenario14UserTypeDeletionPolicy
+            $testResults.Steps += @{
+                Name = "DeletionImpactPreview"
+                Success = $deletionPreviewSuccess
+                Note = ($deletionPreviewNotes -join "; ")
             }
         }
     }
