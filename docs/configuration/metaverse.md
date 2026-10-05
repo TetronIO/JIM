@@ -38,6 +38,13 @@ When the rule is **When Authoritative Source Disconnected**, a **Deletion Trigge
 
 Systems you do not select as sources (typically targets) never block or trigger deletion in either mode. At least one source must be selected, and only contributing systems (systems with inbound Synchronisation Rules for the object type) are offered. A live summary beneath the settings restates the configured behaviour in plain language before you save. Configurations created before trigger modes existed keep the **Specific source(s) disconnect** behaviour they were built with; nothing changes on upgrade.
 
+!!! warning "Projecting systems that are not authoritative sources"
+    The authoritative sources are a list you choose, so a Connected System onboarded later is not on it until you add it. That is exactly right for a system whose inbound Synchronisation Rules only **join** (projection off): it contributes attributes without governing lifecycle, an authoritative source such as HR leaving still deletes the object, and leaving it unselected is the recommended way to add an attribute-only contributor.
+
+    A system that **projects** into the object type is different. Objects it creates that no selected source also holds are never deleted automatically, and objects it shares with a selected source are deleted when that source disconnects, even though the projecting system still holds them. Select it as an authoritative source, or turn projection off if it should only contribute attributes.
+
+    JIM points this out in four places. The Authoritative Sources list marks each system **Projects** or **Joins only**, and a warning beneath it names every projecting system left unselected (with an extra line when no grace period is set, since a deletion would then be immediate). Saving a Synchronisation Rule that newly projects into the object type from such a system (a new projecting rule, enabling one, or switching projection on) asks you to confirm first. The REST object type responses list these systems as `deletionSourceWarnings`, and the Synchronisation Rule create and update responses carry `deletionSourceWarning`. `New-JIMMetaverseObjectType`, `Set-JIMMetaverseObjectType`, `New-JIMSyncRule` and `Set-JIMSyncRule` write them as warnings, and `Get-JIMMetaverseObjectType -Name` returns the list for health-check scripts. None of these blocks a save.
+
 #### Grace period
 
 Rather than deleting immediately when the Deletion Rule triggers, a configurable **grace period** holds the object in a pending-deletion state first, giving administrators time to intervene if a deletion was triggered in error. The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe Metaverse Objects out.

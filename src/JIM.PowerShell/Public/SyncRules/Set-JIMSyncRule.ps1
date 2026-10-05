@@ -16,6 +16,12 @@ function Set-JIMSyncRule {
         Attribute Flows are written with Write-Warning too. Both apply only while the Metaverse-Derived Attribute
         Flows feature is enabled.
 
+        When the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
+        Disconnected (enabling it, or switching projection on), from a Connected System that is not one of the type's
+        authoritative sources, the update still goes ahead and the cmdlet writes a warning: objects only that system
+        holds will never be deleted, and objects it shares with an authoritative source are deleted when that source
+        disconnects.
+
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule to update.
 
@@ -74,8 +80,9 @@ function Set-JIMSyncRule {
     .OUTPUTS
         If -PassThru is specified, returns the updated Synchronisation Rule object, including Warnings (non-blocking
         warnings the save raised about the rule's Attribute Flows) and DependentDerivedFlows (Attribute Flows
-        deriving Metaverse attributes that the update left with a missing input). Both are also written with
-        Write-Warning whether or not -PassThru is supplied.
+        deriving Metaverse attributes that the update left with a missing input) and DeletionSourceWarning (the
+        deletion source warning described above, or null). All three are also written with Write-Warning whether or
+        not -PassThru is supplied.
 
     .EXAMPLE
         Set-JIMSyncRule -Id 1 -Name "Updated Rule Name"
@@ -237,6 +244,12 @@ function Set-JIMSyncRule {
 
                 # Derived flows the update left with a missing input (#1750, FR 3): reported, never blocking.
                 Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
+
+                # The update took the rule into projecting from a system that is not an authoritative source of the
+                # type (#1256): reported, never blocking.
+                if ($result.deletionSourceWarning) {
+                    Write-Warning $result.deletionSourceWarning
+                }
 
                 if ($PassThru) {
                     $result

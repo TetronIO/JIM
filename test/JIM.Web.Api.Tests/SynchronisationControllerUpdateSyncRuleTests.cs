@@ -39,6 +39,7 @@ public class SynchronisationControllerUpdateSyncRuleTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
     private Mock<ICredentialProtectionService> _mockCredentialProtection = null!;
@@ -52,8 +53,10 @@ public class SynchronisationControllerUpdateSyncRuleTests
         _mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
         // the flag on these paths (#1750).
         _mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
@@ -275,4 +278,54 @@ public class SynchronisationControllerUpdateSyncRuleTests
         _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(
             It.Is<SyncRule>(sr => sr.Description == null)), Times.Once);
     }
+    #region Deletion source warning (#1256)
+
+    /// <summary>
+    /// Arranges an import rule from Connected System 100 ("Test CS") into Metaverse Object Type 300, a type deleted When
+    /// Authoritative Source Disconnected whose only authoritative source is Connected System 1 ("HR").
+    /// </summary>
+    private SyncRule ArrangeRuleIntoAuthoritativeSourceType(int id, bool projects)
+    {
+        var syncRule = BuildImportRule(id);
+        syncRule.Enabled = true;
+        syncRule.ProjectToMetaverse = projects;
+        syncRule.MetaverseObjectType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        syncRule.MetaverseObjectType.DeletionTriggerConnectedSystemIds = [1];
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(id)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [1] = "HR", [100] = "Test CS" });
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(300, It.IsAny<bool>()))
+            .ReturnsAsync(syncRule.MetaverseObjectType);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        return syncRule;
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_ProjectionSwitchedOnFromUnlistedSystem_ReturnsDeletionSourceWarningAsync()
+    {
+        ArrangeRuleIntoAuthoritativeSourceType(20, projects: false);
+
+        var result = await _controller.UpdateSyncRuleAsync(20, new UpdateSyncRuleRequest { ProjectToMetaverse = true }) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.DeletionSourceWarning, Does.Contain("Test CS").And.Contain("HR"),
+            "switching projection on for a system that is not an authoritative source must be reported, naming both");
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_RuleAlreadyProjecting_ReturnsNoDeletionSourceWarningAsync()
+    {
+        ArrangeRuleIntoAuthoritativeSourceType(21, projects: true);
+
+        var result = await _controller.UpdateSyncRuleAsync(21, new UpdateSyncRuleRequest { Name = "Renamed" }) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.DeletionSourceWarning, Is.Null, "re-saving a rule that already projected must not repeat the warning");
+    }
+
+    #endregion
 }
