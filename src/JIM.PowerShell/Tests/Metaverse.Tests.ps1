@@ -965,6 +965,44 @@ Describe 'New-JIMMetaverseObjectType' {
         }
     }
 
+    Context 'Deletion source warnings (#1256)' {
+
+        It 'Writes one warning per projecting system that is not an authoritative source' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id = 5
+                        name = 'Person'
+                        deletionSourceWarnings = @(
+                            [PSCustomObject]@{ connectedSystemId = 7; connectedSystemName = 'Partner Portal' },
+                            [PSCustomObject]@{ connectedSystemId = 8; connectedSystemName = 'Badge System' }
+                        )
+                    }
+                }
+
+                New-JIMMetaverseObjectType -Name 'Person' -PluralName 'People' -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1 -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 2
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+                $sourceWarnings[1].Message | Should -Match 'Badge System'
+            }
+        }
+
+        It 'Emits no warning when the API lists no deletion source warnings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Person'; deletionSourceWarnings = @() } }
+
+                New-JIMMetaverseObjectType -Name 'Person' -PluralName 'People' -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1 -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll { $help = Get-Help New-JIMMetaverseObjectType -Full }
@@ -1081,6 +1119,44 @@ Describe 'Set-JIMMetaverseObjectType' {
                     -WarningVariable advisoryWarnings -WarningAction SilentlyContinue | Out-Null
 
                 $advisoryWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Deletion source warnings (#1256)' {
+
+        It 'Writes one warning per projecting system that is not an authoritative source' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id = 5
+                        name = 'Person'
+                        deletionSourceWarnings = @(
+                            [PSCustomObject]@{ connectedSystemId = 7; connectedSystemName = 'Partner Portal' },
+                            [PSCustomObject]@{ connectedSystemId = 8; connectedSystemName = 'Badge System' }
+                        )
+                    }
+                }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule WhenAuthoritativeSourceDisconnected -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 2
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+                $sourceWarnings[1].Message | Should -Match 'Badge System'
+            }
+        }
+
+        It 'Emits no warning when the API lists no deletion source warnings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Person'; deletionSourceWarnings = @() } }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule WhenAuthoritativeSourceDisconnected -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
             }
         }
     }

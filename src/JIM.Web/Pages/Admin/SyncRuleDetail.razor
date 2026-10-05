@@ -11,6 +11,7 @@
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Services
 @using JIM.Application
+@using JIM.Application.Services
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
@@ -370,6 +371,10 @@ else if (_syncRule != null)
     /// </summary>
     private bool _persistedEnabled;
 
+    // What the rule projected into as loaded (#1256), so the deletion source warning is raised when a save takes the rule
+    // into projecting, and not on every save of a rule that already did. Null for a new rule.
+    private int? _persistedProjectedTypeId;
+
     // Both /admin/sync-rules/new and /admin/sync-rules/{id} resolve to this component, so creating a rule and
     // navigating from /new to /{id} reuses the instance (OnInitializedAsync does not run again). Load from
     // OnParametersSetAsync keyed on the route id so the page re-loads cleanly into edit mode after a create.
@@ -416,6 +421,7 @@ else if (_syncRule != null)
 
             _syncRuleNameOrCreate = _syncRule.Name;
             _persistedEnabled = _syncRule.Enabled;
+            _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
             _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
 
@@ -820,6 +826,14 @@ else if (_syncRule != null)
                 "Disable Synchronisation Rule?", "disable this Synchronisation Rule", "Disable") == false)
             return;
 
+        // #1256: projecting into a type deleted When Authoritative Source Disconnected from a system that is not one of its
+        // authoritative sources leaves objects no source governs. Said here because this is where the mistake is made;
+        // with nothing to say, nothing is shown. Advisory: the administrator can always save.
+        var deletionSourceWarning = await _jim.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(_syncRule, _persistedProjectedTypeId);
+        if (deletionSourceWarning != null && !await DeletionSourceWarningDialog.ConfirmAsync(
+                DialogService, deletionSourceWarning, _syncRule.ResolveMetaverseObjectTypeId()))
+            return;
+
         // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
         // are saving it. A cosmetic edit (a rename, a description) shows nothing at all; cancelling aborts the save.
         // Where a destructive-toggle preview has run and still describes the form, its counts and verdict are stated
@@ -884,6 +898,7 @@ else if (_syncRule != null)
                 // buttons are offered against; a create re-loads the rule by its new URL and captures it there.
                 _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
                 _persistedEnabled = _syncRule.Enabled;
+                _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
                 if (_attributeFlowTab != null)

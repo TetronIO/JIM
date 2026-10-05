@@ -83,14 +83,16 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Builds the detail DTO with its deletion-rule configuration advisory (#1570) attached, so every
-    /// surface reading an Object Type (portal, REST consumers, PowerShell) sees the same advice.
+    /// Builds the detail DTO with its deletion-rule configuration advisory (#1570) and deletion source
+    /// warnings (#1256) attached, so every surface reading an Object Type (portal, REST consumers,
+    /// PowerShell) sees the same advice.
     /// </summary>
     private async Task<MetaverseObjectTypeDetailDto> BuildObjectTypeDetailDtoAsync(MetaverseObjectType objectType)
     {
         var dto = MetaverseObjectTypeDetailDto.FromEntity(objectType);
         dto.DeletionRuleAdvisory = DeletionRuleConfigurationAdvisor.GetAdvisory(
             objectType.DeletionRule, objectType.Id, await _application.ConnectedSystems.GetSyncRulesAsync());
+        dto.DeletionSourceWarnings = [.. await _application.Metaverse.GetDeletionSourceGapsAsync(objectType)];
         return dto;
     }
 

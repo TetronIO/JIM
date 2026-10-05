@@ -139,9 +139,20 @@
                             </MudText>
                             @foreach (var system in _contributingSystems)
                             {
-                                <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
-                                    ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
-                                    Label="@system.Name" Color="Color.Primary" />
+                                @* Projects / Joins only (#1256): why a system is or is not flagged below. Leaving a
+                                   join-only system unselected is the normal way to add an attribute-only contributor. *@
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                                    <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
+                                        ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
+                                        Label="@system.Name" Color="Color.Primary" />
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
+                                        @(system.Projects ? "Projects" : "Joins only")
+                                    </MudChip>
+                                    @if (system.Projects && !_selectedAuthoritativeSources.Contains(system.Id))
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Projects, not authoritative</MudChip>
+                                    }
+                                </MudStack>
                             }
                         }
                         else
@@ -152,6 +163,11 @@
                         }
                     </div>
 
+                    @* Projecting systems left out of the authoritative sources (#1256), from the edited selection so the
+                       warning follows the checkboxes. *@
+                    <DeletionSourceWarningAlert SystemNames="@GetDeletionSourceGapNames()"
+                        ObjectTypeName="@_metaverseObjectType.Name"
+                        NoGracePeriod="@(GetEditedGracePeriod() == null)" />
                     @if (_contributingSystems.Any())
                     {
                         @* Live summary (#119): restates trigger mode, sources by name and grace period before Save *@
@@ -582,7 +598,8 @@
     private int _gracePeriodHours;
     private int _gracePeriodMinutes;
     private HashSet<int> _selectedAuthoritativeSources = new();
-    private List<(int Id, string Name)> _contributingSystems = new();
+    private List<(int Id, string Name, bool Projects)> _contributingSystems = new();
+    private IList<SyncRuleHeader> _importRuleHeaders = [];
 
     // Configuration Change Preview of the deletion settings (#1114). The proposal the preview was started for is
     // kept beside its Activity id so the panel can be labelled stale the moment the form moves on from it: a
@@ -708,10 +725,13 @@
     private async Task LoadContributingSystemsAsync()
     {
         using var jim = JimFactory.Create();
-        var importRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync(Id, SyncRuleDirection.Import);
-        _contributingSystems = importRuleHeaders
+        _importRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync(Id, SyncRuleDirection.Import) ?? [];
+        // A system "projects" when any enabled import rule of its projects into this type (#1256); the same test
+        // DeletionSourceAdvisor applies, so the chip and the warning cannot disagree.
+        _contributingSystems = _importRuleHeaders
             .GroupBy(h => h.ConnectedSystemId)
-            .Select(g => (Id: g.Key, Name: g.First().ConnectedSystemName))
+            .Select(g => (Id: g.Key, Name: g.First().ConnectedSystemName,
+                Projects: g.Any(h => h.Enabled && h.ProjectToMetaverse == true)))
             .OrderBy(s => s.Name)
             .ToList();
     }
@@ -794,6 +814,17 @@
             _ => string.Empty
         };
     }
+
+    /// <summary>
+    /// The projecting Connected Systems the edited selection leaves out of the authoritative sources (#1256), by name,
+    /// for the warning beneath the checkboxes. Computed from the edited rule and selection, not the stored ones, so the
+    /// warning appears and clears as the administrator ticks.
+    /// </summary>
+    private List<string> GetDeletionSourceGapNames() =>
+        JIM.Application.Services.DeletionSourceAdvisor
+            .GetUnlistedProjectingSources(_deletionRule, _selectedAuthoritativeSources, Id, _importRuleHeaders)
+            .Select(gap => gap.ConnectedSystemName)
+            .ToList();
 
     /// <summary>
     /// The display names of the currently selected authoritative sources, in contributing-system order,

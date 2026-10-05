@@ -3329,11 +3329,13 @@ public class SynchronisationController(
     /// </remarks>
     /// <param name="request">The Synchronisation Rule creation request.</param>
     /// <returns>The created Synchronisation Rule details.</returns>
-    /// <response code="201">Synchronisation Rule created successfully.</response>
+    /// <response code="201">Synchronisation Rule created successfully. <c>deletionSourceWarning</c> is set when the new rule projects into a
+    /// Metaverse Object Type deleted When Authoritative Source Disconnected from a Connected System that is not one of its
+    /// authoritative sources; the rule was created regardless.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
-    [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(SyncRuleSaveResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleAsync([FromBody] CreateSyncRuleRequest request)
@@ -3406,9 +3408,11 @@ public class SynchronisationController(
 
         _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the created Synchronisation Rule
+        // Retrieve the created Synchronisation Rule. A new rule had no prior projection, so any projection it carries is
+        // new and may need the deletion source warning (#1256).
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
-        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleHeader.FromEntity(created!));
+        var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore: null);
+        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning));
     }
 
     /// <summary>
@@ -3419,7 +3423,9 @@ public class SynchronisationController(
     /// <returns>The updated Synchronisation Rule details.</returns>
     /// <response code="200">Synchronisation Rule updated. <c>warnings</c> lists any non-blocking warnings the save raised
     /// about the rule's Attribute Flows; <c>dependentDerivedFlows</c> names any Attribute Flow deriving a Metaverse
-    /// attribute that the update left with a missing input, for example by disabling the rule (the update goes ahead
+    /// attribute that the update left with a missing input, for example by disabling the rule; <c>deletionSourceWarning</c>
+    /// is set when the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
+    /// Disconnected from a Connected System that is not one of its authoritative sources (the update goes ahead
     /// regardless).</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
@@ -3445,6 +3451,10 @@ public class SynchronisationController(
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        // What the rule projected into before this update, so the deletion source warning (#1256) is raised only when the
+        // update takes it into projecting, not on every save of a rule that already did.
+        var projectedTypeIdBefore = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(syncRule);
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -3496,7 +3506,8 @@ public class SynchronisationController(
 
         // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
-        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule));
+        var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore);
+        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning));
     }
 
     /// <summary>
