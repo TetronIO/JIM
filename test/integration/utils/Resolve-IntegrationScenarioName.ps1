@@ -107,3 +107,30 @@ function Get-IntegrationScenarioSetupScript {
     if (Test-Path -LiteralPath $candidate) { return $candidate }
     return $null
 }
+
+function Get-IntegrationScenarioSetupParameters {
+    <#
+    .SYNOPSIS
+        The switches a scenario passes to its setup script on top of the defaults, as a new hashtable to splat.
+        The one place that says how a scenario configures its setup, so the scenario's own run and -SetupOnly
+        (which runs the setup script and stops, leaving the environment for a demonstration) configure the same
+        thing.
+    .DESCRIPTION
+        Scenario 001 runs with generated and derived identifiers: Account Name generated from the HR names
+        (Unique Value Generation, #242), Email and User Principal Name derived from it (Metaverse-Derived
+        Attribute Flows, #1750). The switches belong here rather than as Setup-Scenario-001.ps1's defaults,
+        because the scenarios that compose that setup as their substrate rely on its sourced identifiers.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    switch ($ScenarioNumber) {
+        1 { return @{ GenerateAccountName = $true; DeriveFromAccountName = $true } }
+        default { return @{} }
+    }
+}

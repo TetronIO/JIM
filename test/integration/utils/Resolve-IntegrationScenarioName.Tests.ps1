@@ -162,3 +162,30 @@ Describe 'Get-IntegrationScenarioSetupScript' {
             Should -Be (Join-Path $realPath 'Setup-Scenario-001.ps1')
     }
 }
+
+Describe 'Get-IntegrationScenarioSetupParameters' {
+    It 'gives Scenario 001 generated and derived identifiers, as the scenario itself runs' {
+        $parameters = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+        $parameters.GenerateAccountName | Should -BeTrue
+        $parameters.DeriveFromAccountName | Should -BeTrue
+    }
+
+    It 'adds nothing for a scenario whose setup runs with its defaults' {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 4).Count | Should -Be 0
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber $null).Count | Should -Be 0
+    }
+
+    It 'returns a fresh table each call, so a caller adding to it cannot change what the next caller gets' {
+        $first = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+        $first.Extra = $true
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1).ContainsKey('Extra') | Should -BeFalse
+    }
+
+    It 'names only switches the real Setup-Scenario-001.ps1 declares' {
+        $setupScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'Setup-Scenario-001.ps1'
+        $declared = (Get-Command $setupScript).Parameters.Keys
+        foreach ($name in (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1).Keys) {
+            $declared | Should -Contain $name
+        }
+    }
+}

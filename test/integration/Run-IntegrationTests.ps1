@@ -3772,6 +3772,12 @@ if ($SetupOnly) {
         if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
             $setupParams.MaxExportParallelism = $MaxExportParallelism
         }
+        # The switches the scenario itself passes to its setup (Scenario 001: generated and derived
+        # identifiers), so the environment left for exploration is the one the scenario runs against.
+        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber
+        foreach ($key in $scenarioSetupParams.Keys) {
+            $setupParams[$key] = $scenarioSetupParams[$key]
+        }
         $config = & $setupScript @setupParams
         if ($config) {
             Write-Success "Scenario configured successfully"
