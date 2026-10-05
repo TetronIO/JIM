@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Connectors;
+using JIM.Web.Models;
 
 namespace JIM.Web;
 
@@ -33,4 +34,23 @@ public static class CertificateDisplay
     {
         return PresentedServerCertificate.CommonNameOf(distinguishedName);
     }
+
+    /// <summary>
+    /// Where JIM found a certificate in a chain, in the few words a chain listing has room for.
+    /// </summary>
+    public static string FormatSource(ServerCertificateChainElementSource source) => source switch
+    {
+        ServerCertificateChainElementSource.SentByServer => "Sent by server",
+        ServerCertificateChainElementSource.Downloaded => "Downloaded",
+        ServerCertificateChainElementSource.JimCertificateStore => "In Trusted Certificates",
+        ServerCertificateChainElementSource.OperatingSystem => "Operating system",
+        _ => "Unknown"
+    };
+
+    public static string FormatRole(ServerCertificateChainRole role) => role switch
+    {
+        ServerCertificateChainRole.Root => "Root",
+        ServerCertificateChainRole.Intermediate => "Intermediate",
+        _ => "Server"
+    };
 }

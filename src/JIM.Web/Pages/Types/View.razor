@@ -42,7 +42,7 @@
 
 @if (MetaverseObject != null)
 {
-    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
+    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged"
                       ActivePanelSlugChanged="OnActiveTabSlugChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
         <Header Context="headerContext">
             @if (_activeTabIndex == 0)
@@ -72,11 +72,11 @@
             {
                 <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? "object")"
                                  AttributeValueTotalCounts="_attributeValueTotalCounts"
-                                 Provenance="_mvoProvenance" ProvenanceLoading="_provenanceLoading"
+                                 Provenance="_object.Provenance" ProvenanceLoading="_object.ProvenanceLoading"
                                  GroupBy="@_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
-                                 ContributionFilterKey="@_contributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
-                                 SelectedAttributeId="_selectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
-                                 SelectedAttributeProvenance="_selectedAttributeProvenance" AttributeInspectorLoading="_attributeInspectorLoading"
+                                 ContributionFilterKey="@_object.ContributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
+                                 SelectedAttributeId="_object.SelectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
+                                 SelectedAttributeProvenance="_object.SelectedAttributeProvenance" AttributeInspectorLoading="_object.AttributeInspectorLoading"
                                  OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync" />
             }
             else if (_detailViewMode == "tabs")
@@ -91,33 +91,33 @@
 
         <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeBadge()" BadgeColor="Color.Primary">
             <div>
-                @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
+                @if (_object.ChangeHistoryLoading && _object.ChangeHistoryRows.Count == 0)
                 {
                     <div class="d-flex justify-center pa-4">
                         <MudProgressCircular Indeterminate="true" />
                     </div>
                 }
-                else if (_changeCount == 0 && _retirements.Count == 0)
+                else if (_object.ChangeCount == 0 && _object.Retirements.Count == 0)
                 {
                     <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
                 }
                 else
                 {
-                    <ChangeHistoryTimeline Changes="@_changeHistoryRows"
-                                           Retirements="@_retirements"
-                                           HistoryComplete="@(_changeHistoryRows.Count >= _changeHistoryTotal)" />
-                    @if (_changeHistoryRows.Count < _changeHistoryTotal)
+                    <ChangeHistoryTimeline Changes="@_object.ChangeHistoryRows"
+                                           Retirements="@_object.Retirements"
+                                           HistoryComplete="@(_object.ChangeHistoryRows.Count >= _object.ChangeHistoryTotal)" />
+                    @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
                             <MudButton Variant="Variant.Filled"
                                        Color="Color.Secondary"
-                                       Disabled="@_changeHistoryLoading"
+                                       Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
-                                @if (_changeHistoryLoading)
+                                @if (_object.ChangeHistoryLoading)
                                 {
                                     <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
                                 }
-                                Load more (@($"{_changeHistoryTotal - _changeHistoryRows.Count:N0}") remaining)
+                                Load more (@($"{_object.ChangeHistoryTotal - _object.ChangeHistoryRows.Count:N0}") remaining)
                             </MudButton>
                         </div>
                     }
@@ -151,13 +151,13 @@
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Created By</MudText>
                         <br />
-                        @if (_createdByHref != null)
+                        @if (_object.CreatedByHref != null)
                         {
-                            <MudLink Typo="Typo.body1" Href="@_createdByHref">@_createdByName</MudLink>
+                            <MudLink Typo="Typo.body1" Href="@_object.CreatedByHref">@_object.CreatedByName</MudLink>
                         }
                         else
                         {
-                            <MudText Typo="Typo.body1">@(_createdByName ?? "—")</MudText>
+                            <MudText Typo="Typo.body1">@(_object.CreatedByName ?? "—")</MudText>
                         }
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
@@ -178,13 +178,13 @@
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Last Updated By</MudText>
                         <br />
-                        @if (_lastUpdatedByHref != null)
+                        @if (_object.LastUpdatedByHref != null)
                         {
-                            <MudLink Typo="Typo.body1" Href="@_lastUpdatedByHref">@_lastUpdatedByName</MudLink>
+                            <MudLink Typo="Typo.body1" Href="@_object.LastUpdatedByHref">@_object.LastUpdatedByName</MudLink>
                         }
                         else
                         {
-                            <MudText Typo="Typo.body1">@(_lastUpdatedByName ?? "—")</MudText>
+                            <MudText Typo="Typo.body1">@(_object.LastUpdatedByName ?? "—")</MudText>
                         }
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
@@ -206,16 +206,16 @@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
             <MudTabPanel Text="Connections" Icon="@Icons.Material.Filled.Hub" BadgeColor="Color.Primary"
-                         BadgeData="@(_connectorCount > 0 ? _connectorCount.ToString("N0") : null)">
+                         BadgeData="@(_object.ConnectorCount > 0 ? _object.ConnectorCount.ToString("N0") : null)">
                 <div>
-                    <MetaverseObjectConnectionsTable IsLoading="_connectionsLoading" IsLoaded="_connectionsLoaded"
-                                                      Connections="_connections" PreviewLoading="_connectionPreviewLoading"
+                    <MetaverseObjectConnectionsTable IsLoading="_object.ConnectionsLoading" IsLoaded="_object.ConnectionsLoaded"
+                                                      Connections="_object.Connections" PreviewLoading="_object.ConnectionPreviewLoading"
                                                       OnPreview="PreviewConnectionAsync" />
 
-                    @if (_connectionPreviewResult != null)
+                    @if (_object.ConnectionPreviewResult != null)
                     {
                         <div class="mt-6">
-                            <SyncPreviewPanel PreviewResult="_connectionPreviewResult" Context="_connectionPreviewContext!" OnClose="CloseConnectionPreview" />
+                            <SyncPreviewPanel PreviewResult="_object.ConnectionPreviewResult" Context="_object.ConnectionPreviewContext!" OnClose="CloseConnectionPreview" />
                         </div>
                     }
 
@@ -232,25 +232,25 @@
                                     What JIM would export for this Metaverse Object as it stands: where it would be
                                     provisioned, updated or deprovisioned under each enabled export Synchronisation Rule.
                                     Nothing is imported first.
-                                    @if (_connections.Count > 0)
+                                    @if (_object.Connections.Count > 0)
                                     {
                                         <text>To preview synchronising one of its connections, use that row's Preview Sync.</text>
                                     }
                                 </MudText>
                             </MudStack>
                             <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
-                                       Disabled="@_outboundPreviewLoading"
+                                       Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
-                                @(_outboundPreviewLoading ? "Previewing…" : "Preview")
+                                @(_object.OutboundPreviewLoading ? "Previewing…" : "Preview")
                             </MudButton>
                         </MudStack>
                     </MudPaper>
 
-                    @if (_outboundPreviewResult != null)
+                    @if (_object.OutboundPreviewResult != null)
                     {
                         <div class="mt-6">
-                            <SyncPreviewPanel PreviewResult="_outboundPreviewResult" Context="BuildOutboundPreviewContext()" OnClose="CloseOutboundPreview" />
+                            <SyncPreviewPanel PreviewResult="_object.OutboundPreviewResult" Context="BuildOutboundPreviewContext()" OnClose="CloseOutboundPreview" />
                         </div>
                     }
                 </div>
@@ -266,14 +266,14 @@
         @* expired, the same count the Passwords tab of Operations carries per person.                            *@
         <AuthorizeView Roles="Administrator" Context="passwordAuth">
             <MudTabPanel Text="Password" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Error"
-                         BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
+                         BadgeData="@(_object.PasswordAttentionCount > 0 ? _object.PasswordAttentionCount.ToString("N0") : null)">
                 <MetaverseObjectPasswordPanel MetaverseObjectId="@(MetaverseObject?.Id ?? Guid.Empty)"
                                               MetaverseObjectTypeName="@(MetaverseObjectType?.Name ?? "Metaverse Object")"
-                                              Events="@_passwordEvents"
-                                              QueuedChanges="@_queuedPasswordChanges"
-                                              Accounts="@_passwordAccounts"
-                                              Loading="@(!_passwordTabLoaded)"
-                                              Busy="@_passwordActionRunning"
+                                              Events="@_object.PasswordEvents"
+                                              QueuedChanges="@_object.QueuedPasswordChanges"
+                                              Accounts="@_object.PasswordAccounts"
+                                              Loading="@(!_object.PasswordTabLoaded)"
+                                              Busy="@_object.PasswordActionRunning"
                                               OnSetPassword="OpenSetPasswordDialogAsync"
                                               OnRetry="RetryPasswordChangeAsync"
                                               OnStopTrying="StopPasswordChangeAsync" />
@@ -300,32 +300,21 @@
     /// </summary>
     private const string ConnectionsTabSlug = "connections";
 
-    // The Password tab's data (#1635): this person's history, their outstanding queue work and their accounts,
-    // loaded when the tab is first opened rather than with the page. Three reads that most visits to this page
-    // never need, on a page every signed-in user opens. The badge count is the exception: it is read with the
-    // page, because a badge that only appears once its tab is opened is not a badge.
-    private IReadOnlyList<PasswordSynchronisationEvent> _passwordEvents = [];
-    private IReadOnlyList<PendingPasswordChangeHeader> _queuedPasswordChanges = [];
-    private IReadOnlyList<MetaverseObjectAccount> _passwordAccounts = [];
-    private int _passwordAttentionCount;
-    private bool _passwordTabLoaded;
-    private bool _passwordTabLoading;
-    private bool _passwordActionRunning;
+    /// <summary>
+    /// The slug NavigableMudTabs gives the Changes tab: its text, lower-cased.
+    /// </summary>
+    private const string ChangesTabSlug = "changes";
 
-    // The Connections tab (#1519): this Metaverse Object's joined Connected System Objects, loaded when the
-    // tab is first opened, and the state of a per-row Sync Preview.
-    private List<MetaverseObjectConnection> _connections = [];
-    private int _connectorCount;
-    private bool _connectionsLoading;
-    private bool _connectionsLoaded;
-    private bool _connectionPreviewLoading;
-    private SyncPreviewResult? _connectionPreviewResult;
-    private CausalityPageContext? _connectionPreviewContext;
+    // Everything this page holds about the object it is showing, replaced (never cleared) when the reader moves to
+    // another object; see MetaverseObjectViewState for why. The Changes, Connections and Password tabs load their
+    // data when first opened rather than with the page: reads most visits never need, on a page every signed-in
+    // user opens. Their badge counts are the exception, read with the page, because a badge that only appears once
+    // its tab is opened is not a badge.
+    private MetaverseObjectViewState _object = new(Guid.Empty);
 
-    // The Connections tab's secondary preview (#1519, D-S6): this Metaverse Object as it stands, against every
-    // enabled export Synchronisation Rule.
-    private bool _outboundPreviewLoading;
-    private SyncPreviewResult? _outboundPreviewResult;
+    // The tab the reader is on, so moving to another object on the same tab can load that tab for the new object:
+    // NavigableMudTabs only reports a change of tab, and the tab has not changed.
+    private string? _activeTabSlug;
 
     /// <summary>
     /// Whether the reader may see another person's password history. The tab's own markup is gated the same
@@ -357,20 +346,17 @@
     /// in, and counting it would be a second query to learn a number nothing on screen shows.
     /// </para>
     /// </summary>
-    private async Task LoadQueuedPasswordChangesAsync(JimApplication jim)
+    private static async Task LoadQueuedPasswordChangesAsync(JimApplication jim, MetaverseObjectViewState state)
     {
-        if (MetaverseObject == null)
-            return;
-
         var queued = await jim.PasswordSynchronisation.GetPendingPasswordChangesAsync(
-            new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject.Id },
+            new PendingPasswordChangeFilter { MetaverseObjectId = state.ObjectId },
             startIndex: 0,
             count: MaximumQueuedChangesShown,
             sortBy: "queued",
             sortDescending: false,
             includeTotalCount: false);
-        _queuedPasswordChanges = queued.Results;
-        _passwordAttentionCount = _queuedPasswordChanges.Count(c =>
+        state.QueuedPasswordChanges = queued.Results;
+        state.PasswordAttentionCount = state.QueuedPasswordChanges.Count(c =>
             c.Status is PendingPasswordChangeStatus.Parked or PendingPasswordChangeStatus.Expired);
     }
 
@@ -385,21 +371,22 @@
     /// </summary>
     private async Task LoadPasswordTabAsync()
     {
-        if (MetaverseObject == null || _passwordTabLoading)
+        var state = _object;
+        if (MetaverseObject == null || state.PasswordTabLoading)
             return;
 
-        _passwordTabLoading = true;
+        state.PasswordTabLoading = true;
         try
         {
             using var jim = JimFactory.Create();
-            _passwordEvents = await jim.PasswordSynchronisation.GetEventsForMetaverseObjectAsync(MetaverseObject.Id, PasswordEventsShown);
-            await LoadQueuedPasswordChangesAsync(jim);
-            _passwordAccounts = await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id);
-            _passwordTabLoaded = true;
+            state.PasswordEvents = await jim.PasswordSynchronisation.GetEventsForMetaverseObjectAsync(state.ObjectId, PasswordEventsShown);
+            await LoadQueuedPasswordChangesAsync(jim, state);
+            state.PasswordAccounts = await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(state.ObjectId);
+            state.PasswordTabLoaded = true;
         }
         finally
         {
-            _passwordTabLoading = false;
+            state.PasswordTabLoading = false;
             StateHasChanged();
         }
     }
@@ -421,15 +408,18 @@
         if (MetaverseObject == null)
             return;
 
+        // The dialog acts on the person it was opened for, whatever the page goes on to show behind it.
+        var state = _object;
+        var displayName = _displayName ?? state.ObjectId.ToString();
         var parameters = new DialogParameters<SetPasswordDialog>
         {
-            { x => x.Accounts, _passwordAccounts },
-            { x => x.MetaverseObjectId, MetaverseObject.Id },
+            { x => x.Accounts, state.PasswordAccounts },
+            { x => x.MetaverseObjectId, state.ObjectId },
             { x => x.AllowSelection, true },
             { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
-            { x => x.SetPassword, SetPasswordAsync },
-            { x => x.StopTrying, connectedSystemId => CancelPasswordChangeAsync(connectedSystemId) }
+            { x => x.SetPassword, submission => SetPasswordAsync(state.ObjectId, displayName, submission) },
+            { x => x.StopTrying, connectedSystemId => CancelPasswordChangeAsync(state.ObjectId, connectedSystemId) }
         };
 
         // The name only when there is one: an object with no display name would otherwise be titled with a
@@ -441,7 +431,7 @@
         // A change was queued, so the history and the queue rows behind this tab have moved on.
         var result = await dialog.Result;
         if (result is { Canceled: false, Data: true })
-            await LoadPasswordTabAsync();
+            await ReloadPasswordTabIfShownAsync(state);
     }
 
     /// <summary>
@@ -465,15 +455,15 @@
     /// <summary>
     /// The one password operation (#1635), aimed at the accounts the administrator ticked.
     /// </summary>
-    private async Task<PasswordQueueResult> SetPasswordAsync(PasswordSetSubmission submission)
+    private async Task<PasswordQueueResult> SetPasswordAsync(Guid metaverseObjectId, string displayName, PasswordSetSubmission submission)
     {
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         return await jim.PasswordSynchronisation.SetPasswordAsync(new SetPasswordRequest
         {
-            MetaverseObjectId = MetaverseObject!.Id,
-            DisplayName = _displayName ?? MetaverseObject.Id.ToString(),
+            MetaverseObjectId = metaverseObjectId,
+            DisplayName = displayName,
             Password = submission.Password,
             Targets = submission.Targets,
             ExpiryBehaviour = submission.ExpiryBehaviour,
@@ -489,16 +479,17 @@
     /// </summary>
     private async Task RetryPasswordChangeAsync(int connectedSystemId)
     {
-        if (MetaverseObject == null || _passwordActionRunning)
+        var state = _object;
+        if (MetaverseObject == null || state.PasswordActionRunning)
             return;
 
-        _passwordActionRunning = true;
+        state.PasswordActionRunning = true;
         try
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var retried = await jim.PasswordSynchronisation.RetryAsync(
-                new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject.Id, ConnectedSystemId = connectedSystemId },
+                new PendingPasswordChangeFilter { MetaverseObjectId = state.ObjectId, ConnectedSystemId = connectedSystemId },
                 user, null);
 
             Snackbar.Add(
@@ -507,10 +498,10 @@
         }
         finally
         {
-            _passwordActionRunning = false;
+            state.PasswordActionRunning = false;
         }
 
-        await LoadPasswordTabAsync();
+        await ReloadPasswordTabIfShownAsync(state);
     }
 
     /// <summary>
@@ -518,35 +509,46 @@
     /// </summary>
     private async Task StopPasswordChangeAsync(int connectedSystemId)
     {
-        if (MetaverseObject == null || _passwordActionRunning)
+        var state = _object;
+        if (MetaverseObject == null || state.PasswordActionRunning)
             return;
 
-        _passwordActionRunning = true;
+        state.PasswordActionRunning = true;
         try
         {
-            var cancelled = await CancelPasswordChangeAsync(connectedSystemId);
+            var cancelled = await CancelPasswordChangeAsync(state.ObjectId, connectedSystemId);
             Snackbar.Add(
                 cancelled == 0 ? "Nothing was stopped; the change is no longer on the queue." : "The password change will not be delivered.",
                 cancelled == 0 ? Severity.Info : Severity.Success);
         }
         finally
         {
-            _passwordActionRunning = false;
+            state.PasswordActionRunning = false;
         }
 
-        await LoadPasswordTabAsync();
+        await ReloadPasswordTabIfShownAsync(state);
+    }
+
+    /// <summary>
+    /// Re-reads the Password tab after an action changed what it shows, provided the reader is still on the person
+    /// the action was for; if they have moved on, that person's tab is read afresh whenever it is next shown.
+    /// </summary>
+    private async Task ReloadPasswordTabIfShownAsync(MetaverseObjectViewState state)
+    {
+        if (state == _object)
+            await LoadPasswordTabAsync();
     }
 
     /// <summary>
     /// Cancels this person's queued change on one Connected System, attributed to the signed-in administrator.
     /// Shared by the tab's Stop trying action and the dialog's.
     /// </summary>
-    private async Task<int> CancelPasswordChangeAsync(int connectedSystemId)
+    private async Task<int> CancelPasswordChangeAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         return await jim.PasswordSynchronisation.CancelAsync(
-            new PendingPasswordChangeFilter { MetaverseObjectId = MetaverseObject!.Id, ConnectedSystemId = connectedSystemId },
+            new PendingPasswordChangeFilter { MetaverseObjectId = metaverseObjectId, ConnectedSystemId = connectedSystemId },
             user, null);
     }
 
@@ -561,38 +563,15 @@
     private string _detailViewMode = "form";
     private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
-    private string? _createdByName;
-    private string? _createdByHref;
-    private string? _lastUpdatedByName;
-    private string? _lastUpdatedByHref;
 
-    // Change-history lazy-load state. Initial detail load returns only the count so the
-    // badge can render immediately; the rows are fetched the first time the user lands
-    // on the Changes tab and paged via Load more.
+    // The Changes tab pages its rows via Load more.
     private const int ChangeHistoryPageSize = 50;
-    private int _changeCount;
-    private int _changeHistoryTotal;
-    private int _changeHistoryNextPage = 1;
-    private bool _changeHistoryLoading;
-    private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
 
-    // The generated values retired from this object (Unique Value Generation, #242, Phase 6): events on the
-    // Changes timeline. Read whole with the object, since an object retires few values, so the badge counts them
-    // from the first render.
-    private List<RetiredGeneratedValueHeader> _retirements = new();
-
-    // Inspect view state (#399): the object's attribute provenance, its Group by choice, the active source
-    // filter (from the contribution bar's legend) and the currently opened attribute's own provenance. Loaded
-    // by this page (the Inspect table's host) rather than by MvoDetailsTable itself, so that component stays a
-    // presentational renderer of parameters, testable in bUnit without the application layer.
-    private MetaverseObjectProvenance? _mvoProvenance;
-    private bool _provenanceLoading;
-    private Guid? _provenanceLoadedForId;
+    // The Inspect view's Group by choice (#399). The reader's, not the object's, so it survives moving between
+    // objects; the provenance it groups is loaded by this page (the Inspect table's host) rather than by
+    // MvoDetailsTable itself, so that component stays a presentational renderer of parameters, testable in bUnit
+    // without the application layer.
     private string _inspectGroupBy = "none";
-    private string? _contributionFilterKey;
-    private int? _selectedAttributeId;
-    private MetaverseAttributeProvenance? _selectedAttributeProvenance;
-    private bool _attributeInspectorLoading;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -661,49 +640,35 @@
             return;
         }
 
-        var previousObjectId = MetaverseObject?.Id;
         MetaverseObject = detailResult.MetaverseObject;
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
-        _changeCount = detailResult.ChangeCount;
-        _connectorCount = detailResult.ConnectorCount;
-        _retirements = await jim.UniqueValues.GetRetiredValuesForObjectAsync(IdParam);
-
-        // A navigation from one person to another reuses this component (#399): the Inspect view's provenance
-        // and open attribute belong to the previous object and must not be shown against this one.
-        if (previousObjectId != MetaverseObject.Id)
-        {
-            _mvoProvenance = null;
-            _provenanceLoadedForId = null;
-            _contributionFilterKey = null;
-            _selectedAttributeId = null;
-            _selectedAttributeProvenance = null;
-        }
-
-        // A navigation from one person to another reuses this component, so the Password tab's data is forgotten
-        // here and read again on its next activation; the badge is re-read below with the rest of the page.
-        _passwordTabLoaded = false;
-        _passwordEvents = [];
-        _queuedPasswordChanges = [];
-        _passwordAccounts = [];
-        _passwordAttentionCount = 0;
-
         _displayName = MetaverseObject.NameOrId;
 
-        // Only the Password tab's badge is read with the page; the rest of the tab loads on its first activation
-        // (see OnActiveTabSlugChangedAsync). One bounded read, and only for the readers who can see the tab.
-        if (await IsAdministratorAsync())
-            await LoadQueuedPasswordChangesAsync(jim);
+        // A navigation from one person to another reuses this component: what was loaded about, or opened on, the
+        // previous object goes with its state, and any load still running for it lands there rather than here.
+        var objectChanged = _object.ObjectId != MetaverseObject.Id;
+        if (objectChanged)
+            _object = new MetaverseObjectViewState(MetaverseObject.Id);
+        var state = _object;
 
+        state.ChangeCount = detailResult.ChangeCount;
+        state.ConnectorCount = detailResult.ConnectorCount;
         if (detailResult.EarliestChangeInitiator != null)
         {
-            _createdByName = detailResult.EarliestChangeInitiator.InitiatedByName;
-            _createdByHref = GetInitiatorHref(detailResult.EarliestChangeInitiator.InitiatedByType, detailResult.EarliestChangeInitiator.InitiatedById);
+            state.CreatedByName = detailResult.EarliestChangeInitiator.InitiatedByName;
+            state.CreatedByHref = GetInitiatorHref(detailResult.EarliestChangeInitiator.InitiatedByType, detailResult.EarliestChangeInitiator.InitiatedById);
         }
         if (detailResult.LatestChangeInitiator != null)
         {
-            _lastUpdatedByName = detailResult.LatestChangeInitiator.InitiatedByName;
-            _lastUpdatedByHref = GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
+            state.LastUpdatedByName = detailResult.LatestChangeInitiator.InitiatedByName;
+            state.LastUpdatedByHref = GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
         }
+        state.Retirements = await jim.UniqueValues.GetRetiredValuesForObjectAsync(state.ObjectId);
+
+        // Only the Password tab's badge is read with the page; the rest of the tab loads on its first activation
+        // (see LoadTabAsync). One bounded read, and only for the readers who can see the tab.
+        if (await IsAdministratorAsync())
+            await LoadQueuedPasswordChangesAsync(jim, state);
 
         if (MetaverseObject.NameOrId != null)
             _breadcrumbs = new List<BreadcrumbItem>
@@ -720,6 +685,11 @@
             if (pendingInspectAttributeId.HasValue)
                 await OpenAttributeInspectorAsync(pendingInspectAttributeId.Value);
         }
+
+        // Arriving at another object on the tab the reader is already on (a link or history entry carrying the same
+        // ?t=) changes no tab, so the tabs report nothing; the tab is loaded for the new object here instead.
+        if (objectChanged)
+            await LoadTabAsync(_activeTabSlug);
     }
 
     private async Task OnDetailViewModeChangedAsync(string mode)
@@ -735,9 +705,9 @@
         {
             // Leaving Inspect: its state belongs to that view only, so a later switch back starts clean rather
             // than reopening whatever attribute or filter happened to be active last time.
-            _selectedAttributeId = null;
-            _selectedAttributeProvenance = null;
-            _contributionFilterKey = null;
+            _object.SelectedAttributeId = null;
+            _object.SelectedAttributeProvenance = null;
+            _object.ContributionFilterKey = null;
         }
 
         // Clean up the one-shot ?c=/?view= entry triggers, and, once Inspect is left, its ?attr=/?group= state.
@@ -770,20 +740,21 @@
     /// </summary>
     private async Task EnsureProvenanceLoadedAsync()
     {
-        if (MetaverseObject == null || _provenanceLoadedForId == MetaverseObject.Id)
+        var state = _object;
+        if (MetaverseObject == null || state.ProvenanceLoaded)
             return;
 
-        _provenanceLoadedForId = MetaverseObject.Id;
-        _provenanceLoading = true;
+        state.ProvenanceLoaded = true;
+        state.ProvenanceLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            _mvoProvenance = await jim.Metaverse.GetMetaverseObjectProvenanceAsync(MetaverseObject.Id);
+            state.Provenance = await jim.Metaverse.GetMetaverseObjectProvenanceAsync(state.ObjectId);
         }
         finally
         {
-            _provenanceLoading = false;
+            state.ProvenanceLoading = false;
             StateHasChanged();
         }
     }
@@ -793,21 +764,22 @@
     /// </summary>
     private async Task OpenAttributeInspectorAsync(int attributeId)
     {
+        var state = _object;
         if (MetaverseObject == null)
             return;
 
-        _selectedAttributeId = attributeId;
-        _selectedAttributeProvenance = null;
-        _attributeInspectorLoading = true;
+        state.SelectedAttributeId = attributeId;
+        state.SelectedAttributeProvenance = null;
+        state.AttributeInspectorLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            _selectedAttributeProvenance = await jim.Metaverse.GetMetaverseAttributeProvenanceAsync(MetaverseObject.Id, attributeId);
+            state.SelectedAttributeProvenance = await jim.Metaverse.GetMetaverseAttributeProvenanceAsync(state.ObjectId, attributeId);
         }
         finally
         {
-            _attributeInspectorLoading = false;
+            state.AttributeInspectorLoading = false;
             StateHasChanged();
         }
     }
@@ -820,8 +792,8 @@
 
     private Task OnCloseInspectorAsync()
     {
-        _selectedAttributeId = null;
-        _selectedAttributeProvenance = null;
+        _object.SelectedAttributeId = null;
+        _object.SelectedAttributeProvenance = null;
         UpdateQueryString(("attr", null));
         return Task.CompletedTask;
     }
@@ -835,7 +807,7 @@
 
     private Task OnContributionFilterChangedAsync(string? key)
     {
-        _contributionFilterKey = key;
+        _object.ContributionFilterKey = key;
         return Task.CompletedTask;
     }
 
@@ -846,10 +818,12 @@
     /// </summary>
     private async Task OpenAttributeInTimelineAsync()
     {
-        _selectedAttributeId = null;
-        _selectedAttributeProvenance = null;
+        _object.SelectedAttributeId = null;
+        _object.SelectedAttributeProvenance = null;
         UpdateQueryString(("attr", null));
-        await OnActiveTabIndexChangedAsync(1);
+        _activeTabIndex = 1;
+        _activeTabSlug = ChangesTabSlug;
+        await LoadTabAsync(ChangesTabSlug);
     }
 
     /// <summary>Applies one or more query-string changes (null value removes the key) via a history-replacing navigation.</summary>
@@ -877,47 +851,46 @@
 
     private string GetChangeBadge()
     {
-        return (_changeCount + _retirements.Count).ToString("N0");
+        return (_object.ChangeCount + _object.Retirements.Count).ToString("N0");
     }
 
-    private async Task OnActiveTabIndexChangedAsync(int newIndex)
+    private void OnActiveTabIndexChanged(int newIndex)
     {
         _activeTabIndex = newIndex;
-        // Lazy-load the first page of change history when the user lands on the Changes tab.
-        if (newIndex == 1 && _changeHistoryRows.Count == 0 && _changeCount > 0 && !_changeHistoryLoading)
-            await LoadChangeHistoryPageAsync();
     }
 
     private async Task LoadConnectionsAsync()
     {
+        var state = _object;
         if (MetaverseObject == null)
             return;
 
-        _connectionsLoading = true;
+        state.ConnectionsLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            _connections = await jim.Metaverse.GetMetaverseObjectConnectionsAsync(MetaverseObject.Id);
-            _connectionsLoaded = true;
-            _connectorCount = _connections.Count; // the badge agrees with the table once the table has loaded
+            state.Connections = await jim.Metaverse.GetMetaverseObjectConnectionsAsync(state.ObjectId);
+            state.ConnectionsLoaded = true;
+            state.ConnectorCount = state.Connections.Count; // the badge agrees with the table once the table has loaded
         }
         finally
         {
-            _connectionsLoading = false;
+            state.ConnectionsLoading = false;
             StateHasChanged();
         }
     }
 
     private async Task PreviewConnectionAsync(MetaverseObjectConnection connection)
     {
-        _connectionPreviewLoading = true;
+        var state = _object;
+        state.ConnectionPreviewLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            _connectionPreviewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(connection.ConnectedSystemId, connection.ConnectedSystemObjectId);
-            _connectionPreviewContext = new CausalityPageContext(
+            state.ConnectionPreviewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(connection.ConnectedSystemId, connection.ConnectedSystemObjectId);
+            state.ConnectionPreviewContext = new CausalityPageContext(
                 ConnectedSystemId: connection.ConnectedSystemId,
                 ConnectedSystemName: connection.ConnectedSystemName,
                 RunProfileName: "Full Synchronisation",
@@ -929,7 +902,7 @@
                 CsoObjectTypeName: connection.ObjectTypeName,
                 MvoTypeName: MetaverseObjectType?.Name,
                 MvoTypePluralName: MetaverseObjectType?.PluralName);
-            if (_connectionPreviewResult.HasBlockingErrors)
+            if (state.ConnectionPreviewResult.HasBlockingErrors)
                 Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -938,15 +911,15 @@
         }
         finally
         {
-            _connectionPreviewLoading = false;
+            state.ConnectionPreviewLoading = false;
             StateHasChanged();
         }
     }
 
     private void CloseConnectionPreview()
     {
-        _connectionPreviewResult = null;
-        _connectionPreviewContext = null;
+        _object.ConnectionPreviewResult = null;
+        _object.ConnectionPreviewContext = null;
     }
 
     /// <summary>
@@ -956,16 +929,17 @@
     /// </summary>
     private async Task PreviewOutboundAsync()
     {
+        var state = _object;
         if (MetaverseObject == null)
             return;
 
-        _outboundPreviewLoading = true;
+        state.OutboundPreviewLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            _outboundPreviewResult = await jim.SyncPreview.PreviewSyncForMvoAsync(MetaverseObject.Id);
-            if (_outboundPreviewResult.HasBlockingErrors)
+            state.OutboundPreviewResult = await jim.SyncPreview.PreviewSyncForMvoAsync(state.ObjectId);
+            if (state.OutboundPreviewResult.HasBlockingErrors)
                 Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -974,14 +948,14 @@
         }
         finally
         {
-            _outboundPreviewLoading = false;
+            state.OutboundPreviewLoading = false;
             StateHasChanged();
         }
     }
 
     private void CloseOutboundPreview()
     {
-        _outboundPreviewResult = null;
+        _object.OutboundPreviewResult = null;
     }
 
     private CausalityPageContext BuildOutboundPreviewContext()
@@ -1001,19 +975,35 @@
     }
 
     /// <summary>
-    /// Loads the Password tab's data the first time it is opened, whether by a click, by arriving on
-    /// <c>?t=password</c>, or by the browser's back button. Keyed on the slug because the tab's index differs
-    /// between readers (it is gated on the Administrator role).
+    /// Records the tab the reader has moved to and loads its data the first time it is shown for this object,
+    /// whether by a click, by arriving on <c>?t=</c>, or by the browser's back button.
     /// </summary>
     private async Task OnActiveTabSlugChangedAsync(string? slug)
     {
-        if (slug == PasswordTabSlug && !_passwordTabLoaded)
-            await LoadPasswordTabAsync();
+        _activeTabSlug = slug;
+        await LoadTabAsync(slug);
+    }
 
-        // The Connections tab (#1519) loads the same way, for the same reason: it is Administrator-gated,
-        // so its index differs between readers and the slug is the only stable key.
-        if (slug == ConnectionsTabSlug && !_connectionsLoaded && !_connectionsLoading)
-            await LoadConnectionsAsync();
+    /// <summary>
+    /// Loads a tab's data for the object being shown, if it has not been loaded (or started loading) already. Keyed on
+    /// the slug rather than the index because the Connections and Password tabs are gated on the Administrator role,
+    /// so the index of every tab after them differs between readers.
+    /// </summary>
+    private async Task LoadTabAsync(string? slug)
+    {
+        var state = _object;
+        switch (slug)
+        {
+            case ChangesTabSlug when state.ChangeHistoryRows.Count == 0 && state.ChangeCount > 0 && !state.ChangeHistoryLoading:
+                await LoadChangeHistoryPageAsync();
+                break;
+            case ConnectionsTabSlug when !state.ConnectionsLoaded && !state.ConnectionsLoading:
+                await LoadConnectionsAsync();
+                break;
+            case PasswordTabSlug when !state.PasswordTabLoaded:
+                await LoadPasswordTabAsync();
+                break;
+        }
     }
 
     private async Task LoadMoreChangeHistoryAsync()
@@ -1023,23 +1013,24 @@
 
     private async Task LoadChangeHistoryPageAsync()
     {
-        if (_changeHistoryLoading)
+        var state = _object;
+        if (state.ChangeHistoryLoading)
             return;
 
-        _changeHistoryLoading = true;
+        state.ChangeHistoryLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(IdParam, _changeHistoryNextPage, ChangeHistoryPageSize);
-            _changeHistoryTotal = totalCount;
+            var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(state.ObjectId, state.ChangeHistoryNextPage, ChangeHistoryPageSize);
+            state.ChangeHistoryTotal = totalCount;
             var typePluralName = MetaverseObjectType?.PluralName;
-            _changeHistoryRows.AddRange(items.Select(dto => MapDtoToChangeGroup(dto, IdParam, typePluralName)));
-            _changeHistoryNextPage++;
+            state.ChangeHistoryRows.AddRange(items.Select(dto => MapDtoToChangeGroup(dto, state.ObjectId, typePluralName)));
+            state.ChangeHistoryNextPage++;
         }
         finally
         {
-            _changeHistoryLoading = false;
+            state.ChangeHistoryLoading = false;
             StateHasChanged();
         }
     }

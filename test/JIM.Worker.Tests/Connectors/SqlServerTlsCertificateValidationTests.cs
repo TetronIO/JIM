@@ -97,6 +97,16 @@ public class SqlServerTlsCertificateValidationTests
     }
 
     [Test]
+    public void ValidateSettingValues_EncryptedWithTheServersOwnCertificateInTheJimStore_Connects()
+    {
+        // #1914: the trust prompt offers the server's own certificate, but the retry demanded a root in the store, so
+        // trusting it reported success and the connection was still refused.
+        var results = Validate(_host, encrypt: true, _serverCertificatePath);
+
+        Assert.That(results, Is.Empty, string.Join("; ", results.Select(r => r.ErrorMessage)));
+    }
+
+    [Test]
     public void ValidateSettingValues_EncryptedWithAnEmptyJimStore_IsRefusedAsAnUntrustedIssuer()
     {
         // Nothing trusts the issuer, so this must not connect; if it does, validation is not happening at all. The
