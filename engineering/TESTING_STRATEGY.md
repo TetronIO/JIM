@@ -180,7 +180,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 
 ## 4. LDAPS Certificate Validation Tests
 
-**Location**: `test/JIM.Worker.Tests/Connectors/LdapsCertificateValidationTests.cs`, `ServerCertificateProbeTests.cs`, `SambaAdAndUnencryptedLdapTests.cs`, `DirectoryServer389LdapTests.cs`
+**Location**: `test/JIM.Worker.Tests/Connectors/LdapsCertificateValidationTests.cs`, `ServerCertificateProbeTests.cs`, `LdapsDownloadedIntermediateTests.cs`, `SambaAdAndUnencryptedLdapTests.cs`, `DirectoryServer389LdapTests.cs`
 
 **Purpose**: Verify LDAPS certificate validation against real directory servers presenting real certificates over TLS, in the .NET test host. This tier exists because JIM deliberately does not make the trust decision itself (#1132): the platform LDAP client validates the chain, the validity period and the certificate's name, and JIM only supplies additional trust anchors. What that client does with those anchors can only be observed by actually connecting to a directory server over TLS, so none of it is unit-testable, and it is exactly the validation the integration stacks used to bypass by setting `LDAPTLS_REQCERT=never` (#1141).
 
@@ -202,6 +202,8 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 | `JIM_TEST_LDAPS_MISMATCH_HOST` | Host presenting a certificate whose name does not match |
 | `JIM_TEST_LDAPS_EXPIRED_HOST` / `_EXPIRED_PORT` | Server presenting an expired certificate |
 | `JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST` / `_SYSTEM_TRUSTED_PORT` | Server whose CA is already trusted by the OS, proving JIM's additions are additive rather than a replacement |
+| `JIM_TEST_LDAPS_INTERMEDIATE_HOST` / `_INTERMEDIATE_PORT` | Server whose certificate comes from an intermediate CA it does not send, proving that trusting the root through JIM's trust action stores the intermediate JIM had to download, which the LDAP client cannot fetch itself (#1938) |
+| `JIM_TEST_LDAPS_AIA_DIRECTORY` / `JIM_TEST_LDAPS_AIA_PORT` | The intermediate and root that server's certificates name for download, and the loopback port written into those addresses; the fixture serves the directory on that port itself, so CI needs no extra image |
 
 The Samba AD and 389 Directory Server rows read the `JIM_TEST_LDAPS_SAMBA_*` and `JIM_TEST_LDAPS_389_*` variables the script prints, and the unencrypted OpenLDAP row reads `JIM_TEST_LDAP_PLAIN_HOST` / `_PORT`, each test ignoring itself when its own are unset.
 
