@@ -8,6 +8,7 @@ using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Repositories;
@@ -66,12 +67,12 @@ public class RawSqlConnectionDisciplineDatabaseTests
         await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
-    private async Task<(Guid CsoId, Guid PeId, Guid AvcId, int MailAttrId)> SeedPendingExportAsync()
+    private async Task<(Guid CsoId, Guid PeId, Guid AvcId, int MailAttrId)> SeedPendingExportAsync(string systemName = "Yellowstone HR")
     {
         await using var seed = NewContext();
 
-        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
-        var system = new ConnectedSystem { Name = "Yellowstone HR", ConnectorDefinition = connectorDefinition };
+        var connectorDefinition = new ConnectorDefinition { Name = $"Test Connector ({systemName})", BuiltIn = true };
+        var system = new ConnectedSystem { Name = systemName, ConnectorDefinition = connectorDefinition };
         var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
         var mailAttr = new ConnectedSystemObjectTypeAttribute
         {
@@ -167,4 +168,108 @@ public class RawSqlConnectionDisciplineDatabaseTests
         Assert.That(ctx.Database.GetDbConnection().State, Is.EqualTo(System.Data.ConnectionState.Closed),
             "The raw batch-read helper must close the connection it opened.");
     }
+
+    /// <summary>
+    /// The bulk Pending Export update stages rows in session-scoped temp tables (ON COMMIT PRESERVE
+    /// ROWS) that are only dropped on its success path, so a call that fails part-way leaves its rows
+    /// on the physical connection. The next call must not apply them: it must not rely on Npgsql's
+    /// pool reset (DISCARD ALL) having run in between, because nothing guarantees that (a connection
+    /// held open across calls, or No Reset On Close). Applying them would silently write an earlier
+    /// call's values over Pending Exports the current call never touched.
+    /// </summary>
+    [Test]
+    public async Task UpdateUntrackedPendingExportsAsync_LeftoverRowsFromFailedCallOnSameSession_AreNotAppliedAsync()
+    {
+        var target = await SeedPendingExportAsync("Yellowstone HR");
+        var bystander = await SeedPendingExportAsync("Glitterband HR");
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        // Hold the physical connection open across both calls, so no pool reset runs between them.
+        await ctx.Database.OpenConnectionAsync();
+        await ctx.Database.ExecuteSqlRawAsync("SET lock_timeout = '500ms'");
+
+        // Make a call for the bystander fail after both COPYs have staged its rows: another session
+        // holds its attribute change row, so the attribute change UPDATE times out before the cleanup.
+        await using (var locker = new NpgsqlConnection(_connectionString))
+        {
+            await locker.OpenAsync();
+            await using var lockTransaction = await locker.BeginTransactionAsync();
+            await using (var lockCmd = new NpgsqlCommand(
+                """SELECT 1 FROM "PendingExportAttributeValueChanges" WHERE "Id" = @id FOR UPDATE""", locker, lockTransaction))
+            {
+                lockCmd.Parameters.AddWithValue("id", bystander.AvcId);
+                await lockCmd.ExecuteNonQueryAsync();
+            }
+
+            var failedCall = BuildUntrackedUpdate(bystander, PendingExportStatus.Exported, errorCount: 0,
+                PendingExportAttributeChangeStatus.ExportedPendingConfirmation, exportAttemptCount: 1);
+            var ex = Assert.ThrowsAsync<PostgresException>(() => repository.Sync.UpdateUntrackedPendingExportsAsync([failedCall]));
+            Assert.That(ex!.SqlState, Is.EqualTo(PostgresErrorCodes.LockNotAvailable),
+                "Test setup: the bystander call must fail at the attribute change UPDATE, after its rows were staged.");
+
+            await lockTransaction.RollbackAsync();
+        }
+
+        await ctx.Database.ExecuteSqlRawAsync("RESET lock_timeout");
+
+        // The bystander then moves on independently of the failed call.
+        await using (var other = NewContext())
+        {
+            await other.PendingExports.Where(pe => pe.Id == bystander.PeId).ExecuteUpdateAsync(s => s
+                .SetProperty(pe => pe.Status, PendingExportStatus.Failed)
+                .SetProperty(pe => pe.ErrorCount, 3));
+            await other.PendingExportAttributeValueChanges.Where(avc => avc.Id == bystander.AvcId).ExecuteUpdateAsync(s => s
+                .SetProperty(avc => avc.Status, PendingExportAttributeChangeStatus.Failed)
+                .SetProperty(avc => avc.ExportAttemptCount, 3));
+        }
+
+        // Act: an unrelated update on the same session.
+        await repository.Sync.UpdateUntrackedPendingExportsAsync([
+            BuildUntrackedUpdate(target, PendingExportStatus.Exported, errorCount: 0,
+                PendingExportAttributeChangeStatus.ExportedPendingConfirmation, exportAttemptCount: 1)
+        ]);
+
+        await using var verify = NewContext();
+        var bystanderPe = await verify.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == bystander.PeId);
+        var bystanderAvc = await verify.PendingExportAttributeValueChanges.AsNoTracking().SingleAsync(avc => avc.Id == bystander.AvcId);
+        var targetPe = await verify.PendingExports.AsNoTracking().SingleAsync(pe => pe.Id == target.PeId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targetPe.Status, Is.EqualTo(PendingExportStatus.Exported), "The current call's own update must apply.");
+            Assert.That(bystanderPe.Status, Is.EqualTo(PendingExportStatus.Failed),
+                "A leftover row from the failed call reverted an unrelated Pending Export's Status.");
+            Assert.That(bystanderPe.ErrorCount, Is.EqualTo(3),
+                "A leftover row from the failed call reverted an unrelated Pending Export's ErrorCount.");
+            Assert.That(bystanderAvc.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed),
+                "A leftover row from the failed call reverted an unrelated attribute change's Status.");
+            Assert.That(bystanderAvc.ExportAttemptCount, Is.EqualTo(3),
+                "A leftover row from the failed call reverted an unrelated attribute change's ExportAttemptCount.");
+        }
+    }
+
+    private static PendingExport BuildUntrackedUpdate(
+        (Guid CsoId, Guid PeId, Guid AvcId, int MailAttrId) seeded,
+        PendingExportStatus status,
+        int errorCount,
+        PendingExportAttributeChangeStatus attributeChangeStatus,
+        int exportAttemptCount) => new()
+    {
+        Id = seeded.PeId,
+        ConnectedSystemObjectId = seeded.CsoId,
+        ChangeType = PendingExportChangeType.Update,
+        Status = status,
+        ErrorCount = errorCount,
+        AttributeValueChanges =
+        {
+            new PendingExportAttributeValueChange
+            {
+                Id = seeded.AvcId,
+                AttributeId = seeded.MailAttrId,
+                Status = attributeChangeStatus,
+                ExportAttemptCount = exportAttemptCount
+            }
+        }
+    };
 }

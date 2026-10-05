@@ -895,6 +895,12 @@ public partial class SyncRepository
 
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
+        // The temp tables below are session-scoped and only dropped on the success path, so a call that
+        // fails part-way leaves its rows on the physical connection. Truncate on every use rather than
+        // relying on Npgsql's pool reset (DISCARD ALL) to have run in between: a connection held open
+        // across calls, or No Reset On Close, would otherwise feed those stale rows into the UPDATE ... FROM
+        // below and overwrite unrelated Pending Exports with an earlier call's values.
+
         // 1. Bulk update PendingExports
         await using (var createCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
         {
@@ -910,7 +916,8 @@ public partial class SyncRepository
                     "LastErrorMessage" text,
                     "LastErrorStackTrace" text,
                     "HasUnresolvedReferences" boolean
-                ) ON COMMIT PRESERVE ROWS
+                ) ON COMMIT PRESERVE ROWS;
+                TRUNCATE _pe_bulk_update
                 """;
             await createCmd.ExecuteNonQueryAsync();
         }
@@ -975,7 +982,8 @@ public partial class SyncRepository
                         "LastImportedValue" text,
                         "ExportAttemptCount" int,
                         "LastExportedAt" timestamptz
-                    ) ON COMMIT PRESERVE ROWS
+                    ) ON COMMIT PRESERVE ROWS;
+                    TRUNCATE _peavc_bulk_update
                     """;
                 await createCmd.ExecuteNonQueryAsync();
             }
