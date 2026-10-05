@@ -1,11 +1,11 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Doing (Phases 0-3 and layers 1-2 complete)
+- **Status:** Doing (Phases 0-4 and layers 1-2 complete)
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
 - **UI mockups:** [MVO Connections Mocks](https://claude.ai/artifact/4Tj5DYpEMR7c8g9pSoAqD9) (board 1B chosen)
 - **Related:** [#1519](https://github.com/TetronIO/JIM/issues/1519) Connections tab and Sync Preview, [#399](https://github.com/TetronIO/JIM/issues/399) value provenance, [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements, [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping, [`../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md`](../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)
-- **Last Updated:** 2026-10-05 (join method recorded, PRD Resolved Decision 9); 2026-10-05 (Phase 3: connection explanations on the server, join record); 2026-10-05 (Phase 2: summariser); 2026-10-05 (Phase 1: shared evaluator); 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
+- **Last Updated:** 2026-10-05 (Phase 4: REST endpoint, Created By and Last Updated By, cmdlet); 2026-10-05 (join method recorded, PRD Resolved Decision 9); 2026-10-05 (Phase 3: connection explanations on the server, join record); 2026-10-05 (Phase 2: summariser); 2026-10-05 (Phase 1: shared evaluator); 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
 
 ## Overview
 
@@ -216,11 +216,13 @@ Join record: `ConnectedSystemObject.RecordJoin` and `ClearJoinRecord` are the on
 
 Decided after review (PRD Resolved Decision 9): the record also stores how the join was made, `ConnectedSystemObject.JoinMethod` (projection, provisioning, inbound matching, export matching), in the same migration. A Connected System with no import rule for an object type joins on its own Object Matching Rules, so no rule is responsible; the method is what tells that join apart from one made before recording began. `RecordJoin` now takes the method and derives `JoinType` from it. The join record carries the method and a server-generated sentence (`ScopingExplanationSummariser.DescribeJoin`, for example "Joined by the Synchronisation Rule "Finance App Users Export", which matched an existing object instead of provisioning a new one"); for older joins the method comes from history, an inbound join's history giving the method but no rule.
 
-### Phase 4: REST and PowerShell
+### Phase 4: REST and PowerShell ✅
 
 1. `GET objects/{id}/connections` and DTOs (`src/JIM.Web/Models/Api/MetaverseObjectConnectionExplanationDtos.cs`); controller tests for 200, 404, `includeNotConnected` both ways, flat criteria paths; an `[Authorize]` attribute assertion in the style of `SystemControllerTests.cs:470-482`.
 2. Created By and Last Updated By: a lightweight initiator lookup reused by `GetObjectAsync`, added to `MetaverseObjectDto`; DTO and controller tests.
 3. `Get-JIMMetaverseObjectConnection.ps1`, manifest export, Pester tests (parameter sets, validation, requires connection, request binding including `-IncludeNotConnected`, pipeline from `Get-JIMMetaverseObject`, `-ConnectedSystemName` match and no-match, help documentation), module export test.
+
+Results: `GET api/v1/metaverse/objects/{id}/connections?includeNotConnected=` returns `MetaverseObjectConnectionExplanationsDto` (`src/JIM.Web/Models/Api/MetaverseObjectConnectionExplanationDtos.cs`): each scoping explanation carries its tree and, flattened, every criterion with its path, `Met` and outcome; each bullet carries its plain text and its typed segments; every word is the server's. 404 for an unknown Metaverse Object comes from the server method's own header read, so no second existence check is made. `MetaverseObjectDto` gains `CreatedByType`/`Id`/`Name` and `LastUpdatedByType`/`Id`/`Name`, read by `GetMetaverseObjectChangeInitiatorsAsync`, which the portal's detail load now shares, so the two cannot disagree. `Get-JIMMetaverseObjectConnection` emits one object per connection or not-connected entry with a uniform top level (`ConnectedSystem`, `Connected`, `Object`, `Role`, `State`, `SyncRule`, `Join`, `Hint`, `BulletsTitle`, `Bullets` as plain text, `Summary`, `Scoping`, `Conflicts`, `EvaluatedAt`); `-ConnectedSystemName` filters case-insensitively and errors when nothing matches, suggesting `-IncludeNotConnected` when it was not given. Tests: controller tests (404, both `includeNotConnected` forms, flat criteria paths, the join record, Administrator-only at its route), Created By and Last Updated By on the DTO with and without history, a PostgreSQL test of the initiator read, and Pester tests for binding, pipeline input, output shape, filtering and help. The OpenAPI document generates with the recursive group schema as a `$ref`. Documented in `docs/powershell/metaverse.md`; the portal and concept documentation follow in Phases 5 and 6.
 
 ### Phase 5: Portal
 

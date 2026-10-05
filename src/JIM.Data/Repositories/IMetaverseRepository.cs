@@ -139,6 +139,13 @@ public interface IMetaverseRepository
     public Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy);
 
     /// <summary>
+    /// Gets who made a Metaverse Object's earliest and latest changes: its Created By and Last Updated By, as the
+    /// portal's Properties tab shows them. Both null when the object has no change history (change tracking off, or
+    /// the history purged).
+    /// </summary>
+    public Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Returns a page of change-history records for a Metaverse Object, projected into a flat DTO
     /// so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
     /// </summary>

@@ -1413,6 +1413,48 @@ public class MetaverseRepository : IMetaverseRepository
 
     private const int CappedMvaLimit = 10;
 
+    /// <inheritdoc />
+    public async Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid metaverseObjectId)
+    {
+        var changeQuery = Repository.Database.Set<MetaverseObjectChange>()
+            .AsNoTracking()
+            .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == metaverseObjectId);
+        return await LoadChangeInitiatorsAsync(changeQuery);
+    }
+
+    /// <summary>
+    /// The initiators of the earliest and latest of the given changes: Created By and Last Updated By, wherever they
+    /// are shown, so the portal and the REST API cannot disagree.
+    /// </summary>
+    private static async Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> LoadChangeInitiatorsAsync(
+        IQueryable<MetaverseObjectChange> changeQuery)
+    {
+        var earliest = await changeQuery
+            .OrderBy(c => c.ChangeTime)
+            .Select(c => new MvoChangeInitiatorSummary
+            {
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName
+            })
+            .FirstOrDefaultAsync();
+        if (earliest == null)
+            return (null, null);
+
+        var latest = await changeQuery
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(c => new MvoChangeInitiatorSummary
+            {
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName
+            })
+            .FirstOrDefaultAsync();
+        return (earliest, latest);
+    }
+
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
         if (loadStrategy == MvoAttributeLoadStrategy.All)
@@ -1448,29 +1490,7 @@ public class MetaverseRepository : IMetaverseRepository
 
             changeCount = await changeQuery.CountAsync();
             if (changeCount > 0)
-            {
-                earliestInitiator = await changeQuery
-                    .OrderBy(c => c.ChangeTime)
-                    .Select(c => new MvoChangeInitiatorSummary
-                    {
-                        ChangeTime = c.ChangeTime,
-                        InitiatedByType = c.InitiatedByType,
-                        InitiatedById = c.InitiatedById,
-                        InitiatedByName = c.InitiatedByName
-                    })
-                    .FirstOrDefaultAsync();
-
-                latestInitiator = await changeQuery
-                    .OrderByDescending(c => c.ChangeTime)
-                    .Select(c => new MvoChangeInitiatorSummary
-                    {
-                        ChangeTime = c.ChangeTime,
-                        InitiatedByType = c.InitiatedByType,
-                        InitiatedById = c.InitiatedById,
-                        InitiatedByName = c.InitiatedByName
-                    })
-                    .FirstOrDefaultAsync();
-            }
+                (earliestInitiator, latestInitiator) = await LoadChangeInitiatorsAsync(changeQuery);
         }
 
         // Joined Connected System Object count, for the Connections tab's badge (#1519): a count only,
