@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-04-23 |
-| **Last Updated** | 2026-04-23 |
+| **Last Updated** | 2026-10-05 |
 | **Status** | Active |
 
 This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
@@ -149,6 +149,12 @@ Worked examples (export rule on a Person's termination-date attribute):
 
 - **Leavers terminated within the last year**: an `All` group with the date attribute *on or before* `30 days ago` (`LessThanOrEquals`, 30 Days Ago) and *after* `364 days ago` (`GreaterThan`, 364 Days Ago). The window slides forward on every run.
 - **Accounts expiring soon**: `AccountExpiry` *on or before* `7 days from now` (`LessThanOrEquals`, 7 Days FromNow) scopes in objects due to expire within the coming week.
+
+## Criteria groups and loading
+
+A rule's criteria are a tree: top-level groups (ORed together; the rule is in scope if any top-level group is met), each an `All` or `Any` group of criteria and child groups, nested to any depth. An empty group counts as met, and a rule with no groups is in scope.
+
+Because an empty group counts as met, a group that fails to load silently widens the rule's scope, so loading the whole tree is a synchronisation integrity requirement, not a convenience. Include chains cannot express "every level", so every repository path that reads a rule's tree goes through `SyncRuleScopingTreeLoader` (`src/JIM.PostgresData/Repositories/`): `LoadAsync` completes rules' trees (tracked or untracked, matching the rules), and `GetCriterionOwnershipAsync` resolves criteria at any depth to their owning rule for reference queries (configuration drift scope, the attribute-in-use check). Only top-level groups carry the rule id; deeper groups carry only `ParentGroupId`, so the loader walks the tree level by level. Do not add scoping-group `Include`s to a rule loader; call the loader. `SyncRuleScopingDepthDatabaseTests` guards every path against real PostgreSQL. (Before #348's prerequisite fix, the loaders included two levels, so deeper groups were ignored at evaluation and dropped from the editor.)
 
 ## What scoping does not do today
 

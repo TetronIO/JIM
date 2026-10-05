@@ -184,6 +184,24 @@ Describe 'Approve-JIMConnectedSystemServerCertificate' {
             }
         }
 
+        It 'Returns the certificate authorities stored alongside the trusted one with -PassThru' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        outcome             = 'Trusted'
+                        certificate         = [PSCustomObject]@{ thumbprint = 'CC' }
+                        storedIntermediates = @([PSCustomObject]@{ thumbprint = 'BB' })
+                    }
+                }
+
+                $result = Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint 'CC' -PassThru
+
+                $result.outcome | Should -Be 'Trusted'
+                $result.storedIntermediates.thumbprint | Should -Be 'BB'
+            }
+        }
+
         It 'Trusts nothing when the caller declines the confirmation' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

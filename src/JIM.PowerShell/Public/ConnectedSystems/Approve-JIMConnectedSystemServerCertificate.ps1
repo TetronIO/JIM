@@ -15,17 +15,18 @@ function Approve-JIMConnectedSystemServerCertificate {
         that changed since you looked at it detectable rather than waved through: if the server is
         presenting anything else, nothing is trusted and both thumbprints are reported.
 
-        Supplying the thumbprint of the authority that issued the certificate, rather than the server's own
-        certificate, trusts the authority. That survives the server's certificate being renewed, so the
-        decision does not have to be repeated. Read both with
-        Get-JIMConnectedSystemServerCertificate.
+        Any certificate in the server's chain can be trusted: the server's own, an intermediate certificate
+        authority, or the root. Each makes the connection work; the higher in the chain, the more renewals
+        the decision survives, so the root (rootThumbprint) is the one that does not have to be repeated.
+        Read the chain with Get-JIMConnectedSystemServerCertificate. Certificate authorities JIM had to
+        download, rather than the server sending them, are stored alongside the one you trust.
 
     .PARAMETER ConnectedSystemId
         The identifier of the Connected System whose server is asked.
 
     .PARAMETER Thumbprint
-        The thumbprint being trusted, as read from the server. Matched against the certificate the server
-        presents now and against the authority that issued it; whichever matches is what gets trusted.
+        The thumbprint being trusted, as read from the server. Matched against every certificate in the
+        chain JIM assembles when it reads the server again; whichever matches is what gets trusted.
         Spaces and colons between the pairs are ignored.
 
     .PARAMETER ChangeReason
@@ -41,8 +42,9 @@ function Approve-JIMConnectedSystemServerCertificate {
         If specified, returns the outcome, including the certificate as it now sits in the store.
 
     .OUTPUTS
-        If -PassThru is specified, returns a PSCustomObject with the outcome (Trusted, AlreadyTrusted or
-        ThumbprintMismatch), the certificate that was added, and the expected and presented thumbprints.
+        If -PassThru is specified, returns a PSCustomObject with the outcome (Trusted, AlreadyTrusted,
+        ThumbprintMismatch or InvalidChain), the certificate that was added, any certificate authorities
+        stored alongside it (storedIntermediates), and the expected and presented thumbprints.
 
     .EXAMPLE
         Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
@@ -51,13 +53,13 @@ function Approve-JIMConnectedSystemServerCertificate {
 
     .EXAMPLE
         $reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-        $reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+        $reading.certificate.chain | Format-Table subject, source, downloadedFrom
         Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-            -Thumbprint $reading.certificate.issuerThumbprint `
+            -Thumbprint $reading.certificate.rootThumbprint `
             -ChangeReason 'Unblocking the HR Cloud connection test.'
 
-        Looks at what the server presents, then trusts the authority that issued it rather than the
-        server's own certificate, so the decision survives renewal. Check the thumbprint against the one
+        Looks at the chain the server presents, then trusts its root rather than the server's own
+        certificate, so the decision survives renewal of everything beneath it. Check the thumbprint against the one
         the server's administrator gives you before running the second command.
 
     .EXAMPLE

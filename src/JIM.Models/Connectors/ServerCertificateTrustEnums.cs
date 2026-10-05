@@ -64,5 +64,12 @@ public enum ServerCertificateTrustOutcome
     /// <summary>
     /// The server could not be reached to read its certificate again, so nothing was trusted.
     /// </summary>
-    ServerUnreachable
+    ServerUnreachable,
+
+    /// <summary>
+    /// A certificate authority in the server's chain cannot be relied on: it has expired or is not yet valid, is not
+    /// marked as a certificate authority, or its signature does not verify. Nothing trusted in JIM would make the
+    /// connection work, so nothing was trusted; the chain has to be fixed on the server.
+    /// </summary>
+    InvalidChain
 }
