@@ -1030,10 +1030,10 @@ Describe 'Restart-JIMGeneratedValues' {
             $description | Should -Match 'exports? nothing|nothing is exported|no existing generated value'
         }
 
-        It 'States that there are no retired values until a later release' {
+        It 'States that the retired values are forgotten' {
             $description = ($help.Description.Text -join ' ')
             $description | Should -Match 'retired values'
-            $description | Should -Match 'release 2'
+            $description | Should -Match 'forgotten'
         }
     }
 }

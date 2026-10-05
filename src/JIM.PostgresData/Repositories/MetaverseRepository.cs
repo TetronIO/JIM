@@ -3093,6 +3093,17 @@ public class MetaverseRepository : IMetaverseRepository
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
+        // One transaction for the whole deletion (Unique Value Generation, #242, Phase 6): the retirement below must
+        // land with the deletion or not at all. A caller already inside a transaction keeps it; this joins it.
+        await using var ownTransaction = Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
+
+        // Retire the object's generated values BEFORE it goes: its assignments are removed by the deletion's
+        // foreign-key cascade, so once the object is deleted there is nothing left to read them from. The portal
+        // and housekeeping callers record no synchronisation outcome, so what was retired is not returned here.
+        await RetiredGeneratedValueSql.RetireForMetaverseObjectsAsync(Repository.Database, [metaverseObject.Id]);
+
         // Null out the FK references in related tables to preserve audit history before deletion.
 
         // Null out FK reference in Activities to preserve audit history
@@ -3139,6 +3150,9 @@ public class MetaverseRepository : IMetaverseRepository
 
         Repository.Database.MetaverseObjects.Remove(metaverseObject);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
     }
 
     /// <summary>

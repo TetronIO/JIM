@@ -149,6 +149,13 @@ public class SyncRuleMappingGenerationDto
     /// </summary>
     public SequenceSkippedAheadDto? SequenceSkippedAhead { get; set; }
 
+    /// <summary>
+    /// How many values the target attribute's retired values register holds (#242, Phase 6): values JIM will never
+    /// issue again for the attribute, whichever generated mapping produces it. Present on the list and get reads;
+    /// null on the response to a create or update.
+    /// </summary>
+    public int? RetiredValueCount { get; set; }
+
     public static SyncRuleMappingGenerationDto FromEntity(SyncRuleMappingGeneration entity) => new()
     {
         TokenKind = entity.TokenKind,

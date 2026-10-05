@@ -72,6 +72,9 @@
                     </MudItem>
                 }
             </MudGrid>
+            <MudSwitch T="bool" Value="generation.NeverReuse" ValueChanged="OnNeverReuseChangedAsync"
+                Color="Color.Primary" Class="mt-4" Label="Never reuse a value" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@NeverReuseHelperText</MudText>
             break;
 
         case GeneratedValueTokenKind.Sequence:
@@ -176,6 +179,9 @@
                 }
             </MudGrid>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@RandomFormatHint</MudText>
+            <MudSwitch T="bool" Value="generation.NeverReuse" ValueChanged="OnNeverReuseChangedAsync"
+                Color="Color.Primary" Class="mt-4" Label="Never reuse a value" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@NeverReuseHelperText</MudText>
             break;
     }
 
@@ -347,6 +353,14 @@
             ? "Needs a base expression; add one above, or choose a Sequence or Random token instead."
             : "joe.bloggs, then joe.bloggs1, joe.bloggs2 …";
 
+    /// <summary>
+    /// The Never reuse switch's explanation (#242, Phase 6, mockup section D), which says what the current position
+    /// means rather than describing both.
+    /// </summary>
+    private string NeverReuseHelperText => Mapping.Generation is { NeverReuse: false }
+        ? "Off: once JIM stops holding a value, it can be issued again, possibly to a different person."
+        : "On: once JIM stops holding a value, it is never issued again. Turn this off only if a value may safely pass to a different person.";
+
     private string RandomSubtext => IsNumberTarget
         ? "Digits only for a Number attribute; GUID and hex are text."
         : "A GUID, or a short hex or digit string. A clash draws again.";
@@ -396,6 +410,18 @@
     private async Task OnTokenKindChangedAsync(GeneratedValueTokenKind kind)
     {
         Mapping.Generation!.TokenKind = kind;
+
+        // A Sequence never reuses a value whatever the setting (#242, Phase 6), so the stored flag is put back to
+        // say so rather than left reporting a choice the flow does not honour.
+        if (kind == GeneratedValueTokenKind.Sequence)
+            Mapping.Generation.NeverReuse = true;
+
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnNeverReuseChangedAsync(bool neverReuse)
+    {
+        Mapping.Generation!.NeverReuse = neverReuse;
         await NotifyChangedAsync();
     }
 

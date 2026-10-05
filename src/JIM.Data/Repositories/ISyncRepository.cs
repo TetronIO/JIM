@@ -569,9 +569,11 @@ public interface ISyncRepository
     Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>
-    /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations.
+    /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations. In the same transaction,
+    /// before the object goes, retires every generated value it held whose flow never reuses values (Unique Value
+    /// Generation, #242, Phase 6), and returns what was retired so a synchronisation can record it.
     /// </summary>
-    Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
+    Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>
     /// Deletes multiple MVOs in one set-based pass: each FK cleanup statement runs once for the
@@ -579,9 +581,10 @@ public interface ISyncRepository
     /// single SaveChanges. Semantically equivalent to calling
     /// <see cref="DeleteMetaverseObjectAsync"/> per object; exists because the per-object form
     /// costs six sequential round trips per MVO, which dominates 0-grace-period deprovisioning
-    /// flushes at scale (issue #993).
+    /// flushes at scale (issue #993). Retires the objects' generated values first, in the same transaction, exactly
+    /// as <see cref="DeleteMetaverseObjectAsync"/> does, and returns what was retired.
     /// </summary>
-    Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects);
+    Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects);
 
     /// <summary>
     /// Deletes MVO attribute values by their IDs using raw SQL.
@@ -1742,6 +1745,60 @@ public interface ISyncRepository
     /// path); empty when the object holds no generated values.
     /// </summary>
     Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId);
+
+    #endregion
+
+    #region Retired Values Register (#242, Phase 6)
+
+    /// <summary>
+    /// The retired gate's lookup (plan "The service", gate (b)): which of <paramref name="normalisedValues"/>
+    /// (already lower-cased) the retired values register holds for the attribute. Exactly one of
+    /// <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/> must be
+    /// given. Raw SQL over the register's <c>LOWER("NormalisedValue")</c> unique index; returns the matching
+    /// normalised values. Never excludes the requesting object: a retired value belongs to nobody, so even the
+    /// object that once held it does not get it back.
+    /// </summary>
+    Task<HashSet<string>> GetRetiredGeneratedValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues);
+
+    /// <summary>
+    /// Deletes the given assignments and, in the same statement, retires each one's value when its generated
+    /// mapping has "Never reuse a value" on or uses a Sequence token (plan decision 4): the page-flush lifecycle
+    /// reconciliation's supersession path, where another Attribute Flow has taken the attribute over or the value
+    /// was cleared. A value already retired for the attribute is left as it is.
+    /// </summary>
+    /// <param name="assignmentIds">The assignments to delete.</param>
+    /// <param name="reason">Why the values are being retired.</param>
+    /// <param name="activityId">The Activity doing it, recorded on each register entry; null if none.</param>
+    /// <returns>The values actually retired by this call.</returns>
+    Task<IReadOnlyList<GeneratedValueRetirement>> RetireAndDeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds, RetiredGeneratedValueReason reason, Guid? activityId);
+
+    /// <summary>
+    /// How many values the register holds per attribute, for every attribute in the two id lists that holds any:
+    /// the one grouped query behind an Attribute Flow list's "N retired" chips. Attributes with none are absent.
+    /// </summary>
+    Task<List<RetiredGeneratedValueCount>> GetRetiredGeneratedValueCountsAsync(IReadOnlyCollection<int> metaverseAttributeIds, IReadOnlyCollection<int> connectedSystemObjectTypeAttributeIds);
+
+    /// <summary>
+    /// One window of an attribute's retired values, newest first, optionally narrowed by
+    /// <paramref name="search"/> (matched case-insensitively against the value and the holder's name). Exactly one
+    /// attribute id must be given. When <paramref name="includeTotalCount"/> is false the count query is skipped and
+    /// the total is null ("not counted", never zero), per the virtualised list contract.
+    /// </summary>
+    Task<(List<RetiredGeneratedValueHeader> Items, int? TotalCount)> GetRetiredGeneratedValueHeadersRangeAsync(
+        int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, string? search, int offset, int count, bool includeTotalCount);
+
+    /// <summary>
+    /// Every value the register holds that was retired from <paramref name="fromObjectId"/>, newest first, with
+    /// the Activity that retired it where known: the retirement events on an object's change history.
+    /// </summary>
+    Task<List<RetiredGeneratedValueHeader>> GetRetiredGeneratedValueHeadersForObjectAsync(Guid fromObjectId);
+
+    /// <summary>
+    /// Forgets every retired value for the attribute ("Start again", plan "The service": <c>StartAgainAsync</c>;
+    /// FR 33). Exactly one attribute id must be given.
+    /// </summary>
+    /// <returns>How many values were forgotten.</returns>
+    Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
 
     #endregion
 }

@@ -119,7 +119,7 @@ public class SyncServer : ISyncServer
 
     #region MVO Deletion with Change Tracking
 
-    public async Task DeleteMetaverseObjectAsync(
+    public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
@@ -161,12 +161,12 @@ public class SyncServer : ISyncServer
             foreach (var attributeValue in attributesToCapture)
                 change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
 
-            await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
+            var retired = await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
             await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);
-            return;
+            return retired;
         }
 
-        await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
+        return await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
     }
 
     /// <summary>
@@ -182,14 +182,14 @@ public class SyncServer : ISyncServer
     /// <param name="initiatorType">The type of principal that initiated the deletion.</param>
     /// <param name="initiatorId">The unique identifier of the initiating principal, if any.</param>
     /// <param name="initiatorName">The display name of the initiating principal, if any.</param>
-    public async Task DeleteMetaverseObjectsAsync(
+    public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
     {
         if (deletions.Count == 0)
-            return;
+            return [];
 
         var changeTrackingEnabled = await GetMvoChangeTrackingEnabledAsync();
 
@@ -234,13 +234,15 @@ public class SyncServer : ISyncServer
             }
         }
 
-        await _syncRepo.DeleteMetaverseObjectsAsync(deletions.Select(d => d.Mvo).ToList());
+        var retired = await _syncRepo.DeleteMetaverseObjectsAsync(deletions.Select(d => d.Mvo).ToList());
 
         // Persist the Deleted change records after the deletions, matching the singular method's
         // ordering. The bulk COPY path writes the parent, attribute and value rows in one
         // transaction instead of the singular path's one INSERT per row.
         if (changes.Count > 0)
             await _syncRepo.PersistPendingMvoChangesAsync(changes, []);
+
+        return retired;
     }
 
     #endregion

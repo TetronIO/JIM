@@ -244,6 +244,16 @@ public class BulkInsertColumnCompletenessTests
             PendingPasswordChangeBulkColumns.PendingPasswordChangesUpdateExclusions);
     }
 
+    /// <summary>
+    /// The retired values register's raw-SQL writers (#242, Phase 6: <c>RetiredGeneratedValueSql</c>) all project
+    /// this list; a column the model gains and the list lacks would be left null on every retired value.
+    /// </summary>
+    [Test]
+    public void RetiredGeneratedValueBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.RetiredGeneratedValue), "RetiredGeneratedValues", RetiredGeneratedValueBulkColumns.RetiredGeneratedValues);
+    }
+
     [Test]
     public void ServiceHeartbeatBulkColumns_MatchMappedColumnsExactly()
     {

@@ -1,13 +1,14 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
+@using JIM.Models.Transactional
 @using JIM.Utilities
 @using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (Changes == null || !Changes.Any())
+@if ((Changes == null || !Changes.Any()) && !Retirements.Any())
 {
     <MudText Class="mud-text-secondary pa-1">No change history available.</MudText>
 }
@@ -35,8 +36,55 @@ else
 
     <!-- Timeline -->
     <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
-        @foreach (var changeGroup in GetFilteredChangeGroups())
+        @foreach (var entry in GetTimelineEntries())
         {
+            @if (entry.Retirement is { } retirement)
+            {
+                @* ─── A retired generated value (Unique Value Generation, #242, Phase 6) ─── *@
+                <MudTimelineItem Color="Color.Warning" Elevation="0">
+                    <ItemContent>
+                        <MudCard Outlined="true" data-testid="jim-timeline-retirement">
+                            <MudCardContent>
+                                <MudStack Spacing="2">
+                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Style="flex-wrap: wrap; gap: 6px;">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Archive" Color="Color.Warning" />
+                                        <MudText Typo="Typo.body1" Style="margin-right: 14px;"><strong>Value retired</strong></MudText>
+                                        <MudTooltip Text="@retirement.RetiredAt.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top" Arrow="true">
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">
+                                                @GetRelativeTime(retirement.RetiredAt)</MudText>
+                                        </MudTooltip>
+                                        @if (retirement.ActivityId is { } retirementActivityId)
+                                        {
+                                            <MudLink Typo="Typo.body2" Href="@($"/activity/{retirementActivityId}")">
+                                                @(retirement.ActivityTargetName ?? "View Activity")
+                                            </MudLink>
+                                        }
+                                    </MudStack>
+                                    <MudDivider />
+                                    <div class="d-flex align-center flex-wrap gap-2">
+                                        <MudText Class="mud-text-secondary">@retirement.AttributeName</MudText>
+                                        <MudText>generated value</MudText>
+                                        <code class="jim-code-inline" style="text-decoration: line-through;" title="@retirement.Value">@retirement.Value</code>
+                                        <MudText>retired</MudText>
+                                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                                            <ChildContent>
+                                                <MudChip T="string" Variant="Variant.Text" Color="@RetiredGeneratedValueReasonDisplay.Colour(retirement.Reason)" Class="ma-0">
+                                                    @RetiredGeneratedValueReasonDisplay.Label(retirement.Reason)
+                                                </MudChip>
+                                            </ChildContent>
+                                            <TooltipContent>
+                                                <TooltipText Text="@RetiredGeneratedValueReasonDisplay.Tooltip(retirement.Reason)" />
+                                            </TooltipContent>
+                                        </MudTooltip>
+                                    </div>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </ItemContent>
+                </MudTimelineItem>
+            }
+            else if (entry.Change is { } changeGroup)
+            {
             <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Elevation="0">
                 <ItemContent>
                     <MudCard Outlined="true" Class="cursor-pointer change-card" @onclick="() => OpenChangeDetails(changeGroup)">
@@ -162,6 +210,7 @@ else
                                         </MudCard>
                                     </ItemContent>
                                 </MudTimelineItem>
+            }
                             }
                         </MudTimeline>
                     }
@@ -600,6 +649,51 @@ else
     /// </summary>
     [Parameter]
     public List<ChangeGroup> Changes { get; set; } = new();
+
+    /// <summary>
+    /// The generated values retired from this object (Unique Value Generation, #242, Phase 6), shown as events among
+    /// the changes in time order. Read whole, since an object retires few values.
+    /// </summary>
+    [Parameter]
+    public List<RetiredGeneratedValueHeader> Retirements { get; set; } = new();
+
+    /// <summary>
+    /// Whether <see cref="Changes"/> holds the object's whole history. While a host is still paging it in, a
+    /// retirement older than the oldest loaded change is held back: shown now, it would sit at the foot of the list
+    /// as though it were the oldest thing that happened to the object, ahead of changes not yet loaded.
+    /// </summary>
+    [Parameter]
+    public bool HistoryComplete { get; set; } = true;
+
+    /// <summary>One event on the timeline: a change group or a retired generated value.</summary>
+    private sealed record TimelineEntry(DateTime Time, ChangeGroup? Change, RetiredGeneratedValueHeader? Retirement);
+
+    /// <summary>
+    /// The filtered change groups and retirements interleaved, newest first. A retirement answers the search by
+    /// attribute name or value, and is hidden by a change type filter, which names kinds of attribute change it is
+    /// not.
+    /// </summary>
+    private IEnumerable<TimelineEntry> GetTimelineEntries()
+    {
+        var changes = GetFilteredChangeGroups().Select(c => new TimelineEntry(c.ChangeTime, c, null));
+
+        IEnumerable<RetiredGeneratedValueHeader> retirements = string.IsNullOrEmpty(_filterChangeType) ? Retirements : [];
+        if (!HistoryComplete && Changes.Count > 0)
+        {
+            var oldestLoaded = Changes.Min(c => c.ChangeTime);
+            retirements = retirements.Where(r => r.RetiredAt >= oldestLoaded);
+        }
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            retirements = retirements.Where(r =>
+                r.AttributeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                r.Value.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return changes
+            .Concat(retirements.Select(r => new TimelineEntry(r.RetiredAt, null, r)))
+            .OrderByDescending(e => e.Time);
+    }
 
     private string _searchText = string.Empty;
     private string? _filterChangeType = null;
