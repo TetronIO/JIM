@@ -204,6 +204,59 @@ public class ScopingExplanationSummariserTests
 
     #endregion
 
+    #region Text carried on every explanation
+
+    /// <summary>
+    /// The tree's lines and the hint are generated on the server and travel with the explanation, so the portal, the
+    /// REST API and PowerShell show identical words without each rebuilding them.
+    /// </summary>
+    [Test]
+    public void ExplainMvoForExportRule_OutOfScope_CarriesTreeLinesAndHint()
+    {
+        var explanation = Explain(FinanceAppRule());
+        var group = explanation.Groups.Single();
+        var any = group.ChildGroups.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(explanation.Hint, Is.EqualTo("Fails on Department; Cost Centre or Job Title"));
+            Assert.That(group.Description, Is.EqualTo("All of these must be met (not met)"));
+            Assert.That(group.Criteria.Select(c => (c.Description, c.ActualDescription)),
+                Is.EqualTo(new[] { ("Employee Status equals Active", "is Active"), ("Department equals Finance", "is Engineering") }));
+            Assert.That(any.Description, Is.EqualTo("Any one of these (none met)"));
+            Assert.That(any.Criteria[0].ActualDescription, Is.EqualTo("has no value"));
+        }
+    }
+
+    [Test]
+    public void ExplainMvoForExportRule_InScope_HintIsEmpty()
+    {
+        var explanation = Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, "Engineering"))));
+
+        Assert.That(explanation.Hint, Is.Empty);
+    }
+
+    [Test]
+    public void ExplainMvoForExportRule_InvalidCriterionReached_HintNamesTheInvalidCriterion()
+    {
+        var explanation = Explain(Rule(All(Criterion(StartDate, SearchComparisonType.StartsWith, null))));
+
+        Assert.That(explanation.Hint, Is.EqualTo("Invalid criterion on Start Date"));
+    }
+
+    [Test]
+    public void DescribeObjectTypeConflict_RuleTargetingAnotherType_SaysWhyTheRuleCannotConnect()
+    {
+        var text = ScopingExplanationSummariser.DescribeObjectTypeConflict("Finance App Groups Export", "group", "person", "Finance App");
+
+        Assert.That(text, Is.EqualTo(
+            "The Synchronisation Rule \"Finance App Groups Export\" targets \"group\" objects in Finance App, but this Metaverse Object " +
+            "is already represented there by a \"person\" object. A Metaverse Object can have only one Connected System Object per " +
+            "Connected System, so this rule cannot connect it."));
+    }
+
+    #endregion
+
     #region Bullets
 
     [Test]

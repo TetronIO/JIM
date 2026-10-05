@@ -374,3 +374,18 @@ public enum NotConnectedReason
     /// </summary>
     NotYetProvisioned = 3
 }
+
+/// <summary>
+/// Where the Synchronisation Rule named on a Connected System Object's join record came from (#348).
+/// </summary>
+public enum JoinRecordSource
+{
+    /// <summary>Recorded on the Connected System Object when it was joined.</summary>
+    Recorded = 0,
+
+    /// <summary>Recovered from Activity history, for an object joined before joins were recorded.</summary>
+    Derived = 1,
+
+    /// <summary>Neither recorded nor recoverable: the join predates recording and its history has gone.</summary>
+    NotRecorded = 2
+}

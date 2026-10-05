@@ -1464,24 +1464,9 @@ public partial class MetaverseServer
             }
 
             pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
-            var state = ConnectedSystemObjectConnectionStateResolver.Resolve(cso.Status, pendingExport);
-
-            connections.Add(new MetaverseObjectConnection
-            {
-                ConnectedSystemObjectId = cso.Id,
-                DisplayName = cso.ExternalIdAttributeValue?.ToStringNoName() ?? cso.Id.ToString(),
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemName = cso.ConnectedSystem.Name,
-                ObjectTypeName = cso.Type.Name,
-                JoinType = cso.JoinType,
-                IsSource = isSource,
-                IsTarget = isTarget,
-                State = state,
-                PendingAttributeChangeCount = state == ConnectedSystemObjectConnectionState.UpdatePending
-                    ? pendingExport?.AttributeValueChanges.Count
-                    : null,
-                LastSynchronised = cso.LastUpdated
-            });
+            var row = new MetaverseObjectConnection();
+            PopulateConnectionRow(row, cso, isSource, isTarget, pendingExport);
+            connections.Add(row);
         }
 
         return connections;

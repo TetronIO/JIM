@@ -118,6 +118,7 @@ public class ScopingEvaluationServer
             ? ScopingEvaluator.Explain(rule.ObjectScopingCriteriaGroups, source, explanation.EvaluatedAt, explanation.Groups)
             : ScopingRuleOutcome.InScope;
 
+        ScopingExplanationSummariser.Describe(explanation);
         return explanation;
     }
 }

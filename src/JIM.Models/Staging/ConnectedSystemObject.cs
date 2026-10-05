@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystemObject
@@ -127,6 +128,41 @@ public class ConnectedSystemObject
     /// When this Connected System Object was joined to the Metaverse.
     /// </summary>
     public DateTime? DateJoined { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule that projected, provisioned or joined this object (#348). Null when the object is not
+    /// joined, when the join predates recording, or when the rule has since been deleted, in which case
+    /// <see cref="JoinSyncRuleName"/> still names it.
+    /// </summary>
+    public int? JoinSyncRuleId { get; set; }
+
+    /// <summary>
+    /// The joining Synchronisation Rule's name when the join was made (#348), kept when the rule is deleted.
+    /// </summary>
+    public string? JoinSyncRuleName { get; set; }
+
+    /// <summary>
+    /// Records the Synchronisation Rule responsible for this object's join (#348). Every join site calls this
+    /// alongside setting <see cref="JoinType"/>, so the record cannot describe a different join from the one made.
+    /// </summary>
+    public void RecordJoin(ConnectedSystemObjectJoinType joinType, SyncRule? syncRule, DateTime dateJoined)
+    {
+        JoinType = joinType;
+        DateJoined = dateJoined;
+        JoinSyncRuleId = syncRule is { Id: > 0 } ? syncRule.Id : null;
+        JoinSyncRuleName = syncRule?.Name;
+    }
+
+    /// <summary>
+    /// Clears the join record when the object stops being joined (#348).
+    /// </summary>
+    public void ClearJoinRecord()
+    {
+        JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        DateJoined = null;
+        JoinSyncRuleId = null;
+        JoinSyncRuleName = null;
+    }
 
     /// <summary>
     /// Set by the Temporal Scope Reconciler when this object's relative-date (inbound) scope membership

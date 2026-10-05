@@ -1288,11 +1288,11 @@ public interface ISyncRepository
     /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
-    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
-    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
-    /// change tracker).
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
+    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
+    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
 
     #endregion
 

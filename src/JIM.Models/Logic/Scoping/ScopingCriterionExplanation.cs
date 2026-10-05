@@ -56,4 +56,10 @@ public sealed class ScopingCriterionExplanation
     public int AdditionalValuesNotEvaluated { get; set; }
 
     public ScopingCriterionOutcome Outcome { get; set; }
+
+    /// <summary>The criterion as a condition, for example "Department equals Finance"; a masked value reads as hidden.</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>What the object held, for example "is Engineering" or "has no value".</summary>
+    public string ActualDescription { get; set; } = string.Empty;
 }

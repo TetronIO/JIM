@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
@@ -3500,7 +3501,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    public async Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
     {
         // A single conditional UPDATE guards the join-before-provision race (#1051): two Metaverse
         // Objects can both pass the point-in-time eligibility check in
@@ -3509,9 +3510,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // the caller owns fixing up any tracked instance on success.
         var affectedRows = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ConnectedSystemObjects""
-              SET ""MetaverseObjectId"" = {0}, ""JoinType"" = {1}, ""DateJoined"" = {2}, ""Status"" = {3}
+              SET ""MetaverseObjectId"" = {0}, ""JoinType"" = {1}, ""DateJoined"" = {2}, ""Status"" = {3},
+                  ""JoinSyncRuleId"" = {5}, ""JoinSyncRuleName"" = {6}
               WHERE ""Id"" = {4} AND ""MetaverseObjectId"" IS NULL",
-            metaverseObjectId, (int)ConnectedSystemObjectJoinType.Joined, dateJoined, (int)ConnectedSystemObjectStatus.Normal, connectedSystemObjectId);
+            metaverseObjectId, (int)ConnectedSystemObjectJoinType.Joined, dateJoined, (int)ConnectedSystemObjectStatus.Normal, connectedSystemObjectId,
+            joinSyncRuleId, joinSyncRuleName);
 
         return affectedRows == 1;
     }
@@ -5672,6 +5675,185 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<SyncRule>> GetSyncRulesForScopingExplanationAsync(int metaverseObjectTypeId)
+    {
+        // A projection rather than includes: the page needs a few columns of the rule, its Connected System and its
+        // object type, not their graphs (a Connected System carries its settings and Connector).
+        var rules = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(sr => sr.MetaverseObjectTypeId == metaverseObjectTypeId && sr.Enabled)
+            .OrderBy(sr => sr.Name)
+            .Select(sr => new SyncRule
+            {
+                Id = sr.Id,
+                Name = sr.Name,
+                Direction = sr.Direction,
+                Enabled = sr.Enabled,
+                ConnectedSystemId = sr.ConnectedSystemId,
+                ConnectedSystem = new ConnectedSystem { Id = sr.ConnectedSystem.Id, Name = sr.ConnectedSystem.Name, Status = sr.ConnectedSystem.Status },
+                ConnectedSystemObjectTypeId = sr.ConnectedSystemObjectTypeId,
+                ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = sr.ConnectedSystemObjectType.Id, Name = sr.ConnectedSystemObjectType.Name },
+                MetaverseObjectTypeId = sr.MetaverseObjectTypeId,
+                ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem
+            })
+            .ToListAsync();
+
+        await SyncRuleScopingTreeLoader.LoadAsync(Repository.Database, rules, asTrackingRequested: false);
+        return rules;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectAttributeValue>> GetConnectedSystemObjectAttributeValuesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> attributeIds)
+    {
+        if (connectedSystemObjectIds.Count == 0 || attributeIds.Count == 0)
+            return [];
+
+        var csoIds = connectedSystemObjectIds.ToList();
+        var attributeIdList = attributeIds.ToList();
+
+        // Unordered, as synchronisation's own loads are: scoping compares an attribute's first value as the database
+        // returns it (#1923).
+        var rows = await Repository.Database.ConnectedSystemObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => csoIds.Contains(av.ConnectedSystemObject.Id) && attributeIdList.Contains(av.AttributeId))
+            .Select(av => new
+            {
+                av.Id,
+                ConnectedSystemObjectId = av.ConnectedSystemObject.Id,
+                av.AttributeId,
+                av.StringValue,
+                av.IntValue,
+                av.LongValue,
+                av.DecimalValue,
+                av.DateTimeValue,
+                av.BoolValue,
+                av.GuidValue
+            })
+            .ToListAsync();
+
+        return rows.Select(r => new ConnectedSystemObjectAttributeValue
+        {
+            Id = r.Id,
+            ConnectedSystemObject = new ConnectedSystemObject { Id = r.ConnectedSystemObjectId },
+            AttributeId = r.AttributeId,
+            StringValue = r.StringValue,
+            IntValue = r.IntValue,
+            LongValue = r.LongValue,
+            DecimalValue = r.DecimalValue,
+            DateTimeValue = r.DateTimeValue,
+            BoolValue = r.BoolValue,
+            GuidValue = r.GuidValue
+        }).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<JoinHistoryEntry>> GetJoinHistoryAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyDictionary<Guid, Guid> pendingProvisioningQueuedBy)
+    {
+        var history = new List<JoinHistoryEntry>();
+        if (connectedSystemObjectIds.Count == 0)
+            return history;
+
+        var csoIds = connectedSystemObjectIds.ToList();
+        var db = Repository.Database;
+
+        // Projections and inbound joins are recorded against the object itself (the item's indexed object id). A
+        // projection's root outcome names the projecting rule; an inbound join's names none.
+        var joinItems = await db.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Where(rpei => rpei.ConnectedSystemObjectId != null && csoIds.Contains(rpei.ConnectedSystemObjectId.Value)
+                && (rpei.ObjectChangeType == ObjectChangeType.Projected || rpei.ObjectChangeType == ObjectChangeType.Joined))
+            .Select(rpei => new
+            {
+                rpei.Id,
+                ConnectedSystemObjectId = rpei.ConnectedSystemObjectId!.Value,
+                rpei.ObjectChangeType,
+                rpei.ActivityId,
+                rpei.Activity.Created,
+                rpei.Activity.TotalActivityTime,
+                ProjectingRule = rpei.SyncOutcomes
+                    .Where(o => o.ParentSyncOutcomeId == null && o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected)
+                    .Select(o => new { o.SyncRuleId, o.SyncRuleName })
+                    .FirstOrDefault()
+            })
+            .ToListAsync();
+
+        history.AddRange(joinItems.Select(item => new JoinHistoryEntry
+        {
+            ConnectedSystemObjectId = item.ConnectedSystemObjectId,
+            JoinType = item.ObjectChangeType == ObjectChangeType.Projected
+                ? ConnectedSystemObjectJoinType.Projected
+                : ConnectedSystemObjectJoinType.Joined,
+            ActivityId = item.ActivityId,
+            ActivityCreated = item.Created,
+            ActivityDuration = item.TotalActivityTime,
+            RunProfileExecutionItemId = item.Id,
+            SyncRuleId = item.ProjectingRule?.SyncRuleId,
+            SyncRuleName = item.ProjectingRule?.SyncRuleName
+        }));
+
+        // A provisioned object's join was made by the synchronisation that staged its creation. Once exported, the
+        // export's item carries a causal edge back to that synchronisation's item, naming the provisioning rule.
+        var provisioningEdges = await (
+                from export in db.ActivityRunProfileExecutionItems.AsNoTracking()
+                join edge in db.CausalEdges.AsNoTracking() on export.Id equals edge.EffectRunProfileExecutionItemId
+                join cause in db.ActivityRunProfileExecutionItems.AsNoTracking() on edge.CauseRunProfileExecutionItemId equals cause.Id
+                where export.ConnectedSystemObjectId != null && csoIds.Contains(export.ConnectedSystemObjectId.Value)
+                    && edge.ReasonCode == CausalReasonCode.ExportCreateStaged
+                select new
+                {
+                    ConnectedSystemObjectId = export.ConnectedSystemObjectId!.Value,
+                    cause.Id,
+                    cause.ActivityId,
+                    cause.Activity.Created,
+                    cause.Activity.TotalActivityTime,
+                    edge.SyncRuleId,
+                    edge.SyncRuleName
+                })
+            .ToListAsync();
+
+        history.AddRange(provisioningEdges.Select(edge => new JoinHistoryEntry
+        {
+            ConnectedSystemObjectId = edge.ConnectedSystemObjectId,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            ActivityId = edge.ActivityId,
+            ActivityCreated = edge.Created,
+            ActivityDuration = edge.TotalActivityTime,
+            RunProfileExecutionItemId = edge.Id,
+            SyncRuleId = edge.SyncRuleId,
+            SyncRuleName = edge.SyncRuleName
+        }));
+
+        // Before the export, the Pending Export's queueing item is the synchronisation that staged the creation; the
+        // caller already holds the Pending Export and so the rule, and needs only the item's Activity.
+        if (pendingProvisioningQueuedBy.Count > 0)
+        {
+            var queueingItemIds = pendingProvisioningQueuedBy.Values.Distinct().ToList();
+            var queueingItems = await db.ActivityRunProfileExecutionItems
+                .AsNoTracking()
+                .Where(rpei => queueingItemIds.Contains(rpei.Id))
+                .Select(rpei => new { rpei.Id, rpei.ActivityId, rpei.Activity.Created, rpei.Activity.TotalActivityTime })
+                .ToDictionaryAsync(rpei => rpei.Id);
+
+            history.AddRange(pendingProvisioningQueuedBy
+                .Where(p => queueingItems.ContainsKey(p.Value))
+                .Select(p => (CsoId: p.Key, Item: queueingItems[p.Value]))
+                .Select(p => new JoinHistoryEntry
+                {
+                    ConnectedSystemObjectId = p.CsoId,
+                    JoinType = ConnectedSystemObjectJoinType.Provisioned,
+                    ActivityId = p.Item.ActivityId,
+                    ActivityCreated = p.Item.Created,
+                    ActivityDuration = p.Item.TotalActivityTime,
+                    RunProfileExecutionItemId = p.Item.Id
+                }));
+        }
+
+        return history;
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
@@ -7882,6 +8064,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(cso.DerivedInputChangePending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -8008,7 +8192,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer, {{{offset + 9}}}::integer, {{{offset + 10}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -8020,6 +8204,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(cso.ExternalIdAttributeId);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");
@@ -8031,35 +8217,43 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
+    /// Batch updates only the join state (<see cref="CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate"/>) on
     /// ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
     /// Used during sync page flush where only join state has changed and a full column update is unnecessary.
     /// </summary>
     private async Task BulkUpdateConnectedSystemObjectJoinStatesRawAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 4; // Id + 3 mutable columns
+        // Id plus the join state; cast/parameter order below MUST match
+        // CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate exactly.
+        var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"" FROM (VALUES ");
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
+            sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
-            sql.Append(@") AS v(""Id"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }

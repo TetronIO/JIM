@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
@@ -140,18 +141,27 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
         var mvoType = new MetaverseObjectType { Name = "Person", PluralName = "People" };
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
 
-        seed.AddRange(connectorDefinition, system, csType, partition, mvoType, mvo);
+        // The rule a join records (#348).
+        var syncRule = new SyncRule
+        {
+            Name = JoinSyncRuleName, Direction = SyncRuleDirection.Import, ConnectedSystem = system,
+            ConnectedSystemObjectType = csType, MetaverseObjectType = mvoType
+        };
+
+        seed.AddRange(connectorDefinition, system, csType, partition, mvoType, mvo, syncRule);
         await seed.SaveChangesAsync();
 
         return new Seeded(system.Id, csType.Id, extIdAttr.Id, secondaryExtIdAttr.Id, textAttr.Id, numberAttr.Id,
             longNumberAttr.Id, decimalAttr.Id, binaryAttr.Id, guidAttr.Id, boolAttr.Id, dateAttr.Id,
-            referenceAttr.Id, partition.Id, mvo.Id);
+            referenceAttr.Id, partition.Id, mvo.Id, syncRule.Id);
     }
+
+    private const string JoinSyncRuleName = "Yellowstone HR Import";
 
     private sealed record Seeded(
         int SystemId, int TypeId, int ExtIdAttrId, int SecondaryExtIdAttrId, int TextAttrId, int NumberAttrId,
         int LongNumberAttrId, int DecimalAttrId, int BinaryAttrId, int GuidAttrId, int BoolAttrId, int DateAttrId,
-        int ReferenceAttrId, int PartitionId, Guid MvoId);
+        int ReferenceAttrId, int PartitionId, Guid MvoId, int SyncRuleId);
 
     [Test]
     public async Task CreateConnectedSystemObjectsAsync_PageSizedBatchEveryColumnPopulated_RoundTripsExactlyAsync()
@@ -193,6 +203,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             MetaverseObjectId = s.MvoId,
             JoinType = ConnectedSystemObjectJoinType.Joined,
             DateJoined = dateJoined,
+            JoinSyncRuleId = s.SyncRuleId,
+            JoinSyncRuleName = JoinSyncRuleName,
             PartitionId = s.PartitionId,
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt,
@@ -232,6 +244,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.MetaverseObjectId, Is.EqualTo(s.MvoId));
             Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
             Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(storedCso.JoinSyncRuleId, Is.EqualTo(s.SyncRuleId), "#348: the join record must round-trip");
+            Assert.That(storedCso.JoinSyncRuleName, Is.EqualTo(JoinSyncRuleName), "#348: the join record must round-trip");
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));
             Assert.That(storedCso.ScopeReviewPending, Is.True);
             Assert.That(storedCso.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));
@@ -344,6 +358,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             MetaverseObjectId = s.MvoId,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             DateJoined = dateJoined,
+            JoinSyncRuleId = s.SyncRuleId,
+            JoinSyncRuleName = JoinSyncRuleName,
             PartitionId = s.PartitionId,
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt,
@@ -374,6 +390,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.MetaverseObjectId, Is.EqualTo(s.MvoId));
             Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
             Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(storedCso.JoinSyncRuleId, Is.EqualTo(s.SyncRuleId), "#348: the join record must round-trip");
+            Assert.That(storedCso.JoinSyncRuleName, Is.EqualTo(JoinSyncRuleName), "#348: the join record must round-trip");
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));
             Assert.That(storedCso.ScopeReviewPending, Is.True);
             Assert.That(storedCso.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));

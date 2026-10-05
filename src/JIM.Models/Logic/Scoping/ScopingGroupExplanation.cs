@@ -37,4 +37,7 @@ public sealed class ScopingGroupExplanation
     public List<ScopingCriterionExplanation> Criteria { get; set; } = [];
 
     public List<ScopingGroupExplanation> ChildGroups { get; set; } = [];
+
+    /// <summary>The group's line in the tree, for example "Any one of these (none met)".</summary>
+    public string Description { get; set; } = string.Empty;
 }

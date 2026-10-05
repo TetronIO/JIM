@@ -83,6 +83,50 @@ internal static class ScopingExplanationSummariser
 
     #endregion
 
+    #region Text carried on every explanation
+
+    /// <summary>
+    /// Writes the words every surface shows onto an explanation: its hint and each line of its tree. Done once, on the
+    /// server, so the portal, the REST API and PowerShell cannot word an explanation differently.
+    /// </summary>
+    internal static void Describe(ScopingExplanation explanation)
+    {
+        explanation.Hint = explanation.Outcome switch
+        {
+            ScopingRuleOutcome.OutOfScope => FailingAttributesHint(explanation),
+            ScopingRuleOutcome.Undetermined => InvalidCriteriaHint(explanation),
+            _ => string.Empty
+        };
+
+        foreach (var group in explanation.Groups)
+            DescribeTree(group);
+    }
+
+    private static void DescribeTree(ScopingGroupExplanation group)
+    {
+        group.Description = DescribeGroup(group);
+        foreach (var criterion in group.Criteria)
+        {
+            criterion.Description = DescribeCriterion(criterion);
+            criterion.ActualDescription = DescribeActual(criterion);
+        }
+
+        foreach (var child in group.ChildGroups)
+            DescribeTree(child);
+    }
+
+    /// <summary>
+    /// Why an enabled export rule cannot connect a Metaverse Object whose one slot in the rule's Connected System is held
+    /// by an object of another type, in the terms synchronisation reports it (#1331).
+    /// </summary>
+    internal static string DescribeObjectTypeConflict(string syncRuleName, string targetObjectTypeName, string existingObjectTypeName,
+        string connectedSystemName) =>
+        $"The Synchronisation Rule \"{syncRuleName}\" targets \"{targetObjectTypeName}\" objects in {connectedSystemName}, but this " +
+        $"Metaverse Object is already represented there by a \"{existingObjectTypeName}\" object. A Metaverse Object can have only one " +
+        "Connected System Object per Connected System, so this rule cannot connect it.";
+
+    #endregion
+
     #region Hint
 
     /// <summary>

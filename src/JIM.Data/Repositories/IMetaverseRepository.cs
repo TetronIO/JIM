@@ -150,6 +150,13 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
+    /// <summary>
+    /// Gets every value a Metaverse Object holds for the given attributes (#348), uncapped, so scoping can be explained
+    /// against exactly the values synchronisation compares: a capped multi-valued load could change which value comes
+    /// first. Values carry their scalar fields, attribute id and asserted-null flag only.
+    /// </summary>
+    public Task<List<MetaverseObjectAttributeValue>> GetMetaverseObjectAttributeValuesAsync(Guid metaverseObjectId, IReadOnlyCollection<int> attributeIds);
+
     #region value provenance (#399)
 
     /// <summary>

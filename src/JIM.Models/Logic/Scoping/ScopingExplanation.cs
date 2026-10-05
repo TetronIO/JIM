@@ -28,4 +28,10 @@ public sealed class ScopingExplanation
     /// The top-level groups, in evaluation order. They are ORed: one met group puts the object in scope.
     /// </summary>
     public List<ScopingGroupExplanation> Groups { get; set; } = [];
+
+    /// <summary>
+    /// The outcome in one line without values: the attributes an out-of-scope object fails on ("Fails on Department;
+    /// Cost Centre or Job Title"), or the invalid criteria an undetermined rule stops at; empty when in scope.
+    /// </summary>
+    public string Hint { get; set; } = string.Empty;
 }

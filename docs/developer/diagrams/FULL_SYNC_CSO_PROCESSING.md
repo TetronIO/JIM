@@ -78,7 +78,7 @@ flowchart TD
     RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>ReElectSurvivingContributorsAsync<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion is pending,<br/>or preserved if no import source remains #1570]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
-    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined<br/>Clear the joining rule]
     BreakJoin --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
     EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
@@ -115,10 +115,10 @@ flowchart TD
     AttemptJoin --> JoinResult{Match<br/>found?}
 
     JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Synchronisation Rule has<br/>ProjectToMetaverse = true?}
-    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Synchronisation Rule<br/>Link CSO to new MVO]
+    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Synchronisation Rule<br/>Link CSO to new MVO<br/>Record the projecting rule]
     AttemptProject -->|No| Done
 
-    JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined<br/>Cancels a scheduled MVO deletion when<br/>the rejoin falsifies its trigger:<br/>MvoDeletionCancelled outcome #1627]
+    JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined<br/>Record the matching import rule<br/>Cancels a scheduled MVO deletion when<br/>the rejoin falsifies its trigger:<br/>MvoDeletionCancelled outcome #1627]
     JoinResult -->|Multiple matches| AmbiguousError[AmbiguousMatch error<br/>RPEI with error]
     JoinResult -->|Match already joined| ExistingJoinError[CouldNotJoinDueToExistingJoin<br/>error RPEI]
 

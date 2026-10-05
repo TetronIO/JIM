@@ -239,6 +239,14 @@ public partial class SyncRepository
             await writer.WriteNullAsync();
             await writer.WriteNullAsync();
             await writer.WriteAsync(cso.DerivedInputChangePending, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (cso.JoinSyncRuleId.HasValue)
+                await writer.WriteAsync(cso.JoinSyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (cso.JoinSyncRuleName != null)
+                await writer.WriteAsync(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -1544,7 +1552,7 @@ public partial class SyncRepository
 
     /// <summary>
     /// Disconnects the given CSOs from their MVOs in one set-based statement: nulls
-    /// <c>MetaverseObjectId</c> and <c>DateJoined</c> and resets <c>JoinType</c> to
+    /// <c>MetaverseObjectId</c>, <c>DateJoined</c> and the join record (#348) and resets <c>JoinType</c> to
     /// <c>NotJoined</c>. Tracked instances are fixed up to match the database state so a later
     /// SaveChangesAsync does not write stale join state back (same pattern as the CSO detach in
     /// the MVO delete path).
@@ -1557,7 +1565,8 @@ public partial class SyncRepository
         var csoIds = connectedSystemObjectIds.ToArray();
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ConnectedSystemObjects""
-              SET ""MetaverseObjectId"" = NULL, ""JoinType"" = {1}, ""DateJoined"" = NULL
+              SET ""MetaverseObjectId"" = NULL, ""JoinType"" = {1}, ""DateJoined"" = NULL,
+                  ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL
               WHERE ""Id"" = ANY({0})",
             csoIds, (int)ConnectedSystemObjectJoinType.NotJoined);
 
@@ -1567,8 +1576,7 @@ public partial class SyncRepository
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
-            trackedCso.Entity.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-            trackedCso.Entity.DateJoined = null;
+            trackedCso.Entity.ClearJoinRecord();
         }
     }
 

@@ -1708,6 +1708,49 @@ public class MetaverseRepository : IMetaverseRepository
         }
     }
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectAttributeValue>> GetMetaverseObjectAttributeValuesAsync(Guid metaverseObjectId, IReadOnlyCollection<int> attributeIds)
+    {
+        if (attributeIds.Count == 0)
+            return [];
+
+        var attributeIdList = attributeIds.ToList();
+
+        // Unordered, as synchronisation's own loads are: scoping compares an attribute's first value as the database
+        // returns it (#1923).
+        var rows = await Repository.Database.MetaverseObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId && attributeIdList.Contains(av.AttributeId))
+            .Select(av => new
+            {
+                av.Id,
+                av.AttributeId,
+                av.StringValue,
+                av.IntValue,
+                av.LongValue,
+                av.DecimalValue,
+                av.DateTimeValue,
+                av.BoolValue,
+                av.GuidValue,
+                av.NullValue
+            })
+            .ToListAsync();
+
+        return rows.Select(r => new MetaverseObjectAttributeValue
+        {
+            Id = r.Id,
+            AttributeId = r.AttributeId,
+            StringValue = r.StringValue,
+            IntValue = r.IntValue,
+            LongValue = r.LongValue,
+            DecimalValue = r.DecimalValue,
+            DateTimeValue = r.DateTimeValue,
+            BoolValue = r.BoolValue,
+            GuidValue = r.GuidValue,
+            NullValue = r.NullValue
+        }).ToList();
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         // Materialise the full entity so Include chains are honoured (Include is ignored
@@ -3119,14 +3162,17 @@ public class MetaverseRepository : IMetaverseRepository
         // MVOs are deleted in the same batch.
         // Also update tracked entities in EF Core's change tracker to match the DB state,
         // otherwise SaveChangesAsync will try to write the stale FK value.
+        // The join record (#348) goes with the join; JoinType and DateJoined are left as they always have been here.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = {0}",
             metaverseObject.Id);
         foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
             .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinSyncRuleId = null;
+            trackedCso.Entity.JoinSyncRuleName = null;
         }
 
         // Reference attribute values on other MVOs that point to this MVO: valueless rows are
