@@ -613,7 +613,36 @@ Deleting a Connected System asks what should happen to everything it managed, wi
 
 If a deprovisioning run stops before completing, the system stays fenced and consistent: deleting it again with deprovisioning resumes from where the run stopped, and deleting immediately finishes the removal at once (keeping whatever contributed data remained). A half-deprovisioned system never returns to service.
 
+Before deleting a system that other systems depend on, [preview the deletion](#previewing-a-deletion): the counts in the delete dialog say how much the system holds, while the preview says what deleting it would do to everything else.
+
 Deleting a Connected System records a final snapshot of its configuration in the [configuration change history](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
+
+### Previewing a deletion
+
+Deprovisioning through synchronisation reaches well beyond the system being deleted: another system takes over the values it also contributes, values nothing else contributes are cleared, people whose last connector it was become eligible for deletion, and every downstream system is corrected to match. A **deletion impact preview** works all of that out against the objects as they stand, changing nothing, so you can read it before you commit.
+
+Open the Connected System's **Danger Zone** tab and choose **Preview deletion impact**. The preview runs in the background like any other [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it); you can leave the page and come back to it, and the tab picks up the latest one rather than starting another. It leads with the worst consequence and breaks the rest down beneath:
+
+| Consequence | What it means |
+|---|---|
+| Becomes eligible for deletion | A Metaverse Object whose last connector is this system. Its Object Type's deletion rule decides what happens next, as it would after any disconnection. |
+| Value cleared | A Metaverse attribute value this system contributed that no other Connected System contributes, so nothing replaces it. |
+| New contributor, value changes | Another Connected System also contributes the attribute, so its value takes over, following [Attribute Priority](../concepts/attribute-priority.md). Each row names the system the new value would come from. |
+| New contributor, same value | As above, but the value is identical, so only its source changes and nothing is exported. These are counted but never lead the summary. |
+| Updated in the target system | A correction staged for a downstream Connected System because a value it holds would change or be cleared. |
+| Removed from the target system | An account a downstream system would delete, because the identity it belongs to is deleted or leaves that system's export scope, and the [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) there is Delete. |
+| Disconnects from its Metaverse Object | The same two situations where the Deprovisioning Action is Disconnect: the account stays in the downstream system and JIM stops managing it. |
+| Provisioning cancelled | An account JIM was about to create in a downstream system, but has not yet exported, that would no longer be created. |
+
+The preview describes **deprovisioning through synchronisation** only. Deleting immediately keeps every contributed value and sends no exports, so there is nothing for it to evaluate beyond the deletion rules, and the delete dialog says so instead of repeating the preview's figures.
+
+The delete dialog shows the latest preview beside the deletion choices: the first few lines of its summary when it is current, its progress while it is still running, and a prompt to preview first when there is none. A preview goes **stale** when anything that could change its answer happens after it ran. That is either data moving (a Run Profile running, housekeeping deleting Metaverse Objects, a connector space being cleared, or another Connected System being deleted) or a configuration change that affects synchronisation. A stale preview says which of the two overtook it and offers to run again.
+
+The deletion's [Activity](activities.md) records whether a preview informed it. Only a finished, current preview is recorded, and the Activity shows it as "Informed by a preview run" with its summary lines and a link to the full preview; anything else (no preview, one still running, one that did not finish, or a stale one) is recorded as "Went ahead without a preview". Recording a preview the administrator could not rely on would make the audit trail claim more than it should.
+
+Where a derived Attribute Flow (in development) reads a Metaverse attribute this deletion clears or changes, the preview carries a warning naming the attribute and the systems hosting those flows. The preview shows the change to the attribute itself, not the derived values that follow from it: the deletion marks the objects affected, and those flows recompute at the next synchronisation of the system hosting them.
+
+Automation gets the same evaluation: [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion`](../powershell/previews.md#new-jimconfigurationchangepreview) in PowerShell, or `POST connected-systems/{id}/deletion/preview` in the [REST API](../../api/reference/). Pass the preview's Activity id to [`Remove-JIMConnectedSystem -PreviewActivityId`](../powershell/connected-systems.md#remove-jimconnectedsystem), or as `previewActivityId` on the REST deletion, to record it; JIM refuses a deletion citing anything other than a deletion preview of that same system.
 
 ## Manage Connected Systems
 

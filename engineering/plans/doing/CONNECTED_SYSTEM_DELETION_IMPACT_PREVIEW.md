@@ -1,6 +1,6 @@
 # Connected System Deletion Impact Preview - Implementation Plan
 
-- **Status:** Doing (Phases 0 to 2 complete)
+- **Status:** Doing (Phases 0 to 4 complete)
 - **Issue:** [#134](https://github.com/TetronIO/JIM/issues/134)
 - **PRD:** [`engineering/prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (FR 6-11; decisions 2-5 of 2026-08-29)
 - **Framework:** [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](../done/CONFIGURATION_CHANGE_PREVIEW.md) (#827); execution side [`engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (#809)
@@ -266,27 +266,27 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 
 ### Phase 3: portal
 
-- [ ] Danger Zone panel hosting, reattachment, staleness (bUnit).
-- [ ] Dialog summary block, running and immediate-mode lines, `previewActivityId` passed only when current (bUnit).
-- [ ] Panel changes listed under Transitions: consequence-then-count order, verdict omissions, takeover "Applies to", contributor-named values, adapter empty copy (bUnit for the ordering and omission logic; copy verified by eye).
-- [ ] "Informed by preview" on Activity detail.
-- [ ] Copy (text-only, verified by eye):
+- [x] Danger Zone panel hosting, reattachment, staleness (bUnit: `ConnectedSystemDangerZoneTabTests`). Staleness is judged from the preview Activity's start against data-moving Activities and synchronisation-affecting configuration changes (`GetPreviewStalenessSinceAsync`, real-PostgreSQL `ConfigurationChangePreviewStalenessDatabaseTests`). The runtime walkthrough found the first draft counted target types wholesale: an administrator's first sign-in (a `MetaverseObject` Activity) and Run Profile edits marked previews stale, while a connector space clear, a schema refresh removal, another system's deletion and a rule deletion's recall did not; it now names each data-moving (target, operation) pair.
+- [x] Dialog summary block, running and immediate-mode lines, `previewActivityId` passed only when current (bUnit: `DeleteConnectedSystemDialogTests`, `DeletionImpactPreviewStateTests`).
+- [x] Panel changes listed under Transitions: consequence-then-count order, verdict omissions, takeover "Applies to", contributor-named values, adapter empty copy (`ConfigurationChangePreviewVerdictTests`, `ConfigurationChangePreviewWordingTests`; copy verified by eye).
+- [x] "Informed by preview" on Activity detail (`ActivityPreviewProvenanceTests`), and on the REST Activity detail as `PreviewActivityId`, which `Get-JIMActivity -Id` returns, so the link reads back from all three surfaces.
+- [x] Copy (text-only, verified by eye):
   - Delete dialog, "Joined" note: "related objects; deprovisioned per the choice above" reads as though every joined Metaverse Object will be deprovisioned. Becomes "disconnected from this system; they stay in the Metaverse unless this was their last connector, below".
   - Delete dialog, "Eligible for deletion rules" note: "their own rules decide, when deprovisioning" wrongly implies the immediate mode skips them. Becomes "this system is their last connector; their Object Type's deletion rule decides".
   - Shared preview panel staleness line: "An import since then may have moved the answer." becomes "An import since then may change the preview results."
-- [ ] Runtime validation on the sandbox stack against a two-HR-source fixture; screenshots against the artefact.
+- [x] Runtime validation on the sandbox stack against a two-HR-source fixture with a Directory provisioned from the Metaverse and confirmed by import, so the preview has downstream corrections to report; screenshots against the artefact.
 
 ### Phase 4: REST and PowerShell
 
-- [ ] Start endpoint, `previewActivityId` on delete, controller tests.
-- [ ] `New-JIMConfigurationChangePreview -Deletion`, `Remove-JIMConnectedSystem -PreviewActivityId`, Pester tests, help examples.
+- [x] Start endpoint, `previewActivityId` on delete, controller tests (`SynchronisationControllerDeletionPreviewTests`).
+- [x] `New-JIMConfigurationChangePreview -Deletion`, `Remove-JIMConnectedSystem -PreviewActivityId`, Pester tests, help examples.
 
 ### Phase 5: integration, docs, close-out
 
 - [ ] Integration scenario (extending the Attribute Priority fixture): preview, assert verdict and groups; delete with the preview; assert execution matches.
-- [ ] Docs: deleting a Connected System, reading the deletion impact preview; changelog `✨` entry.
-- [ ] Correct the stale references: #134's `docs/CONNECTED_SYSTEM_DELETION_DESIGN.md` path, and the `plans/doing/` paths in `DeleteConnectedSystemDialog` and `ConsequenceConfirmationDialog` comments.
-- [ ] Remove or populate `ConnectedSystemDeletionPreview.MvosWithOtherConnectorsCount` and `MvosWithGracePeriodCount`, which are never set.
+- [x] Docs: deleting a Connected System, reading the deletion impact preview; changelog `✨` entry.
+- [x] Correct the stale references: #134's `docs/CONNECTED_SYSTEM_DELETION_DESIGN.md` path, and the `plans/doing/` paths in `DeleteConnectedSystemDialog` and `ConsequenceConfirmationDialog` comments (and three more dialogs carrying the same stale #827 path).
+- [x] Remove or populate `ConnectedSystemDeletionPreview.MvosWithOtherConnectorsCount` and `MvosWithGracePeriodCount`, which are never set. Populated: both were in the REST response from the start, always reading zero, and removing them would have broken callers for no gain.
 - [ ] Move this plan to `done/` in the PR that closes #134.
 
 ## Success Criteria
