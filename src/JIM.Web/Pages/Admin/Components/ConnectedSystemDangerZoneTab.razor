@@ -17,7 +17,7 @@
 @* A deletion of a fenced system is already underway, so there is nothing left to preview. *@
 @if (ConnectedSystem.Status != ConnectedSystemStatus.Deleting)
 {
-    <MudPaper Class="pa-4" data-testid="jim-deletion-impact">
+    <MudPaper Class="pa-4" Outlined="true" data-testid="jim-deletion-impact">
         <MudText Typo="Typo.h6">Deletion impact</MudText>
         <MudText Class="mt-2">
             See what deleting this system would do before you do it: which attribute values would be cleared or taken
