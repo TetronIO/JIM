@@ -3883,7 +3883,7 @@ userPassword: Test@123!
             # 3. The deletion did what the preview said, row by row, for the attributes held one value at a time.
             # (Manager and Other Telephones are reported too, but as rendered text; their exact shape is the
             # subject of the earlier steps.)
-            $scalarAttributes = @("Account Name", "Employee ID", "First Name", "Last Name", "Display Name", "Email", "Description", "Job Title")
+            $scalarAttributes = @("Account Name", "Employee ID", "First Name", "Last Name", "Display Name", "Email", "Description", "Job Title", "Common Name")
             $eligibleMvoIds = @($deltas | Where-Object { $_.TransitionType -eq "WouldBecomeDeletionEligible" } |
                 ForEach-Object { [string]$_.MetaverseObjectId } | Sort-Object -Unique)
 
@@ -3921,6 +3921,12 @@ userPassword: Test@123!
             foreach ($delta in $cleared) {
                 Assert-MvoAttributeValue -MvoId $delta.MetaverseObjectId -AttributeName $delta.AttributeName -ExpectNoValue `
                     -Name "$($delta.ObjectDisplayName)'s $($delta.AttributeName) (previewed as cleared)"
+            }
+
+            # Common Name has no Secondary mapping (Setup-Scenario-014.ps1), so every user holding one loses it: a
+            # deletion that cleared nothing here means the preview stopped reporting what has no other source.
+            if (@($cleared | Where-Object { $_.AttributeName -eq "Common Name" }).Count -eq 0) {
+                throw "The preview reported no Common Name cleared; Primary is its only source, so deleting Primary must clear it."
             }
 
             $deletionPreviewNotes += "$($handedOver.Count) handed over and $($cleared.Count) cleared as previewed; $($eligibleMvoIds.Count) previewed as eligible for deletion went; the Activity records the preview"
