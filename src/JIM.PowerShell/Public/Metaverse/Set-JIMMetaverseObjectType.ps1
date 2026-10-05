@@ -18,6 +18,12 @@ function Set-JIMMetaverseObjectType {
         last known state) and the cmdlet surfaces it as a warning; the returned object carries it as
         DeletionRuleAdvisory.
 
+        When the deletion rule is WhenAuthoritativeSourceDisconnected and a Connected System projects into the type
+        without being one of its authoritative sources, the cmdlet writes one warning per such system: objects only it
+        holds will never be deleted, and objects it shares with an authoritative source are deleted when that source
+        disconnects. The returned object lists them as DeletionSourceWarnings. Join-only contributors (projection off)
+        are never listed.
+
     .PARAMETER Id
         The unique identifier of the Object Type to update.
 
@@ -274,6 +280,9 @@ function Set-JIMMetaverseObjectType {
                 if ($result.deletionRuleAdvisory) {
                     Write-Warning $result.deletionRuleAdvisory
                 }
+
+                # Projecting systems that are not authoritative sources (#1256): one warning per system, never blocking.
+                Write-JIMDeletionSourceWarning -ObjectType $result
 
                 if ($PassThru) {
                     $result

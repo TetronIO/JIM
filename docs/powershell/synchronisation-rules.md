@@ -141,7 +141,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 
 ### Output
 
-With `-PassThru`, returns the created Synchronisation Rule object. Without it, returns nothing.
+With `-PassThru`, returns the created Synchronisation Rule object, including `DeletionSourceWarning`. Without it, returns nothing. Either way, when the new rule projects into a Metaverse Object Type deleted `WhenAuthoritativeSourceDisconnected` from a Connected System that is not one of the type's authoritative sources, that warning is written with `Write-Warning`; the rule is created regardless. See [projecting systems that are not authoritative sources](../configuration/metaverse.md#authoritative-source-trigger-modes).
 
 **ShouldProcess impact level:** Medium.
 
@@ -235,7 +235,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 
 ### Output
 
-With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings` and `DependentDerivedFlows`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`.
+With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings`, `DependentDerivedFlows` and `DeletionSourceWarning`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`, and then `DeletionSourceWarning` when the update took the rule into projecting (enabling it, or switching projection on) from a Connected System that is not an authoritative source of a type deleted `WhenAuthoritativeSourceDisconnected`. Re-saving a rule that already projected does not repeat it.
 
 **ShouldProcess impact level:** Medium.
 
@@ -731,13 +731,13 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 
 "Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
-"back" is the common case, but a lower configured start is honoured too). For every other token kind
-(`OnlyIfTaken`, `Random`) this is a documented no-op that still succeeds.
+"back" is the common case, but a lower configured start is honoured too), and forgets the attribute's
+[retired values](../configuration/synchronisation-rules.md#retired-values) so they can be issued again.
+For every other token kind (`OnlyIfTaken`, `Random`) this is a documented no-op that still succeeds.
 
 **It changes nothing else.** No existing generated value on any object is changed, nothing is exported,
-and no synchronisation runs as a result of this command. There are no retired values to bring back in
-this release: the retired values register does not exist yet (it ships in release 2), so
-`RetiredValuesForgotten` on the result is always `0`.
+and no synchronisation runs as a result of this command. To see what it would forget first, run
+`Get-JIMRetiredGeneratedValue` for the attribute (see [Metaverse cmdlets](metaverse.md#get-jimretiredgeneratedvalue)).
 
 ### Syntax
 
@@ -758,7 +758,7 @@ One object describing what moved:
 
 | Property | Description |
 |----------|--------------|
-| `RetiredValuesForgotten` | Always `0` in this release; no retired values register exists yet |
+| `RetiredValuesForgotten` | How many retired values were forgotten and can be issued again |
 | `CounterFrom` | The counter's position before this call, for a Sequence mapping; `$null` otherwise |
 | `CounterTo` | The counter's position after this call (the mapping's Sequence Start); `$null` otherwise |
 

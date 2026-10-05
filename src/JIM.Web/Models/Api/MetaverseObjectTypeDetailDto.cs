@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -39,6 +40,16 @@ public class MetaverseObjectTypeDetailDto
     /// deprovisioned when the source of record departs.
     /// </summary>
     public string? DeletionRuleAdvisory { get; set; }
+
+    /// <summary>
+    /// Connected Systems that project into this type without being one of its selected authoritative sources (#1256).
+    /// Populated only when the deletion rule is WhenAuthoritativeSourceDisconnected: such a system can create objects
+    /// that no selected source governs, which are then never deleted automatically, and the objects it shares with a
+    /// selected source are deleted when that source disconnects. Systems whose inbound Synchronisation Rules only join
+    /// (projection off) are never listed; leaving those out is the normal way to add attribute-only contributors.
+    /// Always present; empty when there is nothing to warn about, so a health-check script can fail on any entry.
+    /// </summary>
+    public List<DeletionSourceGap> DeletionSourceWarnings { get; set; } = new();
 
     /// <summary>
     /// Creates a detailed DTO from a MetaverseObjectType entity.

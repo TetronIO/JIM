@@ -3331,11 +3331,13 @@ public class SynchronisationController(
     /// </remarks>
     /// <param name="request">The Synchronisation Rule creation request.</param>
     /// <returns>The created Synchronisation Rule details.</returns>
-    /// <response code="201">Synchronisation Rule created successfully.</response>
+    /// <response code="201">Synchronisation Rule created successfully. <c>deletionSourceWarning</c> is set when the new rule projects into a
+    /// Metaverse Object Type deleted When Authoritative Source Disconnected from a Connected System that is not one of its
+    /// authoritative sources; the rule was created regardless.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
-    [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(SyncRuleSaveResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleAsync([FromBody] CreateSyncRuleRequest request)
@@ -3408,9 +3410,11 @@ public class SynchronisationController(
 
         _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the created Synchronisation Rule
+        // Retrieve the created Synchronisation Rule. A new rule had no prior projection, so any projection it carries is
+        // new and may need the deletion source warning (#1256).
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
-        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleHeader.FromEntity(created!));
+        var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore: null);
+        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning));
     }
 
     /// <summary>
@@ -3421,7 +3425,9 @@ public class SynchronisationController(
     /// <returns>The updated Synchronisation Rule details.</returns>
     /// <response code="200">Synchronisation Rule updated. <c>warnings</c> lists any non-blocking warnings the save raised
     /// about the rule's Attribute Flows; <c>dependentDerivedFlows</c> names any Attribute Flow deriving a Metaverse
-    /// attribute that the update left with a missing input, for example by disabling the rule (the update goes ahead
+    /// attribute that the update left with a missing input, for example by disabling the rule; <c>deletionSourceWarning</c>
+    /// is set when the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
+    /// Disconnected from a Connected System that is not one of its authoritative sources (the update goes ahead
     /// regardless).</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
@@ -3447,6 +3453,10 @@ public class SynchronisationController(
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        // What the rule projected into before this update, so the deletion source warning (#1256) is raised only when the
+        // update takes it into projecting, not on every save of a rule that already did.
+        var projectedTypeIdBefore = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(syncRule);
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -3498,7 +3508,8 @@ public class SynchronisationController(
 
         // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
-        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule));
+        var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore);
+        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning));
     }
 
     /// <summary>
@@ -4251,6 +4262,7 @@ public class SynchronisationController(
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity).ToList();
         AttachDerivedFlowInfo(dtos, await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
+        await AttachRetiredValueCountsAsync(dtos);
         return Ok(dtos);
     }
 
@@ -4278,7 +4290,75 @@ public class SynchronisationController(
 
         var dto = SyncRuleMappingDto.FromEntity(mapping);
         AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
+        await AttachRetiredValueCountsAsync([dto]);
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// Fills each generated mapping's <see cref="SyncRuleMappingGenerationDto.RetiredValueCount"/> from one grouped
+    /// count of the retired values register (#242, Phase 6), however many mappings there are.
+    /// </summary>
+    private async Task AttachRetiredValueCountsAsync(IReadOnlyList<SyncRuleMappingDto> dtos)
+    {
+        var generated = dtos.Where(d => d.Generation != null).ToList();
+        if (generated.Count == 0)
+            return;
+
+        var counts = await _application.UniqueValues.GetRetiredValueCountsAsync(
+            generated.Where(d => d.TargetMetaverseAttributeId.HasValue).Select(d => d.TargetMetaverseAttributeId!.Value).Distinct().ToList(),
+            generated.Where(d => d.TargetConnectedSystemAttributeId.HasValue).Select(d => d.TargetConnectedSystemAttributeId!.Value).Distinct().ToList());
+
+        foreach (var dto in generated)
+        {
+            dto.Generation!.RetiredValueCount = counts
+                .Where(c => (dto.TargetMetaverseAttributeId.HasValue && c.MetaverseAttributeId == dto.TargetMetaverseAttributeId)
+                    || (dto.TargetConnectedSystemAttributeId.HasValue && c.ConnectedSystemObjectTypeAttributeId == dto.TargetConnectedSystemAttributeId))
+                .Sum(c => c.Count);
+        }
+    }
+
+    /// <summary>
+    /// List a Connected System attribute's retired generated values
+    /// </summary>
+    /// <remarks>
+    /// The retired values register for an attribute an export Attribute Flow generates (Unique Value Generation):
+    /// values JIM issued for it and will never issue again, whichever flow generates it, newest first. Optionally
+    /// narrowed by <c>search</c>, matched case-insensitively against the value and the name of the object that held
+    /// it. Read-only: the only way to forget retired values is "Start again" on a Sequence flow.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Connected System Object Type.</param>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="search">Optional text to match against the value or the holder's name.</param>
+    /// <response code="200">A page of the attribute's retired values.</response>
+    /// <response code="404">Connected System, Object Type or attribute not found.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes/{attributeId:int}/retired-generated-values", Name = "GetRetiredGeneratedValuesForConnectedSystemAttribute")]
+    [ProducesResponseType(typeof(PaginatedResponse<RetiredGeneratedValueDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRetiredGeneratedValuesForConnectedSystemAttributeAsync(
+        int connectedSystemId, int objectTypeId, int attributeId, [FromQuery] PaginationRequest pagination, [FromQuery] string? search = null)
+    {
+        _logger.LogTrace("Requested retired generated values for attribute {AttributeId} of Connected System {SystemId}", attributeId, connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var attribute = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
+        if (attribute == null ||
+            attribute.ConnectedSystemObjectType.Id != objectTypeId ||
+            attribute.ConnectedSystemObjectType.ConnectedSystemId != connectedSystemId)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of Connected System {connectedSystemId}."));
+        }
+
+        var (items, total) = await _application.UniqueValues.GetRetiredValuesAsync(
+            null, attributeId, search, pagination.Skip, pagination.PageSize, includeTotalCount: true);
+
+        return Ok(PaginatedResponse<RetiredGeneratedValueDto>.Create(
+            items.Select(RetiredGeneratedValueDto.FromModel), total ?? 0, pagination.Page, pagination.PageSize));
     }
 
     /// <summary>
@@ -4721,9 +4801,10 @@ public class SynchronisationController(
     /// <remarks>
     /// For a generated Sequence mapping, moves the target attribute's counter back to the mapping's configured
     /// Sequence Start (the move can go either direction; "back" is the common case, but a lower configured start
-    /// is honoured too). Existing values and assignments are left untouched: this is not a recall. For every
-    /// other token kind this is a documented no-op. Retired values are not returned to circulation in this
-    /// release; <c>retiredValuesForgotten</c> is always 0 until the retired values register ships (release 2).
+    /// is honoured too), and forgets the target attribute's retired values so they can be issued again;
+    /// <c>retiredValuesForgotten</c> says how many. Existing values and assignments are left untouched: this is not
+    /// a recall, and a number an object still holds is skipped when the counter reaches it. For every other token
+    /// kind this is a documented no-op.
     /// </remarks>
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping.</param>

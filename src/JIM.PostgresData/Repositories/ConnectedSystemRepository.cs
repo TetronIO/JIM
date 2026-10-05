@@ -906,16 +906,43 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Objects
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        await using var ownTransaction = await BeginTransactionIfNoneAsync();
+
+        // Retire any export-mode generated values the object held before it goes (Unique Value Generation, #242,
+        // Phase 6): its assignments are removed by the deletion's foreign-key cascade.
+        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, [connectedSystemObject.Id]);
         await ClearReferencesToConnectedSystemObjectsAsync([connectedSystemObject.Id]);
         Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
     }
 
     public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
-        await ClearReferencesToConnectedSystemObjectsAsync(connectedSystemObjects.Select(cso => cso.Id).ToList());
+        await using var ownTransaction = await BeginTransactionIfNoneAsync();
+
+        var csoIds = connectedSystemObjects.Select(cso => cso.Id).ToList();
+        // Retire any export-mode generated values these objects held before they go (#242, Phase 6).
+        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
+        await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
         Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
+    }
+
+    /// <summary>
+    /// Begins a transaction on the shared context when none is open, so a deletion and the retirement written
+    /// beside it land together; returns null when the caller already holds one, which the work then joins.
+    /// </summary>
+    private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BeginTransactionIfNoneAsync()
+    {
+        return Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
     }
 
     /// <summary>
@@ -6069,26 +6096,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.MetaverseObjectType)
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.Criteria)
-            .ThenInclude(c => c.MetaverseAttribute)
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.Criteria)
-            .ThenInclude(c => c.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.ChildGroups)
-            .ThenInclude(cg => cg.Criteria)
-            .ThenInclude(c => c.MetaverseAttribute)
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.ChildGroups)
-            .ThenInclude(cg => cg.Criteria)
-            .ThenInclude(c => c.ConnectedSystemAttribute)
             .OrderBy(x => x.Name);
 
         if (withChangeTracking)
             allQuery = allQuery.AsTracking();
 
-        return await allQuery.ToListAsync();
+        var rules = await allQuery.ToListAsync();
+
+        // Scoping criteria trees can nest to any depth, which no Include chain can express; see SyncRuleScopingTreeLoader.
+        await SyncRuleScopingTreeLoader.LoadAsync(Repository.Database, rules, withChangeTracking);
+        return rules;
     }
 
     /// <summary>
@@ -6148,7 +6165,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.ToListAsync();
+        var rules = await query.ToListAsync();
+
+        // Synchronisation evaluates these rules' scoping criteria. They used to arrive only because a tracked
+        // all-rules load later in the same context fixed the navigations up; load them here, at full depth, so the
+        // rules are complete on their own.
+        await SyncRuleScopingTreeLoader.LoadAsync(Repository.Database, rules, withChangeTracking);
+        return rules;
     }
 
     public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
@@ -6776,7 +6799,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // references, which nulled the child rows rather than removing them, and each delete
         // silently left the rule's whole configuration behind belonging to nothing. Adding or
         // removing an Include here is now a read-path decision only.
-        return await Repository.Database.SyncRules
+        var syncRule = await Repository.Database.SyncRules
             .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
@@ -6802,13 +6825,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.InitialPassword)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.Criteria)
-            .ThenInclude(c => c.MetaverseAttribute)
-            .Include(sr => sr.ObjectScopingCriteriaGroups)
-            .ThenInclude(g => g.ChildGroups)
-            .ThenInclude(cg => cg.Criteria)
-            .ThenInclude(c => c.MetaverseAttribute)
             // CreatedByName is now a string property on SyncRule (IAuditable) - no Include needed
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
@@ -6820,6 +6836,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.MetaverseObjectType)
             .SingleOrDefaultAsync(x => x.Id == id);
+
+        // Tracked, like the rest of this graph, so an edit anywhere in the scoping tree persists on save. The tree
+        // can nest to any depth, which no Include chain can express; see SyncRuleScopingTreeLoader.
+        if (syncRule != null)
+            await SyncRuleScopingTreeLoader.LoadAsync(Repository.Database, [syncRule], asTrackingRequested: true);
+        return syncRule;
     }
 
     public async Task CreateSyncRuleAsync(SyncRule syncRule)
@@ -7185,6 +7207,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // owns and commits its own transaction. Npgsql does not support nested transactions, hence the ownership check.
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
+        // 0a. Retire the export-mode generated values these Connected System Objects hold (Unique Value Generation,
+        // #242, Phase 6), first: their assignments go with the objects in step 8, and the holder names the register
+        // records are read from the attribute values step 6 deletes. When the whole Connected System is being
+        // deleted, its attributes, and so these register entries, go too, later in the same transaction.
+        await RetiredGeneratedValueSql.RetireForConnectedSystemAsync(Repository.Database, connectedSystemId);
 
         // 0. Post-clear reconciliation (#1605): record which Metaverse Objects are joined to this system
         // RIGHT NOW, before anything below removes the evidence. A re-clear before the sweep has consumed
@@ -8127,8 +8155,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemIds.Count == 0)
             return [];
 
-        // Projected in one pass over the rules rather than four separate queries, then grouped in memory. The result
-        // set is bounded by configuration size (rules and their mappings), not by object counts, so it stays small.
+        // Attribute Flow and matching references are projected in one pass over the rules, scoping criteria in a second
+        // (below), then everything is grouped in memory. The result set is bounded by configuration size (rules and
+        // their mappings), not by object counts, so it stays small.
         var references = await Repository.Database.SyncRules
             .Where(sr => connectedSystemIds.Contains(sr.ConnectedSystemId))
             .Select(sr => new
@@ -8143,15 +8172,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .SelectMany(m => m.Sources)
                     .Where(s => s.MetaverseAttributeId != null)
                     .Select(s => s.MetaverseAttributeId!.Value),
-                ScopingAttributeIds = sr.ObjectScopingCriteriaGroups
-                    .SelectMany(g => g.Criteria)
-                    .Where(c => c.MetaverseAttributeId != null)
-                    .Select(c => c.MetaverseAttributeId!.Value),
                 MatchingAttributeIds = sr.ObjectMatchingRules
                     .Where(o => o.TargetMetaverseAttributeId != null)
                     .Select(o => o.TargetMetaverseAttributeId!.Value)
             })
             .ToListAsync();
+
+        // Scoping criteria can sit at any depth of a rule's group tree, which a projection over navigations cannot
+        // reach, so they are resolved separately; see SyncRuleScopingTreeLoader.
+        var scopingAttributeIdsByRule = (await SyncRuleScopingTreeLoader.GetCriterionOwnershipAsync(
+                Repository.Database, references.Select(r => r.SyncRuleId).ToList()))
+            .Where(c => c.MetaverseAttributeId.HasValue)
+            .GroupBy(c => c.SyncRuleId)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.MetaverseAttributeId!.Value).ToList());
 
         var bySystem = references.GroupBy(r => r.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => new ConnectedSystemConfigurationScope
@@ -8161,7 +8194,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 MetaverseObjectTypeIds = g.Select(r => r.MetaverseObjectTypeId).ToHashSet(),
                 MetaverseAttributeIds = g.SelectMany(r => r.FlowTargetAttributeIds
                         .Concat(r.FlowSourceAttributeIds)
-                        .Concat(r.ScopingAttributeIds)
+                        .Concat(scopingAttributeIdsByRule.TryGetValue(r.SyncRuleId, out var scoping) ? scoping : [])
                         .Concat(r.MatchingAttributeIds))
                     .ToHashSet()
             });

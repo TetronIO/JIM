@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
+- ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 
 ### Changed
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
 - 🐛 Trusting an intermediate certificate authority or a server's own certificate now works for SQL Server, as for LDAPS and SCIM; it used to report "Certificate trusted." and still be refused, and the card kept saying untrusted. (#1914)
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)
+- 🐛 Synchronisation Rule scoping criteria nested more than two groups deep are now evaluated; previously the deeper groups were ignored, so such rules could include objects their criteria excluded, and the editor dropped those groups from view after saving. (#348)
 
 ## [0.16.0] - 2026-09-29
 

@@ -254,6 +254,77 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
             "\"Wait until every input has a value\" is the generated-value default (plan Phase 3 point 4)");
     }
 
+    // ─── Never reuse a value (#242, Phase 6, mockup section D) ───
+
+    private const string NeverReuseLabel = "Never reuse a value";
+
+    [Test]
+    public async Task OnlyIfTakenToken_OffersTheNeverReuseSwitch_OnByDefault()
+    {
+        var (provider, _, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var neverReuse = provider.FindComponents<MudSwitch<bool>>().SingleOrDefault(s => s.Instance.Label == NeverReuseLabel);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(neverReuse, Is.Not.Null, "\"number if taken\" offers the choice");
+            Assert.That(mapping().Generation!.NeverReuse, Is.True, "on by default");
+        }
+    }
+
+    [Test]
+    public async Task RandomToken_OffersTheNeverReuseSwitch()
+    {
+        var (provider, tab, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var tokenRadios = provider.FindComponents<MudRadioGroup<GeneratedValueTokenKind>>().Single();
+        await provider.InvokeAsync(() => tokenRadios.Instance.ValueChanged.InvokeAsync(GeneratedValueTokenKind.Random));
+        tab.Render();
+
+        Assert.That(provider.FindComponents<MudSwitch<bool>>().Any(s => s.Instance.Label == NeverReuseLabel), Is.True);
+    }
+
+    [Test]
+    public async Task SequenceToken_HasNoNeverReuseSwitch()
+    {
+        // A Sequence never reuses a value whatever the setting, so it keeps its locked, always-on line instead.
+        var (provider, tab, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var tokenRadios = provider.FindComponents<MudRadioGroup<GeneratedValueTokenKind>>().Single();
+        await provider.InvokeAsync(() => tokenRadios.Instance.ValueChanged.InvokeAsync(GeneratedValueTokenKind.Sequence));
+        tab.Render();
+
+        Assert.That(provider.FindComponents<MudSwitch<bool>>().Any(s => s.Instance.Label == NeverReuseLabel), Is.False);
+    }
+
+    [Test]
+    public async Task TurningNeverReuseOff_IsWrittenToTheMapping()
+    {
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var neverReuse = provider.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == NeverReuseLabel);
+        await provider.InvokeAsync(() => neverReuse.Instance.ValueChanged.InvokeAsync(false));
+        tab.Render();
+
+        Assert.That(mapping().Generation!.NeverReuse, Is.False);
+    }
+
+    [Test]
+    public async Task SwitchingToSequenceAfterTurningNeverReuseOff_TurnsItBackOn()
+    {
+        // The stored flag should say what the engine does: a Sequence never reuses, so leaving it false would make
+        // the REST and PowerShell surfaces report something the flow does not do.
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var neverReuse = provider.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == NeverReuseLabel);
+        await provider.InvokeAsync(() => neverReuse.Instance.ValueChanged.InvokeAsync(false));
+        var tokenRadios = provider.FindComponents<MudRadioGroup<GeneratedValueTokenKind>>().Single();
+        await provider.InvokeAsync(() => tokenRadios.Instance.ValueChanged.InvokeAsync(GeneratedValueTokenKind.Sequence));
+        tab.Render();
+
+        Assert.That(mapping().Generation!.NeverReuse, Is.True);
+    }
+
     // ─── Test scaffolding ───
 
     private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)

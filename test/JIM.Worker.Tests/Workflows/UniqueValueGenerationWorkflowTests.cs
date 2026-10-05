@@ -273,6 +273,176 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
     #endregion
 
+    #region Retired values register (#242, Phase 6)
+
+    [Test]
+    public async Task FullSync_HigherPrioritySourceSupersedesTheGeneratedValue_RetiresItAndRecordsTheOutcomeAsync()
+    {
+        var (ctx, hrCso, overrideAttr) = await SetUpSamePassSupersessionAsync(neverReuse: true);
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        var mvoId = SyncRepo.MetaverseObjects.Values.Single().Id;
+
+        SupplyOverride(hrCso, overrideAttr, "j.bloggs.authoritative");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty);
+            var retired = SyncRepo.RetiredGeneratedValues.Single();
+            Assert.That(retired.Value, Is.EqualTo("joe.bloggs"));
+            Assert.That(retired.MetaverseAttributeId, Is.EqualTo(ctx.MvAccountNameAttributeId));
+            Assert.That(retired.Reason, Is.EqualTo(RetiredGeneratedValueReason.Superseded));
+            Assert.That(retired.FromObjectId, Is.EqualTo(mvoId));
+            Assert.That(retired.ActivityId, Is.EqualTo(activity.Id), "the synchronisation that caused it is recorded for the object's history");
+
+            var outcome = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired);
+            Assert.That(outcome, Is.Not.Null, "the retirement is visible on the Activity");
+            Assert.That(outcome!.DetailMessage, Is.EqualTo("Account Name: joe.bloggs"));
+            Assert.That(outcome!.TargetEntityId, Is.EqualTo(mvoId));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_SupersededWithNeverReuseOff_DeletesTheAssignmentWithoutRetiringAsync()
+    {
+        var (ctx, hrCso, overrideAttr) = await SetUpSamePassSupersessionAsync(neverReuse: false);
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        SupplyOverride(hrCso, overrideAttr, "j.bloggs.authoritative");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty);
+            Assert.That(SyncRepo.RetiredGeneratedValues, Is.Empty, "nothing is written to the register for a flow that reuses values");
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired), Is.False);
+        }
+    }
+
+    [Test]
+    public async Task FullSync_AnotherSystemSupersedes_GeneratingSystemsNextRunRetiresTheValueAsync()
+    {
+        var ctx = await SetUpCrossSystemSupersessionScenarioAsync();
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        await SeedDirectoryOverrideCsoAsync(ctx, "E1", "j.bloggs.authoritative");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        Assert.That(SyncRepo.RetiredGeneratedValues, Is.Empty, "Directory's run cannot see HR's assignment, so nothing is retired yet");
+
+        var hrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        var retired = SyncRepo.RetiredGeneratedValues.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retired.Value, Is.EqualTo("joe.bloggs"));
+            Assert.That(retired.Reason, Is.EqualTo(RetiredGeneratedValueReason.Superseded));
+            Assert.That(retired.ActivityId, Is.EqualTo(hrActivity.Id));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_LeaverDeletedThenJoinerWithTheSameName_JoinerNeverReceivesTheLeaversValueAsync()
+    {
+        // PRD Scenario 13: joe.bloggs is assigned to a leaver whose Metaverse Object is deleted; a new Joe Bloggs
+        // starts and, with Never reuse a value on, receives joe.bloggs1.
+        var ctx = await SetUpBasicGenerationAsync();
+        var leaver = await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        var leaverMvoId = SyncRepo.MetaverseObjects.Values.Single().Id;
+
+        leaver.Status = ConnectedSystemObjectStatus.Obsolete;
+        leaver.LastUpdated = DateTime.UtcNow;
+        var leaverActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.MetaverseObjects, Is.Empty, "precondition: the leaver's Metaverse Object is deleted");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "the assignment goes with its object");
+            var retired = SyncRepo.RetiredGeneratedValues.Single();
+            Assert.That(retired.Value, Is.EqualTo("joe.bloggs"));
+            Assert.That(retired.Reason, Is.EqualTo(RetiredGeneratedValueReason.ObjectDeleted));
+            Assert.That(retired.FromObjectId, Is.EqualTo(leaverMvoId));
+
+            var deletedNode = leaverActivity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+            var retiredOutcome = deletedNode.Children.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired);
+            Assert.That(retiredOutcome, Is.Not.Null, "the retirement is recorded under the deletion that caused it");
+            Assert.That(retiredOutcome!.DetailMessage, Is.EqualTo("Account Name: joe.bloggs"));
+        }
+
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E2");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs1"), "the leaver's value is never issued again");
+    }
+
+    [Test]
+    public async Task FullSync_LeaverDeletedThenJoinerWithTheSameName_NeverReuseOff_JoinerReceivesTheValueAgainAsync()
+    {
+        var ctx = await SetUpBasicGenerationAsync();
+        SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.Generation != null).Generation!.NeverReuse = false;
+        var leaver = await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        leaver.Status = ConnectedSystemObjectStatus.Obsolete;
+        leaver.LastUpdated = DateTime.UtcNow;
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(SyncRepo.RetiredGeneratedValues, Is.Empty, "nothing is retired for a flow that reuses values");
+
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E2");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "with Never reuse off, a rehire may receive the previous value");
+    }
+
+    /// <summary>
+    /// The same-pass supersession topology of
+    /// <see cref="FullSync_HigherPriorityOrdinarySourceLaterSuppliesAValue_SupersedesTheGeneratedValueAndDeletesTheAssignmentAsync"/>:
+    /// a second HR import rule's priority-1 ordinary flow over the same attribute, silent until a test supplies it.
+    /// </summary>
+    private async Task<(GenerationContext Ctx, ConnectedSystemObject HrCso, ConnectedSystemObjectTypeAttribute OverrideAttr)> SetUpSamePassSupersessionAsync(bool neverReuse)
+    {
+        var ctx = await SetUpBasicGenerationAsync(generatedMappingPriority: 2);
+        SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.Generation != null).Generation!.NeverReuse = neverReuse;
+
+        var hrType = SyncRepo.ObjectTypes[ctx.HrCsoTypeId];
+        var overrideAttr = new ConnectedSystemObjectTypeAttribute { Name = "accountNameOverride", Type = AttributeDataType.Text, Selected = true };
+        DbContext.ConnectedSystemAttributes.Add(overrideAttr);
+        await DbContext.SaveChangesAsync();
+        hrType.Attributes.Add(overrideAttr);
+
+        var overrideRule = await CreateImportSyncRuleAsync(ctx.Hr.Id, hrType, ctx.MvType, "HR Override Import", enableProjection: false);
+        overrideRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = overrideRule,
+            SyncRuleId = overrideRule.Id,
+            Priority = 1,
+            TargetMetaverseAttribute = ctx.MvAccountNameAttribute,
+            TargetMetaverseAttributeId = ctx.MvAccountNameAttributeId,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = overrideAttr, ConnectedSystemAttributeId = overrideAttr.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var hrCso = await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        return (ctx, hrCso, overrideAttr);
+    }
+
+    private static void SupplyOverride(ConnectedSystemObject hrCso, ConnectedSystemObjectTypeAttribute overrideAttr, string value) =>
+        hrCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = overrideAttr.Id,
+            Attribute = overrideAttr,
+            StringValue = value
+        });
+
+    #endregion
+
     #region Exhaustion and width
 
     [Test]

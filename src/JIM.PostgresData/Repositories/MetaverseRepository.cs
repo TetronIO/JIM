@@ -721,24 +721,19 @@ public class MetaverseRepository : IMetaverseRepository
                 : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
         }));
 
-        // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group graph; global lists
-        //    all. Nested groups are resolved one level deep, matching GetSyncRulesReferencingAttributeAsync.
+        // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group tree, at any depth
+        //    (a criterion missed here would be left pointing at nothing, and never match); global lists all.
         List<int> scopingCriterionIds;
         if (objectTypeId.HasValue)
         {
             var typeId = objectTypeId.Value;
-            var directCriteria = db.SyncRules
+            var typeRuleIds = await db.SyncRules
                 .Where(sr => sr.MetaverseObjectTypeId == typeId)
-                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
-                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            var childCriteria = db.SyncRules
-                .Where(sr => sr.MetaverseObjectTypeId == typeId)
-                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
-                .SelectMany(g => g.ChildGroups)
-                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            scopingCriterionIds = await directCriteria.Union(childCriteria).ToListAsync();
+                .Select(sr => sr.Id)
+                .ToListAsync();
+            scopingCriterionIds = (await SyncRuleScopingTreeLoader.GetCriterionOwnershipAsync(db, typeRuleIds, attributeId))
+                .Select(c => c.CriterionId)
+                .ToList();
         }
         else
         {
@@ -3093,6 +3088,17 @@ public class MetaverseRepository : IMetaverseRepository
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
+        // One transaction for the whole deletion (Unique Value Generation, #242, Phase 6): the retirement below must
+        // land with the deletion or not at all. A caller already inside a transaction keeps it; this joins it.
+        await using var ownTransaction = Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
+
+        // Retire the object's generated values BEFORE it goes: its assignments are removed by the deletion's
+        // foreign-key cascade, so once the object is deleted there is nothing left to read them from. The portal
+        // and housekeeping callers record no synchronisation outcome, so what was retired is not returned here.
+        await RetiredGeneratedValueSql.RetireForMetaverseObjectsAsync(Repository.Database, [metaverseObject.Id]);
+
         // Null out the FK references in related tables to preserve audit history before deletion.
 
         // Null out FK reference in Activities to preserve audit history
@@ -3139,6 +3145,9 @@ public class MetaverseRepository : IMetaverseRepository
 
         Repository.Database.MetaverseObjects.Remove(metaverseObject);
         await Repository.Database.SaveChangesAsync();
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
     }
 
     /// <summary>

@@ -83,14 +83,16 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Builds the detail DTO with its deletion-rule configuration advisory (#1570) attached, so every
-    /// surface reading an Object Type (portal, REST consumers, PowerShell) sees the same advice.
+    /// Builds the detail DTO with its deletion-rule configuration advisory (#1570) and deletion source
+    /// warnings (#1256) attached, so every surface reading an Object Type (portal, REST consumers,
+    /// PowerShell) sees the same advice.
     /// </summary>
     private async Task<MetaverseObjectTypeDetailDto> BuildObjectTypeDetailDtoAsync(MetaverseObjectType objectType)
     {
         var dto = MetaverseObjectTypeDetailDto.FromEntity(objectType);
         dto.DeletionRuleAdvisory = DeletionRuleConfigurationAdvisor.GetAdvisory(
             objectType.DeletionRule, objectType.Id, await _application.ConnectedSystems.GetSyncRulesAsync());
+        dto.DeletionSourceWarnings = [.. await _application.Metaverse.GetDeletionSourceGapsAsync(objectType)];
         return dto;
     }
 
@@ -1723,6 +1725,42 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var headers = await _application.UniqueValues.GetAssignmentsForMetaverseObjectAsync(id);
         return Ok(headers.Select(GeneratedValueAssignmentHeaderDto.FromModel));
+    }
+
+    /// <summary>
+    /// List a Metaverse Attribute's retired generated values
+    /// </summary>
+    /// <remarks>
+    /// The retired values register for an attribute an import Attribute Flow generates (Unique Value Generation):
+    /// values JIM issued for it and will never issue again, whichever flow generates it, newest first. A value is
+    /// retired when the Metaverse Object that held it is deleted (<c>ObjectDeleted</c>), when another Attribute Flow
+    /// takes the attribute over (<c>Superseded</c>), or when the generating Attribute Flow is removed
+    /// (<c>Recalled</c>), provided the flow has "Never reuse a value" on (always the case for a Sequence). Optionally
+    /// narrowed by <c>search</c>, matched case-insensitively against the value and the name of the object that held
+    /// it. Read-only: the only way to forget retired values is "Start again" on a Sequence flow.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Metaverse Attribute.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize).</param>
+    /// <param name="search">Optional text to match against the value or the holder's name.</param>
+    /// <response code="200">A page of the attribute's retired values.</response>
+    /// <response code="404">Attribute not found.</response>
+    [HttpGet("attributes/{id:int}/retired-generated-values", Name = "GetRetiredGeneratedValuesForMetaverseAttribute")]
+    [ProducesResponseType(typeof(PaginatedResponse<RetiredGeneratedValueDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRetiredGeneratedValuesForMetaverseAttributeAsync(int id, [FromQuery] PaginationRequest pagination, [FromQuery] string? search = null)
+    {
+        _logger.LogTrace("Requested retired generated values for Metaverse Attribute: {Id}", id);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        var (items, total) = await _application.UniqueValues.GetRetiredValuesAsync(
+            id, null, search, pagination.Skip, pagination.PageSize, includeTotalCount: true);
+
+        return Ok(PaginatedResponse<RetiredGeneratedValueDto>.Create(
+            items.Select(RetiredGeneratedValueDto.FromModel), total ?? 0, pagination.Page, pagination.PageSize));
     }
 
     /// <summary>
