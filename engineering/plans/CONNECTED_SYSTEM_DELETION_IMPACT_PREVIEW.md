@@ -240,7 +240,7 @@ The #809 residue pass recalls by provenance with **no** `RemoveContributedAttrib
 - [ ] Fix: skip residue recall for rules whose Connected System Object Type has recall off, mirroring `StrandedValueSweep`.
 - [ ] Changelog `🐛` entry (user-facing data integrity fix).
 
-Lands first so the preview mirrors correct behaviour rather than encoding the defect.
+Lands first so the preview mirrors correct behaviour rather than encoding the defect. Fixed as part of this work (decision 2).
 
 ### Phase 1: read-only deprovisioning harness
 
@@ -264,6 +264,10 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 - [ ] Dialog summary block, running and immediate-mode lines, `previewActivityId` passed only when current (bUnit).
 - [ ] Panel changes listed under Transitions: consequence-then-count order, verdict omissions, takeover "Applies to", contributor-named values, adapter empty copy (bUnit for the ordering and omission logic; copy verified by eye).
 - [ ] "Informed by preview" on Activity detail.
+- [ ] Copy (text-only, verified by eye):
+  - Delete dialog, "Joined" note: "related objects; deprovisioned per the choice above" reads as though every joined Metaverse Object will be deprovisioned. Becomes "disconnected from this system; they stay in the Metaverse unless this was their last connector, below".
+  - Delete dialog, "Eligible for deletion rules" note: "their own rules decide, when deprovisioning" wrongly implies the immediate mode skips them. Becomes "this system is their last connector; their Object Type's deletion rule decides".
+  - Shared preview panel staleness line: "An import since then may have moved the answer." becomes "An import since then may change the preview results."
 - [ ] Runtime validation on the sandbox stack against a two-HR-source fixture; screenshots against the artefact.
 
 ### Phase 4: REST and PowerShell
@@ -312,8 +316,8 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 | Reference-recall exports have no preview path anywhere yet | Covered in Phase 1; if it slips, a warning finding states the gap rather than silently omitting it |
 | Phase 0 changes shipped behaviour | It aligns execution with the decided PRD behaviour; changelog states it |
 
-## Decisions for the product owner
+## Decisions
 
-1. **Placement:** host the preview on the Danger Zone tab with a compact summary in the dialog (recommended, matches every other surface and survives long runs), or widen the dialog and host the panel in it.
-2. **Phase 0:** confirm the residue pass should honour the recall setting (recommended, per PRD decision 3), as the bottom stack layer.
-3. **Same-value takeovers:** show as a quiet group, omitted from the verdict and sorted last, which means changing the summary order to consequence-then-count for every surface (recommended); or hide them entirely.
+1. **Placement** (open): host the preview on the Danger Zone tab with a compact summary in the dialog (A, recommended: matches every other surface and survives long runs), or widen the dialog and host the panel beside the consent controls (B: evidence and consent side by side, but a modal to wait in for minutes, a size prompt stacked on a dialog, and a cramped drill-down). Both are mocked in the UX artefact.
+2. **Phase 0** (decided, product owner, 2026-10-05): the residue pass honours the recall setting, fixed as part of this work as the bottom stack layer.
+3. **Same-value takeovers** (decided, product owner, 2026-10-05): a quiet group, omitted from the verdict and sorted last; the summary grid sorts by consequence then count on every surface.
