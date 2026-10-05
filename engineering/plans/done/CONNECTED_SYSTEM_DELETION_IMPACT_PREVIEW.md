@@ -1,6 +1,6 @@
 # Connected System Deletion Impact Preview - Implementation Plan
 
-- **Status:** Doing (Phases 0 to 4 complete)
+- **Status:** Done
 - **Issue:** [#134](https://github.com/TetronIO/JIM/issues/134)
 - **PRD:** [`engineering/prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (FR 6-11; decisions 2-5 of 2026-08-29)
 - **Framework:** [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](../done/CONFIGURATION_CHANGE_PREVIEW.md) (#827); execution side [`engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (#809)
@@ -283,11 +283,11 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 
 ### Phase 5: integration, docs, close-out
 
-- [ ] Integration scenario (extending the Attribute Priority fixture): preview, assert verdict and groups; delete with the preview; assert execution matches.
+- [x] Integration scenario (extending the Attribute Priority fixture): preview, assert verdict and groups; delete with the preview; assert execution matches. Scenario 014's `DeletionImpactPreview` runs last, holds every scalar takeover, clearance and eligibility to what the deletion did, and checks the Activity records the preview; it asserts against whatever state the earlier steps leave rather than predicting it. Its first full run found that the deletion itself could never succeed: removing a Scoping Criteria group (the Out-of-Scope step does) severed it from its rule instead of deleting it, and the orphan's criterion refused the attribute delete with 23503. Fixed here, in the save path and with a sweep in the deletion sequence for deployments already holding orphans, the #1589 pattern; the full scenario then passed 24 of 24.
 - [x] Docs: deleting a Connected System, reading the deletion impact preview; changelog `✨` entry.
 - [x] Correct the stale references: #134's `docs/CONNECTED_SYSTEM_DELETION_DESIGN.md` path, and the `plans/doing/` paths in `DeleteConnectedSystemDialog` and `ConsequenceConfirmationDialog` comments (and three more dialogs carrying the same stale #827 path).
 - [x] Remove or populate `ConnectedSystemDeletionPreview.MvosWithOtherConnectorsCount` and `MvosWithGracePeriodCount`, which are never set. Populated: both were in the REST response from the start, always reading zero, and removing them would have broken callers for no gain.
-- [ ] Move this plan to `done/` in the PR that closes #134.
+- [x] Move this plan to `done/` in the PR that closes #134.
 
 ## Success Criteria
 
