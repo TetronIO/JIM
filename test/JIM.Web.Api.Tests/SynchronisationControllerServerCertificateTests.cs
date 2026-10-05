@@ -127,6 +127,30 @@ public class SynchronisationControllerServerCertificateTests
     }
 
     [Test]
+    public async Task GetServerCertificateAsync_ReturnsTheChainWithWhereEachCertificateCameFromAsync()
+    {
+        // Surface parity with the portal's chain listing (#1914): a script choosing what to trust needs the same view.
+        var reading = ReadingOf(_leaf);
+        reading.Diagnostic.Chain =
+        [
+            new ServerCertificateChainElement { Subject = _leaf.Subject, Thumbprint = _leaf.Thumbprint, Source = ServerCertificateChainElementSource.SentByServer },
+            new ServerCertificateChainElement { Subject = "CN=Corp Root CA", Thumbprint = "CC", IsSelfSigned = true, Source = ServerCertificateChainElementSource.Downloaded, DownloadedFrom = "http://pki.corp.local/root.crt" }
+        ];
+        reading.Diagnostic.RootThumbprint = "CC";
+        GivenTheServerPresents(reading);
+
+        var result = await _controller.GetServerCertificateAsync(ConnectedSystemId) as OkObjectResult;
+
+        var response = (ServerCertificateResponse)result!.Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.Certificate.RootThumbprint, Is.EqualTo("CC"));
+            Assert.That(response.Certificate.Chain.Select(e => e.Source), Is.EqualTo(new[] { ServerCertificateChainElementSource.SentByServer, ServerCertificateChainElementSource.Downloaded }));
+            Assert.That(response.Certificate.Chain[1].DownloadedFrom, Is.EqualTo("http://pki.corp.local/root.crt"));
+        }
+    }
+
+    [Test]
     public async Task GetServerCertificateAsync_WithAnUnknownConnectedSystem_ReturnsNotFoundAsync()
     {
         _mockConnectedSystemRepo
@@ -251,6 +275,46 @@ public class SynchronisationControllerServerCertificateTests
     }
 
     [Test]
+    public async Task TrustServerCertificateAsync_WhenACertificateAuthorityInTheChainCannotBeReliedOn_ReturnsBadRequestAndTrustsNothingAsync()
+    {
+        var reading = ReadingOf(_leaf);
+        reading.Diagnostic.FailureReason = ServerCertificateFailureReason.InvalidChain;
+        reading.Diagnostic.Remediation = "Corp Issuing CA expired on 1 Jan 2026.";
+        GivenTheServerPresents(reading);
+
+        var result = await _controller.TrustServerCertificateAsync(ConnectedSystemId, new TrustServerCertificateRequest { Thumbprint = _leaf.Thumbprint }) as BadRequestObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(((TrustServerCertificateResponse)result!.Value!).Outcome, Is.EqualTo(ServerCertificateTrustOutcome.InvalidChain));
+            _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WithARootAboveAnIntermediateJimDownloaded_ReportsTheIntermediateWasStoredTooAsync()
+    {
+        var intermediate = Describe("CN=Corp Issuing CA", ServerCertificateChainElementSource.Downloaded);
+        var root = Describe("CN=Corp Root CA", ServerCertificateChainElementSource.Downloaded);
+        GivenTheServerPresents(new ServerCertificateReading
+        {
+            Diagnostic = ReadingOf(_leaf).Diagnostic,
+            Chain = new PresentedServerCertificateChain { Host = "hr.corp.local", Port = 443, ReadAt = DateTime.UtcNow, Leaf = _leaf, Intermediates = [intermediate], Root = root }
+        });
+
+        var result = await _controller.TrustServerCertificateAsync(ConnectedSystemId, new TrustServerCertificateRequest { Thumbprint = root.Thumbprint }) as ObjectResult;
+
+        var response = (TrustServerCertificateResponse)result!.Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.StatusCode, Is.EqualTo(StatusCodes.Status201Created));
+            Assert.That(response.Certificate!.Thumbprint, Is.EqualTo(root.Thumbprint));
+            Assert.That(response.StoredIntermediates.Select(c => c.Thumbprint), Is.EqualTo(new[] { intermediate.Thumbprint }));
+        }
+    }
+
+    [Test]
     public async Task TrustServerCertificateAsync_WhenTheCertificateIsAlreadyTrusted_ReturnsOkAsync()
     {
         _mockCertRepo.Setup(r => r.ExistsByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(true);
@@ -306,31 +370,58 @@ public class SynchronisationControllerServerCertificateTests
             .ReturnsAsync(connectedSystem);
     }
 
-    private void GivenTheServerPresentsItsCertificate()
+    private void GivenTheServerPresentsItsCertificate() => GivenTheServerPresents(ReadingOf(_leaf));
+
+    private void GivenTheServerPresents(ServerCertificateReading reading)
     {
         _mockReader
             .Setup(r => r.Read(It.IsAny<SecureEndpoint>(), It.IsAny<IReadOnlyCollection<X509Certificate2>>()))
-            .Returns(new ServerCertificateReading
+            .Returns(reading);
+    }
+
+    private static PresentedServerCertificate Describe(string subject, ServerCertificateChainElementSource source)
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(5));
+
+        return new PresentedServerCertificate
+        {
+            Thumbprint = certificate.Thumbprint,
+            Subject = certificate.Subject,
+            Issuer = certificate.Issuer,
+            ValidFrom = certificate.NotBefore.ToUniversalTime(),
+            ValidTo = certificate.NotAfter.ToUniversalTime(),
+            Data = certificate.Export(X509ContentType.Cert),
+            Source = source,
+            DownloadedFrom = source == ServerCertificateChainElementSource.Downloaded ? "http://pki.corp.local/aia/ca.crt" : null
+        };
+    }
+
+    private static ServerCertificateReading ReadingOf(PresentedServerCertificate leaf)
+    {
+        return new ServerCertificateReading
+        {
+            Diagnostic = new ServerCertificateDiagnostic
             {
-                Diagnostic = new ServerCertificateDiagnostic
-                {
-                    Host = "hr.corp.local",
-                    Port = 443,
-                    Subject = _leaf.Subject,
-                    Issuer = _leaf.Issuer,
-                    Thumbprint = _leaf.Thumbprint,
-                    IsSelfSigned = true,
-                    FailureReason = ServerCertificateFailureReason.UntrustedIssuer
-                },
-                Chain = new PresentedServerCertificateChain
-                {
-                    Host = "hr.corp.local",
-                    Port = 443,
-                    ReadAt = DateTime.UtcNow,
-                    IsSelfSigned = true,
-                    Leaf = _leaf
-                }
-            });
+                Host = "hr.corp.local",
+                Port = 443,
+                Subject = leaf.Subject,
+                Issuer = leaf.Issuer,
+                Thumbprint = leaf.Thumbprint,
+                IsSelfSigned = true,
+                FailureReason = ServerCertificateFailureReason.UntrustedIssuer
+            },
+            Chain = new PresentedServerCertificateChain
+            {
+                Host = "hr.corp.local",
+                Port = 443,
+                ReadAt = DateTime.UtcNow,
+                IsSelfSigned = true,
+                Leaf = leaf
+            }
+        };
     }
 
     private class StubConnectorFactory : IConnectorFactory

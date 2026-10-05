@@ -73,8 +73,10 @@ public class TrustServerCertificateRequest : ServerCertificateDraftSettings
 {
     /// <summary>
     /// The thumbprint being trusted, as read from the server. Required: JIM will not trust whatever a server happens
-    /// to be presenting. Matched against the certificate the server presents now and against the authority that
-    /// issued it; whichever matches is what gets trusted. Spaces and colons between the pairs are ignored.
+    /// to be presenting. Matched against every certificate in the chain JIM assembles when it reads the server again
+    /// (the server's own, an intermediate certificate authority, or the root); whichever matches is what gets
+    /// trusted. Any of them makes the connection work; the higher in the chain, the more renewals the decision
+    /// survives. Spaces and colons between the pairs are ignored.
     /// </summary>
     public string Thumbprint { get; set; } = string.Empty;
 
@@ -112,6 +114,13 @@ public class TrustServerCertificateResponse
 
     public string? PresentedThumbprint { get; set; }
 
+    /// <summary>
+    /// Certificate authorities JIM stored alongside the trusted certificate because it downloaded them rather than
+    /// the server sending them; without them a connection could not link the trusted certificate to the server's.
+    /// Empty unless the outcome is <see cref="ServerCertificateTrustOutcome.Trusted"/>.
+    /// </summary>
+    public List<TrustedCertificateDetailDto> StoredIntermediates { get; set; } = [];
+
     public static TrustServerCertificateResponse FromResult(ServerCertificateTrustResult result)
     {
         return new TrustServerCertificateResponse
@@ -120,7 +129,8 @@ public class TrustServerCertificateResponse
             Message = result.Message,
             Certificate = result.Certificate == null ? null : TrustedCertificateDetailDto.FromEntity(result.Certificate),
             ExpectedThumbprint = result.ExpectedThumbprint,
-            PresentedThumbprint = result.PresentedThumbprint
+            PresentedThumbprint = result.PresentedThumbprint,
+            StoredIntermediates = result.StoredIntermediates.Select(TrustedCertificateDetailDto.FromEntity).ToList()
         };
     }
 }

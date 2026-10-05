@@ -388,9 +388,9 @@ There is no per Connected System option to relax any of this.
 
 #### Trusting an internal certificate authority, or a self-signed certificate
 
-**The quickest route is the certificate JIM already shows you.** When an LDAPS connection is refused because JIM does not trust the issuer, the certificate card carries a **Trust this certificate** action. JIM reads the certificate from the directory server again, checks it is still the one you were shown, and adds it to the Trusted Certificates store. There is nothing to obtain, export or upload.
+**The quickest route is the certificate JIM already shows you.** When an LDAPS connection is refused because JIM does not trust the issuer, the certificate card shows the certificate chain JIM found, from the root down to the directory server's own certificate, and where each came from: sent by the server, or downloaded from the address the certificate below it names. Its **Choose what to trust** action lets you trust any certificate in that chain. JIM reads the chain from the directory server again, checks your choice is still in it, and adds it to the Trusted Certificates store. There is nothing to obtain, export or upload.
 
-You are asked to confirm first, because this is a security decision: compare the thumbprint against the one the directory's administrator gives you. Where the server sent the authority that issued its certificate, JIM offers that as well and recommends it, because trusting the authority survives the server's certificate being renewed. A self-signed certificate has no separate authority, so there is only one thing to trust.
+You are asked to confirm first, because this is a security decision: compare the thumbprint against the one the directory's administrator gives you. Every choice makes the connection work; they differ in how long the decision lasts. JIM recommends the root, because it survives the renewal of every certificate beneath it, including the directory server's own. Trusting the server's own certificate has to be repeated each time it is renewed. Where JIM had to download an intermediate authority to reach the one you chose, it stores that alongside, because the LDAP connection does not download certificates itself. A self-signed certificate has no separate authority, so there is only one thing to trust.
 
 Reading the certificate again at the moment you confirm is what makes a change detectable. If the server is presenting something other than what you were shown, JIM trusts nothing and shows you both thumbprints; expected after a renewal, worth investigating otherwise.
 
@@ -398,7 +398,7 @@ Reading the certificate again at the moment you confirm is what makes a change d
 
 You can still upload a certificate by hand via **Admin > Certificates**, which is the route to take when the directory is not reachable from JIM at the time you are configuring it. Both kinds work:
 
-- **An internal certificate authority**<br /> Upload the CA (and any intermediates). Every directory server whose certificate it issued is then trusted.
+- **An internal certificate authority**<br /> Upload the root CA, plus any intermediates the directory server does not send. Every directory server whose certificate it issued is then trusted. Uploading an intermediate on its own also works, and covers what that intermediate issues.
 - **The directory server's own self-signed certificate**<br /> Upload the server certificate itself. Only that certificate is then trusted, which is the tighter option where a directory has no certificate authority behind it.
 
 Certificates added this way are trusted **in addition to** the operating system's trust store, so adding one never stops a publicly-issued or already-trusted certificate from working.
@@ -407,11 +407,11 @@ To do the same from a script:
 
 ```powershell
 $reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+$reading.certificate.chain | Format-Table subject, source, downloadedFrom
 
 Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-    -Thumbprint $reading.certificate.issuerThumbprint `
-    -ChangeReason 'Trusting the corporate issuing CA.'
+    -Thumbprint $reading.certificate.rootThumbprint `
+    -ChangeReason 'Trusting the corporate root CA.'
 ```
 
 #### When the certificate name does not match the host you connect to

@@ -104,6 +104,27 @@ public class ServerCertificateCardTests : JimComponentTestContext
         Assert.That(cut.Markup, Does.Contain("Expired"));
     }
 
+    /// <summary>
+    /// "No problem found" is the good outcome (JIM trusts the certificate, or the connection failed for some other
+    /// reason), so it must not be presented as a refusal.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithNothingWrong_PresentsTheVerdictAsGood()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.None)));
+
+        Assert.That(cut.Find(".jim-certificate-verdict").ClassList, Does.Contain("jim-certificate-verdict-ok"));
+    }
+
+    [TestCase(ServerCertificateFailureReason.UntrustedIssuer)]
+    [TestCase(ServerCertificateFailureReason.Expired)]
+    public void ServerCertificateCard_WithAProblem_PresentsTheVerdictAsARefusal(ServerCertificateFailureReason reason)
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(reason)));
+
+        Assert.That(cut.Find(".jim-certificate-verdict").ClassList, Does.Not.Contain("jim-certificate-verdict-ok"));
+    }
+
     [Test]
     public void ServerCertificateCard_ShowsTheRemediation()
     {
@@ -156,6 +177,7 @@ public class ServerCertificateCardTests : JimComponentTestContext
     [TestCase(ServerCertificateFailureReason.NotYetValid)]
     [TestCase(ServerCertificateFailureReason.NameMismatch)]
     [TestCase(ServerCertificateFailureReason.NoCertificatePresented)]
+    [TestCase(ServerCertificateFailureReason.InvalidChain)]
     public void ServerCertificateCard_WhereTrustingWouldNotHelp_DoesNotOfferTheTrustAction(ServerCertificateFailureReason reason)
     {
         var cut = Render<ServerCertificateCard>(p => p
@@ -207,6 +229,80 @@ public class ServerCertificateCardTests : JimComponentTestContext
             .Add(c => c.ConnectedSystemId, 42));
 
         Assert.That(cut.Markup, Does.Contain("no separate authority to trust"));
+    }
+
+    #endregion
+
+    #region The certificate chain
+
+    private static ServerCertificateDiagnostic WithChain(bool complete)
+    {
+        var diagnostic = Diagnostic(ServerCertificateFailureReason.UntrustedIssuer);
+        diagnostic.Chain =
+        [
+            new ServerCertificateChainElement { Subject = "CN=dc01.corp.local", Issuer = "CN=Corp Issuing CA", Thumbprint = "AA", Source = ServerCertificateChainElementSource.SentByServer },
+            new ServerCertificateChainElement { Subject = "CN=Corp Issuing CA", Issuer = "CN=Corp Root CA", Thumbprint = "BB", IsCertificateAuthority = true, Source = ServerCertificateChainElementSource.SentByServer }
+        ];
+
+        if (complete)
+        {
+            diagnostic.Chain.Add(new ServerCertificateChainElement
+            {
+                Subject = "CN=Corp Root CA", Issuer = "CN=Corp Root CA", Thumbprint = "CC", IsCertificateAuthority = true, IsSelfSigned = true,
+                Source = ServerCertificateChainElementSource.Downloaded, DownloadedFrom = "http://pki.corp.local/aia/root.crt"
+            });
+            diagnostic.IsChainComplete = true;
+            diagnostic.RootThumbprint = "CC";
+        }
+        else
+        {
+            diagnostic.MissingIssuer = "CN=Corp Root CA";
+        }
+
+        return diagnostic;
+    }
+
+    [Test]
+    public void ServerCertificateCard_WithAChain_ListsItFromTheRootDownToTheServer()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, WithChain(complete: true)));
+
+        var rows = cut.FindAll("[data-testid='jim-certificate-chain-element']").Select(row => row.TextContent).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(3));
+            Assert.That(rows[0], Does.Contain("Corp Root CA"));
+            Assert.That(rows[1], Does.Contain("Corp Issuing CA"));
+            Assert.That(rows[2], Does.Contain("dc01.corp.local"));
+        }
+    }
+
+    [Test]
+    public void ServerCertificateCard_WithAnIncompleteChain_NamesTheCertificateJimCouldNotFind()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, WithChain(complete: false)));
+
+        Assert.That(cut.Find("[data-testid='jim-certificate-chain-missing']").TextContent, Does.Contain("Corp Root CA"));
+    }
+
+    [Test]
+    public void ServerCertificateCard_WithACompleteChain_DoesNotReportAnythingMissing()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, WithChain(complete: true)));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-missing']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// Diagnostics recorded on Activities before JIM described chains have none; the card shows what it has.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithoutAChain_ShowsNoChainSection()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.UntrustedIssuer)));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-element']"), Is.Empty);
     }
 
     #endregion

@@ -151,9 +151,9 @@ Every secret is encrypted at rest and is never written to a log.
 
 A provider using a certificate JIM does not yet trust (an internal certificate authority, or a self-signed certificate) fails the connection test. JIM shows you the certificate the provider presented: its subject, the names it was issued for, its issuer, validity dates and thumbprint, along with which check it failed and what to do about it. The same detail appears on a failed Activity and on the Activity's `errorDetail` field in the REST API.
 
-**Trusting the certificate is the recommended way to unblock this, and JIM offers it on the certificate itself.** Select **Trust this certificate** on the card, and JIM reads the certificate from the provider again, checks it is still the one you were shown, and adds it to the Trusted Certificates store. You never have to obtain the certificate file by other means, which for a hosted service is often the hardest part of the exercise.
+**Trusting the certificate is the recommended way to unblock this, and JIM offers it on the certificate itself.** The card shows the certificate chain JIM found, from the root down to the provider's own certificate, and where each came from. Select **Choose what to trust** (or **Trust this certificate**, where JIM found only the provider's own), and JIM reads the chain from the provider again, checks your choice is still in it, and adds it to the Trusted Certificates store. You never have to obtain the certificate file by other means, which for a hosted service is often the hardest part of the exercise.
 
-You are asked to confirm before anything is added, because this is a security decision. Compare the thumbprint against the one the provider's administrator gives you first. Where the provider sent the authority that issued its certificate, JIM offers that as well and recommends it: trusting the authority survives the provider's own certificate being renewed, whereas trusting the certificate itself has to be repeated each time. A self-signed certificate has no separate authority, so there is only one thing to trust.
+You are asked to confirm before anything is added, because this is a security decision. Compare the thumbprint against the one the provider's administrator gives you first. Every certificate in the chain makes the connection work; they differ in how long the decision lasts. JIM recommends the root, which survives the renewal of every certificate beneath it, whereas trusting the provider's own certificate has to be repeated each time it is renewed. A self-signed certificate has no separate authority, so there is only one thing to trust.
 
 Reading the certificate again at the moment you confirm is what makes a change detectable. If the provider is presenting something other than what you were shown, JIM trusts nothing and shows you both thumbprints, which is expected after a renewal and worth investigating otherwise.
 
@@ -168,10 +168,10 @@ To do the same from a script:
 
 ```powershell
 $reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+$reading.certificate.chain | Format-Table subject, source, downloadedFrom
 
 Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-    -Thumbprint $reading.certificate.thumbprint `
+    -Thumbprint ($reading.certificate.rootThumbprint ?? $reading.certificate.thumbprint) `
     -ChangeReason 'Unblocking the HR Cloud connection test.'
 ```
 
