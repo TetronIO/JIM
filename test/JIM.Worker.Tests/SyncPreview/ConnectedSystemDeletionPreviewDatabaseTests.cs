@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers.Preview;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -92,23 +93,38 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
         await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
-    [TestCase(true, TestName = "PreviewSynchronisedDeprovisioningAsync_TrackingContextSavedAfterwards_LeavesTheIntegrityTablesByteIdenticalAsync")]
-    [TestCase(false, TestName = "PreviewSynchronisedDeprovisioningAsync_NoTrackingContext_LeavesTheIntegrityTablesByteIdenticalAsync")]
-    public async Task PreviewSynchronisedDeprovisioningAsync_LeavesTheIntegrityTablesByteIdenticalAsync(bool tracking)
+    [TestCase(true, TestName = "DeletionPreviewAdapter_EveryStageOnATrackingContextSavedAfterwards_LeavesTheIntegrityTablesByteIdenticalAsync")]
+    [TestCase(false, TestName = "DeletionPreviewAdapter_EveryStageOnANoTrackingContext_LeavesTheIntegrityTablesByteIdenticalAsync")]
+    public async Task DeletionPreviewAdapter_EveryStage_LeavesTheIntegrityTablesByteIdenticalAsync(bool tracking)
     {
         var topology = await SeedAsync();
         var before = await DatabaseIsolationSnapshot.CaptureAsync(_connectionString, WatchedTables);
 
+        List<PreviewValidationFinding> findings;
+        PreviewCostEstimate estimate;
+        List<PreviewImpactCount> counts;
         var deltas = new List<PreviewDelta>();
         await using (var ctx = NewContext(tracking))
         {
             var repo = new PostgresDataRepository(ctx);
             using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
-            await foreach (var delta in jim.ConnectedSystems.PreviewSynchronisedDeprovisioningAsync(topology.HrSystemId))
+            var adapter = new ConnectedSystemDeletionPreviewAdapter(jim);
+            var context = new PreviewContext
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion,
+                ActivityId = Guid.CreateVersion7(),
+                TargetId = topology.HrSystemId,
+                ProposedConfiguration = new ConnectedSystemDeletionProposal()
+            };
+
+            // Every stage, in the framework's order, on one context: the framework saves its progress and results on
+            // that context between them, and on the Worker the context tracks. Nothing a stage touched may ride along.
+            findings = await adapter.ValidateAsync(context);
+            estimate = await adapter.EstimateCostAsync(context);
+            counts = await adapter.CountImpactAsync(context);
+            await foreach (var delta in adapter.EvaluateDeltasAsync(context, CancellationToken.None))
                 deltas.Add(delta);
 
-            // The preview framework saves its progress and results on the same context between and after pages; on the
-            // Worker that context tracks. Nothing the preview touched may ride along with that save.
             await ctx.SaveChangesAsync();
         }
 
@@ -116,6 +132,13 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(() => after.AssertUnchangedSince(before), Throws.Nothing);
+            Assert.That(findings, Is.Empty);
+            Assert.That(estimate, Is.EqualTo(new PreviewCostEstimate(1, 2)), "one HR object, contributing DisplayName and Description");
+            Assert.That(counts.Select(c => (c.TransitionType, c.ObjectCount)), Is.EquivalentTo(new[]
+            {
+                (ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 1),
+                (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, 1)
+            }));
             Assert.That(deltas.Where(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor).Select(d => d.AttributeName),
                 Is.EquivalentTo(new[] { "DisplayName", "Description" }), "the preview must have found what the deletion would clear");
             Assert.That(deltas.Where(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport).Select(d => d.ConnectedSystemObjectId),

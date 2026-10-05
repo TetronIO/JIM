@@ -162,6 +162,33 @@ public class ConfigurationChangePreviewServerTests
     }
 
     [Test]
+    public async Task StartPreviewAsync_ConnectedSystemDeletion_AttachesTheActivityToTheSystemAsync()
+    {
+        // A deletion preview must be findable from the system it previewed, like its import scope and schema previews,
+        // because the Danger Zone reattaches to it from there.
+        _adapter = new FakePreviewAdapter { Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion };
+        var request = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion,
+            TargetId = 42,
+            TargetName = "Old HR System",
+            ProposedConfiguration = new FakeProposal("delete", 0),
+            InitiatedByType = ActivityInitiatorType.User,
+            InitiatedById = Guid.CreateVersion7(),
+            InitiatedByName = "Ada Lovelace"
+        };
+
+        await NewServer().StartPreviewAsync(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_activity!.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystem));
+            Assert.That(_activity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Preview));
+            Assert.That(_activity!.ConnectedSystemId, Is.EqualTo(42));
+        }
+    }
+
+    [Test]
     public async Task StartPreviewAsync_Findings_ArePersistedForThePanelToReadAsync()
     {
         _adapter.Findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning, "No trigger systems are selected."));

@@ -28,6 +28,7 @@ public static class ConfigurationChangePreviewSurfaces
         ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour => ActivityTargetType.SynchronisationRule,
         ConfigurationChangePreviewSurface.ConnectedSystem => ActivityTargetType.ConnectedSystem,
         ConfigurationChangePreviewSurface.ConnectedSystemSchema => ActivityTargetType.ConnectedSystem,
+        ConfigurationChangePreviewSurface.ConnectedSystemDeletion => ActivityTargetType.ConnectedSystem,
         ConfigurationChangePreviewSurface.MetaverseObjectType => ActivityTargetType.MetaverseObjectType,
         ConfigurationChangePreviewSurface.MetaverseAttribute => ActivityTargetType.MetaverseAttribute,
         ConfigurationChangePreviewSurface.ObjectMatching => ActivityTargetType.ObjectMatchingRule,

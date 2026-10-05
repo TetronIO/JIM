@@ -1,6 +1,6 @@
 # Connected System Deletion Impact Preview - Implementation Plan
 
-- **Status:** Doing (Phase 0 complete)
+- **Status:** Doing (Phases 0 to 2 complete)
 - **Issue:** [#134](https://github.com/TetronIO/JIM/issues/134)
 - **PRD:** [`engineering/prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (FR 6-11; decisions 2-5 of 2026-08-29)
 - **Framework:** [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](../done/CONFIGURATION_CHANGE_PREVIEW.md) (#827); execution side [`engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (#809)
@@ -197,9 +197,9 @@ REST mirrors both: `POST /api/v1/connected-systems/{id}/deletion/preview` (202 w
 
 - Surface `ConnectedSystemDeletion = 10` (append-only), mapped to `ActivityTargetType.ConnectedSystem`, with a `BuildActivity` case and registration.
 - Proposal `ConnectedSystemDeletionProposal`: no fields beyond the target id, which travels on `PreviewContext.TargetId`. It always previews deprovisioning through synchronisation; the immediate mode has no per-object consequences beyond eligibility, which the portal states as a contrast line rather than a second preview.
-- `ValidateAsync`: blocking finding when the system is mid-deletion with no surviving task; warning findings for derived flows (inputs are marked, not re-derived) and for reference-recall exports if Phase 1 has not covered them.
-- `EstimateCostAsync`: Connected System Object count, with a deltas-per-object constant measured on the integration fixture.
-- `CountImpactAsync`: streams `EvaluateDeltasAsync`, as every engine-driven adapter does, documenting the departure from set-based SQL.
+- `ValidateAsync`: blocking finding when the system no longer exists or is already being deleted (part of what a preview would describe has happened); blocking when the surviving derived flows form a cycle, which the real run refuses; one warning per Metaverse attribute the deletion withdraws that a surviving derived flow reads, naming the hosting systems (the real run marks those objects for re-derivation rather than re-deriving, so the derived values are not shown). Reference recall needed no warning: Phase 1 covers it.
+- `EstimateCostAsync`: Connected System Object count by the distinct Metaverse attributes the system's import rules contribute (enabled or not, since the residue pass recalls by provenance), read from the store the real run sizes itself from. Data-derived rather than a constant measured on one fixture, so it tracks each system's shape.
+- `CountImpactAsync`: streams `EvaluateDeltasAsync`, as every engine-driven adapter does, documenting the departure from set-based SQL. One count per transition, of distinct objects (the target's object for export transitions, the Metaverse Object otherwise), because the verdict states each count as "N objects would ...".
 
 **Transitions** (append to `ActivityRunProfileExecutionItemSyncOutcomeType`, display entries in `OutcomeDisplayMap`, vocabulary tests):
 
@@ -250,19 +250,19 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 
 ### Phase 1: read-only deprovisioning harness
 
-- [ ] Shared clone helper; `BuildRecallPriorityContextAsync` made internal.
-- [ ] End-state remaining-connector decorator.
-- [ ] Harness over the obsoletion core with evaluate-only deletion and no generated-value resolver.
-- [ ] Recall-aware outbound staging via the pure engine, export-scope exits, immediate-deletion exports.
-- [ ] Read-only residue pass.
-- [ ] **Equivalence test (the guarantee):** on one PostgreSQL fixture covering takeovers, clears, same-value takeovers, recall-off types, grace and immediate deletion, export-scope exits and stranded values, run the harness, then run the real #809 execution, and assert the Metaverse attribute changes, eligibility decisions and staged Pending Exports match the preview's deltas exactly.
-- [ ] Zero-side-effects test: row counts and `xmin` of every touched table unchanged after a preview.
+- [x] Preview-owned clones of each page's Connected System Objects and Metaverse Objects (one Metaverse clone per page, so two of the system's objects joined to one identity act on one working copy).
+- [x] End-state remaining connectors: the evaluate-only deletion delegate strips every one of the deleted system's objects before asking the engine.
+- [x] Harness over the obsoletion core with evaluate-only deletion and no generated-value resolver (`ConnectedSystemServer.PreviewSynchronisedDeprovisioningAsync`).
+- [x] Recall-aware outbound staging (`EvaluateOutboundPreviewForMaterialisedMvosAsync` with recall semantics), export-scope exits, immediate-deletion cascades, last-connector marking after a scope-exit disconnect.
+- [x] Read-only residue pass, skipping recall-off types as the fixed executor does.
+- [x] **Equivalence (the guarantee):** `ConnectedSystemDeletionPreviewWorkflowTests` previews, then runs the real #809 execution on the same state, and asserts the two describe identical facts (values cleared and taken over with their new source, eligibility, values kept, export updates and deletions, disconnections) across sole contributor, takeover with a different and the same value, recall-off types, export-scope exits with Delete and Disconnect, last connector immediate and with grace, the authoritative-source cascade, stranded values, and Manager references both taken over and cleared. These run on the in-memory harness, where both sides share one store.
+- [x] Zero side effects on PostgreSQL (`ConnectedSystemDeletionPreviewDatabaseTests`): every adapter stage on one context, then the caller's save, leaves the integrity tables plus everything the deletion writes byte-identical (content digests, not only counts), under tracking and NoTracking. Checked red: working on the tracked originals instead of clones fails it. The same fixture runs the real executor and proves the scope-exit Delete is staged and the run completes.
 
 ### Phase 2: adapter and transitions
 
-- [ ] Surface, proposal, adapter, registration, `BuildActivity` case, surface tests.
-- [ ] New transitions with ordinal pins, display entries and vocabulary tests.
-- [ ] Classification unit tests per transition, including the same-value takeover and frozen-value cases.
+- [x] Surface `ConnectedSystemDeletion = 10`, `ConnectedSystemDeletionProposal`, `ConnectedSystemDeletionPreviewAdapter`, registration, `BuildActivity` case, surface tests (`ConnectedSystemDeletionPreviewAdapterTests`, server and model surface tests).
+- [x] New transitions with ordinal pins, display entries and vocabulary tests.
+- [x] Classification tests per transition, including the same-value takeover and frozen-value cases.
 
 ### Phase 3: portal
 
@@ -319,7 +319,7 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 | Cost at large scale | Worker dispatch above the threshold, paged clones, sampling prompt, cancellation honoured per page |
 | Administrators read a stale answer | Import and configuration-change staleness; dialog links only a current preview |
 | Same-value takeovers drown the real changes | Separate Info transition, excluded from the verdict, sorted last |
-| Reference-recall exports have no preview path anywhere yet | Covered in Phase 1; if it slips, a warning finding states the gap rather than silently omitting it |
+| Reference-recall exports have no preview path anywhere yet | Covered in Phase 1 and proven equal to execution for a reference taken over and a reference cleared |
 | Phase 0 changes shipped behaviour | It aligns execution with the decided PRD behaviour; changelog states it |
 
 ## Decisions

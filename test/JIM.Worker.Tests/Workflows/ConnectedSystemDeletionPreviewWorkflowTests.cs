@@ -656,44 +656,6 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         return new ManagerReferenceTopology(hrSystem, trainingSystem, targetSystem);
     }
 
-    /// <summary>
-    /// Simulates the target Connected System having exported what synchronisation staged for it: each provisioned
-    /// object goes Normal and holds the values its Pending Export carried, and the Pending Exports are cleared so only
-    /// what the deletion stages is seen afterwards. A reference is staged as the referent's Metaverse Object id and
-    /// resolved on export to the referent's object in the target, so it is resolved here the same way, and held as
-    /// the optimistic export apply holds it: the resolved object plus the reference string the export wrote.
-    /// </summary>
-    private void ApplyStagedExports(ConnectedSystem targetSystem)
-    {
-        var targetObjects = SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == targetSystem.Id).ToList();
-        foreach (var pendingExport in SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == targetSystem.Id && pe.ConnectedSystemObjectId.HasValue))
-        {
-            var cso = SyncRepo.ConnectedSystemObjects[pendingExport.ConnectedSystemObjectId!.Value];
-            cso.Status = ConnectedSystemObjectStatus.Normal;
-            foreach (var change in pendingExport.AttributeValueChanges.Where(c => c.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update))
-            {
-                var referent = change.ResolvedReferenceCsoId.HasValue
-                    ? SyncRepo.ConnectedSystemObjects[change.ResolvedReferenceCsoId.Value]
-                    : Guid.TryParse(change.UnresolvedReferenceValue, out var referentMvoId)
-                        ? targetObjects.Single(c => c.MetaverseObjectId == referentMvoId)
-                        : null;
-                cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = change.AttributeId,
-                    Attribute = change.Attribute,
-                    StringValue = change.StringValue,
-                    GuidValue = change.GuidValue,
-                    ReferenceValueId = referent?.Id,
-                    ReferenceValue = referent,
-                    UnresolvedReferenceValue = referent == null ? null : $"CN={referent.Id}",
-                    ConnectedSystemObject = cso
-                });
-            }
-        }
-        SyncRepo.ClearAllPendingExports();
-    }
-
     private async Task<List<PreviewDelta>> PreviewAsync(ConnectedSystem connectedSystem)
     {
         var deltas = new List<PreviewDelta>();

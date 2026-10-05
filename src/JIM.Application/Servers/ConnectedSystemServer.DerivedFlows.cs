@@ -48,6 +48,57 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The Metaverse attributes whose values deleting <paramref name="connectedSystemId"/> with Synchronised
+    /// Deprovisioning could withdraw or change, and that a surviving derived flow reads, each with the names of the
+    /// Connected Systems hosting those flows (#134). The deletion preview states these rather than showing them: the
+    /// real run marks the readers' objects for re-derivation by their host's next synchronisation (the graph built here
+    /// is the one <see cref="CreateDerivedInputMarkBatchAsync"/> builds for it, over the surviving rules), so what the
+    /// derived values become is not decided by the deletion at all. Empty when the feature is off.
+    /// </summary>
+    /// <exception cref="DerivedFlowCycleException">The surviving derived flows contain a cycle, which the real run
+    /// would also refuse.</exception>
+    internal async Task<List<(string MetaverseAttributeName, IReadOnlyList<string> HostingSystemNames)>> GetDerivedFlowsReadingDeprovisionedAttributesAsync(int connectedSystemId)
+    {
+        var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
+        var graph = await DerivedFlowGraphFactory.CreateAsync(
+            Application.FeatureFlags, allSyncRules.Where(rule => rule.ConnectedSystemId != connectedSystemId), []);
+        if (graph == null)
+            return [];
+
+        // Every import mapping of the system, enabled or not: the residue pass recalls by provenance, so a value an
+        // earlier, since-disabled mapping contributed is withdrawn as surely as a current one.
+        var withdrawable = allSyncRules
+            .Where(rule => rule.ConnectedSystemId == connectedSystemId && rule.Direction == SyncRuleDirection.Import)
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Select(mapping => (
+                    MetaverseObjectTypeId: rule.ResolveMetaverseObjectTypeId(),
+                    AttributeId: mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId ?? 0,
+                    AttributeName: mapping.TargetMetaverseAttribute?.Name)))
+            .Where(attribute => attribute.AttributeId != 0)
+            .DistinctBy(attribute => (attribute.MetaverseObjectTypeId, attribute.AttributeId))
+            .ToList();
+        if (withdrawable.Count == 0)
+            return [];
+
+        var systemNames = await Application.SyncRepo.GetConnectedSystemNamesAsync();
+        return withdrawable
+            .Select(attribute => (
+                Name: attribute.AttributeName ?? $"ID {attribute.AttributeId}",
+                Hosts: graph.GetHostingSystemsReading(attribute.MetaverseObjectTypeId, attribute.AttributeId)))
+            .Where(attribute => attribute.Hosts.Count > 0)
+            // One attribute bound to several Metaverse Object Types is one thing to an administrator reading the warning.
+            .GroupBy(attribute => attribute.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => (group.Key, (IReadOnlyList<string>)group
+                .SelectMany(attribute => attribute.Hosts)
+                .Distinct()
+                .Select(id => systemNames.GetValueOrDefault(id) ?? $"ID {id}")
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList()))
+            .ToList();
+    }
+
+    /// <summary>
     /// The single-mapping save paths' entry point (create, update, settings update): gates and validates
     /// <paramref name="mapping"/> as a proposal replacing the persisted mapping with the same id on its rule, and
     /// stamps any warnings onto <see cref="SyncRuleMapping.SaveWarnings"/>.

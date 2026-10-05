@@ -25,6 +25,27 @@ namespace JIM.Application.Servers;
 public partial class ConnectedSystemServer
 {
     /// <summary>
+    /// The size of a Synchronised Deprovisioning preview of <paramref name="connectedSystemId"/>, read from what the real
+    /// run sizes itself from: the system's Connected System Objects, each of which is obsoleted, by the distinct
+    /// Metaverse attributes its import Synchronisation Rules contribute, each of which an object can move. Every import
+    /// rule counts, enabled or not, because the residue pass recalls by provenance.
+    /// </summary>
+    internal async Task<PreviewCostEstimate> EstimateSynchronisedDeprovisioningPreviewAsync(int connectedSystemId)
+    {
+        var objects = await Application.SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
+        var contributedAttributes = allSyncRules
+            .Where(rule => rule.ConnectedSystemId == connectedSystemId && rule.Direction == SyncRuleDirection.Import)
+            .SelectMany(rule => rule.AttributeFlowRules)
+            .Select(mapping => mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId)
+            .Where(id => id.HasValue)
+            .Distinct()
+            .Count();
+
+        return new PreviewCostEstimate(objects, Math.Max(1, contributedAttributes));
+    }
+
+    /// <summary>
     /// Previews deleting the Connected System with Synchronised Deprovisioning (#134, the Connected System deletion
     /// adapter's evaluation). Walks the same two passes the real run does, through the same obsoletion core
     /// (<see cref="ConnectedSystemObjectObsoletionService"/>) and the same recall re-election, so the answer cannot drift
