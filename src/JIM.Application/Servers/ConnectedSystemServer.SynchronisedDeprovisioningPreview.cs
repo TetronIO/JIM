@@ -181,6 +181,11 @@ public partial class ConnectedSystemServer
             cso.Status = ConnectedSystemObjectStatus.Obsolete;
             var mvo = cso.MetaverseObject;
 
+            // Named as the administrator knows it today, from the untouched original: applying the recall recomputes the
+            // clone's name from what remains, so an object whose name this deletion clears would otherwise be shown by id
+            // on exactly the rows that matter most.
+            var objectName = original.MetaverseObject?.NameOrId ?? mvo?.NameOrId;
+
             var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
                 cso,
                 pass.SystemSyncRules,
@@ -197,14 +202,14 @@ public partial class ConnectedSystemServer
                 (target, disconnectingSystemId, remaining) => Task.FromResult(EvaluateDeletionAtEndState(pass, target, disconnectingSystemId, remaining)),
                 recordPreRecallAttributeSnapshot: _ => { });
 
-            if (mvo == null)
+            if (mvo == null || objectName == null)
                 continue;
 
             if (result.MvoDeletionDecision is { Fate: not MvoDeletionFate.NotDeleted } decision && progress.EligibilityReported.Add(mvo.Id))
             {
                 deltas.Add(new PreviewDelta(
                     ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
-                    ObjectDisplayName: mvo.NameOrId,
+                    ObjectDisplayName: objectName,
                     ObjectTypeName: mvo.Type?.Name,
                     MetaverseObjectTypeId: mvo.Type?.Id,
                     MetaverseObjectId: mvo.Id,
@@ -215,7 +220,7 @@ public partial class ConnectedSystemServer
                 if (decision.Fate == MvoDeletionFate.DeletedImmediately)
                 {
                     progress.Deleted.Add(mvo.Id);
-                    deltas.AddRange(await PreviewDeletionCascadeAsync(pass, mvo));
+                    deltas.AddRange(await PreviewDeletionCascadeAsync(pass, mvo, objectName));
                 }
                 else
                 {
@@ -226,7 +231,7 @@ public partial class ConnectedSystemServer
             if (result.MvoAttributeChange is { } change)
             {
                 progress.Recalled.Add(mvo.Id);
-                deltas.AddRange(ClassifyRecall(mvo, change.Additions, change.Removals));
+                deltas.AddRange(ClassifyRecall(mvo, objectName, change.Additions, change.Removals));
             }
             else if (original.Type is { RemoveContributedAttributesOnObsoletion: false } && result.MvoDeletionDecision?.Fate != MvoDeletionFate.DeletedImmediately)
             {
@@ -237,7 +242,7 @@ public partial class ConnectedSystemServer
                 {
                     deltas.Add(new PreviewDelta(
                         ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues,
-                        ObjectDisplayName: mvo.NameOrId,
+                        ObjectDisplayName: objectName,
                         ObjectTypeName: mvo.Type?.Name,
                         MetaverseObjectTypeId: mvo.Type?.Id,
                         MetaverseObjectId: mvo.Id,
@@ -249,9 +254,9 @@ public partial class ConnectedSystemServer
             {
                 var outbound = await previewExportServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(
                     [exportEvaluation.Mvo], pass.ExportEvaluationCache, (exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes));
-                var outboundDeltas = ClassifyOutbound(pass, exportEvaluation.Mvo, outbound).ToList();
+                var outboundDeltas = ClassifyOutbound(pass, exportEvaluation.Mvo, objectName, outbound).ToList();
                 deltas.AddRange(outboundDeltas);
-                if (await PreviewLastConnectorDisconnectAsync(pass, exportEvaluation.Mvo, outboundDeltas, progress) is { } eligibility)
+                if (await PreviewLastConnectorDisconnectAsync(pass, exportEvaluation.Mvo, objectName, outboundDeltas, progress) is { } eligibility)
                     deltas.Add(eligibility);
             }
         }
@@ -277,6 +282,7 @@ public partial class ConnectedSystemServer
         foreach (var original in metaverseObjects.Where(mvo => mvo.LastConnectorDisconnectedDate == null))
         {
             var mvo = CloneForDeprovisioningPreview(original);
+            var objectName = original.NameOrId;
             var recalledValues = mvo.AttributeValues.Where(av => av.ContributedBySyncRuleId == syncRuleId).ToList();
             if (recalledValues.Count == 0)
                 continue;
@@ -292,13 +298,13 @@ public partial class ConnectedSystemServer
             var changedAttributes = additions.Concat(removals).ToList();
             pass.SyncEngine.ApplyPendingAttributeChanges(mvo);
 
-            deltas.AddRange(ClassifyRecall(mvo, additions, removals));
+            deltas.AddRange(ClassifyRecall(mvo, objectName, additions, removals));
 
             var outbound = await previewExportServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(
                 [mvo], pass.ExportEvaluationCache, (changedAttributes, removals.ToHashSet()));
-            var outboundDeltas = ClassifyOutbound(pass, mvo, outbound).ToList();
+            var outboundDeltas = ClassifyOutbound(pass, mvo, objectName, outbound).ToList();
             deltas.AddRange(outboundDeltas);
-            if (await PreviewLastConnectorDisconnectAsync(pass, mvo, outboundDeltas, progress) is { } eligibility)
+            if (await PreviewLastConnectorDisconnectAsync(pass, mvo, objectName, outboundDeltas, progress) is { } eligibility)
                 deltas.Add(eligibility);
         }
 
@@ -313,7 +319,8 @@ public partial class ConnectedSystemServer
     /// against the end state: none of the deleted system's objects, and none of the disconnected targets.
     /// </summary>
     private async Task<PreviewDelta?> PreviewLastConnectorDisconnectAsync(
-        DeprovisioningPreviewPass pass, MetaverseObject mvo, IReadOnlyCollection<PreviewDelta> outboundDeltas, DeprovisioningPreviewProgress progress)
+        DeprovisioningPreviewPass pass, MetaverseObject mvo, string objectName, IReadOnlyCollection<PreviewDelta> outboundDeltas,
+        DeprovisioningPreviewProgress progress)
     {
         var disconnectedSystemIds = outboundDeltas
             .Where(delta => delta.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject && delta.ConnectedSystemId.HasValue)
@@ -343,7 +350,7 @@ public partial class ConnectedSystemServer
 
         return new PreviewDelta(
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
-            ObjectDisplayName: mvo.NameOrId,
+            ObjectDisplayName: objectName,
             ObjectTypeName: mvo.Type?.Name,
             MetaverseObjectTypeId: mvo.Type?.Id,
             MetaverseObjectId: mvo.Id,
@@ -368,7 +375,7 @@ public partial class ConnectedSystemServer
     /// is deprovisioned, disconnected, or has its never-exported provisioning cancelled, by the engine's own decision
     /// (<c>ExportEvaluationServer.EvaluateMvoDeletionsAsync</c> acts on the same verdicts).
     /// </summary>
-    private async Task<List<PreviewDelta>> PreviewDeletionCascadeAsync(DeprovisioningPreviewPass pass, MetaverseObject mvo)
+    private async Task<List<PreviewDelta>> PreviewDeletionCascadeAsync(DeprovisioningPreviewPass pass, MetaverseObject mvo, string objectName)
     {
         var deltas = new List<PreviewDelta>();
         var joined = (await pass.Guard.GetConnectedSystemObjectsForMvoDeletionAsync([mvo.Id])).GetValueOrDefault(mvo.Id) ?? [];
@@ -392,7 +399,7 @@ public partial class ConnectedSystemServer
                     : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
 
             deltas.Add(new PreviewDelta(transition,
-                ObjectDisplayName: mvo.NameOrId,
+                ObjectDisplayName: objectName,
                 ObjectTypeName: mvo.Type?.Name,
                 MetaverseObjectTypeId: mvo.Type?.Id,
                 MetaverseObjectId: mvo.Id,
@@ -408,8 +415,8 @@ public partial class ConnectedSystemServer
     /// withdrawn value; taken over, with or without a change of value, when a surviving contributor does; withdrawn when
     /// other values of a multi-valued attribute remain.
     /// </summary>
-    private static IEnumerable<PreviewDelta> ClassifyRecall(
-        MetaverseObject mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> additions, IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
+    private static IEnumerable<PreviewDelta> ClassifyRecall(MetaverseObject mvo, string objectName,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> additions, IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
     {
         var clearedAttributeIds = ContributorReElectionService.GetClearedAttributeIds(mvo, additions, removals);
 
@@ -446,7 +453,7 @@ public partial class ConnectedSystemServer
             }
 
             yield return new PreviewDelta(transition,
-                ObjectDisplayName: mvo.NameOrId,
+                ObjectDisplayName: objectName,
                 ObjectTypeName: mvo.Type?.Name,
                 MetaverseObjectTypeId: mvo.Type?.Id,
                 MetaverseObjectId: mvo.Id,
@@ -462,7 +469,8 @@ public partial class ConnectedSystemServer
     /// deprovisioning for each export rule the object leaves, named per the rule's Deprovisioning Action. Anything
     /// targeting the system being deleted is left out; it goes with the system.
     /// </summary>
-    private static IEnumerable<PreviewDelta> ClassifyOutbound(DeprovisioningPreviewPass pass, MetaverseObject mvo, OutboundPreviewResult outbound)
+    private static IEnumerable<PreviewDelta> ClassifyOutbound(DeprovisioningPreviewPass pass, MetaverseObject mvo, string objectName,
+        OutboundPreviewResult outbound)
     {
         foreach (var entry in outbound.Entries.Where(entry => entry.ConnectedSystemId != pass.ConnectedSystemId))
         {
@@ -477,30 +485,30 @@ public partial class ConnectedSystemServer
                         var current = pass.ExportEvaluationCache.CsoAttributeValues[(targetCsoId, changesForAttribute.Key)]
                             .Select(value => value.ToStringNoName());
 
-                        yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport, mvo, entry, targetCsoId,
+                        yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport, mvo, objectName, entry, targetCsoId,
                             attributeName, PreviewValueRenderer.Join(current), PreviewValueRenderer.Join(changesForAttribute.Select(PreviewValueRenderer.Render)));
                     }
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeleteExport:
-                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, mvo, entry, entry.ExistingTargetCsoId);
+                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, mvo, objectName, entry, entry.ExistingTargetCsoId);
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.Disconnect:
-                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, mvo, entry, entry.ExistingTargetCsoId);
+                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, mvo, objectName, entry, entry.ExistingTargetCsoId);
                     break;
 
                 case OutboundPreviewEntryKind.ProvisioningCancelled:
-                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, mvo, entry, entry.ExistingTargetCsoId);
+                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, mvo, objectName, entry, entry.ExistingTargetCsoId);
                     break;
             }
         }
     }
 
-    private static PreviewDelta OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType transition, MetaverseObject mvo,
+    private static PreviewDelta OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType transition, MetaverseObject mvo, string objectName,
         OutboundPreviewEntry entry, Guid? targetCsoId, string? attributeName = null, string? oldValue = null, string? newValue = null) =>
         new(transition,
-            ObjectDisplayName: mvo.NameOrId,
+            ObjectDisplayName: objectName,
             ObjectTypeName: mvo.Type?.Name,
             MetaverseObjectTypeId: mvo.Type?.Id,
             MetaverseObjectId: mvo.Id,

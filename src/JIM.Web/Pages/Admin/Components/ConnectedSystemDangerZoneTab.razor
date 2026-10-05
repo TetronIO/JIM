@@ -74,7 +74,8 @@
         <li>All Pending Exports</li>
     </ul>
     <MudText Class="mt-2">
-        Metaverse Objects joined to this system's Connected System Objects will be disconnected but not deleted.
+        Metaverse Objects joined to this system are disconnected from it. Any for which it is the last connector are then
+        subject to their Object Type's deletion rule; the deletion impact preview above names them.
     </MudText>
 
     @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)

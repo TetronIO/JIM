@@ -212,6 +212,31 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         }
     }
 
+    [Test]
+    public async Task PreviewSynchronisedDeprovisioningAsync_ObjectWhoseNameTheDeletionClears_IsNamedAsItStandsTodayAsync()
+    {
+        // HR is the object's only source of its name, so the deletion clears it. Every row about the object must still
+        // name it as the administrator knows it now: naming it from the deletion's end state showed its id instead, on
+        // exactly the rows that matter most (its account removed downstream, itself eligible for deletion).
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true,
+            scopeExitAction: OutboundDeprovisionAction.Disconnect);
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        // The stored name, as synchronisation keeps it; applying a change recomputes it from the values that remain, which
+        // is how the deletion's end state loses it.
+        mvo.CachedDisplayName = "John Smith";
+
+        var deltas = await PreviewAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject), Is.Not.Empty,
+                "the fixture must reach the downstream row for this to prove anything");
+            Assert.That(deltas.Select(d => d.ObjectDisplayName).Distinct(), Is.EqualTo(new[] { "John Smith" }));
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // The residue pass
     // -----------------------------------------------------------------------------------------------------------------
