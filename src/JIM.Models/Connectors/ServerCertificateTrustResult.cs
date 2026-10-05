@@ -28,6 +28,25 @@ public class ServerCertificateTrustResult
     public string? PresentedThumbprint { get; init; }
 
     /// <summary>
+    /// The root of the server's chain, where JIM has it. Set for <see cref="ServerCertificateTrustOutcome.NotTheRoot"/>
+    /// so the caller is told what to trust instead.
+    /// </summary>
+    public string? RootThumbprint { get; init; }
+
+    public string? RootSubject { get; init; }
+
+    /// <summary>
+    /// The certificate JIM could not find. Set for <see cref="ServerCertificateTrustOutcome.ChainIncomplete"/>.
+    /// </summary>
+    public string? MissingIssuer { get; init; }
+
+    /// <summary>
+    /// Certificate authorities stored alongside the root so JIM can complete the chain: the ones the server did not
+    /// send. Never trusted on their own. Set for <see cref="ServerCertificateTrustOutcome.Trusted"/>.
+    /// </summary>
+    public List<TrustedCertificate> StoredIntermediates { get; init; } = [];
+
+    /// <summary>
     /// A sentence explaining the outcome, suitable for showing.
     /// </summary>
     public string? Message { get; init; }

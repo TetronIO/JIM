@@ -56,17 +56,39 @@ public class ServerCertificateDiagnostic
     public bool IsSelfSigned { get; set; }
 
     /// <summary>
-    /// SHA-1 thumbprint of the certificate that issued this one, where the server sent it alongside its own. Null
-    /// where it did not, which is what makes the difference between offering an administrator the durable choice
-    /// (trust the authority, and the decision survives renewal) and having only the leaf to offer.
+    /// SHA-1 thumbprint of the certificate authority directly above this certificate, where JIM has it. Informational:
+    /// what JIM trusts is the root at the top of the chain (<see cref="RootThumbprint"/>), because a chain is only
+    /// trusted when it ends at a root in the JIM certificate store. Null for a self-signed certificate, and where
+    /// JIM could not find the issuer.
     /// </summary>
     public string? IssuerThumbprint { get; set; }
 
     /// <summary>
-    /// Whether the server sent the certificate authority that issued its own certificate, so it can be trusted
-    /// directly. Self-signed certificates have no separate authority and so never do.
+    /// The certificate chain JIM assembled, starting with the server's certificate and ending with the root where
+    /// JIM could reach one. Built from what the server sent, what JIM could download from the addresses certificates
+    /// name, and what JIM already holds. Empty on diagnostics recorded before JIM described chains.
     /// </summary>
-    public bool IsIssuerCertificateAvailable => !string.IsNullOrEmpty(IssuerThumbprint);
+    public List<ServerCertificateChainElement> Chain { get; set; } = [];
+
+    /// <summary>
+    /// Whether the chain reaches a root (a self-signed certificate authority). When it does not, nothing JIM could be
+    /// asked to trust would make the connection work until the missing certificates are supplied.
+    /// </summary>
+    public bool IsChainComplete { get; set; }
+
+    /// <summary>
+    /// The subject of the first certificate JIM could not find, where the chain is incomplete: the issuer of the
+    /// highest certificate JIM has. What an administrator asks their PKI team for.
+    /// </summary>
+    public string? MissingIssuer { get; set; }
+
+    /// <summary>
+    /// The root at the top of a complete chain: the certificate to trust. For a self-signed server certificate this
+    /// is the server's certificate itself.
+    /// </summary>
+    public string? RootThumbprint { get; set; }
+
+    public string? RootSubject { get; set; }
 
     /// <summary>
     /// A sentence naming what to do about it, shown alongside the certificate.

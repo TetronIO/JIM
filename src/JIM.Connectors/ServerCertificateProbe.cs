@@ -63,7 +63,8 @@ public static class ServerCertificateProbe
         ILogger logger,
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
-        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
+        IReadOnlyCollection<X509Certificate2>? suppliedCertificates = null)
     {
         X509Certificate2? presented = null;
         var presentedChain = new List<X509Certificate2>();
@@ -135,7 +136,7 @@ public static class ServerCertificateProbe
                     ReadAt = readAt,
                     IsSelfSigned = diagnostic.IsSelfSigned,
                     Leaf = Describe(presented),
-                    Issuer = issuer == null ? null : Describe(issuer)
+                    Root = issuer == null ? null : Describe(issuer)
                 }
             };
         }

@@ -165,6 +165,9 @@ public class ServerCertificateTrustTests
                 Issuer = leaf.Issuer,
                 Thumbprint = leaf.Thumbprint,
                 IssuerThumbprint = issuer?.Thumbprint,
+                IsChainComplete = issuer != null,
+                RootThumbprint = issuer?.Thumbprint,
+                RootSubject = issuer?.Subject,
                 FailureReason = ServerCertificateFailureReason.UntrustedIssuer
             },
             Chain = new PresentedServerCertificateChain
@@ -173,7 +176,7 @@ public class ServerCertificateTrustTests
                 Port = 443,
                 ReadAt = DateTime.UtcNow,
                 Leaf = leaf,
-                Issuer = issuer
+                Root = issuer
             }
         };
     }
@@ -433,7 +436,7 @@ public class ServerCertificateTrustTests
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateReadOutcome.Read));
             Assert.That(result.Diagnostic, Is.Not.Null);
             Assert.That(result.Diagnostic!.Thumbprint, Is.EqualTo(_leaf.Thumbprint));
-            Assert.That(result.Diagnostic!.IsIssuerCertificateAvailable, Is.True);
+            Assert.That(result.Diagnostic!.RootThumbprint, Is.EqualTo(_issuer.Thumbprint));
             Assert.That(result.ReadAt, Is.Not.Null);
         }
     }

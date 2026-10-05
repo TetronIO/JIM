@@ -513,7 +513,7 @@ public class CertificateServer : ICertificateProvider
         // means the server is presenting something other than what was shown, and nothing is added.
         var chain = reading.Chain;
         var chosen = MatchesThumbprint(chain.Leaf, expected) ? chain.Leaf
-            : chain.Issuer != null && MatchesThumbprint(chain.Issuer, expected) ? chain.Issuer
+            : chain.Root != null && MatchesThumbprint(chain.Root, expected) ? chain.Root
             : null;
 
         if (chosen == null)

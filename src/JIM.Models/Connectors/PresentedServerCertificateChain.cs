@@ -4,13 +4,14 @@
 namespace JIM.Models.Connectors;
 
 /// <summary>
-/// What a server presented at the moment it was asked: its own certificate, and the authority that issued it where
-/// the server sent one.
+/// The certificate chain behind a server's certificate as JIM assembled it at the moment it was asked: the server's
+/// own certificate, the certificate authorities between it and the root, and the root where JIM could reach one.
 /// </summary>
 /// <remarks>
-/// Trusting the issuer is the durable choice, because it survives the server's certificate being renewed; trusting
-/// the leaf works too, but has to be repeated at every renewal. A self-signed server sends only the leaf, which is
-/// then the only thing there is to trust.
+/// JIM trusts a server when its chain ends at a root in the JIM certificate store. The certificate authorities in
+/// between are not trusted themselves, but JIM needs every one of them to complete the chain, so the ones the server
+/// did not send are stored alongside the root when it is trusted. A self-signed server certificate is its own root,
+/// with nothing in between.
 /// </remarks>
 public class PresentedServerCertificateChain
 {
@@ -30,10 +31,28 @@ public class PresentedServerCertificateChain
     public PresentedServerCertificate Leaf { get; init; } = null!;
 
     /// <summary>
-    /// The certificate that issued the leaf, where the server sent it. Null when the server sent only its own
-    /// certificate, in which case there is no issuer to offer and the card should say so.
+    /// The certificate authorities between the server's certificate and the root, nearest the server first.
     /// </summary>
-    public PresentedServerCertificate? Issuer { get; init; }
+    public List<PresentedServerCertificate> Intermediates { get; init; } = [];
+
+    /// <summary>
+    /// The root at the top of the chain, where JIM reached one: the certificate to trust. The leaf itself for a
+    /// self-signed server certificate. Null when the chain is incomplete.
+    /// </summary>
+    public PresentedServerCertificate? Root { get; init; }
+
+    /// <summary>
+    /// Certificates the administrator supplied that did not turn out to belong to this chain. Nothing is trusted
+    /// while there are any, so a mistaken file is never stored.
+    /// </summary>
+    public List<PresentedServerCertificate> Unrelated { get; init; } = [];
+
+    /// <summary>
+    /// The subject of the first certificate JIM could not find, where the chain is incomplete.
+    /// </summary>
+    public string? MissingIssuer { get; init; }
+
+    public bool IsComplete => Root != null;
 
     public bool IsSelfSigned { get; init; }
 }
