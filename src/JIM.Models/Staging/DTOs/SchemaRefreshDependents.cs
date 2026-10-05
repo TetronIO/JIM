@@ -37,8 +37,7 @@ public class SchemaRefreshDependents
     /// Metaverse-Derived Attribute Flows (#1750, FR 3), on any Connected System, that disabling or removing the
     /// rules and mappings above would leave with a missing input, because an attribute they read lost its last
     /// enabled contributor. Display only, like <see cref="ReferencedObjectMatchingRules"/>: the derived flows keep
-    /// running and their Missing Input Behaviour decides what they contribute. Always empty when the
-    /// Metaverse-Derived Attribute Flows feature is off.
+    /// running and their Missing Input Behaviour decides what they contribute.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 

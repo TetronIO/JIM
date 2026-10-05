@@ -73,7 +73,7 @@ public class ConnectedSystemDetailDto
     /// Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation
     /// Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The
     /// refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always
-    /// present; empty on every other response, and whenever the Metaverse-Derived Attribute Flows feature is off.
+    /// present; empty on every other response.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.TestSupport;
 using JIM.Web;
 using NUnit.Framework;
 
@@ -9,11 +10,9 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// The Service Settings table's feature-flag (#1781) visibility rule. The real <see cref="FeatureFlagCatalogue"/>
-/// carries no Preview-tier entry today (its one entry, Unique Value Generation, is In Development), which would
-/// otherwise leave "a Preview row always appears" unprovable against real catalogue data. The
-/// <see cref="FeatureFlagDefinition"/>-taking overload is exercised directly against a synthetic Preview
-/// definition for exactly this reason; the string-key overload (what the page actually calls) is proven
-/// separately against the real catalogue's actual key, so a rename or removal of that key would be caught here.
+/// declares no flag while no feature is behind one, so the rule is proven against synthetic definitions: the
+/// <see cref="FeatureFlagDefinition"/>-taking overload directly, and the string-key overload (what the page actually
+/// calls) through a substituted catalogue (<see cref="FeatureFlagCatalogueScope"/>).
 /// </summary>
 [TestFixture]
 public class HelpersFeatureFlagVisibilityTests
@@ -62,18 +61,17 @@ public class HelpersFeatureFlagVisibilityTests
     }
 
     [Test]
-    public void IsFeatureFlagVisible_ByKey_RealCatalogueInDevelopmentFlag_MatchesTheDefinitionRule()
+    public void IsFeatureFlagVisible_ByKey_CatalogueInDevelopmentFlag_MatchesTheDefinitionRule()
     {
-        // Proves the string-key overload (what Settings.razor actually calls) delegates correctly, against the
-        // real catalogue's one live entry, so a rename or tier change of it would fail this test.
+        // Proves the string-key overload (what Settings.razor actually calls) resolves the key through the catalogue
+        // and delegates to the definition rule.
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
+        var key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key;
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(
-                Helpers.IsFeatureFlagVisible(FeatureFlagCatalogue.UniqueValueGeneration.Key, includeInDevelopment: false),
-                Is.False);
-            Assert.That(
-                Helpers.IsFeatureFlagVisible(FeatureFlagCatalogue.UniqueValueGeneration.Key, includeInDevelopment: true),
-                Is.True);
+            Assert.That(Helpers.IsFeatureFlagVisible(key, includeInDevelopment: false), Is.False);
+            Assert.That(Helpers.IsFeatureFlagVisible(key, includeInDevelopment: true), Is.True);
         }
     }
 
@@ -88,11 +86,13 @@ public class HelpersFeatureFlagVisibilityTests
     }
 
     [Test]
-    public void GetFeatureFlagDefinition_RealCatalogueKey_ReturnsTheDefinition()
+    public void GetFeatureFlagDefinition_CatalogueKey_ReturnsTheDefinition()
     {
-        var definition = Helpers.GetFeatureFlagDefinition(FeatureFlagCatalogue.UniqueValueGeneration.Key);
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
 
-        Assert.That(definition, Is.SameAs(FeatureFlagCatalogue.UniqueValueGeneration));
+        var definition = Helpers.GetFeatureFlagDefinition(FeatureFlagCatalogueScope.InDevelopmentFlag.Key);
+
+        Assert.That(definition, Is.SameAs(FeatureFlagCatalogueScope.InDevelopmentFlag));
     }
 
     [Test]

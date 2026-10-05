@@ -1,8 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using JIM.Models.Core;
+using JIM.TestSupport;
 using NUnit.Framework;
 
 namespace JIM.Models.Tests.Core;
@@ -59,32 +63,31 @@ public class FeatureFlagCatalogueTests
     }
 
     [Test]
-    public void UniqueValueGeneration_MatchesTheAgreedDefinition()
+    public void Use_SubstitutesTheCatalogueUntilDisposed()
     {
-        var definition = FeatureFlagCatalogue.UniqueValueGeneration;
+        var declared = FeatureFlagCatalogue.All;
 
-        using (Assert.EnterMultipleScope())
+        using (FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag))
         {
-            Assert.That(definition.Key, Is.EqualTo("Features.UniqueValueGeneration"));
-            Assert.That(definition.DisplayName, Is.EqualTo("Unique Value Generation"));
-            Assert.That(definition.Tier, Is.EqualTo(FeatureFlagTier.InDevelopment));
-            Assert.That(definition.TrackingIssueNumber, Is.EqualTo(242));
-            Assert.That(FeatureFlagCatalogue.All, Does.Contain(definition));
+            Assert.That(FeatureFlagCatalogue.All, Is.EqualTo(new[] { FeatureFlagCatalogueScope.InDevelopmentFlag }));
         }
+
+        Assert.That(FeatureFlagCatalogue.All, Is.SameAs(declared), "disposing the scope must restore the declared catalogue");
     }
 
     [Test]
-    public void MetaverseDerivedAttributeFlows_MatchesTheAgreedDefinition()
+    public async Task Use_IsScopedToTheCallingFlowAsync()
     {
-        var definition = FeatureFlagCatalogue.MetaverseDerivedAttributeFlows;
+        using var scope = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.PreviewFlag);
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(definition.Key, Is.EqualTo("Features.MetaverseDerivedAttributeFlows"));
-            Assert.That(definition.DisplayName, Is.EqualTo("Metaverse-Derived Attribute Flows"));
-            Assert.That(definition.Tier, Is.EqualTo(FeatureFlagTier.InDevelopment));
-            Assert.That(definition.TrackingIssueNumber, Is.EqualTo(1878));
-            Assert.That(FeatureFlagCatalogue.All, Does.Contain(definition));
-        }
+        // A flow started from a clean execution context (as a concurrently running test's would be) must not see this
+        // test's substitute.
+        Task<IReadOnlyList<FeatureFlagDefinition>> elsewhere;
+        using (ExecutionContext.SuppressFlow())
+            elsewhere = Task.Run(() => FeatureFlagCatalogue.All);
+        var seenElsewhere = await elsewhere;
+
+        Assert.That(seenElsewhere, Does.Not.Contain(FeatureFlagCatalogueScope.PreviewFlag));
+        Assert.That(FeatureFlagCatalogue.All, Does.Contain(FeatureFlagCatalogueScope.PreviewFlag));
     }
 }

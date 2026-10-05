@@ -106,10 +106,8 @@ public class FullSyncPreviewServerTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
-        // Tests run with every feature flag on (test/CLAUDE.md), which the preview reads for the Metaverse-Derived
-        // Attribute Flow graph (#1750).
-        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(
-            InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync().GetAwaiter().GetResult().BuildMockDbSet().Object);
+        // No Service Setting is set: the preview's reads of them see an empty table.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(
             activity: ActivitiesData.First(),

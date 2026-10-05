@@ -973,9 +973,6 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 ### Get-JIMGeneratedValue
 
-!!! note "In development"
-    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
-
 Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
 committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
 and its state. Empty when the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
@@ -1021,9 +1018,6 @@ Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGener
 ```
 
 ### Get-JIMRetiredGeneratedValue
-
-!!! note "In development"
-    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
 
 Lists an attribute's retired generated values, newest first: the values JIM issued for it and will never issue again, whichever Attribute Flow generates it. Every page is read, so the whole list is returned. Read-only; the only way to forget retired values is `Restart-JIMGeneratedValues` on a sequence. See [Retired values](../configuration/synchronisation-rules.md#retired-values) for when a value is retired.
 

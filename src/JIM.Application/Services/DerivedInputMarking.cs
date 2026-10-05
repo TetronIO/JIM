@@ -22,10 +22,10 @@ public static class DerivedInputMarking
     /// The Connected Systems whose import Synchronisation Rules host a derived flow reading any of
     /// <paramref name="changedAttributeIds"/> (transitively through derived levels), excluding
     /// <paramref name="excludedConnectedSystemId"/>: the system whose synchronisation made the change, whose derived
-    /// pass has already run on this pass's values. Ascending and distinct; empty when there is no graph (the feature is
-    /// off) or nothing derived reads the changed attributes.
+    /// pass has already run on this pass's values. Ascending and distinct; empty when there is no graph or nothing
+    /// derived reads the changed attributes.
     /// </summary>
-    /// <param name="graph">The run's derived flow graph, or null when the feature is off.</param>
+    /// <param name="graph">The run's derived flow graph, or null when there is none.</param>
     /// <param name="metaverseObjectTypeId">The changed Metaverse Object's type.</param>
     /// <param name="changedAttributeIds">The Metaverse attributes whose values changed: additions and removals staged
     /// this pass, which include generated values and re-elected survivors. A provenance-only takeover stages neither,

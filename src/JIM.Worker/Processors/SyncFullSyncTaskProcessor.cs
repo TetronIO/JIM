@@ -99,13 +99,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         }
 
         // Metaverse-Derived Attribute Flows (#1750): build the run's dependency graph from the same all-systems rule
-        // set, reading the feature flag once for the run (null when off: the engine is exactly as before). A cycle
-        // among the enabled derived flows throws DerivedFlowCycleException here, before any object is processed,
-        // failing the run hard with the cycle named on the Activity (plan decision 11).
-        DerivedFlowGraph? derivedFlowGraph;
+        // set, once for the run. A cycle among the enabled derived flows throws DerivedFlowCycleException here, before
+        // any object is processed, failing the run hard with the cycle named on the Activity (plan decision 11).
+        DerivedFlowGraph derivedFlowGraph;
         using (Diagnostics.Sync.StartSpan("BuildDerivedFlowGraph"))
         {
-            derivedFlowGraph = await _syncServer.CreateDerivedFlowGraphAsync(allSyncRules);
+            derivedFlowGraph = _syncServer.CreateDerivedFlowGraph(allSyncRules);
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true), and the attribute

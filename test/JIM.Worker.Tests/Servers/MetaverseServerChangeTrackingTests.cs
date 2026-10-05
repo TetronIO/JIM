@@ -33,13 +33,20 @@ public class MetaverseServerChangeTrackingTests
 
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        // Every Metaverse Object edit reads its type's import Synchronisation Rules, to mark the Connected Systems whose
+        // Metaverse-Derived Attribute Flows read a changed attribute (#1750): none here.
+        var connectedSystemsRepo = new Mock<IConnectedSystemRepository>();
+        connectedSystemsRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<JIM.Models.Logic.SyncRule>());
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystemsRepo.Object);
 
         // Default: change tracking is enabled (GetSettingAsync returns null => default of true)
         _mockServiceSettingsRepo
             .Setup(r => r.GetSettingAsync(It.IsAny<string>()))
             .ReturnsAsync((ServiceSetting?)null);
 
-        _jim = new JimApplication(_mockRepository.Object);
+        // Production hosts always hand JimApplication a sync repository; the derived-input marking every Metaverse
+        // Object edit runs (#1750) flushes through it.
+        _jim = new JimApplication(_mockRepository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
 
         _userType = new MetaverseObjectType { Id = 1, Name = "User" };
         _displayNameAttr = new MetaverseAttribute

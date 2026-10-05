@@ -59,8 +59,8 @@ public class SyncServer : ISyncServer
 
     // The rules come from the worker's all-rules load, which includes each rule's Metaverse Object Type with its
     // attributes, so the graph resolves mv["..."] names from those navigations without another query.
-    public Task<DerivedFlowGraph?> CreateDerivedFlowGraphAsync(IReadOnlyCollection<SyncRule> allSyncRules)
-        => DerivedFlowGraphFactory.CreateAsync(_jim.FeatureFlags, allSyncRules, []);
+    public DerivedFlowGraph CreateDerivedFlowGraph(IReadOnlyCollection<SyncRule> allSyncRules)
+        => DerivedFlowGraphFactory.Create(allSyncRules, []);
 
     #endregion
 

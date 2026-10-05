@@ -49,10 +49,8 @@ public class SynchronisationControllerSyncPreviewTests
         _mockSyncRepository.Setup(r => r.BeginRollbackOnlyTransactionAsync())
             .ReturnsAsync((IAsyncDisposable?)null);
 
-        // Tests run with every feature flag on (test/CLAUDE.md); the preview reads the Metaverse-Derived Attribute Flows
-        // flag (#1750) when it builds its evaluation context.
         _application = new JimApplication(
-            Mock.Of<JIM.Data.IRepository>(r => r.ServiceSettings == InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()),
+            Mock.Of<JIM.Data.IRepository>(r => r.ServiceSettings == new InMemoryServiceSettingsRepository()),
             syncRepository: _mockSyncRepository.Object);
         _controller = new SynchronisationController(
             Mock.Of<ILogger<SynchronisationController>>(),

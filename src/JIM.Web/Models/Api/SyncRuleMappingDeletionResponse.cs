@@ -32,8 +32,7 @@ public class SyncRuleMappingDeletionResponse
     /// <summary>
     /// The Metaverse-Derived Attribute Flows the deletion left with a missing input, because an attribute they read,
     /// directly or through other derived attributes, lost its last enabled contributor. The deletion went ahead
-    /// regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty when the
-    /// Metaverse-Derived Attribute Flows feature is off.
+    /// regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 }

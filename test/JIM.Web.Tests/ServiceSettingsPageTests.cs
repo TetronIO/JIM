@@ -8,6 +8,7 @@ using JIM.Application.Services;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.TestSupport;
 using JIM.Web.Pages.Admin;
 using JIM.Web.Services;
 using Microsoft.AspNetCore.Components;
@@ -32,10 +33,12 @@ public class ServiceSettingsPageTests : JimComponentTestContext
     private Mock<IServiceSettingsRepository> _serviceSettingsRepository = null!;
     private Mock<IWebHostEnvironment> _hostEnvironment = null!;
     private NavigationManager _navigation = null!;
+    private IDisposable _catalogue = null!;
 
     [SetUp]
     public void SetUp()
     {
+        _catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         _serviceSettingsRepository = new Mock<IServiceSettingsRepository>();
         _serviceSettingsRepository.Setup(r => r.GetAllSettingsAsync()).ReturnsAsync(
         [
@@ -112,17 +115,16 @@ public class ServiceSettingsPageTests : JimComponentTestContext
 
     /// <summary>
     /// Feature flags (#1781) are ordinary Service Settings rows under the "Preview Features" category, rather
-    /// than the removed Preview features card. The real <see cref="FeatureFlagCatalogue"/> carries one entry
-    /// today, <see cref="FeatureFlagCatalogue.UniqueValueGeneration"/>, which is In Development tier: these
-    /// tests prove it via real rendering (Preview-tier "always visible" is proven separately, against a
-    /// synthetic definition, in <c>HelpersFeatureFlagVisibilityTests</c>, since the real catalogue has no
-    /// Preview-tier entry to render).
+    /// than the removed Preview features card. The real <see cref="FeatureFlagCatalogue"/> declares no flag while
+    /// no feature is behind one, so these tests render a synthetic In Development flag,
+    /// <see cref="FeatureFlagCatalogueScope.InDevelopmentFlag"/>, substituted into the catalogue in
+    /// <see cref="SetUp"/> (Preview-tier "always visible" is proven in <c>HelpersFeatureFlagVisibilityTests</c>).
     /// </summary>
     private static ServiceSetting InDevelopmentFlagSetting(bool overridden = false) => new()
     {
-        Key = FeatureFlagCatalogue.UniqueValueGeneration.Key,
-        DisplayName = FeatureFlagCatalogue.UniqueValueGeneration.DisplayName,
-        Description = FeatureFlagCatalogue.UniqueValueGeneration.Description,
+        Key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
+        DisplayName = FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName,
+        Description = FeatureFlagCatalogueScope.InDevelopmentFlag.Description,
         Category = ServiceSettingCategory.FeatureFlags,
         ValueType = ServiceSettingValueType.Boolean,
         DefaultValue = "false",
@@ -159,7 +161,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         var page = Render<Settings>();
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO Authority")));
-        Assert.That(page.Markup, Does.Not.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName),
+        Assert.That(page.Markup, Does.Not.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName),
             "an In Development flag must never appear on a Production host");
     }
 
@@ -172,7 +174,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         _navigation.NavigateTo("/admin/settings");
         var page = Render<Settings>();
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName)));
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName)));
         using (Assert.EnterMultipleScope())
         {
             Assert.That(page.Markup, Does.Contain("Preview Features"),
@@ -193,7 +195,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         _navigation.NavigateTo("/admin/settings");
         var page = Render<Settings>();
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName)));
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName)));
 
         // MudTooltip does not render its Text into static markup (it is JS-driven, on hover), so the Actions
         // cell's button count is what actually distinguishes "has a revert action" from "does not": Edit,
@@ -230,7 +232,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         var page = Render<Settings>();
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO Authority")));
-        Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName));
+        Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName));
 
         var checkboxLabel = page.FindAll("label")
             .Single(l => l.TextContent.Trim() == "Show preview features only");
@@ -239,9 +241,12 @@ public class ServiceSettingsPageTests : JimComponentTestContext
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("SSO Authority"),
             "the filter must remove non-flag rows"));
-        Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName),
+        Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName),
             "the filter must keep the Preview Features row it exists to show");
     }
+
+    [TearDown]
+    public void RestoreCatalogue() => _catalogue?.Dispose();
 
     private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
     {

@@ -4565,7 +4565,7 @@ public class SynchronisationController(
 
     /// <summary>
     /// Sets each mapping response's <see cref="SyncRuleMappingDto.Derived"/> from the Application layer's step facts,
-    /// which carry an entry only for Metaverse-Derived Attribute Flows (and none with the feature off).
+    /// which carry an entry only for Metaverse-Derived Attribute Flows.
     /// </summary>
     private static void AttachDerivedFlowInfo(IEnumerable<SyncRuleMappingDto> dtos, IReadOnlyDictionary<int, DerivedFlowStepInfo> steps)
     {

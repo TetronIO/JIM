@@ -35,10 +35,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
         // Standard Mapping hints need a Connected System id, and the contributor counts an import rule. The
         // factory still has to be resolvable for the component to construct.
         var repo = new Mock<IRepository>();
-        // Unique Value Generation is gated behind its feature flag (#242, Phase 3.5); these tests are about the
-        // pickers' rendering, not the flag itself, so run with it enabled (test/CLAUDE.md > "Tests run with
-        // flags on"). The gate's own visibility behaviour is covered by SyncRuleAttributeFlowTabFeatureFlagTests.
-        repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         _jim = new JimApplication(repo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
     }

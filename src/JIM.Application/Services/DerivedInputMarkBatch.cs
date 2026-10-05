@@ -23,7 +23,7 @@ namespace JIM.Application.Services;
 /// carry transitivity onwards.
 /// </para>
 /// <para>
-/// Inert when <see cref="Graph"/> is null (the feature is off): nothing is collected, nothing is flushed, and the
+/// Inert when <see cref="Graph"/> is null: nothing is collected, nothing is flushed, and the
 /// repository is never called.
 /// </para>
 /// </summary>
@@ -33,7 +33,7 @@ public sealed class DerivedInputMarkBatch
     private readonly string _writerName;
 
     /// <param name="graph">The run-time derived flow graph of the Synchronisation Rules that will exist once the write
-    /// completes (<see cref="DerivedFlowGraphFactory.CreateAsync"/>), or null when the feature is off.</param>
+    /// completes (<see cref="DerivedFlowGraphFactory.Create"/>), or null to make the batch inert.</param>
     /// <param name="writerName">Names the writer in log messages.</param>
     public DerivedInputMarkBatch(DerivedFlowGraph? graph, string writerName)
     {
@@ -43,7 +43,7 @@ public sealed class DerivedInputMarkBatch
     }
 
     /// <summary>
-    /// The graph marks are computed from; null when the feature is off.
+    /// The graph marks are computed from; null when the batch is inert.
     /// </summary>
     public DerivedFlowGraph? Graph { get; }
 
@@ -131,7 +131,7 @@ public sealed class DerivedInputMarkBatch
 
     /// <summary>
     /// Logs the operation's summary statistics (sync integrity: every batch operation logs its totals). Silent when
-    /// the feature is off.
+    /// the batch is inert.
     /// </summary>
     public void LogSummary()
     {

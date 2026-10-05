@@ -56,7 +56,7 @@ public class FeatureFlagsController(ILogger<FeatureFlagsController> logger, JimA
     /// Enabling an In Development flag requires <c>allowInDevelopment: true</c> in the request body; without it
     /// the request fails. Disabling never needs it, whatever the flag's tier.
     /// </remarks>
-    /// <param name="key">The flag's key, e.g. "Features.UniqueValueGeneration".</param>
+    /// <param name="key">The flag's key, e.g. "Features.SomeInDevelopmentFeature".</param>
     /// <param name="request">The new state.</param>
     /// <returns>The updated Feature Flag.</returns>
     [HttpPut("{key}", Name = "UpdateFeatureFlag")]

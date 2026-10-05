@@ -39,11 +39,8 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     protected override void ConfigureAdditionalServices()
     {
         var repo = new Mock<IRepository>();
-        // Unique Value Generation is gated behind its feature flag (#242, Phase 3.5); this file exercises the
-        // generated form itself, so run with it enabled (test/CLAUDE.md > "Tests run with flags on"). The gate's
-        // own visibility behaviour is covered by SyncRuleAttributeFlowTabFeatureFlagTests.
-        repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
-        // With every flag on, the dialog's live Metaverse-Derived Attribute Flow analysis (#1750) reads the Metaverse
+        repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
+        // The dialog's live Metaverse-Derived Attribute Flow analysis (#1750) reads the Metaverse
         // Object Type's import rules once a generated import mapping has a target; there are none here.
         var connectedSystems = new Mock<IConnectedSystemRepository>();
         connectedSystems.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRule>());

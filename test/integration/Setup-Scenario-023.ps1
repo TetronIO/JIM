@@ -14,8 +14,7 @@
         Name import mapping with a generated one (OnlyIfTaken, Number suffix), and, with
         -DeriveFromAccountName (Metaverse-Derived Attribute Flows, #1750), derives Email
         (mv["Account Name"] + "@panoply.local") and User Principal Name (mv["Email"]) from it, so
-        both carry exactly the collision suffix the generated Account Name carries. That turns on the
-        In development Features.MetaverseDerivedAttributeFlows flag as well.
+        both carry exactly the collision suffix the generated Account Name carries.
       - The HR CSV is expected to have been generated with Generate-TestCSV.ps1
         -OmitItOwnedAttributes (Invoke-Scenario-023-UniqueValueGeneration.ps1 does this before calling
         this script), so samAccountName/email/userPrincipalName are genuinely absent, the shape this

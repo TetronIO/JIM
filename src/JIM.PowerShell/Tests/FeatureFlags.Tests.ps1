@@ -146,7 +146,7 @@ Describe 'Enable-JIMFeature' {
         }
 
         It 'Should throw when not connected' {
-            { Enable-JIMFeature -Name 'Features.UniqueValueGeneration' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+            { Enable-JIMFeature -Name 'Features.SomeInDevelopmentFeature' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
@@ -169,12 +169,12 @@ Describe 'Enable-JIMFeature' {
         It 'Sends allowInDevelopment=true when specified, as scenario setup does' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
-                Mock Invoke-JIMApi { [PSCustomObject]@{ key = 'Features.UniqueValueGeneration' } }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ key = 'Features.SomeInDevelopmentFeature' } }
 
-                Enable-JIMFeature -Name 'Features.UniqueValueGeneration' -AllowInDevelopment | Out-Null
+                Enable-JIMFeature -Name 'Features.SomeInDevelopmentFeature' -AllowInDevelopment | Out-Null
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
-                    $Endpoint -eq '/api/v1/features/Features.UniqueValueGeneration' -and
+                    $Endpoint -eq '/api/v1/features/Features.SomeInDevelopmentFeature' -and
                     $Body.allowInDevelopment -eq $true
                 }
             }
@@ -236,7 +236,7 @@ Describe 'Disable-JIMFeature' {
         }
 
         It 'Should throw when not connected' {
-            { Disable-JIMFeature -Name 'Features.UniqueValueGeneration' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+            { Disable-JIMFeature -Name 'Features.SomeInDevelopmentFeature' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

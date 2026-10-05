@@ -29,9 +29,8 @@
     ./Setup-Scenario-001.ps1 -Template Small
 
 .PARAMETER GenerateAccountName
-    Opt-in (Unique Value Generation, #242). When set, enables the In development
-    Features.UniqueValueGeneration feature flag and replaces the ordinary samAccountName -> Account
-    Name import mapping with a generated one: base expression Lower(cs["firstName"]) + "." +
+    Opt-in (Unique Value Generation, #242). When set, replaces the ordinary samAccountName ->
+    Account Name import mapping with a generated one: base expression Lower(cs["firstName"]) + "." +
     Lower(cs["lastName"]), OnlyIfTaken with a Number collision suffix starting at 1 (JIM's own
     defaults). The HR CSV's samAccountName column, if present, is then simply unused; it need not be
     omitted for this switch to work, though Scenario 023 pairs it with a CSV generated via
@@ -46,13 +45,13 @@
     -DeriveFromAccountName (below) derives Email from the generated Account Name instead, so they cannot.
 
     Without this switch, setup is unchanged: the ordinary samAccountName -> Account Name mapping is
-    created exactly as before, and the feature flag is left alone. Scenario 001 itself is not converted
-    in this phase; Invoke-Scenario-001-HRToIdentityDirectory.ps1 is unaffected either way.
+    created exactly as before. That default is what every other scenario built on this setup relies
+    on; Scenario 001 itself opts in to both switches (Invoke-Scenario-001-HRToIdentityDirectory.ps1
+    passes them), so its demo shows generated and derived identifiers.
 
 .PARAMETER DeriveFromAccountName
-    Opt-in (Metaverse-Derived Attribute Flows, #1750). Requires -GenerateAccountName. Enables the In
-    development Features.MetaverseDerivedAttributeFlows feature flag and derives the identifiers that
-    follow from the generated Account Name instead of generating them separately:
+    Opt-in (Metaverse-Derived Attribute Flows, #1750). Requires -GenerateAccountName. Derives the
+    identifiers that follow from the generated Account Name instead of generating them separately:
       - Email = mv["Account Name"] + "@panoply.local" (step 2), replacing the generated Email mapping
         (and the ordinary email -> Email mapping, when the CSV carries an "email" column);
       - User Principal Name = mv["Email"] (step 3);
@@ -1051,13 +1050,7 @@ try {
         # Unique Value Generation (#242): replace samAccountName -> Account Name with a generated
         # mapping, and derive Email from the names when the CSV carries no "email" column.
         if ($GenerateAccountName) {
-            Write-Host "  Enabling Unique Value Generation and creating the generated Account Name mapping..." -ForegroundColor Gray
-
-            # In development: creating a generated mapping is refused (HTTP 400) until this is on.
-            # -AllowInDevelopment is the integration harness's standing acknowledgement (same
-            # mechanism Enable-JIMFeature's own help documents for scenario setup).
-            Enable-JIMFeature -Name "Features.UniqueValueGeneration" -AllowInDevelopment | Out-Null
-            Write-Host "  ✓ Enabled Features.UniqueValueGeneration (In development)" -ForegroundColor Green
+            Write-Host "  Creating the generated Account Name mapping..." -ForegroundColor Gray
 
             $accountNameMvAttr = $mvAttributes | Where-Object { $_.name -eq 'Account Name' }
             if (-not $accountNameMvAttr) {
@@ -1095,9 +1088,6 @@ try {
                 # generated Account Name instead of being generated separately, so they always carry
                 # the suffix Account Name carries. JIM orders the three itself: Account Name (generated,
                 # step 1), then Email (reads it, step 2), then User Principal Name (reads Email, step 3).
-                # In development: an import mapping reading mv["..."] is refused (HTTP 400) until this is on.
-                Enable-JIMFeature -Name "Features.MetaverseDerivedAttributeFlows" -AllowInDevelopment | Out-Null
-                Write-Host "  ✓ Enabled Features.MetaverseDerivedAttributeFlows (In development)" -ForegroundColor Green
 
                 $derivedMappings = @(
                     @{ MvAttr = "Email";               Expression = 'mv["Account Name"] + "@panoply.local"' }

@@ -6,7 +6,7 @@ namespace JIM.Models.Core;
 /// <summary>
 /// Describes one feature flag (#1781): its Service Setting key, how it is presented to an administrator, its
 /// tier, and the issue that will remove it once the feature it gates has shipped. Catalogued once in
-/// <see cref="FeatureFlagCatalogue"/>; never constructed elsewhere.
+/// <see cref="FeatureFlagCatalogue"/>; never constructed elsewhere, other than as a synthetic flag in tests.
 /// </summary>
 /// <param name="Key">
 /// The underlying <see cref="ServiceSetting"/> key. By convention, "Features.&lt;Name&gt;".
