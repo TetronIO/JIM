@@ -60,9 +60,8 @@ public partial class ConnectedSystemServer
     internal async Task<List<(string MetaverseAttributeName, IReadOnlyList<string> HostingSystemNames)>> GetDerivedFlowsReadingDeprovisionedAttributesAsync(int connectedSystemId)
     {
         var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
-        var graph = await DerivedFlowGraphFactory.CreateAsync(
-            Application.FeatureFlags, allSyncRules.Where(rule => rule.ConnectedSystemId != connectedSystemId), []);
-        if (graph == null)
+        if (await DerivedFlowGraphFactory.CreateAsync(
+                Application.FeatureFlags, allSyncRules.Where(rule => rule.ConnectedSystemId != connectedSystemId), []) is not { } graph)
             return [];
 
         // Every import mapping of the system, enabled or not: the residue pass recalls by provenance, so a value an

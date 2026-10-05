@@ -66,7 +66,7 @@ public class ConfigurationChangePreviewVerdictTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(verdict!.Lead, Is.EqualTo("662 objects would have a value cleared."));
-            Assert.That(verdict.Detail, Is.Null);
+            Assert.That(verdict!.Detail, Is.Null);
         }
     }
 

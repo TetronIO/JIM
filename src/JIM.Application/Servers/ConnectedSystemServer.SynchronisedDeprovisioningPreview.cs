@@ -390,13 +390,9 @@ public partial class ConnectedSystemServer
 
         foreach (var cso in downstream)
         {
-            ActivityRunProfileExecutionItemSyncOutcomeType transition;
-            if (pass.SyncEngine.IsProvisioningNeverExported(cso, existingPendingExports.GetValueOrDefault(cso.Id)))
-                transition = ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled;
-            else
-                transition = pass.SyncEngine.DecideMvoDeletionExport(cso, mvo.Type?.Id, pass.ExportEvaluationCache.ExportRulesByMvoTypeId, existingPendingExport: null).ShouldStageDeleteExport
-                    ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
-                    : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
+            var transition = pass.SyncEngine.IsProvisioningNeverExported(cso, existingPendingExports.GetValueOrDefault(cso.Id))
+                ? ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
+                : DeletionCascadeExportTransition(pass, cso, mvo);
 
             deltas.Add(new PreviewDelta(transition,
                 ObjectDisplayName: objectName,
@@ -409,6 +405,16 @@ public partial class ConnectedSystemServer
 
         return deltas;
     }
+
+    /// <summary>
+    /// What deleting the Metaverse Object does to one of its exported Connected System Objects, per the engine's own
+    /// decision: a delete export, or a disconnection that leaves the object where it is.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemSyncOutcomeType DeletionCascadeExportTransition(
+        DeprovisioningPreviewPass pass, ConnectedSystemObject cso, MetaverseObject mvo) =>
+        pass.SyncEngine.DecideMvoDeletionExport(cso, mvo.Type?.Id, pass.ExportEvaluationCache.ExportRulesByMvoTypeId, existingPendingExport: null).ShouldStageDeleteExport
+            ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
+            : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
 
     /// <summary>
     /// Classifies a recall's change to one Metaverse Object, attribute by attribute: cleared when nothing replaces the

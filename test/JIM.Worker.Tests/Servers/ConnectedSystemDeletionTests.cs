@@ -174,7 +174,7 @@ public class ConnectedSystemDeletionTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.MvosWithOtherConnectorsCount, Is.EqualTo(340));
-            Assert.That(result.MvosWithGracePeriodCount, Is.EqualTo(12));
+            Assert.That(result!.MvosWithGracePeriodCount, Is.EqualTo(12));
         }
     }
 
