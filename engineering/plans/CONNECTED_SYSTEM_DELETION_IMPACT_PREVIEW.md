@@ -318,6 +318,6 @@ Lands first so the preview mirrors correct behaviour rather than encoding the de
 
 ## Decisions
 
-1. **Placement** (open): host the preview on the Danger Zone tab with a compact summary in the dialog (A, recommended: matches every other surface and survives long runs), or widen the dialog and host the panel beside the consent controls (B: evidence and consent side by side, but a modal to wait in for minutes, a size prompt stacked on a dialog, and a cramped drill-down). Both are mocked in the UX artefact.
+1. **Placement** (decided, product owner, 2026-10-05): the preview lives on the **Danger Zone tab**, with a compact summary in the delete dialog (option A). It matches every other surface and survives long runs. Rejected: widening the dialog to host the panel beside the consent controls (option B), which puts evidence and consent side by side but leaves a modal to wait in for minutes, stacks the size prompt on a dialog, and cramps the drill-down. Both are mocked in the UX artefact.
 2. **Phase 0** (decided, product owner, 2026-10-05): the residue pass honours the recall setting, fixed as part of this work as the bottom stack layer.
 3. **Same-value takeovers** (decided, product owner, 2026-10-05): a quiet group, omitted from the verdict and sorted last; the summary grid sorts by consequence then count on every surface.
