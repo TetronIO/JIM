@@ -45,6 +45,13 @@ function New-JIMConfigurationChangePreview {
           refreshed and on how many objects, and whose contributed Metaverse values would be withdrawn, or
           kept, when their obsolete objects are next synchronised. Deselecting an Object Type that an enabled
           Synchronisation Rule still manages is reported as Blocking, because saving it is refused.
+        - -ConnectedSystemId with -Deletion previews deleting that Connected System by deprovisioning it
+          through synchronisation, which is what Remove-JIMConnectedSystem does by default: which Metaverse
+          attribute values another system would take over and which would be cleared, which Metaverse
+          Objects would become eligible for deletion, and which corrective updates and deletions would be
+          staged for the other Connected Systems. There is nothing to propose beyond the system itself.
+          Deleting a system with -DeleteImmediately skips all of that work, so this preview does not
+          describe it.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -53,8 +60,9 @@ function New-JIMConfigurationChangePreview {
         A proposal that cannot be applied comes back with a blocking validation finding and is never
         evaluated: check IsBlocked and ValidationFindings before reading anything else.
 
-        Pass the returned ActivityId to Set-JIMMetaverseObjectType -PreviewActivityId when you make the
-        change, so the audit records which preview informed it.
+        Pass the returned ActivityId to the cmdlet that makes the change (Set-JIMMetaverseObjectType
+        -PreviewActivityId, or Remove-JIMConnectedSystem -PreviewActivityId for a deletion), so the audit
+        records which preview informed it.
 
     .PARAMETER MetaverseObjectTypeId
         The Metaverse Object Type whose deletion settings are being proposed. Selects the deletion
@@ -62,7 +70,10 @@ function New-JIMConfigurationChangePreview {
 
     .PARAMETER ConnectedSystemId
         The Connected System whose partition and container selection is being proposed. Selects the scope
-        selection surface.
+        selection surface, unless -MatchingRule, -SchemaObjectType or -Deletion selects another.
+
+    .PARAMETER Deletion
+        Previews deleting the Connected System named by -ConnectedSystemId, rather than changing it.
 
     .PARAMETER SchemaObjectType
         The proposed schema selection, as one hashtable per Connected System Object Type being changed.
@@ -325,6 +336,24 @@ function New-JIMConfigurationChangePreview {
         are the only ones whose fate the setting changes now.
 
     .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -Wait
+        $preview.ImpactCounts
+
+        Previews deleting a Connected System and reports, per consequence, how many objects it reaches:
+        attribute values another system would take over, values that would be cleared, Metaverse Objects
+        that would become eligible for deletion, and updates and deletions that would be staged for the
+        other Connected Systems.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -Wait
+        if ($preview.IsComplete) {
+            Remove-JIMConnectedSystem -Id 3 -PreviewActivityId $preview.ActivityId -Confirm:$false
+        }
+
+        Deletes the Connected System once its deletion preview has finished, and records the preview on the
+        deletion's Activity, so the audit shows the consequences were looked at first.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled -Wait
         $preview.ImpactCounts
 
@@ -346,6 +375,7 @@ function New-JIMConfigurationChangePreview {
         Set-JIMSyncRule
         Set-JIMMatchingRule
         Set-JIMConnectedSystemObjectType
+        Remove-JIMConnectedSystem
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -370,7 +400,13 @@ function New-JIMConfigurationChangePreview {
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemScopeSelection', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ObjectMatching', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemSchema', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemDeletion', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
+
+        # Mandatory so that it, and only it, selects the deletion set: -ConnectedSystemId on its own keeps meaning
+        # the scope selection, and a deletion is never previewed because a caller left something out.
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemDeletion')]
+        [switch]$Deletion,
 
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
         [int[]]$SelectedPartitionIds,
@@ -576,6 +612,11 @@ function New-JIMConfigurationChangePreview {
         elseif ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemSchema') {
             $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/schema-selection/preview"
             $subject = "Connected System $ConnectedSystemId"
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemDeletion') {
+            # The deletion has no settings to propose, so the body carries only -FullDataSet's choice, if any.
+            $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/deletion/preview"
+            $subject = "the deletion of Connected System $ConnectedSystemId"
         }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"

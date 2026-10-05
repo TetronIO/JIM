@@ -282,6 +282,74 @@ Describe 'Remove-JIMConnectedSystem' {
         }
     }
 
+    Context 'Recording the preview behind the deletion (#134)' {
+
+        It 'Sends previewActivityId so the deletion records the preview that informed it' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $previewActivityId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -PreviewActivityId $previewActivityId -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -match "previewActivityId=$previewActivityId"
+                }
+            }
+        }
+
+        It 'Combines previewActivityId with the mode and the reason into one query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $previewActivityId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force -DeleteImmediately -ChangeReason 'Decommissioned' -PreviewActivityId $previewActivityId
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and
+                    $Endpoint -match 'synchronisedDeprovisioning=false' -and
+                    $Endpoint -match 'changeReason=Decommissioned' -and
+                    $Endpoint -match "previewActivityId=$previewActivityId" -and
+                    @($Endpoint -split '\?').Count -eq 2
+                }
+            }
+        }
+
+        It 'Omits previewActivityId when no preview was run' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') { return }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -notmatch 'previewActivityId'
+                }
+            }
+        }
+
+        It 'Refuses a preview id that is not a GUID before deleting anything' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+
+                { Remove-JIMConnectedSystem -Id 1 -PreviewActivityId 'last-week' -Force -ErrorAction Stop } |
+                    Should -Throw -ErrorId 'ParameterArgumentTransformationError,Remove-JIMConnectedSystem'
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
