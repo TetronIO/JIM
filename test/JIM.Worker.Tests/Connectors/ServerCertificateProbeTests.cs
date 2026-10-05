@@ -135,18 +135,20 @@ public class ServerCertificateProbeTests
     }
 
     [Test]
-    public void Probe_WhenTheServerSendsItsIssuer_ReportsTheIssuerAsSomethingThatCanBeTrusted()
+    public void Probe_WhenTheServerSendsItsRoot_ReportsACompleteChainWithTheRootToTrust()
     {
         var diagnostic = Probe(_host, _port);
 
         Assert.That(diagnostic, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            // The test servers are issued by a certificate authority they send alongside their own certificate,
-            // which is what lets an administrator trust the authority instead of repeating this at every renewal.
+            // The test servers' certificates are issued by a root they send alongside their own certificate, so the
+            // chain is complete and the root, not the server's certificate, is what an administrator is offered.
             Assert.That(diagnostic!.IsSelfSigned, Is.False);
-            Assert.That(diagnostic!.IsIssuerCertificateAvailable, Is.True);
-            Assert.That(diagnostic!.IssuerThumbprint, Is.Not.EqualTo(diagnostic!.Thumbprint));
+            Assert.That(diagnostic!.IsChainComplete, Is.True);
+            Assert.That(diagnostic!.RootThumbprint, Is.EqualTo(diagnostic!.IssuerThumbprint));
+            Assert.That(diagnostic!.RootThumbprint, Is.Not.EqualTo(diagnostic!.Thumbprint));
+            Assert.That(diagnostic!.Chain.Last().Source, Is.EqualTo(ServerCertificateChainElementSource.SentByServer));
         }
     }
 
@@ -161,9 +163,9 @@ public class ServerCertificateProbeTests
         {
             Assert.That(reading!.Chain!.Leaf.Thumbprint, Is.EqualTo(reading!.Diagnostic.Thumbprint));
             Assert.That(reading!.Chain!.Leaf.Data, Is.Not.Empty);
-            Assert.That(reading!.Chain!.Issuer, Is.Not.Null);
-            Assert.That(reading!.Chain!.Issuer!.Data, Is.Not.Empty);
-            Assert.That(reading!.Chain!.Issuer!.Thumbprint, Is.EqualTo(reading!.Diagnostic.IssuerThumbprint));
+            Assert.That(reading!.Chain!.Root, Is.Not.Null);
+            Assert.That(reading!.Chain!.Root!.Data, Is.Not.Empty);
+            Assert.That(reading!.Chain!.Root!.Thumbprint, Is.EqualTo(reading!.Diagnostic.RootThumbprint));
         }
     }
 

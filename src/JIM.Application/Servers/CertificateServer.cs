@@ -508,15 +508,28 @@ public class CertificateServer : ICertificateProvider
             };
         }
 
-        // The thumbprint both selects and verifies: the administrator chose either the server's own certificate or
-        // the authority that issued it, and JIM adds whichever the confirmed thumbprint identifies. Anything else
-        // means the server is presenting something other than what was shown, and nothing is added.
-        var chain = reading.Chain;
-        var chosen = MatchesThumbprint(chain.Leaf, expected) ? chain.Leaf
-            : chain.Issuer != null && MatchesThumbprint(chain.Issuer, expected) ? chain.Issuer
-            : null;
+        // A certificate authority in the chain that cannot be relied on (expired, not a certificate authority, a bad
+        // signature) defeats whatever is trusted above it, so trusting anything would report success and change
+        // nothing.
+        if (reading.Diagnostic.FailureReason == ServerCertificateFailureReason.InvalidChain)
+        {
+            return new ServerCertificateTrustResult
+            {
+                Outcome = ServerCertificateTrustOutcome.InvalidChain,
+                ExpectedThumbprint = expected,
+                Message = reading.Diagnostic.Remediation
+            };
+        }
 
-        if (chosen == null)
+        // The thumbprint both selects and verifies: the administrator chose a certificate in the chain JIM assembled
+        // (the server's own, an intermediate, or the root), and JIM adds whichever the confirmed thumbprint
+        // identifies. Anything else means the server is presenting something other than what was shown, and
+        // nothing is added.
+        var chain = reading.Chain;
+        var chainCertificates = chain.All.ToList();
+        var chosenIndex = chainCertificates.FindIndex(certificate => MatchesThumbprint(certificate, expected));
+
+        if (chosenIndex < 0)
         {
             Log.Warning("Refused to trust a certificate for Connected System {ConnectedSystemId}: {Host}:{Port} is presenting {Presented}, not the confirmed {Expected}",
                 connectedSystemId, LogSanitiser.Sanitise(endpoint.Host), endpoint.Port, LogSanitiser.Sanitise(chain.Leaf.Thumbprint), LogSanitiser.Sanitise(expected));
@@ -530,6 +543,7 @@ public class CertificateServer : ICertificateProvider
             };
         }
 
+        var chosen = chainCertificates[chosenIndex];
         if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(chosen.Thumbprint))
         {
             return new ServerCertificateTrustResult
@@ -548,13 +562,41 @@ public class CertificateServer : ICertificateProvider
 
         var certificate = await addAsync(chosen.CommonName, chosen.Data, notes, reason);
 
+        // Certificate authorities between the server's certificate and the one chosen that the server does not send:
+        // JIM found them by downloading, which a connection cannot be relied on to do (the LDAP Connector's TLS stack
+        // never does, and an air-gapped deployment cannot), so without them the chosen certificate could not be
+        // linked to the server's. Stored after the choice, so the audit trail reads in the order the decision was made.
+        var storedIntermediates = new List<TrustedCertificate>();
+        foreach (var intermediate in chainCertificates.Take(chosenIndex).Skip(1).Where(c => c.Source == ServerCertificateChainElementSource.Downloaded))
+        {
+            var stored = await AddUnlessAlreadyTrustedAsync(intermediate, addAsync,
+                $"Stored alongside '{chosen.CommonName}' so JIM can link it to the certificate {endpoint.Host}:{endpoint.Port} presents, which does not send this certificate authority itself. Downloaded from {intermediate.DownloadedFrom}.",
+                reason);
+            storedIntermediates.AddRange(stored == null ? [] : [stored]);
+        }
+
         return new ServerCertificateTrustResult
         {
             Outcome = ServerCertificateTrustOutcome.Trusted,
             Certificate = certificate,
             ExpectedThumbprint = expected,
-            PresentedThumbprint = chosen.Thumbprint
+            PresentedThumbprint = chosen.Thumbprint,
+            StoredIntermediates = storedIntermediates
         };
+    }
+
+    /// <summary>
+    /// Adds a certificate to the store, or returns null where it is already there.
+    /// </summary>
+    private async Task<TrustedCertificate?> AddUnlessAlreadyTrustedAsync(
+        PresentedServerCertificate certificate,
+        Func<string, byte[], string?, string?, Task<TrustedCertificate>> addAsync,
+        string notes,
+        string reason)
+    {
+        return await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(certificate.Thumbprint)
+            ? null
+            : await addAsync(certificate.CommonName, certificate.Data, notes, reason);
     }
 
     /// <summary>

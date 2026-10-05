@@ -526,9 +526,11 @@ Get-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> [-SettingValues
 
 ### Output
 
-An object with a `certificate` property and a `readAt` timestamp. The certificate carries `host`, `port`, `subject`, `issuer`, `subjectAlternativeNames`, `validFrom`, `validTo`, `thumbprint`, `signatureAlgorithm`, `isSelfSigned`, `issuerThumbprint`, `isIssuerCertificateAvailable`, `failureReason` and `remediation`.
+An object with a `certificate` property and a `readAt` timestamp. The certificate carries `host`, `port`, `subject`, `issuer`, `subjectAlternativeNames`, `validFrom`, `validTo`, `thumbprint`, `signatureAlgorithm`, `isSelfSigned`, `issuerThumbprint`, `isIssuerCertificateAvailable`, `chain`, `isChainComplete`, `missingIssuer`, `rootThumbprint`, `rootSubject`, `failureReason` and `remediation`.
 
-`failureReason` is one of `None`, `UntrustedIssuer`, `NameMismatch`, `Expired`, `NotYetValid` or `NoCertificatePresented`. Only `UntrustedIssuer` is fixed by trusting the certificate.
+`chain` lists the certificate chain JIM found, the server's own certificate first and the root (where JIM reached one) last. Each entry carries `subject`, `issuer`, `thumbprint`, `validFrom`, `validTo`, `isCertificateAuthority`, `isSelfSigned`, `source` and `downloadedFrom`. `source` is `SentByServer`, `Downloaded` (from the address in the certificate below it, given in `downloadedFrom`), `JimCertificateStore` or `OperatingSystem`. When JIM could not reach a root, `isChainComplete` is `$false` and `missingIssuer` names the certificate it could not find.
+
+`failureReason` is one of `None`, `UntrustedIssuer`, `NameMismatch`, `Expired`, `NotYetValid`, `NoCertificatePresented`, `InvalidChain` or `Unknown`. Only `UntrustedIssuer` is fixed by trusting a certificate. `InvalidChain` means a certificate authority in the chain has expired, is not marked as one, or has a signature that does not verify, which has to be fixed on the server.
 
 ### Examples
 
@@ -540,6 +542,11 @@ Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
 Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 |
     Select-Object -ExpandProperty certificate |
     Select-Object host, subject, thumbprint, failureReason
+```
+
+```powershell title="List the certificate chain and where each certificate came from"
+(Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42).certificate.chain |
+    Format-Table subject, source, downloadedFrom
 ```
 
 ```powershell title="Read an endpoint that has been entered but not saved"
@@ -571,14 +578,14 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> -Thumbprint
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
-| `Thumbprint` | `string` | Yes | | The thumbprint being trusted, as read from the server. Spaces and colons between the pairs are ignored. |
+| `Thumbprint` | `string` | Yes | | The thumbprint being trusted, as read from the server: the server's own certificate, or any certificate in its chain. Spaces and colons between the pairs are ignored. |
 | `ChangeReason` | `string` | No | | Reason recorded on the audit Activity. JIM records a sentence naming the Connected System when none is given. |
 | `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
 | `PassThru` | `switch` | No | `$false` | Returns the outcome, including the certificate as it now sits in the store. |
 
 ### Output
 
-When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `AlreadyTrusted` or `ThumbprintMismatch`), `message`, `certificate`, `expectedThumbprint` and `presentedThumbprint`. Otherwise, no output.
+When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `AlreadyTrusted`, `ThumbprintMismatch` or `InvalidChain`), `message`, `certificate`, `storedIntermediates`, `expectedThumbprint` and `presentedThumbprint`. `storedIntermediates` lists any certificate authorities JIM downloaded and stored alongside the one you trusted, because the server does not send them. Otherwise, no output.
 
 ### Examples
 
@@ -586,12 +593,12 @@ When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `Alr
 Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
 ```
 
-```powershell title="Trust the authority that issued it, rather than the server's own certificate"
+```powershell title="Trust the root of the chain, rather than the server's own certificate"
 $reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
-$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+$reading.certificate.chain | Format-Table subject, source, downloadedFrom
 
 Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
-    -Thumbprint $reading.certificate.issuerThumbprint `
+    -Thumbprint $reading.certificate.rootThumbprint `
     -ChangeReason 'Unblocking the HR Cloud connection test.'
 ```
 
@@ -604,9 +611,9 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 ### Notes
 
 - **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
-- **Trust the issuer where there is one.** `issuerThumbprint` is populated when the server sent the authority that issued its certificate. Trusting the authority survives the server's certificate being renewed; trusting the server's own certificate has to be repeated at every renewal. A self-signed certificate has no separate authority, and `isIssuerCertificateAvailable` is then `$false`.
+- **Any certificate in the chain works; the root lasts longest.** JIM accepts the server when any certificate in its chain is in the Trusted Certificates store. `rootThumbprint` is populated when JIM reached the root, and trusting it survives the renewal of every certificate beneath it; trusting the server's own certificate has to be repeated at every renewal. Where `isChainComplete` is `$false`, trust the highest certificate JIM found, or add `missingIssuer` under Admin > Certificates. A self-signed certificate is its own root.
 - **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
-- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries.
+- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted.
 - Supports `ShouldProcess`.
 - Remove a certificate later with `Remove-JIMCertificate`.
 
