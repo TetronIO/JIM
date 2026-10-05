@@ -3,6 +3,7 @@
 
 using System.Text;
 using JIM.Models.Core;
+using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -880,12 +881,22 @@ public partial class SyncRepository
     /// batch via <c>= ANY</c> instead of once per object, and the MVO rows themselves are removed
     /// in a single SaveChanges. Semantics per object are identical to the singular method.
     /// </summary>
-    public async Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
     {
         if (metaverseObjects.Count == 0)
-            return;
+            return [];
 
         var mvoIds = metaverseObjects.Select(mvo => mvo.Id).ToArray();
+
+        // One transaction for the whole deletion (Unique Value Generation, #242, Phase 6): the retirement below must
+        // land with the deletion or not at all. A caller already inside a transaction keeps it; this joins it.
+        await using var ownTransaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
+
+        // Retire the objects' generated values BEFORE the rows go: the assignments are removed by the deletion's
+        // foreign-key cascade, so once the objects are deleted there is nothing left to read them from.
+        var retirements = await RetiredGeneratedValueSql.RetireForMetaverseObjectsAsync(_context, mvoIds);
 
         // Null out FK reference in Activities to preserve audit history
         await _context.Database.ExecuteSqlRawAsync(
@@ -925,7 +936,12 @@ public partial class SyncRepository
         _context.MetaverseObjects.RemoveRange(metaverseObjects);
         await _context.SaveChangesAsync();
 
-        Log.Information("DeleteMetaverseObjectsAsync: Deleted {Count} Metaverse Objects in bulk", metaverseObjects.Count);
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
+
+        Log.Information("DeleteMetaverseObjectsAsync: Deleted {Count} Metaverse Objects in bulk, retiring {RetiredCount} generated value(s)",
+            metaverseObjects.Count, retirements.Count);
+        return retirements;
     }
 
     #endregion

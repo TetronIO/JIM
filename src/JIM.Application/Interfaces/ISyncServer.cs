@@ -128,9 +128,10 @@ public interface ISyncServer
 
     /// <summary>
     /// Deletes an MVO with initiator information for audit trail.
-    /// Handles change tracking (if enabled), then delegates the raw delete to ISyncRepository.
+    /// Handles change tracking (if enabled), then delegates the raw delete to ISyncRepository, which retires the
+    /// object's generated values in the same transaction (#242, Phase 6) and reports them, for the caller's outcomes.
     /// </summary>
-    Task DeleteMetaverseObjectAsync(
+    Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
@@ -140,9 +141,9 @@ public interface ISyncServer
     /// <summary>
     /// Set-based form of <see cref="DeleteMetaverseObjectAsync"/> (issue #993): deletes multiple
     /// MVOs with one FK cleanup pass and bulk change record persistence. Semantically equivalent
-    /// to calling the singular method per object.
+    /// to calling the singular method per object, and likewise returns the generated values it retired.
     /// </summary>
-    Task DeleteMetaverseObjectsAsync(
+    Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,

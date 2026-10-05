@@ -4013,7 +4013,7 @@ public class FullSyncTests
             return base.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
         }
 
-        public override Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+        public override Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
         {
             Interlocked.Increment(ref PerMvoDeleteCalls);
             return base.DeleteMetaverseObjectAsync(metaverseObject);
@@ -4032,7 +4032,7 @@ public class FullSyncTests
     /// </summary>
     private sealed class BulkDeleteFailingSyncRepository : MvoDeletionCountingSyncRepository
     {
-        public override Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+        public override Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
             => throw new InvalidOperationException("Simulated bulk MVO delete failure.");
     }
 }

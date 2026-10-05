@@ -37,7 +37,7 @@ Get-JIMMetaverseObjectType -Name <string> [-IncludeChildObjects]
 
 #### Output
 
-Object type definitions including ID, name, and optionally child object counts.
+Object type definitions including ID, name, and optionally child object counts. With `-Id` or `-Name`, the full object type, which also carries `DeletionRuleAdvisory` and `DeletionSourceWarnings`: the Connected Systems that project into the type without being one of its authoritative sources under `WhenAuthoritativeSourceDisconnected`, each with `ConnectedSystemId` and `ConnectedSystemName` (empty when there are none; see [deletion behaviour](../configuration/metaverse.md#authoritative-source-trigger-modes)). The list form returns summaries without either.
 
 #### Examples
 
@@ -51,6 +51,12 @@ Get-JIMMetaverseObjectType -Name "Person" -IncludeChildObjects
 
 ```powershell title="Page through object types"
 Get-JIMMetaverseObjectType -Page 2 -PageSize 50
+```
+
+```powershell title="Fail a health check when a projecting system is not an authoritative source"
+if ((Get-JIMMetaverseObjectType -Name "Person").DeletionSourceWarnings) {
+    throw "A Connected System projects into Person without being one of its authoritative sources"
+}
 ```
 
 ---
@@ -110,6 +116,8 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
     - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when its authoritative sources disconnect. `DeletionTriggerMode` controls whether every selected source must disconnect first (`AllSourcesDisconnect`) or any one selected source disconnecting is enough (`SpecificSourcesDisconnect`)
 
     Under `WhenLastConnectorDisconnected`, provisioned target accounts count as connectors, so an object of a type with provisioning export Synchronisation Rules outlives its last source while a target account exists; see [deletion behaviour](../configuration/metaverse.md#deletion-behaviour). When that combination applies, the cmdlet surfaces the API's advisory as a warning, and the returned object carries it as `DeletionRuleAdvisory`.
+
+    Under `WhenAuthoritativeSourceDisconnected`, a Connected System that projects into the type without being one of its authoritative sources creates objects no selected source governs; see [projecting systems that are not authoritative sources](../configuration/metaverse.md#authoritative-source-trigger-modes). The cmdlet writes one warning per such system, and the returned object lists them as `DeletionSourceWarnings`. Join-only contributors are never listed.
 
 #### Output
 
@@ -181,7 +189,7 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string>
 
 #### Output
 
-The newly created object type definition.
+The newly created object type definition. As for `Set-JIMMetaverseObjectType`, `DeletionRuleAdvisory` and each entry in `DeletionSourceWarnings` are written with `Write-Warning`.
 
 #### Examples
 
@@ -1010,6 +1018,71 @@ Get-JIMGeneratedValue -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ```powershell title="Pipe a Metaverse Object straight in"
 Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGeneratedValue
+```
+
+### Get-JIMRetiredGeneratedValue
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+Lists an attribute's retired generated values, newest first: the values JIM issued for it and will never issue again, whichever Attribute Flow generates it. Every page is read, so the whole list is returned. Read-only; the only way to forget retired values is `Restart-JIMGeneratedValues` on a sequence. See [Retired values](../configuration/synchronisation-rules.md#retired-values) for when a value is retired.
+
+#### Syntax
+
+```powershell
+# An import flow's Metaverse Attribute, by ID
+Get-JIMRetiredGeneratedValue -MetaverseAttributeId <int> [-Search <string>]
+
+# An import flow's Metaverse Attribute, by name
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName <string> [-Search <string>]
+
+# An export flow's Connected System attribute
+Get-JIMRetiredGeneratedValue -ConnectedSystemId <int> -ObjectTypeId <int> -AttributeId <int> [-Search <string>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseAttributeId` | `int` | Yes (by ID) | | The Metaverse Attribute's ID. Accepts pipeline input by property name, so a Metaverse Attribute from `Get-JIMMetaverseAttribute` pipes straight in. Alias: `Id` |
+| `MetaverseAttributeName` | `string` | Yes (by name) | | The Metaverse Attribute's name, for example `Account Name` |
+| `ConnectedSystemId` | `int` | Yes (export) | | The Connected System whose attribute an export flow generates |
+| `ObjectTypeId` | `int` | Yes (export) | | The Connected System Object Type the attribute belongs to |
+| `AttributeId` | `int` | Yes (export) | | The Connected System attribute's ID |
+| `Search` | `string` | No | | Text matched, ignoring case, against the value and the name of the object that held it |
+
+#### Output
+
+One `PSCustomObject` per retired value:
+
+| Property | Description |
+|----------|--------------|
+| `Id` | The entry's own identifier |
+| `MetaverseAttributeId` | The Metaverse Attribute (import flow); empty for an export flow |
+| `ConnectedSystemObjectTypeAttributeId` | The Connected System attribute (export flow); empty for an import flow |
+| `AttributeName` | The attribute's name |
+| `Value` | The value as it was issued |
+| `RetiredAt` | When it was retired (UTC) |
+| `Reason` | `ObjectDeleted`, `Superseded` or `Recalled` (`Regenerated` is reserved for a later release) |
+| `FromObjectId` | The object that held it: a Metaverse Object, or for an export flow a Connected System Object |
+| `FromObjectDisplayName` | That object's name, as it was when the value was retired |
+| `FromObjectExists` | Whether that object still exists |
+| `ActivityId` | The Activity during which it was retired, when one was recorded (a removed flow records none) |
+| `HeldBy` | `FromObjectDisplayName` for reading, with `(deleted)` added once the object is gone |
+
+#### Examples
+
+```powershell title="List every retired Account Name"
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name"
+```
+
+```powershell title="Find out whether a leaver's account name is retired, and why"
+Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name" -Search "fenwick" |
+    Select-Object Value, RetiredAt, Reason, HeldBy
+```
+
+```powershell title="Pipe a Metaverse Attribute straight in"
+Get-JIMMetaverseAttribute -Name "Employee Number" | Get-JIMRetiredGeneratedValue
 ```
 
 ---

@@ -35,6 +35,7 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepository = null!;
     private Mock<ISyncRepository> _mockSyncRepository = null!;
     private JimApplication _jim = null!;
+    private int _retiredValueCount;
 
     protected override void ConfigureAdditionalServices()
     {
@@ -65,6 +66,12 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
         _mockSyncRepository
             .Setup(r => r.GetGeneratedValueSequenceAsync(3, null))
             .ReturnsAsync(new GeneratedValueSequence { MetaverseAttributeId = 3, NextValue = 101701, AssignedCount = 1245 });
+        _retiredValueCount = 0;
+        _mockSyncRepository
+            .Setup(r => r.GetRetiredGeneratedValueCountsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(() => _retiredValueCount == 0
+                ? []
+                : [new RetiredGeneratedValueCount { MetaverseAttributeId = 3, Count = _retiredValueCount }]);
     }
 
     [TearDown]
@@ -177,6 +184,57 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
         {
             var confirmButton = provider.Find($"[data-testid='{ConfirmButtonMarker}']");
             Assert.That(confirmButton.HasAttribute("disabled"), Is.False);
+        });
+    }
+
+    // ─── Retired values forgotten (#242, Phase 6, mockup section C) ───
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_RetiredValuesToForget_SaysHowManyAndLinksToTheList()
+    {
+        _retiredValueCount = 4;
+
+        var provider = ShowDialog();
+
+        provider.WaitForAssertion(() =>
+        {
+            var line = provider.Find("[data-testid='jim-start-again-forgotten']");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(line.TextContent, Does.Contain("4 retired values"));
+                Assert.That(line.QuerySelector("[data-testid='jim-start-again-view-retired']"), Is.Not.Null,
+                    "the line links through to the retired values list");
+            }
+        });
+    }
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_NoRetiredValues_SaysNothingAboutForgetting()
+    {
+        var provider = ShowDialog();
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("101701")));
+        Assert.That(provider.FindAll("[data-testid='jim-start-again-forgotten']"), Is.Empty);
+    }
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_CounterAtStartAtButRetiredValuesToForget_IsNotANoOp()
+    {
+        _retiredValueCount = 2;
+
+        var provider = ShowDialog(configuredStart: 101701L);
+        provider.WaitForAssertion(() => Assert.That(provider.FindAll("[data-testid='jim-start-again-forgotten']"), Is.Not.Empty));
+
+        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(AttributeName);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.Markup, Does.Not.Contain("starting again changes nothing"));
+                Assert.That(provider.Find($"[data-testid='{ConfirmButtonMarker}']").HasAttribute("disabled"), Is.False,
+                    "forgetting the retired values is a change in its own right");
+            }
         });
     }
 

@@ -1,0 +1,189 @@
+@using JIM.Models.Transactional
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The retired values list (Unique Value Generation, #242, Phase 6, mockup section B): an attribute's retired values
+   register, read-only. The register is per attribute rather than per Attribute Flow, because the same value must
+   not be reissued by any flow generating it. A deployment with years of leavers can hold thousands of entries, so
+   this is the shared virtualised grid with a server-side search; Embedded because it lives in a dialog, whose state
+   a deep link could not restore. Opened from the Attribute Flow row action and from "Start again…". *@
+
+<MudDialog data-testid="jim-retired-values-dialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Outlined.Archive" Class="me-3" /> Retired values: @AttributeName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body1">
+            JIM will never issue these values for @AttributeName again, whichever Attribute Flow generates it. A value
+            is retired when the object that held it is deleted, or when the value stops being JIM's to manage.
+        </MudText>
+
+        <VirtualisedDataGrid T="RetiredGeneratedValueHeader"
+                             ContainerId="retired-generated-values"
+                             Embedded="true"
+                             TrackUrlState="false"
+                             MaxHeight="420px"
+                             GridClass="mt-3"
+                             ExpectedItemCount="@ExpectedCount"
+                             DefaultSortBy="@NewestFirstSort"
+                             LoadWindow="LoadWindowAsync"
+                             SearchPlaceholder="Search retired values"
+                             SingularName="retired value"
+                             PluralName="retired values">
+            <Columns>
+                <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                    <CellTemplate>
+                        <div class="jim-one-line" title="@context.Item.Value"><code class="jim-code-inline">@context.Item.Value</code></div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Retired" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <CellTemplate>
+                        <MudTooltip Text="@context.Item.RetiredAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            @context.Item.RetiredAt.ToRelativeTime()
+                        </MudTooltip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Why" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <CellTemplate>
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <ChildContent>
+                                <MudChip T="string" Variant="Variant.Text" Color="@RetiredGeneratedValueReasonDisplay.Colour(context.Item.Reason)" Class="ma-0">
+                                    @RetiredGeneratedValueReasonDisplay.Label(context.Item.Reason)
+                                </MudChip>
+                            </ChildContent>
+                            <TooltipContent>
+                                <TooltipText Text="@RetiredGeneratedValueReasonDisplay.Tooltip(context.Item.Reason)" />
+                            </TooltipContent>
+                        </MudTooltip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Held by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <CellTemplate>
+                        @{
+                            // Captured once, so the guards below read locals rather than chained dereferences.
+                            var item = context.Item;
+                            var holderHref = HolderHref(item);
+                        }
+                        @if (holderHref != null)
+                        {
+                            <ObjectChip Kind="@(item.MetaverseAttributeId != null ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
+                                        Name="@item.FromObjectDisplayName"
+                                        Href="@holderHref"
+                                        Class="ma-0" />
+                        }
+                        else if (!string.IsNullOrEmpty(item.FromObjectDisplayName))
+                        {
+                            <span class="mud-text-disabled" title="The object that held this value has been deleted.">@item.FromObjectDisplayName (deleted)</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent>
+                @if (!string.IsNullOrEmpty(context.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                                     PrimaryText="@($"No retired values match \"{context.SearchText}\".")"
+                                     ActionText="Clear Search"
+                                     OnAction="@context.ClearSearchAsync" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Outlined.Archive"
+                                     PrimaryText="@($"No values of {AttributeName} have been retired.")"
+                                     SecondaryText="A value is retired when the object that held it is deleted, or when JIM stops managing it." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+            Retired values are kept permanently. On a Sequence flow, Start again is the only thing that clears them.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>
+    /// The register's only order: newest first. Naming it something no header claims keeps the grid from drawing a
+    /// sort arrow over an order the administrator did not choose.
+    /// </summary>
+    private const string NewestFirstSort = "retired";
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>The attribute's name, for the title and the sentences.</summary>
+    [Parameter, EditorRequired]
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>The Metaverse Attribute an import flow generates. Exactly one of the two attribute ids is set.</summary>
+    [Parameter]
+    public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>The Connected System attribute an export flow generates. Exactly one of the two attribute ids is set.</summary>
+    [Parameter]
+    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
+
+    /// <summary>The register's size, when the opener already knows it, so the grid holds its height while loading.</summary>
+    [Parameter]
+    public int? ExpectedCount { get; set; }
+
+    private async Task<VirtualisedWindow<RetiredGeneratedValueHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        using var jim = JimFactory.Create();
+        var (items, total) = await jim.UniqueValues.GetRetiredValuesAsync(
+            MetaverseAttributeId, ConnectedSystemObjectTypeAttributeId, request.SearchText,
+            request.StartIndex, request.Count, request.IncludeTotalCount);
+        return new VirtualisedWindow<RetiredGeneratedValueHeader>(items, total);
+    }
+
+    /// <summary>
+    /// Where "Held by" links: the Metaverse Object (or, for an export flow, the Connected System Object) while it
+    /// exists. Null once it has been deleted, when the row shows its last name instead.
+    /// </summary>
+    private static string? HolderHref(RetiredGeneratedValueHeader item)
+    {
+        if (!item.FromObjectExists || item.FromObjectId is not { } holderId)
+            return null;
+
+        if (item.MetaverseAttributeId != null)
+            return item.FromObjectTypePluralName is { } pluralName ? Utilities.GetMetaverseObjectHref(holderId, pluralName) : null;
+
+        return item.FromObjectConnectedSystemId is { } connectedSystemId
+            ? Utilities.GetConnectedSystemObjectHref(connectedSystemId, holderId)
+            : null;
+    }
+
+    private void Close() => MudDialog.Close();
+
+    /// <summary>
+    /// Opens the retired values list for one attribute: a Metaverse Attribute for an import flow, or a Connected
+    /// System attribute for an export flow.
+    /// </summary>
+    public static async Task ShowAsync(
+        IDialogService dialogService, string attributeName, int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, int? expectedCount)
+    {
+        var parameters = new DialogParameters<RetiredGeneratedValuesDialog>
+        {
+            { x => x.AttributeName, attributeName },
+            { x => x.MetaverseAttributeId, metaverseAttributeId },
+            { x => x.ConnectedSystemObjectTypeAttributeId, connectedSystemObjectTypeAttributeId },
+            { x => x.ExpectedCount, expectedCount }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true, CloseButton = true };
+        var dialog = await dialogService.ShowAsync<RetiredGeneratedValuesDialog>($"Retired values: {attributeName}", parameters, options);
+        await dialog.Result;
+    }
+}

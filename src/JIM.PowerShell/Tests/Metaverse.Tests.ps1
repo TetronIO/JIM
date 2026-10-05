@@ -965,6 +965,44 @@ Describe 'New-JIMMetaverseObjectType' {
         }
     }
 
+    Context 'Deletion source warnings (#1256)' {
+
+        It 'Writes one warning per projecting system that is not an authoritative source' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id = 5
+                        name = 'Person'
+                        deletionSourceWarnings = @(
+                            [PSCustomObject]@{ connectedSystemId = 7; connectedSystemName = 'Partner Portal' },
+                            [PSCustomObject]@{ connectedSystemId = 8; connectedSystemName = 'Badge System' }
+                        )
+                    }
+                }
+
+                New-JIMMetaverseObjectType -Name 'Person' -PluralName 'People' -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1 -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 2
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+                $sourceWarnings[1].Message | Should -Match 'Badge System'
+            }
+        }
+
+        It 'Emits no warning when the API lists no deletion source warnings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Person'; deletionSourceWarnings = @() } }
+
+                New-JIMMetaverseObjectType -Name 'Person' -PluralName 'People' -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1 -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll { $help = Get-Help New-JIMMetaverseObjectType -Full }
@@ -1081,6 +1119,44 @@ Describe 'Set-JIMMetaverseObjectType' {
                     -WarningVariable advisoryWarnings -WarningAction SilentlyContinue | Out-Null
 
                 $advisoryWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Deletion source warnings (#1256)' {
+
+        It 'Writes one warning per projecting system that is not an authoritative source' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id = 5
+                        name = 'Person'
+                        deletionSourceWarnings = @(
+                            [PSCustomObject]@{ connectedSystemId = 7; connectedSystemName = 'Partner Portal' },
+                            [PSCustomObject]@{ connectedSystemId = 8; connectedSystemName = 'Badge System' }
+                        )
+                    }
+                }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule WhenAuthoritativeSourceDisconnected -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -HaveCount 2
+                $sourceWarnings[0].Message | Should -Match 'Partner Portal'
+                $sourceWarnings[1].Message | Should -Match 'Badge System'
+            }
+        }
+
+        It 'Emits no warning when the API lists no deletion source warnings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Person'; deletionSourceWarnings = @() } }
+
+                Set-JIMMetaverseObjectType -Id 5 -DeletionRule WhenAuthoritativeSourceDisconnected -Confirm:$false `
+                    -WarningVariable sourceWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $sourceWarnings | Should -BeNullOrEmpty
             }
         }
     }
@@ -1428,6 +1504,156 @@ Describe 'Get-JIMGeneratedValue' {
     Context 'Help Documentation' {
 
         BeforeAll { $help = Get-Help Get-JIMGeneratedValue -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}
+
+Describe 'Get-JIMRetiredGeneratedValue' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMRetiredGeneratedValue
+        }
+
+        It 'Should offer a parameter set per way of naming the attribute' {
+            $command.ParameterSets.Name | Should -Contain 'ByMetaverseAttributeId'
+            $command.ParameterSets.Name | Should -Contain 'ByMetaverseAttributeName'
+            $command.ParameterSets.Name | Should -Contain 'ByConnectedSystemAttribute'
+        }
+
+        It 'Should alias MetaverseAttributeId to Id, so a Metaverse Attribute pipes straight in' {
+            $command.Parameters['MetaverseAttributeId'].Aliases | Should -Contain 'Id'
+        }
+
+        It 'Should have an optional Search parameter' {
+            $command.Parameters['Search'].ParameterType.Name | Should -Be 'String'
+        }
+    }
+
+    Context 'Request composition' {
+
+        It 'Reads every page of the Metaverse Attribute endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems { , @() }
+
+                Get-JIMRetiredGeneratedValue -MetaverseAttributeId 6 | Out-Null
+
+                Should -Invoke Get-JIMPagedItems -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/metaverse/attributes/6/retired-generated-values'
+                }
+            }
+        }
+
+        It 'Passes Search as an encoded query parameter' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems { , @() }
+
+                Get-JIMRetiredGeneratedValue -MetaverseAttributeId 6 -Search 'o''brien & co' | Out-Null
+
+                Should -Invoke Get-JIMPagedItems -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/metaverse/attributes/6/retired-generated-values?search=o%27brien%20%26%20co'
+                }
+            }
+        }
+
+        It 'Resolves a Metaverse Attribute name to its id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Resolve-JIMMetaverseAttribute { [PSCustomObject]@{ id = 42; name = 'Account Name' } }
+                Mock Get-JIMPagedItems { , @() }
+
+                Get-JIMRetiredGeneratedValue -MetaverseAttributeName 'Account Name' | Out-Null
+
+                Should -Invoke Resolve-JIMMetaverseAttribute -Times 1 -Exactly -ParameterFilter { $Name -eq 'Account Name' }
+                Should -Invoke Get-JIMPagedItems -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/metaverse/attributes/42/retired-generated-values'
+                }
+            }
+        }
+
+        It 'Reads a Connected System attribute''s register for an export flow' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems { , @() }
+
+                Get-JIMRetiredGeneratedValue -ConnectedSystemId 3 -ObjectTypeId 7 -AttributeId 70 | Out-Null
+
+                Should -Invoke Get-JIMPagedItems -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/3/object-types/7/attributes/70/retired-generated-values'
+                }
+            }
+        }
+
+        It 'Pipes a Metaverse Attribute straight in via its Id property' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems { , @() }
+
+                [PSCustomObject]@{ Id = 9; Name = 'Employee Number' } | Get-JIMRetiredGeneratedValue | Out-Null
+
+                Should -Invoke Get-JIMPagedItems -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/metaverse/attributes/9/retired-generated-values'
+                }
+            }
+        }
+
+        It 'Emits one object per retired value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems {
+                    , @(
+                        [PSCustomObject]@{ Value = 'marisol.fenwick1'; Reason = 'ObjectDeleted'; FromObjectDisplayName = 'Marisol Fenwick' }
+                        [PSCustomObject]@{ Value = 'j.okafor'; Reason = 'Superseded'; FromObjectDisplayName = 'Jide Okafor' }
+                    )
+                }
+
+                $results = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeId 6)
+
+                $results.Count | Should -Be 2
+                $results[0].Value | Should -Be 'marisol.fenwick1'
+                $results[1].Reason | Should -Be 'Superseded'
+            }
+        }
+
+        It 'Adds a HeldBy that marks a deleted holder' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems {
+                    , @(
+                        [PSCustomObject]@{ Value = 'marisol.fenwick1'; FromObjectDisplayName = 'Marisol Fenwick'; FromObjectExists = $false }
+                        [PSCustomObject]@{ Value = 'j.okafor'; FromObjectDisplayName = 'Jide Okafor'; FromObjectExists = $true }
+                    )
+                }
+
+                $results = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeId 6)
+
+                $results[0].HeldBy | Should -Be 'Marisol Fenwick (deleted)'
+                $results[1].HeldBy | Should -Be 'Jide Okafor'
+            }
+        }
+
+        It 'Requires a connection' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Get-JIMPagedItems { , @() }
+
+                Get-JIMRetiredGeneratedValue -MetaverseAttributeId 6 -ErrorAction SilentlyContinue -ErrorVariable err | Out-Null
+
+                Should -Invoke Get-JIMPagedItems -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMRetiredGeneratedValue -Full }
 
         It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
         It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }

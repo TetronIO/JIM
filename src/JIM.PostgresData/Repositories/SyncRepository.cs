@@ -258,8 +258,10 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _repo.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
 
-    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
-        => _repo.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
+    // The set-based path with one object: its semantics per object are identical (issue #993), and it is the path
+    // that retires the object's generated values in the same transaction and reports them back (#242, Phase 6).
+    public Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+        => DeleteMetaverseObjectsAsync([metaverseObject]);
 
     public async Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
     {

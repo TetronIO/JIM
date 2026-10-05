@@ -382,6 +382,19 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
         => _inner.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(metaverseObjectId);
 
+    public Task<HashSet<string>> GetRetiredGeneratedValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
+        => _inner.GetRetiredGeneratedValuesInUseAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, normalisedValues);
+
+    public Task<List<RetiredGeneratedValueCount>> GetRetiredGeneratedValueCountsAsync(IReadOnlyCollection<int> metaverseAttributeIds, IReadOnlyCollection<int> connectedSystemObjectTypeAttributeIds)
+        => _inner.GetRetiredGeneratedValueCountsAsync(metaverseAttributeIds, connectedSystemObjectTypeAttributeIds);
+
+    public Task<(List<RetiredGeneratedValueHeader> Items, int? TotalCount)> GetRetiredGeneratedValueHeadersRangeAsync(
+        int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, string? search, int offset, int count, bool includeTotalCount)
+        => _inner.GetRetiredGeneratedValueHeadersRangeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, search, offset, count, includeTotalCount);
+
+    public Task<List<RetiredGeneratedValueHeader>> GetRetiredGeneratedValueHeadersForObjectAsync(Guid fromObjectId)
+        => _inner.GetRetiredGeneratedValueHeadersForObjectAsync(fromObjectId);
+
     public Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
         => _inner.GetHighestNumericValueForAttributeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
@@ -440,10 +453,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectAsync));
 
-    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    public Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
         => throw new PreviewWriteAttemptedException(nameof(DeleteMetaverseObjectAsync));
 
-    public Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    public Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(DeleteMetaverseObjectsAsync));
 
     public Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
@@ -606,6 +619,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
         => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueAssignmentsAsync));
+
+    public Task<IReadOnlyList<GeneratedValueRetirement>> RetireAndDeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds, RetiredGeneratedValueReason reason, Guid? activityId)
+        => throw new PreviewWriteAttemptedException(nameof(RetireAndDeleteGeneratedValueAssignmentsAsync));
+
+    public Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteRetiredGeneratedValuesForAttributeAsync));
 
     public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
         => throw new PreviewWriteAttemptedException(nameof(ReserveGeneratedValueSequenceBlockAsync));

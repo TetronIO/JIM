@@ -167,6 +167,7 @@
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMMetaverseObjectProvenance',
         'Get-JIMGeneratedValue',
+        'Get-JIMRetiredGeneratedValue',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
