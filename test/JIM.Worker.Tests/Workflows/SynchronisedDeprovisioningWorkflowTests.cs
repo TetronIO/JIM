@@ -221,6 +221,55 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallTakesObjectOutOfExportScope_DeprovisionsTargetAsync()
+    {
+        // The export rule's scope depends on Description, which only HR contributes. Deprovisioning HR clears it,
+        // taking the Metaverse Object out of that scope; a synchronisation disconnecting the HR object would
+        // then deprovision the target per the rule's Outbound Deprovision Action (Delete here), so the
+        // deprovisioning run must too (PRD FR 3: the state a normal synchronisation disconnect would produce).
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true);
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var stagedPendingExport = SyncRepo.PendingExports.Values
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == targetCso.Id);
+        var rpei = DbContext.ActivityRunProfileExecutionItems.Single(item => item.ActivityId == activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stagedPendingExport?.ChangeType, Is.EqualTo(PendingExportChangeType.Delete),
+                "the target left the export rule's scope, so it must be staged for deletion");
+            Assert.That(result.PendingExportsStaged, Is.EqualTo(1), "the deprovisioning must be counted");
+            Assert.That(rpei.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
+                Is.True, "the deprovisioning must be recorded on the object's execution item");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallTakesObjectOutOfExportScopeWithDisconnectAction_DisconnectsTargetAsync()
+    {
+        // As above, under the default Outbound Deprovision Action: the target object stays in the target system
+        // but is no longer joined, and nothing is exported to it.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true,
+            scopeExitAction: OutboundDeprovisionAction.Disconnect);
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targetCso.MetaverseObjectId, Is.Null, "the target left the export rule's scope, so its join must be broken");
+            Assert.That(targetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.False,
+                "a disconnected target is left as it is, with nothing exported to it");
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Executor: Metaverse Object deletion rules
     // -----------------------------------------------------------------------------------------------------------------
@@ -813,10 +862,11 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
     /// Sole-contributor topology plus a downstream export target: HR projects and flows DisplayName,
     /// EmployeeId and Description; a target system maps DisplayName and Description outbound.
     /// </summary>
-    private async Task<DeprovisioningContext> SetUpSoleContributorWithExportTargetAsync()
+    private async Task<DeprovisioningContext> SetUpSoleContributorWithExportTargetAsync(bool exportScopedOnDescription = false,
+        OutboundDeprovisionAction scopeExitAction = OutboundDeprovisionAction.Delete)
     {
         var (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr) = await SetUpHrContributorAsync();
-        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr);
+        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr, exportScopedOnDescription, scopeExitAction);
         return new DeprovisioningContext(hrSystem, null, hrImportRule, 0, mvDescriptionAttr.Id,
             mvDisplayNameAttr.Id, target.System, target.DescriptionAttribute, target.DisplayNameAttribute);
     }
@@ -933,7 +983,9 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectTypeAttribute DisplayNameAttribute);
 
     private async Task<ExportTarget> AddExportTargetAsync(
-        MetaverseObjectType mvType, MetaverseAttribute mvDisplayNameAttr, MetaverseAttribute mvDescriptionAttr)
+        MetaverseObjectType mvType, MetaverseAttribute mvDisplayNameAttr, MetaverseAttribute mvDescriptionAttr,
+        bool scopedOnDescription = false,
+        OutboundDeprovisionAction scopeExitAction = OutboundDeprovisionAction.Delete)
     {
         var targetSystem = await CreateConnectedSystemAsync("AD Target");
         var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -968,6 +1020,27 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
             TargetConnectedSystemAttributeId = targetDescriptionAttr.Id,
             Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescriptionAttr, MetaverseAttributeId = mvDescriptionAttr.Id } }
         });
+
+        if (scopedOnDescription)
+        {
+            // Only objects whose Description is the HR value are in scope, so withdrawing Description takes the
+            // object out of scope; the rule deletes what leaves it.
+            exportRule.OutboundDeprovisionAction = scopeExitAction;
+            exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+            {
+                Type = JIM.Models.Search.SearchGroupType.All,
+                Criteria = new List<SyncRuleScopingCriteria>
+                {
+                    new()
+                    {
+                        MetaverseAttribute = mvDescriptionAttr,
+                        ComparisonType = JIM.Models.Search.SearchComparisonType.Equals,
+                        StringValue = HrDescription,
+                        CaseSensitive = true
+                    }
+                }
+            });
+        }
 
         DbContext.SyncRules.Add(exportRule);
         await DbContext.SaveChangesAsync();

@@ -242,6 +242,12 @@ The #809 residue pass recalls by provenance with **no** `RemoveContributedAttrib
 
 Lands first so the preview mirrors correct behaviour rather than encoding the defect. Fixed as part of this work (decision 2).
 
+**Second defect, found designing the Phase 1 harness (decision 4, product owner, 2026-10-05: fix it here).** A synchronisation that withdraws values runs two outbound evaluations for the object: corrective updates for the export rules it is still in scope of, and deprovisioning for any it has left (`SyncTaskProcessorBase.EvaluateOutboundExportsAsync`). Every recall executor ran only the first, so a recall that took an object out of an export rule's scope left its target account provisioned, with nothing to revisit it. That contradicted PRD FR 3 and would have made the preview's "Removed from the target system" row false.
+
+- [x] Failing tests: Connected System deprovisioning (Delete and Disconnect actions) and Synchronisation Rule deletion recall, each with an export rule scoped on the recalled attribute.
+- [x] Fix: one shared `DeprovisionRecallScopeExitsAsync`, called after in-scope staging by Synchronised Deprovisioning's per-object pass and by `RecallSyncRuleContributedValuesAsync` (Synchronisation Rule deletion, the residue pass, the stranded-value sweep); each staged deprovisioning is recorded on the object's execution item as synchronisation records it.
+- [x] Changelog `🐛` entry; public docs for Synchronisation Rule deletion, Connected System removal and Attribute Priority updated.
+
 ### Phase 1: read-only deprovisioning harness
 
 - [ ] Shared clone helper; `BuildRecallPriorityContextAsync` made internal.

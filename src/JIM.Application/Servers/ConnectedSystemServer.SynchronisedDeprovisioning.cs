@@ -248,7 +248,7 @@ public partial class ConnectedSystemServer
     /// obsoletion core, then persists the batch in dependency order (Metaverse Object updates and recalled
     /// value deletions, Connected System Object deletions with change records, immediate Metaverse Object
     /// deletions with their deletion-cascade and reference-recall Pending Exports, recall export staging,
-    /// per-object results, Activity counters). Everything is persisted before the caller records the
+    /// deprovisioning for the export rules a recall took an object out of, per-object results, Activity counters). Everything is persisted before the caller records the
     /// checkpoint.
     /// </summary>
     private async Task ProcessDeprovisioningBatchAsync(
@@ -288,6 +288,7 @@ public partial class ConnectedSystemServer
         var executionItems = new List<ActivityRunProfileExecutionItem>();
         var pendingMvoDeletions = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
         var preRecallAttributeSnapshots = new Dictionary<Guid, List<MetaverseObjectAttributeValue>>();
+        var scopeExitCandidates = new List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem ExecutionItem)>();
 
         // The Metaverse Object deletion rule delegate: evaluates and applies the marking fields via the
         // shared applier (also used by the post-clear reconciliation sweep, #1605), then queues the fate at
@@ -377,6 +378,12 @@ public partial class ConnectedSystemServer
                     .Where(pendingExport => !stagedPendingExports.Contains(pendingExport))
                     .ToList();
                 stagedPendingExports.AddRange(newlyStagedExports);
+
+                // Gated as synchronisation gates its scope-exit evaluation: only an object whose values changed is
+                // re-evaluated, and one about to be deleted immediately has no export evaluation here at all (its
+                // deletion cascade stages its deprovisioning instead). Evaluated after the batch persists; see Step 5.
+                if (obsoletionResult.MvoAttributeChange is { } changeForOutcomes)
+                    scopeExitCandidates.Add((exportEvaluationInput.Mvo, changeForOutcomes.ExecutionItem));
             }
 
             result.ConnectedSystemObjectsProcessed++;
@@ -451,11 +458,20 @@ public partial class ConnectedSystemServer
             result.PendingExportsStaged += stagedPendingExports.Count;
         }
 
-        // Step 5: every Metaverse change of the batch is persisted (and any immediately deleted object is gone, so a
+        // Step 5: the export rules the recall took objects out of, deprovisioned per each rule's Deprovisioning Action
+        // exactly as synchronisation disconnecting the object would (#134; PRD FR 3). Only now, with the batch's
+        // Metaverse changes and staged exports persisted, mirroring synchronisation's own order (persist the page's
+        // objects, then evaluate exports): the evaluation saves what it decides as it goes, and must neither flush a
+        // half-applied object nor have its Delete replaced by Step 4's delete-then-create.
+        foreach (var (scopeExitMvo, scopeExitItem) in scopeExitCandidates)
+            result.PendingExportsStaged += await DeprovisionRecallScopeExitsAsync(scopeExitMvo, exportEvaluationCache, scopeExitItem,
+                recordOutcomes: syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None);
+
+        // Step 6: every Metaverse change of the batch is persisted (and any immediately deleted object is gone, so a
         // mark on it matches nothing); mark the hosting systems of the changed derived inputs in one bulk update.
         await derivedInputMarks.FlushAsync(Application.SyncRepo);
 
-        // Step 6: persist the per-object results. The deleted objects' rows are gone, so the items must
+        // Step 7: persist the per-object results. The deleted objects' rows are gone, so the items must
         // reference them by snapshot only (the core snapshotted the display fields eagerly, and the
         // CsoDeleted outcome carries the deleted id durably); a foreign key to a deleted row would fail.
         foreach (var executionItem in executionItems)
