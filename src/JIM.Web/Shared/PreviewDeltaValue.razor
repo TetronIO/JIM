@@ -1,0 +1,26 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A preview drill-down value, with the Connected System it came from where that is what tells two values apart (#134):
+   a deletion's current value is the deleted system's and a takeover's proposed value is its new contributor's. One line,
+   because the drill-down is a virtualised grid. No contributor is named beside an absent value: there is nothing to
+   attribute. *@
+<span class="jim-one-line" title="@Title">
+    <TextValueDisplay Value="@Value" />
+    @if (!string.IsNullOrEmpty(Value) && !string.IsNullOrEmpty(Contributor))
+    {
+        <span class="jim-one-line-secondary">from @Contributor</span>
+    }
+</span>
+
+@code {
+    /// <summary>The value as the preview recorded it; null or empty where there is none.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>The Connected System the value came from, or null where naming one would not help.</summary>
+    [Parameter]
+    public string? Contributor { get; set; }
+
+    private string? Title => string.IsNullOrEmpty(Value) || string.IsNullOrEmpty(Contributor) ? Value : $"{Value} (from {Contributor})";
+}

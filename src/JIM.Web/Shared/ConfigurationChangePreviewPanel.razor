@@ -147,7 +147,7 @@
                     <MudAlert Severity="Severity.Normal" Class="mt-4" Dense="true">
                         <MudTooltip Arrow="true" Placement="Placement.Top" Text="@baseline.ToLocalTime().ToFriendlyDate()">
                             Evaluated against data as it stood @baseline.ToLocalTime().ToRelativeTime(). An import
-                            since then may have moved the answer.
+                            since then may change the preview results.
                         </MudTooltip>
                     </MudAlert>
                 }
@@ -212,8 +212,8 @@
                         <VirtualisedDataGrid @ref="_groupsGrid" T="ConfigurationChangePreviewGroup"
                                              ContainerId="preview-group-list"
                                              UrlParameterPrefix="pg-"
-                                             DefaultSortBy="objects"
-                                             DefaultSortDescending="true"
+                                             DefaultSortBy="consequence"
+                                             DefaultSortDescending="false"
                                              LoadWindow="LoadGroupWindowAsync"
                                              SingularName="Change"
                                              PluralName="Changes"
@@ -266,10 +266,8 @@
                                                not own; the system it belongs to is prose beside that. *@
                                             <span class="jim-code-inline">@row.Item.MetaverseObjectTypeName</span>
                                             <span> objects</span>
-                                            @if (!string.IsNullOrEmpty(row.Item.ConnectedSystemName))
-                                            {
-                                                <span> in @row.Item.ConnectedSystemName</span>
-                                            }
+                                            @* A takeover's system is where the value now comes from, not where the objects are. *@
+                                            <span>@ConfigurationChangePreviewWording.SystemClause(row.Item.TransitionType, row.Item.ConnectedSystemName)</span>
                                         }
                                     </CellTemplate>
                                 </TemplateColumn>
@@ -349,8 +347,7 @@
                     else if (NothingWouldChange)
                     {
                         <MudAlert Severity="Severity.Success" Class="mt-4">
-                            This change would not change anything: no object moves through any transition as a result
-                            of it.
+                            @ConfigurationChangePreviewWording.NothingWouldChange(preview.Surface)
                         </MudAlert>
                     }
 
@@ -460,7 +457,10 @@
                                         <MudText Typo="Typo.button">Current value</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
-                                        <TextValueDisplay Value="@row.Item.OldValue" />
+                                        @* Which system a value came from, where that is what tells two values apart (a
+                                           deletion's recalled and taken-over values). *@
+                                        <PreviewDeltaValue Value="@row.Item.OldValue"
+                                                           Contributor="@ConfigurationChangePreviewWording.ValueContributor(preview.Surface, row.Item.TransitionType, false, activity.TargetName, selected.ConnectedSystemName)" />
                                     </CellTemplate>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Proposed value" Sortable="false">
@@ -468,7 +468,8 @@
                                         <MudText Typo="Typo.button">Proposed value</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
-                                        <TextValueDisplay Value="@row.Item.NewValue" />
+                                        <PreviewDeltaValue Value="@row.Item.NewValue"
+                                                           Contributor="@ConfigurationChangePreviewWording.ValueContributor(preview.Surface, row.Item.TransitionType, true, activity.TargetName, selected.ConnectedSystemName)" />
                                     </CellTemplate>
                                 </TemplateColumn>
                             </Columns>
@@ -738,8 +739,9 @@
 
     /// <summary>
     /// Slices one window of the summary groups, applying the grid's search and sort. The groups are read whole on
-    /// every refresh (they are the panel's landing view), so there is nothing further to read here. Objects lead
-    /// the default sort, descending: the biggest population is the one an administrator has to answer for first.
+    /// every refresh (they are the panel's landing view), so there is nothing further to read here. The default order
+    /// is the verdict's (#134): worst consequence first, then largest, with transitions the verdict leaves out last, so
+    /// eleven thousand identical-value takeovers do not sit above thirty-seven deprovisions.
     /// </summary>
     private Task<VirtualisedWindow<ConfigurationChangePreviewGroup>> LoadGroupWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
@@ -765,7 +767,8 @@
             "change" => Order(g => Helpers.GetOutcomeTypePlainName(g.TransitionType), StringComparer.OrdinalIgnoreCase),
             "appliesto" => Order(g => g.MetaverseObjectTypeName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             "attribute" => Order(g => g.AttributeName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
-            _ => Order(g => g.ObjectCount)
+            "objects" => Order(g => g.ObjectCount),
+            _ => ConfigurationChangePreviewWording.ByConsequence(groups)
         };
 
         return Task.FromResult(sorted.ToWindow(request));
@@ -1014,12 +1017,10 @@
     /// </summary>
     private static string DescribePopulation(ConfigurationChangePreviewGroup group)
     {
-        var parts = new List<string>(2);
-        if (!string.IsNullOrEmpty(group.MetaverseObjectTypeName))
-            parts.Add($"{group.MetaverseObjectTypeName} objects");
-        if (!string.IsNullOrEmpty(group.ConnectedSystemName))
-            parts.Add(group.ConnectedSystemName);
-        return string.Join(" in ", parts);
+        if (string.IsNullOrEmpty(group.MetaverseObjectTypeName))
+            return group.ConnectedSystemName ?? string.Empty;
+
+        return $"{group.MetaverseObjectTypeName} objects{ConfigurationChangePreviewWording.SystemClause(group.TransitionType, group.ConnectedSystemName)}";
     }
 
     private static IEnumerable<(string Name, ConfigurationChangePreviewStageStatus Status)> Stages(ConfigurationChangePreview preview) =>

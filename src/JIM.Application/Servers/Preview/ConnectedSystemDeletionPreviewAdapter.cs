@@ -81,10 +81,10 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             [
                 .. derivedReaders.Select(reader => new PreviewValidationFinding(
                     PreviewValidationSeverity.Warning,
-                    $"Derived flows on {string.Join(", ", reader.HostingSystemNames)} read {reader.MetaverseAttributeName}, " +
+                    $"Derived flows on {string.Join(", ", reader.HostingSystemNames)} read '{reader.MetaverseAttributeName}', " +
                     "which this deletion clears or changes. The deletion marks the objects affected so those flows " +
                     "recompute at the next synchronisation of the system hosting them; this preview shows the change " +
-                    $"to {reader.MetaverseAttributeName} but not the derived values that follow from it.",
+                    $"to '{reader.MetaverseAttributeName}' but not the derived values that follow from it.",
                     MetaverseAttributeName: reader.MetaverseAttributeName))
             ];
         }

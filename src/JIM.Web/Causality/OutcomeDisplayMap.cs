@@ -238,7 +238,7 @@ public static class OutcomeDisplayMap
                 "have a value replaced by another contributor's"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] =
             new OutcomeDisplay("New contributor, same value", CausalityTone.Secondary, Icons.Material.Filled.CompareArrows,
-                "keep the same value from another contributor"),
+                "keep the same value from another contributor", StatedInVerdict: false),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] =
             new OutcomeDisplay("Updated in the target system", CausalityTone.Info, Icons.Material.Filled.CloudUpload,
                 "be updated in their target Connected System"),

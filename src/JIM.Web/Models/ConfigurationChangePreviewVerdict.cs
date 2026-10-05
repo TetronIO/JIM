@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Preview;
 using JIM.Web.Causality;
 using MudBlazor;
@@ -56,12 +57,23 @@ public static class ConfigurationChangePreviewVerdict
     ];
 
     /// <summary>
+    /// Where a transition sits in the order of consequence, lowest first: its tone's weight, with the transitions the
+    /// verdict leaves out (<see cref="OutcomeDisplay.StatedInVerdict"/>) after everything else. The verdict and the
+    /// summary grid under it both order by this, so the sentence and the table cannot disagree about what matters most.
+    /// </summary>
+    public static int ConsequenceOrder(ActivityRunProfileExecutionItemSyncOutcomeType transition)
+    {
+        var display = OutcomeDisplayMap.Get(transition);
+        return display.StatedInVerdict ? ConsequenceWeight(display.Tone) : int.MaxValue;
+    }
+
+    /// <summary>
     /// The counts worth stating, worst consequence first, then largest.
     /// </summary>
     private static List<PreviewImpactCount> Stated(IReadOnlyList<PreviewImpactCount> counts) =>
         counts
-            .Where(c => c.ObjectCount > 0)
-            .OrderBy(c => ConsequenceWeight(OutcomeDisplayMap.Get(c.TransitionType).Tone))
+            .Where(c => c.ObjectCount > 0 && OutcomeDisplayMap.Get(c.TransitionType).StatedInVerdict)
+            .OrderBy(c => ConsequenceOrder(c.TransitionType))
             .ThenByDescending(c => c.ObjectCount)
             .ThenBy(c => c.TransitionType)
             .ToList();

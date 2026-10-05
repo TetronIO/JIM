@@ -51,6 +51,26 @@ public class ConfigurationChangePreviewVerdictTests
     }
 
     [Test]
+    public void Describe_SameValueTakeovers_AreLeftOut()
+    {
+        // A contributor changing with the value staying identical changes nothing anyone would notice; stating it in the
+        // leading sentence would bury the consequences that do matter under the largest, most harmless number.
+        var counts = new[]
+        {
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue, 11_950),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 662)
+        };
+
+        var verdict = ConfigurationChangePreviewVerdict.Describe(counts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(verdict!.Lead, Is.EqualTo("662 objects would have a value cleared."));
+            Assert.That(verdict.Detail, Is.Null);
+        }
+    }
+
+    [Test]
     public void Describe_EveryCountIsZero_SaysNothing()
     {
         var counts = new[] { Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 0) };

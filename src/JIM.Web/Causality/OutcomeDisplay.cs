@@ -33,9 +33,16 @@ namespace JIM.Web.Causality;
 /// type the preview engine never produces, since inventing conditional wording nothing ever exercises is
 /// exactly the vocabulary drift <see cref="SentenceForm"/>'s own doc comment warns against.
 /// </param>
+/// <param name="StatedInVerdict">
+/// Whether a Configuration Change Preview's leading sentence states this transition (#134). False for a transition
+/// with no effect anyone would notice, such as a contributor changing while the value stays identical: the preview
+/// still counts and groups it, sorted after everything that matters, but stating its (typically largest) number in
+/// the verdict would bury the consequences that do. True for everything else.
+/// </param>
 public sealed record OutcomeDisplay(
     string Label,
     CausalityTone Tone,
     string Icon,
     string? SentenceForm = null,
-    string? SpeculativeLabel = null);
+    string? SpeculativeLabel = null,
+    bool StatedInVerdict = true);
