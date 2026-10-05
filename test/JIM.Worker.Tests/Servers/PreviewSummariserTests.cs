@@ -98,7 +98,10 @@ public class PreviewSummariserTests
     {
         var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 3);
         for (var i = 0; i < 3; i++)
+        {
             summariser.Add(Delta($"old{i}", $"new{i}"));
+            summariser.Add(Delta($"old{i}", $"new{i}"));
+        }
 
         var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
 
@@ -193,8 +196,11 @@ public class PreviewSummariserTests
     public void BuildGroups_ValuesDifferingOnlyByCase_AreDistinctPairs()
     {
         var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
-        summariser.Add(Delta("Smith", "SMITH"));
-        summariser.Add(Delta("smith", "SMITH"));
+        for (var i = 0; i < 2; i++)
+        {
+            summariser.Add(Delta("Smith", "SMITH"));
+            summariser.Add(Delta("smith", "SMITH"));
+        }
 
         var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
 
@@ -226,19 +232,23 @@ public class PreviewSummariserTests
     public void BuildGroups_EqualSizedValuePairGroups_AreOrderedDeterministically()
     {
         var first = new PreviewSummariser(maximumDeltasPerGroup: null);
-        first.Add(Delta("b", "z"));
-        first.Add(Delta("a", "y"));
-        first.Add(Delta("c", "x"));
-
         var second = new PreviewSummariser(maximumDeltasPerGroup: null);
-        second.Add(Delta("c", "x"));
-        second.Add(Delta("b", "z"));
-        second.Add(Delta("a", "y"));
+        for (var i = 0; i < 2; i++)
+        {
+            first.Add(Delta("b", "z"));
+            first.Add(Delta("a", "y"));
+            first.Add(Delta("c", "x"));
+
+            second.Add(Delta("c", "x"));
+            second.Add(Delta("b", "z"));
+            second.Add(Delta("a", "y"));
+        }
 
         var firstGroups = first.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
         var secondGroups = second.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
 
         // The same preview re-read must not look like a different preview.
+        Assert.That(firstGroups, Has.Count.EqualTo(3), "each pair holds two objects, so each is named");
         Assert.That(firstGroups.Select(g => g.OldValue), Is.EqualTo(secondGroups.Select(g => g.OldValue)).AsCollection);
     }
 
@@ -246,16 +256,114 @@ public class PreviewSummariserTests
     public void BuildGroups_DifferentAttributes_GuardIsCountedPerAttributeGroup()
     {
         var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 2);
-        summariser.Add(Delta("a", "b", attributeName: "Email"));
-        summariser.Add(Delta("c", "d", attributeName: "Email"));
-        summariser.Add(Delta("e", "f", attributeName: "Department"));
-        summariser.Add(Delta("g", "h", attributeName: "Department"));
+        for (var i = 0; i < 2; i++)
+        {
+            summariser.Add(Delta("a", "b", attributeName: "Email"));
+            summariser.Add(Delta("c", "d", attributeName: "Email"));
+            summariser.Add(Delta("e", "f", attributeName: "Department"));
+            summariser.Add(Delta("g", "h", attributeName: "Department"));
+        }
 
         var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
 
         // Four pairs in total, two per attribute: neither attribute is over its own guard, so nothing collapses.
         Assert.That(groups, Has.Count.EqualTo(4));
         Assert.That(groups.Where(g => g.OldValue == null), Is.Empty);
+    }
+
+    [Test]
+    public void BuildGroups_EveryValuePairHoldingOneObject_SummarisesAtTheAttributeLevel()
+    {
+        // #1935: five people, five different Job Titles cleared. Splitting by value pair compresses nothing, so the
+        // summary would be a list of five rows saying what one row says, and the drill-down already names each value.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        foreach (var title in new[] { "Analyst", "Account Manager", "Engineer", "Advisor", "Controller" })
+            summariser.Add(Delta(title, null, attributeName: "Job Title"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups[0].AttributeName, Is.EqualTo("Job Title"));
+            Assert.That(groups[0].OldValue, Is.Null, "the row covers five values, so it names none of them");
+            Assert.That(groups[0].NewValue, Is.Null);
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(5));
+            Assert.That(groups[0].Deltas.Select(d => d.OldValue), Is.EquivalentTo(new[] { "Analyst", "Account Manager", "Engineer", "Advisor", "Controller" }),
+                "every value stays one click away, in the drill-down");
+            Assert.That(groups[0].DeltasSampled, Is.False);
+        }
+    }
+
+    [Test]
+    public void BuildGroups_PairsHoldingFewerThanTwoObjectsEach_SummariseAtTheAttributeLevel()
+    {
+        // Three rows for five objects is still mostly a list: one pair of three, and two that hold one object each.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        for (var i = 0; i < 3; i++)
+            summariser.Add(Delta("Sales", "Trading", attributeName: "Department"));
+        summariser.Add(Delta("Support", "Service", attributeName: "Department"));
+        summariser.Add(Delta("Finance", "Treasury", attributeName: "Department"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups[0].OldValue, Is.Null);
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(5));
+            Assert.That(groups[0].Deltas, Has.Count.EqualTo(5));
+        }
+    }
+
+    [Test]
+    public void BuildGroups_PairsHoldingTwoObjectsEachOnAverage_AreNamed()
+    {
+        // The boundary, inclusive: two rows for four objects halves the list, which is a summary.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        for (var i = 0; i < 3; i++)
+            summariser.Add(Delta("Sales", "Trading", attributeName: "Department"));
+        summariser.Add(Delta("Support", "Service", attributeName: "Department"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups.Select(g => (g.OldValue, g.ObjectCount)),
+            Is.EqualTo(new (string?, int)[] { ("Sales", 3), ("Support", 1) }).AsCollection);
+    }
+
+    [Test]
+    public void BuildGroups_LoneObject_IsStillNamedByItsValues()
+    {
+        // One pair is one row whether or not it is split, so naming the values costs nothing and says more.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        summariser.Add(Delta("Analyst", null, attributeName: "Job Title"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups[0].OldValue, Is.EqualTo("Analyst"));
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void BuildGroups_UncompressedGroup_ReportsExactCountAndSamplesWhenCapped()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: 2);
+        for (var i = 0; i < 6; i++)
+            summariser.Add(Delta($"old{i}", $"new{i}"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(6), "describing the group at the attribute level never moves its count");
+            Assert.That(groups[0].Deltas, Has.Count.EqualTo(2));
+            Assert.That(groups[0].DeltasSampled, Is.True);
+        }
     }
 
     [Test]
@@ -307,6 +415,26 @@ public class PreviewSummariserTests
         {
             Assert.That(groups[0].OldValue, Is.Null);
             Assert.That(groups[0].ObjectCount, Is.EqualTo(6));
+            Assert.That(groups[0].PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
+        }
+    }
+
+    [Test]
+    public void BuildGroups_UncompressedGroupWhereEveryDeltaSharesAPattern_NamesIt()
+    {
+        // Three people whose addresses each move domain: three distinct pairs, well inside the guard, but each holds
+        // one object. The attribute-level row keeps the sentence that matters.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        for (var i = 0; i < 3; i++)
+            summariser.Add(Delta($"user{i}@contoso.com", $"user{i}@fabrikam.com"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups[0].OldValue, Is.Null);
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(3));
             Assert.That(groups[0].PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
         }
     }
