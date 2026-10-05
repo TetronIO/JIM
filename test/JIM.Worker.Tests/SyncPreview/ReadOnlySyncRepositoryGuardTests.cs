@@ -87,6 +87,33 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void RetireAndDeleteGeneratedValueAssignmentsAsync_IsAWrite_Throws()
+    {
+        // #242 Phase 6: a preview that reached the supersession flush would retire live values for good.
+        Assert.That(() => _guard.RetireAndDeleteGeneratedValueAssignmentsAsync([Guid.NewGuid()], JIM.Models.Transactional.RetiredGeneratedValueReason.Superseded, null),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.RetireAndDeleteGeneratedValueAssignmentsAsync)));
+    }
+
+    [Test]
+    public void DeleteRetiredGeneratedValuesForAttributeAsync_IsAWrite_Throws()
+    {
+        Assert.That(() => _guard.DeleteRetiredGeneratedValuesForAttributeAsync(1, null),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.DeleteRetiredGeneratedValuesForAttributeAsync)));
+    }
+
+    [Test]
+    public async Task GetRetiredGeneratedValuesInUseAsync_IsARead_DelegatesToTheWrappedRepository()
+    {
+        // The retired gate runs during a preview's generation, so it must read through rather than throw.
+        _inner.Setup(r => r.GetRetiredGeneratedValuesInUseAsync(1, null, It.IsAny<IReadOnlyCollection<string>>()))
+            .ReturnsAsync(new HashSet<string> { "j.okafor" });
+
+        var result = await _guard.GetRetiredGeneratedValuesInUseAsync(1, null, ["j.okafor"]);
+
+        Assert.That(result, Does.Contain("j.okafor"));
+    }
+
+    [Test]
     public async Task GetAllSyncRulesAsync_IsARead_DelegatesToTheWrappedRepository()
     {
         var rules = new List<SyncRule> { new() { Name = "rule" } };
@@ -125,7 +152,7 @@ public class ReadOnlySyncRepositoryGuardTests
             "Create", "Update", "Delete", "Add", "Remove", "Set", "Stamp", "Disconnect", "Bulk", "Save",
             "Truncate", "Mark", "TryClaim", "Claim", "Flush", "Insert", "Upsert", "Replace", "Reset",
             "Persist", "Write", "Apply", "Queue", "Enqueue", "Cancel", "Obsolete", "Expire", "Link",
-            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release", "Reserve"
+            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release", "Reserve", "Retire"
         };
 
         // Change-tracker state operations mutate nothing in the database; the guard delegates them so reused

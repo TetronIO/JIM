@@ -4493,6 +4493,58 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("PendingPasswordChanges");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.RetiredGeneratedValue", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ConnectedSystemObjectTypeAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FromObjectDisplayName")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("FromObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NormalisedValue")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RetiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectTypeAttributeId");
+
+                    b.HasIndex("FromObjectId")
+                        .HasDatabaseName("IX_RetiredGeneratedValues_FromObjectId");
+
+                    b.HasIndex("MetaverseAttributeId");
+
+                    b.ToTable("RetiredGeneratedValues", t =>
+                        {
+                            t.HasCheckConstraint("CK_RetiredGeneratedValues_OneAttribute", "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1");
+                        });
+                });
+
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
                 {
                     b.Property<int>("AttributesId")
@@ -5972,6 +6024,23 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("SyncRuleId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.RetiredGeneratedValue", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemObjectTypeAttribute")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectTypeAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany()
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ConnectedSystemObjectTypeAttribute");
+
+                    b.Navigation("MetaverseAttribute");
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>

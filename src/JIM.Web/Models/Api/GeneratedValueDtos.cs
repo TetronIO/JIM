@@ -79,3 +79,63 @@ public class GeneratedValueRestartResultDto
         CounterTo = model.CounterTo
     };
 }
+
+/// <summary>
+/// API representation of one value in an attribute's retired values register (Unique Value Generation, #242,
+/// Phase 6): a value JIM issued and will never issue again for the attribute. See
+/// <see cref="RetiredGeneratedValueHeader"/> for the source model.
+/// </summary>
+public class RetiredGeneratedValueDto
+{
+    /// <summary>The register entry's own identifier.</summary>
+    public long Id { get; set; }
+
+    /// <summary>The Metaverse Attribute the value was generated for (an import flow); null for an export flow.</summary>
+    public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>The Connected System attribute the value was generated for (an export flow); null for an import flow.</summary>
+    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
+
+    /// <summary>The attribute's name.</summary>
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>The value as it was issued.</summary>
+    public string Value { get; set; } = null!;
+
+    /// <summary>When it was retired (UTC).</summary>
+    public DateTime RetiredAt { get; set; }
+
+    /// <summary>
+    /// Why it was retired: <c>ObjectDeleted</c> (the object that held it was deleted), <c>Superseded</c> (another
+    /// Attribute Flow took the attribute over, or the value was cleared), <c>Recalled</c> (the generating Attribute
+    /// Flow was removed), or <c>Regenerated</c> (reserved for Collision Remediation; not written yet).
+    /// </summary>
+    public RetiredGeneratedValueReason Reason { get; set; }
+
+    /// <summary>The object that held it: a Metaverse Object id (import) or Connected System Object id (export).</summary>
+    public Guid? FromObjectId { get; set; }
+
+    /// <summary>The holder's display name, captured when the value was retired.</summary>
+    public string? FromObjectDisplayName { get; set; }
+
+    /// <summary>Whether the object that held the value still exists.</summary>
+    public bool FromObjectExists { get; set; }
+
+    /// <summary>The Activity during which the value was retired, when one was recorded.</summary>
+    public Guid? ActivityId { get; set; }
+
+    public static RetiredGeneratedValueDto FromModel(RetiredGeneratedValueHeader model) => new()
+    {
+        Id = model.Id,
+        MetaverseAttributeId = model.MetaverseAttributeId,
+        ConnectedSystemObjectTypeAttributeId = model.ConnectedSystemObjectTypeAttributeId,
+        AttributeName = model.AttributeName,
+        Value = model.Value,
+        RetiredAt = model.RetiredAt,
+        Reason = model.Reason,
+        FromObjectId = model.FromObjectId,
+        FromObjectDisplayName = model.FromObjectDisplayName,
+        FromObjectExists = model.FromObjectExists,
+        ActivityId = model.ActivityId
+    };
+}

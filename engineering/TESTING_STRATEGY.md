@@ -2,12 +2,14 @@
 
 ## Overview
 
-JIM employs a six-tier testing approach to ensure quality at different levels of the application:
+JIM employs a seven-tier testing approach to ensure quality at different levels of the application:
 
 ```
 Integration Tests (Full System, Docker stack + external directories)
          ^
 Active Directory Lab Probes (a real Windows Server domain controller, .NET test host)
+         ^
+SQL Server TLS Certificate Validation Tests (a real SQL Server over TLS, .NET test host)
          ^
 LDAPS Certificate Validation Tests (real directory servers over TLS, .NET test host)
          ^
@@ -222,7 +224,56 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 - ❌ The rest of the LDAP Connector's behaviour (schema import, sync, password writes); that is covered by the Integration tier's Samba AD / OpenLDAP scenarios
 - ❌ Anything not reachable purely through the TLS handshake and certificate chain
 
-## 5. Active Directory Lab Probes
+## 5. SQL Server TLS Certificate Validation Tests
+
+**Location**: `test/JIM.Worker.Tests/Connectors/SqlServerTlsCertificateValidationTests.cs`
+
+**Purpose**: Verify the JIM SQL Connector's certificate trust against a real Microsoft SQL Server presenting a real certificate (#1472). The SQL Connector's trust model mirrors the LDAP Connector's (the operating system's anchors get the first say, `TrustServerCertificate` is never used, and a certificate the JIM certificate store vouches for is retried as a pinned anchor), but its unit tests in `SqlConnectorCertificateTrustTests` script both the driver and the look at the server's certificate, so no TLS handshake ever happens there. That gap hid a real defect until this tier existed: the certificate probe opened a bare TLS handshake, which SQL Server answers by dropping the connection, because a TDS 7.x client agrees encryption in a PRELOGIN exchange and carries the handshake inside PRELOGIN packets. Every encrypted failure was reported as "unable to connect", and a certificate in the JIM certificate store was never offered to the driver. `TdsPreLoginTests` now pins that framing in every build, against an in-process fake server; this tier proves it against the real thing.
+
+**Characteristics**:
+- One SQL Server container, presenting a certificate for `localhost` issued by a run-time CA that nothing trusts; certificates are generated on every run, never committed
+- Covers, on that one server: an unencrypted connection (connects), an encrypted connection with the issuer in the JIM certificate store (connects), an encrypted connection with an empty store (refused, reported as `UntrustedIssuer`), an encrypted connection by a name the certificate does not carry (`127.0.0.1`; refused, reported as `NameMismatch`), and the certificate read behind the "trust this certificate" prompt
+- Refusals assert the reported reason (a `ServerCertificateRejectedException` and its `FailureReason`), never merely that the connection failed
+- Needs no root: no hosts entries and no change to the machine trust store, unlike the LDAPS tier
+
+**Gating**: The fixture carries `[Category("RequiresSqlTls")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_SQLTLS_HOST` is set, so a normal `dotnet test` / `jim-test` run skips it.
+
+**Configuration (environment variables)**:
+
+| Variable | Purpose |
+|----------|---------|
+| `JIM_TEST_SQLTLS_HOST` | The name the server's certificate was issued for; **also the opt-in switch** (unset = skip) |
+| `JIM_TEST_SQLTLS_PORT` | The published SQL Server port (default `1433`) |
+| `JIM_TEST_SQLTLS_USERNAME` / `JIM_TEST_SQLTLS_PASSWORD` | SQL login; the script generates a fresh `sa` password per run |
+| `JIM_TEST_SQLTLS_CA_PATH` | Path to the issuing CA certificate to trust via the JIM certificate store |
+| `JIM_TEST_SQLTLS_SERVER_CERTIFICATE_PATH` | Path to the certificate the server presents, which the trust-prompt read is checked against |
+| `JIM_TEST_SQLTLS_MISMATCH_HOST` | A name reaching the same server that the certificate does not carry |
+
+**Running locally**: stand the server up with `test/scripts/Start-SqlServerTlsTestServer.ps1` (Docker and OpenSSL; no root), which prints the environment variables above, then:
+
+```bash
+dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresSqlTls"
+```
+
+Tear down with `Start-SqlServerTlsTestServer.ps1 -Stop`.
+
+**Running in CI**: the `sql-tls-tests` job in `.github/workflows/ci.yml` runs the script, which appends the variables to `$GITHUB_ENV`, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresSqlTls"` and tears the server down. It runs on every PR, alongside `ldaps-tests`, and is a required status check, so a failure blocks the merge.
+
+**Oracle Database is not covered, deliberately.** Its two encrypted modes split the question differently from SQL Server's one:
+- *Native Network Encryption* (the SQL Connector's Oracle default) has no certificate at either end; it is negotiated inside the Oracle Net session. There is no certificate validation to apply, so there is nothing for this tier to test, and `ResolveSecureEndpoint` correctly answers null for it (pinned by unit tests in `SqlConnectorTests`).
+- *TCPS* is genuine TLS from the first byte, so the certificate probe already reads it correctly (no framing of its own) and the shared probe is exercised against real TLS by the LDAPS tier. What remains is Oracle's own driver, which takes trust anchors only from an Oracle wallet: JIM cannot hand it a certificate from its store (`SupportsPinnedServerCertificate` is false, covered by `SqlConnectorCertificateTrustTests`), so the "connects via the JIM store" row does not exist for Oracle, and the refusal rows would test Oracle's driver rather than JIM. Standing up a TCPS listener needs a server wallet built with `orapki` inside the Oracle image, a cost judged disproportionate to that remaining value. Revisit if JIM ever gains a way to supply Oracle's driver with trust anchors.
+
+**What SQL Server TLS Certificate Validation Tests Are Good At**:
+- ✅ Proving JIM can read the certificate a SQL Server presents, which takes a TDS PRELOGIN exchange no unit test makes
+- ✅ Proving a certificate the JIM certificate store vouches for is handed to the driver and accepted
+- ✅ Proving untrusted issuers and name mismatches are refused and reported as what they are
+
+**What SQL Server TLS Certificate Validation Tests Miss**:
+- ❌ Additivity with the operating system's own trust anchors (a system-trusted CA row); the LDAPS tier covers it for the shared trust logic, and adding it here would need root to change the machine trust store
+- ❌ SQL Server configured for TDS 8.0 strict encryption only, where TLS comes before PRELOGIN; the SQL Connector connects with `Encrypt=Mandatory`, which such a server refuses anyway
+- ❌ The rest of the SQL Connector's behaviour (import, export, Delta Import); that is covered by the Integration tier's Scenario 16
+
+## 6. Active Directory Lab Probes
 
 **Location**: `test/JIM.Worker.Tests/Connectors/ActiveDirectory/`
 
@@ -263,7 +314,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresActiveDirectory"
 - ❌ End-to-end synchronisation behaviour (the Integration tier's Active Directory leg)
 - ❌ Anything outside the LDAP Connector
 
-## 6. Integration Tests
+## 7. Integration Tests
 
 **Location**: `test/integration/`
 
@@ -502,7 +553,7 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 ### What This Means
 
 1. **Unit and workflow tests CANNOT validate that repository queries load required navigation properties**
-2. **Only real-PostgreSQL tests can verify `.Include()` chains are correct**; this means the Database-Backed Component tier (tier 3) or the Integration tier (tier 5). The Database-Backed tier is the cheaper of the two and runs on every PR, so reach for it first
+2. **Only real-PostgreSQL tests can verify `.Include()` chains are correct**; this means the Database-Backed Component tier (tier 3) or the Integration tier (tier 7). The Database-Backed tier is the cheaper of the two and runs on every PR, so reach for it first
 3. **Any bug involving missing navigation property loading will pass all unit/workflow tests**
 
 ### Defensive Measures
@@ -546,6 +597,6 @@ Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
 - **LDAPS Certificate Validation Tests**: Real directory servers over TLS in the .NET test host, prove certificate validation genuinely refuses what it should and trusts what it should; fast enough to run on every PR
 - **Integration Tests**: Slow, test full system with Docker + external directories, validate production-like behaviour
 
-The six tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed; the LDAPS certificate tier exists for the same reason one layer up the stack: JIM's own trust decision is untestable without a real TLS handshake, and the integration stacks used to paper over that entirely by disabling validation; the Active Directory lab probes exist because the connector runs a different branch for Active Directory than for Samba AD, and no amount of Samba testing executes it.
+The seven tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed; the LDAPS certificate tier exists for the same reason one layer up the stack: JIM's own trust decision is untestable without a real TLS handshake, and the integration stacks used to paper over that entirely by disabling validation; the SQL Server TLS tier proved the point on arrival, finding that JIM had never been able to read a SQL Server's certificate at all; the Active Directory lab probes exist because the connector runs a different branch for Active Directory than for Samba AD, and no amount of Samba testing executes it.
 
 **⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), a real-PostgreSQL tier (Database-Backed Component or Integration) is the only reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.

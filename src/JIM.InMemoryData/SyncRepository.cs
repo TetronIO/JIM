@@ -81,6 +81,9 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<int, GeneratedValueSequence> _generatedValueSequences = new();
     private int _nextGeneratedValueSequenceId = 1;
     private readonly object _generatedValueSequenceLock = new();
+    private readonly List<RetiredGeneratedValue> _retiredGeneratedValues = new();
+    private long _nextRetiredGeneratedValueId = 1;
+    private readonly Dictionary<int, SyncRuleMappingGeneration> _seededGenerations = new();
 
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
@@ -133,6 +136,9 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All generated value sequences, keyed by sequence ID (#242).</summary>
     public IReadOnlyDictionary<int, GeneratedValueSequence> GeneratedValueSequences => _generatedValueSequences;
+
+    /// <summary>The retired values register (#242, Phase 6), in the order entries were written.</summary>
+    public IReadOnlyList<RetiredGeneratedValue> RetiredGeneratedValues => _retiredGeneratedValues;
 
     #endregion
 
@@ -246,6 +252,29 @@ public class SyncRepository : ISyncRepository
     /// <summary>
     /// Seeds a generated value sequence directly, assigning it an id if it does not already have one (#242).
     /// </summary>
+    /// <summary>
+    /// Seeds a retired values register entry directly (#242, Phase 6). A missing <see cref="RetiredGeneratedValue.Id"/>
+    /// is numbered; a missing <see cref="RetiredGeneratedValue.NormalisedValue"/> is the lower-cased value.
+    /// </summary>
+    public void SeedRetiredGeneratedValue(RetiredGeneratedValue retired)
+    {
+        if (retired.Id == 0)
+            retired.Id = _nextRetiredGeneratedValueId++;
+        else if (retired.Id >= _nextRetiredGeneratedValueId)
+            _nextRetiredGeneratedValueId = retired.Id + 1;
+
+        retired.NormalisedValue ??= retired.Value.ToLowerInvariant();
+        _retiredGeneratedValues.Add(retired);
+    }
+
+    /// <summary>
+    /// Makes a generated mapping's settings row known to the register writes (#242, Phase 6), for unit tests that
+    /// seed assignments without seeding the Synchronisation Rule that owns the generation. The real repository joins
+    /// the settings row; a write for an assignment whose generation is unknown here retires nothing, exactly as that
+    /// join would find nothing.
+    /// </summary>
+    public void SeedGeneration(SyncRuleMappingGeneration generation) => _seededGenerations[generation.Id] = generation;
+
     public void SeedGeneratedValueSequence(GeneratedValueSequence sequence)
     {
         if (sequence.Id == 0)
@@ -1725,23 +1754,36 @@ public class SyncRepository : ISyncRepository
 
     // Virtual so tests can spy on per-object deletes; the MVO deletion flush must use the
     // set-based DeleteMetaverseObjectsAsync instead (issue #993).
-    public virtual Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
-    {
-        _mvos.Remove(metaverseObject.Id);
-        _csosByMvo.Remove(metaverseObject.Id);
-        NullReferencesToDeletedMvos(new HashSet<Guid> { metaverseObject.Id });
-        return Task.CompletedTask;
-    }
+    public virtual Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+        => DeleteMetaverseObjectsCoreAsync([metaverseObject]);
 
-    public virtual Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    public virtual Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+        => DeleteMetaverseObjectsCoreAsync(metaverseObjects);
+
+    /// <summary>
+    /// Shared by both delete methods (so a spy overriding one still sees the other's behaviour unchanged). Mirrors
+    /// the PostgreSQL path (#242, Phase 6): the objects' generated values are retired first, then the objects go,
+    /// taking their assignments with them as the database's foreign-key cascade does.
+    /// </summary>
+    private Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsCoreAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
     {
+        var ids = metaverseObjects.Select(mvo => mvo.Id).ToHashSet();
+        var doomedAssignments = _generatedValueAssignments.Values
+            .Where(a => a.MetaverseObjectId.HasValue && ids.Contains(a.MetaverseObjectId.Value))
+            .ToList();
+
+        var retirements = RetireAssignments(doomedAssignments, RetiredGeneratedValueReason.ObjectDeleted, activityId: null);
+
+        foreach (var assignment in doomedAssignments)
+            _generatedValueAssignments.Remove(assignment.Id);
+
         foreach (var metaverseObject in metaverseObjects)
         {
             _mvos.Remove(metaverseObject.Id);
             _csosByMvo.Remove(metaverseObject.Id);
         }
-        NullReferencesToDeletedMvos(metaverseObjects.Select(mvo => mvo.Id).ToHashSet());
-        return Task.CompletedTask;
+        NullReferencesToDeletedMvos(ids);
+        return Task.FromResult(retirements);
     }
 
     /// <summary>
@@ -4156,6 +4198,214 @@ public class SyncRepository : ISyncRepository
             .ToList();
 
         return Task.FromResult(headers);
+    }
+
+    // ---- Retired values register (#242, Phase 6) ----
+
+    /// <inheritdoc />
+    public Task<HashSet<string>> GetRetiredGeneratedValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        var taken = _retiredGeneratedValues
+            .Where(r => r.MetaverseAttributeId == metaverseAttributeId && r.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId)
+            .Select(r => r.NormalisedValue.ToLowerInvariant())
+            .Where(wanted.Contains)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<GeneratedValueRetirement>> RetireAndDeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds, RetiredGeneratedValueReason reason, Guid? activityId)
+    {
+        var doomed = assignmentIds
+            .Select(id => _generatedValueAssignments.GetValueOrDefault(id))
+            .Where(a => a != null)
+            .Select(a => a!)
+            .ToList();
+
+        var retirements = RetireAssignments(doomed, reason, activityId);
+
+        foreach (var assignment in doomed)
+            _generatedValueAssignments.Remove(assignment.Id);
+
+        return Task.FromResult(retirements);
+    }
+
+    /// <inheritdoc />
+    public Task<List<RetiredGeneratedValueCount>> GetRetiredGeneratedValueCountsAsync(IReadOnlyCollection<int> metaverseAttributeIds, IReadOnlyCollection<int> connectedSystemObjectTypeAttributeIds)
+    {
+        var mvIds = metaverseAttributeIds.ToHashSet();
+        var csIds = connectedSystemObjectTypeAttributeIds.ToHashSet();
+
+        var counts = _retiredGeneratedValues
+            .Where(r => r.MetaverseAttributeId.HasValue && mvIds.Contains(r.MetaverseAttributeId.Value))
+            .GroupBy(r => r.MetaverseAttributeId)
+            .Select(g => new RetiredGeneratedValueCount { MetaverseAttributeId = g.Key, Count = g.Count() })
+            .Concat(_retiredGeneratedValues
+                .Where(r => r.ConnectedSystemObjectTypeAttributeId.HasValue && csIds.Contains(r.ConnectedSystemObjectTypeAttributeId.Value))
+                .GroupBy(r => r.ConnectedSystemObjectTypeAttributeId)
+                .Select(g => new RetiredGeneratedValueCount { ConnectedSystemObjectTypeAttributeId = g.Key, Count = g.Count() }))
+            .ToList();
+
+        return Task.FromResult(counts);
+    }
+
+    /// <inheritdoc />
+    public Task<(List<RetiredGeneratedValueHeader> Items, int? TotalCount)> GetRetiredGeneratedValueHeadersRangeAsync(
+        int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, string? search, int offset, int count, bool includeTotalCount)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        var matches = _retiredGeneratedValues
+            .Where(r => r.MetaverseAttributeId == metaverseAttributeId && r.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            matches = matches.Where(r =>
+                r.NormalisedValue.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (r.FromObjectDisplayName != null && r.FromObjectDisplayName.Contains(term, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var ordered = matches.OrderByDescending(r => r.RetiredAt).ThenByDescending(r => r.Id).ToList();
+        int? total = includeTotalCount ? ordered.Count : null;
+        var items = ordered.Skip(offset).Take(count).Select(ToRetiredHeader).ToList();
+
+        return Task.FromResult((items, total));
+    }
+
+    /// <inheritdoc />
+    public Task<List<RetiredGeneratedValueHeader>> GetRetiredGeneratedValueHeadersForObjectAsync(Guid fromObjectId)
+    {
+        var headers = _retiredGeneratedValues
+            .Where(r => r.FromObjectId == fromObjectId)
+            .OrderByDescending(r => r.RetiredAt)
+            .ThenByDescending(r => r.Id)
+            .Select(ToRetiredHeader)
+            .ToList();
+
+        return Task.FromResult(headers);
+    }
+
+    /// <inheritdoc />
+    public Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        var removed = _retiredGeneratedValues.RemoveAll(r =>
+            r.MetaverseAttributeId == metaverseAttributeId && r.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+        return Task.FromResult(removed);
+    }
+
+    /// <summary>
+    /// Mirrors <c>RetiredGeneratedValueSql</c>'s write in the PostgreSQL implementation: keeps only the assignments
+    /// whose generation never reuses values (NeverReuse on, or a Sequence token), skips a value the attribute's
+    /// register already holds (ON CONFLICT DO NOTHING), and reports what it wrote. An assignment whose generation is
+    /// not known to this repository retires nothing, as the real statement's join would find nothing.
+    /// </summary>
+    private IReadOnlyList<GeneratedValueRetirement> RetireAssignments(IEnumerable<GeneratedValueAssignment> assignments, RetiredGeneratedValueReason reason, Guid? activityId)
+    {
+        var retirements = new List<GeneratedValueRetirement>();
+        var now = DateTime.UtcNow;
+
+        foreach (var assignment in assignments)
+        {
+            var generation = FindGeneration(assignment.SyncRuleMappingGenerationId);
+            if (generation == null || !(generation.NeverReuse || generation.TokenKind == GeneratedValueTokenKind.Sequence))
+                continue;
+
+            var normalised = (assignment.NormalisedValue ?? assignment.Value).ToLowerInvariant();
+            var alreadyRetired = _retiredGeneratedValues.Any(r =>
+                r.MetaverseAttributeId == assignment.MetaverseAttributeId &&
+                r.ConnectedSystemObjectTypeAttributeId == assignment.ConnectedSystemObjectTypeAttributeId &&
+                string.Equals(r.NormalisedValue, normalised, StringComparison.OrdinalIgnoreCase));
+            if (alreadyRetired)
+                continue;
+
+            var fromObjectId = assignment.MetaverseObjectId ?? assignment.ConnectedSystemObjectId;
+            var displayName = assignment.MetaverseObjectId.HasValue && _mvos.TryGetValue(assignment.MetaverseObjectId.Value, out var mvo)
+                ? mvo.Name
+                : null;
+
+            _retiredGeneratedValues.Add(new RetiredGeneratedValue
+            {
+                Id = _nextRetiredGeneratedValueId++,
+                MetaverseAttributeId = assignment.MetaverseAttributeId,
+                ConnectedSystemObjectTypeAttributeId = assignment.ConnectedSystemObjectTypeAttributeId,
+                Value = assignment.Value,
+                NormalisedValue = normalised,
+                RetiredAt = now,
+                Reason = reason,
+                FromObjectDisplayName = displayName,
+                FromObjectId = fromObjectId,
+                ActivityId = activityId
+            });
+
+            retirements.Add(new GeneratedValueRetirement
+            {
+                MetaverseAttributeId = assignment.MetaverseAttributeId,
+                ConnectedSystemObjectTypeAttributeId = assignment.ConnectedSystemObjectTypeAttributeId,
+                AttributeName = generation.SyncRuleMapping?.TargetMetaverseAttribute?.Name
+                    ?? generation.SyncRuleMapping?.TargetConnectedSystemAttribute?.Name
+                    ?? assignment.MetaverseAttribute?.Name
+                    ?? string.Empty,
+                Value = assignment.Value,
+                Reason = reason,
+                FromObjectId = fromObjectId
+            });
+        }
+
+        return retirements;
+    }
+
+    /// <summary>
+    /// A generation settings row by id: one seeded directly, else one hanging off a seeded Synchronisation Rule's
+    /// Attribute Flow (the shape the workflow tests build).
+    /// </summary>
+    private SyncRuleMappingGeneration? FindGeneration(int generationId)
+    {
+        if (_seededGenerations.TryGetValue(generationId, out var seeded))
+            return seeded;
+
+        return _syncRules.Values
+            .SelectMany(r => r.AttributeFlowRules)
+            .Select(m => m.Generation)
+            .FirstOrDefault(g => g != null && g.Id == generationId);
+    }
+
+    private RetiredGeneratedValueHeader ToRetiredHeader(RetiredGeneratedValue retired)
+    {
+        var holder = retired.FromObjectId.HasValue && retired.MetaverseAttributeId.HasValue
+            ? _mvos.GetValueOrDefault(retired.FromObjectId.Value)
+            : null;
+        var csoHolder = retired.FromObjectId.HasValue && retired.ConnectedSystemObjectTypeAttributeId.HasValue
+            ? _csos.GetValueOrDefault(retired.FromObjectId.Value)
+            : null;
+        var activity = retired.ActivityId.HasValue ? _activities.GetValueOrDefault(retired.ActivityId.Value) : null;
+
+        return new RetiredGeneratedValueHeader
+        {
+            Id = retired.Id,
+            MetaverseAttributeId = retired.MetaverseAttributeId,
+            ConnectedSystemObjectTypeAttributeId = retired.ConnectedSystemObjectTypeAttributeId,
+            AttributeName = retired.MetaverseAttribute?.Name ?? retired.ConnectedSystemObjectTypeAttribute?.Name ?? string.Empty,
+            Value = retired.Value,
+            RetiredAt = retired.RetiredAt,
+            Reason = retired.Reason,
+            FromObjectId = retired.FromObjectId,
+            FromObjectDisplayName = retired.FromObjectDisplayName,
+            FromObjectExists = holder != null || csoHolder != null,
+            FromObjectTypeName = holder?.Type?.Name ?? csoHolder?.Type?.Name,
+            FromObjectTypePluralName = holder?.Type?.PluralName,
+            FromObjectConnectedSystemId = csoHolder?.ConnectedSystemId,
+            ActivityId = retired.ActivityId,
+            ActivityTargetName = activity?.TargetName,
+            ActivityTargetContext = activity?.TargetContext
+        };
     }
 
     /// <summary>

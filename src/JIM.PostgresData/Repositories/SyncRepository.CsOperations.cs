@@ -744,6 +744,16 @@ public partial class SyncRepository
         if (csoIds.Length == 0)
             return 0;
 
+        // One transaction for the retirement and the deletion (Unique Value Generation, #242, Phase 6). A caller
+        // already inside a transaction keeps it; this joins it.
+        await using var ownTransaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
+
+        // Retire any export-mode generated values these objects held, BEFORE the rows go: their assignments are
+        // removed by the deletion's foreign-key cascade, so afterwards there is nothing left to read them from.
+        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(_context, csoIds);
+
         // Null incoming reference values from other rows before deleting, exactly as
         // DeleteConnectedSystemObjectsAsync does for its tracked-graph RemoveRange path. Both
         // repositories share the same DbContext (via PostgresDataRepository), so the tracked-instance
@@ -769,6 +779,9 @@ public partial class SyncRepository
         var deleted = await _context.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({0})",
             csoIds);
+
+        if (ownTransaction != null)
+            await ownTransaction.CommitAsync();
 
         return deleted;
     }

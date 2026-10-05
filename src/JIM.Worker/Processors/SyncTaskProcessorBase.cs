@@ -416,6 +416,13 @@ public abstract class SyncTaskProcessorBase
     private readonly List<Guid> _pendingGeneratedValueAssignmentDeletions = [];
 
     /// <summary>
+    /// Page-scoped: the Connected System Object each object queued in <see cref="_pendingGeneratedValueAssignmentDeletions"/>
+    /// was reconciled through, keyed by Metaverse Object id, so a retirement on an object that changed nothing else this
+    /// pass (and so has no execution item yet) can still be reported on the Activity (#242, Phase 6).
+    /// </summary>
+    private readonly Dictionary<Guid, ConnectedSystemObject> _pendingGeneratedValueAssignmentDeletionCsos = [];
+
+    /// <summary>
     /// Page-scoped export-mode <see cref="GenerationOutcome"/>s (<c>Generated</c> only,
     /// Unique Value Generation, #242, Phase 2 work package H) awaiting
     /// <see cref="UniqueValueGenerationServer.CommitAssignmentsAsync"/> once <see cref="FlushPendingExportOperationsAsync"/>
@@ -2002,7 +2009,7 @@ public abstract class SyncTaskProcessorBase
             // the object, reconcile the lifecycle of any generated attribute it holds a live assignment for
             // (plan: Assignment lifecycle row 3). Must run after ApplyPendingMetaverseObjectAttributeChanges,
             // which is what settles the object's final AttributeValues for this pass.
-            ReconcileGeneratedValueAssignmentLifecycle(connectedSystemObject.MetaverseObject);
+            ReconcileGeneratedValueAssignmentLifecycle(connectedSystemObject.MetaverseObject, connectedSystemObject);
 
             // Queue MVO for batch persistence at end of page (reduces database round trips)
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
@@ -2409,7 +2416,7 @@ public abstract class SyncTaskProcessorBase
     /// An object awaiting deletion under a grace period likewise keeps every assignment: nothing it still
     /// holds is being superseded, it is only waiting to be recalled or removed as a whole.
     /// </summary>
-    private void ReconcileGeneratedValueAssignmentLifecycle(MetaverseObject mvo)
+    private void ReconcileGeneratedValueAssignmentLifecycle(MetaverseObject mvo, ConnectedSystemObject connectedSystemObject)
     {
         if (_uniqueValueResolveOptions == null || mvo.Id == Guid.Empty || mvo.IsPendingDeletion)
             return;
@@ -2435,7 +2442,10 @@ public abstract class SyncTaskProcessorBase
                 && currentValue.ContributedBySyncRuleId == mapping!.SyncRuleId;
 
             if (!stillMatches)
+            {
                 _pendingGeneratedValueAssignmentDeletions.Add(assignment.Id);
+                _pendingGeneratedValueAssignmentDeletionCsos[mvo.Id] = connectedSystemObject;
+            }
         }
     }
 
@@ -2511,8 +2521,8 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush deletion: deletes every assignment id
-    /// <see cref="ReconcileGeneratedValueAssignmentLifecycle"/> queued this page (retirement, where it applies,
-    /// is not this feature's concern: release 2's retired values register writes it separately), and drops them
+    /// <see cref="ReconcileGeneratedValueAssignmentLifecycle"/> queued this page, retiring each value whose flow never
+    /// reuses into the retired values register in the same statement (#242, Phase 6), and drops them
     /// from the run cache in the same call, then clears the page-scoped list. Call after
     /// <see cref="PersistPendingMetaverseObjectsAsync"/> but BEFORE <see cref="CommitGeneratedValueAssignmentsAsync"/>:
     /// an assignment being deleted here could share its (object, attribute) key with a fresh one that call is
@@ -2523,8 +2533,59 @@ public abstract class SyncTaskProcessorBase
         if (_uniqueValueGenerationServer == null || _uniqueValueResolveOptions == null || _pendingGeneratedValueAssignmentDeletions.Count == 0)
             return;
 
-        await _uniqueValueGenerationServer.DeleteAssignmentsAsync(_pendingGeneratedValueAssignmentDeletions, _uniqueValueResolveOptions);
+        // Retired values register (#242, Phase 6): a value that stopped being generated while its object lives on is
+        // retired in the same statement that deletes its assignment, when its flow never reuses values. The run's
+        // Activity is recorded on the register entry, which is what lets the object's history name the cause.
+        var retirements = await _uniqueValueGenerationServer.RetireAndDeleteAssignmentsAsync(
+            _pendingGeneratedValueAssignmentDeletions, RetiredGeneratedValueReason.Superseded, _activity.Id, _uniqueValueResolveOptions);
+
+        if (retirements.Count > 0)
+        {
+            RecordSupersededRetirementOutcomes(retirements);
+            Log.Information("FlushGeneratedValueAssignmentDeletionsAsync: Retired {RetiredCount} generated value(s) of {DeletedCount} assignment(s) no longer generated",
+                retirements.Count, _pendingGeneratedValueAssignmentDeletions.Count);
+        }
+
         _pendingGeneratedValueAssignmentDeletions.Clear();
+        _pendingGeneratedValueAssignmentDeletionCsos.Clear();
+    }
+
+    /// <summary>
+    /// Records a <c>GeneratedValueRetired</c> outcome for each value the supersession path retired (#242, Phase 6),
+    /// under the object's own execution item for this pass when it has one; otherwise on an execution item of its
+    /// own for the Connected System Object it was reconciled through, so the Activity shows a retirement even on an
+    /// object nothing else changed for (the cross-system case, where another system's run supplied the new value).
+    /// Not recorded when outcome tracking is off, matching every other outcome.
+    /// </summary>
+    private void RecordSupersededRetirementOutcomes(IReadOnlyList<GeneratedValueRetirement> retirements)
+    {
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        foreach (var retirement in retirements.Where(r => r.FromObjectId.HasValue))
+        {
+            var mvoId = retirement.FromObjectId!.Value;
+            var detailMessage = $"{retirement.AttributeName}: {retirement.Value}";
+
+            if (_mvoIdToRpei.TryGetValue(mvoId, out var rpei)
+                && rpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null) is { } root)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(rpei, root, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired,
+                    targetEntityId: mvoId, targetEntityDescription: root.TargetEntityDescription, detailMessage: detailMessage);
+                continue;
+            }
+
+            if (!_pendingGeneratedValueAssignmentDeletionCsos.TryGetValue(mvoId, out var cso))
+                continue;
+
+            var retirementRpei = _activity.PrepareRunProfileExecutionItem();
+            retirementRpei.ConnectedSystemObject = cso;
+            retirementRpei.ConnectedSystemObjectId = cso.Id;
+            _activity.RunProfileExecutionItems.Add(retirementRpei);
+            SyncOutcomeBuilder.AddRootOutcome(retirementRpei, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired,
+                targetEntityId: mvoId, targetEntityDescription: ObjectNaming.FirstPresent(cso.MetaverseObject?.Name), detailMessage: detailMessage);
+            _mvoIdToRpei[mvoId] = retirementRpei;
+        }
     }
 
     /// <summary>
@@ -4519,6 +4580,7 @@ public abstract class SyncTaskProcessorBase
         var exportEvaluationWorkingSet = new ExportEvaluationWorkingSet();
 
         var deletedMvoIds = new List<Guid>();
+        var retirements = new List<GeneratedValueRetirement>();
         try
         {
             // Set-based fast path (issue #993): one bulk deletion evaluation (delete Pending
@@ -4549,11 +4611,11 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("MvoDeletionDeleteBulk")
                     .SetTag("mvoCount", deletionsToProcess.Count))
                 {
-                    await _syncServer.DeleteMetaverseObjectsAsync(
+                    retirements.AddRange(await _syncServer.DeleteMetaverseObjectsAsync(
                         deletionsToProcess,
                         _activity.InitiatedByType,
                         _activity.InitiatedById,
-                        _activity.InitiatedByName);
+                        _activity.InitiatedByName));
                 }
 
                 deletedMvoIds.AddRange(deletionsToProcess.Select(d => d.Mvo.Id));
@@ -4578,8 +4640,12 @@ public abstract class SyncTaskProcessorBase
             // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
             // stage is merged over the top, deduplicated by Pending Export id.
             deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(
-                deletionsToProcess, deletePendingExports, exportEvaluationWorkingSet));
+                deletionsToProcess, deletePendingExports, exportEvaluationWorkingSet, retirements));
         }
+
+        // Retired values register (#242, Phase 6): each generated value the deletions retired is recorded under the
+        // MvoDeleted outcome that caused it, so the Activity and the causality view show the value going.
+        RecordDeletionRetirementOutcomes(retirements);
 
         // Deletion cascade (#1044): fold the staged delete Pending Exports into Activity reporting, so the
         // accounts a run is about to deprovision are countable and filterable on the Activity rather than
@@ -4947,6 +5013,30 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Records a <c>GeneratedValueRetired</c> outcome under the <c>MvoDeleted</c> node of each deleted object whose
+    /// generated values the deletion retired (#242, Phase 6). Runs inside <see cref="FlushPendingMvoDeletionsAsync"/>,
+    /// while the page's items are still in memory. An object with no deletion node (outcome tracking off) records
+    /// nothing; the register entry stands either way.
+    /// </summary>
+    private void RecordDeletionRetirementOutcomes(IReadOnlyList<GeneratedValueRetirement> retirements)
+    {
+        if (retirements.Count == 0)
+            return;
+
+        Log.Information("FlushPendingMvoDeletionsAsync: Retired {Count} generated value(s) held by deleted Metaverse Objects", retirements.Count);
+
+        var deletedNodes = FindMvoDeletedOutcomeNodes();
+        foreach (var retirement in retirements.Where(r => r.FromObjectId.HasValue && deletedNodes.ContainsKey(r.FromObjectId.Value)))
+        {
+            var (rpei, deletedNode) = deletedNodes[retirement.FromObjectId!.Value];
+            SyncOutcomeBuilder.AddChildOutcome(rpei, deletedNode, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired,
+                targetEntityId: retirement.FromObjectId,
+                targetEntityDescription: deletedNode.TargetEntityDescription,
+                detailMessage: $"{retirement.AttributeName}: {retirement.Value}");
+        }
+    }
+
+    /// <summary>
     /// The <c>MvoDeleted</c> outcome nodes recorded for this page's deletions, keyed by the Metaverse Object
     /// each one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one.
     /// </summary>
@@ -5122,7 +5212,8 @@ public abstract class SyncTaskProcessorBase
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
         Dictionary<Guid, PendingExport> deletePendingExports,
-        ExportEvaluationWorkingSet exportEvaluationWorkingSet)
+        ExportEvaluationWorkingSet exportEvaluationWorkingSet,
+        List<GeneratedValueRetirement> retirements)
     {
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
@@ -5146,12 +5237,12 @@ public abstract class SyncTaskProcessorBase
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
                 // (captured before attribute recall removed them from the MVO)
-                await _syncServer.DeleteMetaverseObjectAsync(
+                retirements.AddRange(await _syncServer.DeleteMetaverseObjectAsync(
                     mvo,
                     _activity.InitiatedByType,
                     _activity.InitiatedById,
                     _activity.InitiatedByName,
-                    finalAttributeValues);
+                    finalAttributeValues));
                 deletedMvoIds.Add(mvo.Id);
                 Log.Information(
                     "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId}",

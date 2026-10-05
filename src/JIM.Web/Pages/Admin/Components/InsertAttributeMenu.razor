@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Web.Models
 @inject IJSRuntime JS
@@ -8,9 +9,11 @@
 
 @* "Insert attribute" under an Attribute Flow's expression (#1750, mockup B). Lists the attributes the expression can
    read, grouped by the accessor that reads them (mv["..."] for the Metaverse, cs["..."] for the Connected System), and
-   hands the chosen accessor to OnInsert, which the host passes to ExpressionEditor.InsertAtCursorAsync. The Metaverse
-   group is offered only where a Metaverse-Derived Attribute Flow is possible (an import rule, the feature on); the
-   host decides that by passing MetaverseAttributes or not. Metaverse attributes the save would refuse are listed but
+   hands the chosen accessor to OnInsert, which the host passes to ExpressionEditor.InsertAtCursorAsync. The host
+   offers only the groups that resolve in the rule's direction, by passing their attributes or not: on an import rule,
+   the Connected System group always and the Metaverse group where a Metaverse-Derived Attribute Flow is possible (the
+   feature on); on an export rule, the Metaverse group alone, since export expressions are evaluated against the
+   Metaverse Object and cs["..."] resolves to nothing there. Metaverse attributes the save would refuse are listed but
    disabled, saying why, rather than left out: an attribute that silently is not there reads as a fault.
    Built on MudPopover rather than MudMenu, for the keyboard: opening puts the caret in the filter; Tab, Shift+Tab and
    the arrow keys move through the filter and the enabled items on show; Enter in the filter chooses the first one, and
@@ -61,14 +64,16 @@
 @code {
     /// <summary>
     /// The Metaverse Object Type's attributes, offered as <c>mv["..."]</c>. Null or empty leaves the Metaverse group out:
-    /// pass them only on an import rule with Metaverse-Derived Attribute Flows enabled.
+    /// pass them on an export rule, and on an import rule only with Metaverse-Derived Attribute Flows enabled.
     /// </summary>
     [Parameter]
     public IEnumerable<MetaverseAttribute>? MetaverseAttributes { get; set; }
 
     /// <summary>
-    /// The Connected System Object Type's attributes, offered as <c>cs["..."]</c>. Credential attributes are never
-    /// offered: they travel through JIM's password channel, never through Attribute Flow.
+    /// The Connected System Object Type's attributes, offered as <c>cs["..."]</c>. Null or empty leaves the group out:
+    /// pass them on an import rule only, since an export expression is evaluated against the Metaverse Object alone and
+    /// <c>cs["..."]</c> resolves to nothing there. Credential attributes are never offered: they travel through JIM's
+    /// password channel, never through Attribute Flow.
     /// </summary>
     [Parameter]
     public IEnumerable<ConnectedSystemObjectTypeAttribute>? ConnectedSystemAttributes { get; set; }
@@ -85,6 +90,13 @@
     /// </summary>
     [Parameter]
     public int? TargetMetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule's direction, which decides which Metaverse attributes are disabled: the derived flow
+    /// rules (no Reference input, not the flow's own target) apply to an import rule only.
+    /// </summary>
+    [Parameter]
+    public SyncRuleDirection Direction { get; set; } = SyncRuleDirection.Import;
 
     [Parameter]
     public bool Disabled { get; set; }
@@ -179,12 +191,17 @@
 
     /// <summary>
     /// A Metaverse attribute's entry, disabled with the reason where the save would refuse an expression reading it.
-    /// Mirrors the save's validator: a Reference input is not supported yet (#1861), and the flow's own target would be
-    /// a loop of one.
+    /// On an import rule this mirrors the derived flow validator: a Reference input is not supported yet (#1861), and
+    /// the flow's own target would be a loop of one. On an export rule nothing is refused: the expression reads the
+    /// Metaverse Object's persisted values (a Reference as the referenced object's identifier), and it writes a
+    /// Connected System attribute, so there is no loop to close.
     /// </summary>
     private InsertableAttribute MetaverseItem(MetaverseAttribute candidate)
     {
         var accessor = Accessor("mv", candidate.Name);
+        if (Direction == SyncRuleDirection.Export)
+            return new InsertableAttribute(candidate.Id, candidate.Name, accessor, null);
+
         if (candidate.Type == AttributeDataType.Reference)
             return new InsertableAttribute(candidate.Id, candidate.Name, accessor, "Reference, not supported yet",
                 "Reference attributes cannot be read by a Derived Attribute Flow yet.");

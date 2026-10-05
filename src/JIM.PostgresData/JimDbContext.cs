@@ -98,6 +98,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleMappingGenerationExclusion> SyncRuleMappingGenerationExclusions { get; set; } = null!;
     public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
+    public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
@@ -1469,5 +1470,38 @@ public class JimDbContext : DbContext
                 "\"ConnectedSystemObjectId\" IS NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NULL) OR " +
                 "(\"ConnectedSystemObjectId\" IS NOT NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL AND " +
                 "\"MetaverseObjectId\" IS NULL AND \"MetaverseAttributeId\" IS NULL)"));
+
+        // RetiredGeneratedValue (Unique Value Generation, #242, plan decision 4): the retired values register. Kept
+        // per attribute, so both attribute FKs cascade and the register goes with its attribute, exactly as the
+        // counter does (plan "deleted only with the attribute"). Nothing else references it and it references no
+        // object: FromObjectId and ActivityId are deliberately plain columns, because the register must outlive the
+        // object that held the value and the Activity that retired it.
+        //
+        // Its uniqueness is case-insensitive per attribute, a LOWER("NormalisedValue") expression index per
+        // attribute column, which EF cannot express; the migration that creates this table creates both as raw SQL
+        // (IX_RetiredGeneratedValues_MvAttributeId_LowerNormalisedValue_Unique and its Connected System sibling),
+        // along with the trigger that retires a flow's values when its SyncRuleMappingGenerations row is deleted.
+        // Every writer therefore says ON CONFLICT DO NOTHING: retiring a value already retired is a no-op.
+        modelBuilder.Entity<RetiredGeneratedValue>()
+            .HasOne(r => r.MetaverseAttribute)
+            .WithMany()
+            .HasForeignKey(r => r.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RetiredGeneratedValue>()
+            .HasOne(r => r.ConnectedSystemObjectTypeAttribute)
+            .WithMany()
+            .HasForeignKey(r => r.ConnectedSystemObjectTypeAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The change history of one object reads its retirements by the object they came from.
+        modelBuilder.Entity<RetiredGeneratedValue>()
+            .HasIndex(r => r.FromObjectId)
+            .HasDatabaseName("IX_RetiredGeneratedValues_FromObjectId");
+
+        modelBuilder.Entity<RetiredGeneratedValue>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_RetiredGeneratedValues_OneAttribute",
+                "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1"));
     }
 }

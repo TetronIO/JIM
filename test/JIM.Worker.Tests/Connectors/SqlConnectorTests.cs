@@ -4,6 +4,7 @@
 using JIM.Connectors;
 using JIM.Connectors.Sql;
 using JIM.Connectors.Sql.Providers;
+using JIM.Models.Connectors;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
@@ -408,6 +409,20 @@ public class SqlConnectorTests
     }
 
     [Test]
+    public void ResolveSecureEndpoint_SqlServerEncrypted_FramesTheHandshakeInTdsPreLoginPackets()
+    {
+        // SQL Server does not answer a bare TLS handshake on its port: a TDS 7.x client negotiates
+        // encryption in a PRELOGIN exchange first and then carries the handshake inside PRELOGIN
+        // packets. A probe that opens plain TLS sees the connection reset, reports nothing, and the
+        // certificate an administrator added in Admin > Certificates is never offered to the driver.
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
+
+        var endpoint = _connector.ResolveSecureEndpoint(settingValues);
+
+        Assert.That(endpoint!.HandshakeFraming, Is.EqualTo(SecureHandshakeFraming.TdsPreLogin));
+    }
+
+    [Test]
     public void ResolveSecureEndpoint_SqlServerLeftAtItsDefaults_ReturnsAnEndpoint()
     {
         // Nothing was said about encryption, and the default is to encrypt, so there is a certificate
@@ -463,6 +478,7 @@ public class SqlConnectorTests
         {
             Assert.That(endpoint!.Port, Is.EqualTo(2484));
             Assert.That(endpoint.SecureTransportName, Is.EqualTo("TCPS"), "TCPS is what an Oracle administrator calls the encrypted transport.");
+            Assert.That(endpoint.HandshakeFraming, Is.EqualTo(SecureHandshakeFraming.DirectTls), "A TCPS listener speaks TLS from the first byte.");
         }
     }
 

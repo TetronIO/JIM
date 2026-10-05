@@ -28,7 +28,8 @@ permissions:
 # Within one run the jobs fan out across every available runner. Across runs, push
 # builds on main are serialised: ldaps-tests mutates machine-global state on the
 # self-hosted host (fixed container names, /etc/hosts entries, a trust-store CA),
-# so two overlapping main runs would corrupt each other's fixtures. A newer queued
+# and sql-tls-tests uses a fixed container name too, so two overlapping main runs
+# would corrupt each other's fixtures. A newer queued
 # main run supersedes an older queued one, which is fine: the newest commit contains
 # the older ones. PR runs get one group per PR so a new push cancels the stale run.
 concurrency:
@@ -244,6 +245,52 @@ jobs:
     - name: Tear down LDAPS certificate test servers
       if: always()
       run: sudo pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -Stop
+
+  sql-tls-tests:
+    # Runs the RequiresSqlTls NUnit tier against a real Microsoft SQL Server
+    # presenting a certificate issued by a CA nobody trusts. These fixtures
+    # self-skip in build-and-test (JIM_TEST_SQLTLS_HOST unset); here the fixture
+    # script stands the server up and exports the environment variables that flip
+    # them from Assert.Ignore to run. This is the regression net for the SQL
+    # Connector's certificate trust (#1472): an encrypted connection must succeed
+    # when the issuer is in the JIM certificate store, and must be refused for an
+    # untrusted issuer or a name mismatch with the reason reported, which only a
+    # real TDS PRELOGIN exchange can show. Runs on every PR so a failure blocks the
+    # merge. Unlike ldaps-tests it needs no root: it writes no hosts entries and
+    # leaves the machine trust store alone.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      run: dotnet restore JIM.sln --locked-mode
+    - name: Build
+      run: dotnet build test/JIM.Worker.Tests/ --no-restore
+    # Pulled up front with a retry, as ldaps-tests does, so a transient registry
+    # refusal fails here with a clear message rather than inside docker run.
+    - name: Pull SQL Server image
+      run: |
+        for attempt in 1 2 3; do
+          docker pull mcr.microsoft.com/mssql/server:2022-latest && exit 0
+          sleep 30
+        done
+        echo "Failed to pull mcr.microsoft.com/mssql/server:2022-latest after 3 attempts."
+        exit 1
+    - name: Start SQL Server TLS test server
+      run: pwsh -File ./test/scripts/Start-SqlServerTlsTestServer.ps1
+    - name: Run SQL Server TLS certificate validation tests (RequiresSqlTls)
+      run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresSqlTls" --verbosity normal
+    # The self-hosted runner used on push events is not ephemeral; without this the
+    # container and generated certificates outlive the job.
+    - name: Tear down SQL Server TLS test server
+      if: always()
+      run: pwsh -File ./test/scripts/Start-SqlServerTlsTestServer.ps1 -Stop
 
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.

@@ -7,11 +7,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* "Start again…" (Unique Value Generation, #242, Phase 3, Work Package D2): the typed confirmation for a saved
-   generated Sequence mapping's row action, adapted from the approved mockup's screen 02b for release 1 (no
-   retired values register yet, so the "N retired values forgotten" line and "View retired values" are omitted;
-   they arrive with release 2's Phase 6). A thin surface over the shared ConsequenceConfirmationDialog: this
-   component owns loading the current counter state, the wording and performing the restart; that one owns
-   presenting it and the typed-confirmation rule. *@
+   generated Sequence mapping's row action (the approved mockup's screen 02b). Phase 6 restored the line release 1
+   left out: how many retired values the restart forgets, with a link through to the retired values list, shown
+   only when there are any. A thin surface over the shared ConsequenceConfirmationDialog: this component owns
+   loading the current counter state, the wording and performing the restart; that one owns presenting it and the
+   typed-confirmation rule. *@
 
 <ConsequenceConfirmationDialog Loading="@(_currentNext == null)"
                                LoadingText="Reading the current counter..."
@@ -33,7 +33,14 @@
         else if (_currentNext is { } currentNext)
         {
             <MudText Typo="Typo.body1" Class="mt-2">
-                Counter returns to <b>@ConfiguredStartFormatted</b> from <b>@GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth)</b>
+                Counter returns to <code class="jim-code-inline">@ConfiguredStartFormatted</code> from <code class="jim-code-inline">@GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth)</code>
+            </MudText>
+        }
+        @if (_retiredValueCount > 0)
+        {
+            <MudText Typo="Typo.body1" Class="mt-2" data-testid="jim-start-again-forgotten">
+                @GeneratedValuePreviewHelpers.DescribeRetiredValueCount(_retiredValueCount) will be forgotten and can be issued again.
+                <MudLink Typo="Typo.body1" OnClick="ViewRetiredValuesAsync" data-testid="jim-start-again-view-retired">View retired values</MudLink>
             </MudText>
         }
     </LeadingContent>
@@ -64,7 +71,22 @@
     [Parameter]
     public int? FixedWidth { get; set; }
 
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
+
+    /// <summary>
+    /// The Metaverse Attribute an import flow generates, for the link through to its retired values list. Null for
+    /// an export flow, which passes <see cref="ConnectedSystemObjectTypeAttributeId"/> instead.
+    /// </summary>
+    [Parameter]
+    public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>The Connected System attribute an export flow generates, for the link through to its retired values list.</summary>
+    [Parameter]
+    public int? ConnectedSystemObjectTypeAttributeId { get; set; }
+
     private long? _currentNext;
+    private int _retiredValueCount;
     private bool _isNoOp;
     private string? _noOpMessage;
 
@@ -80,8 +102,13 @@
         // NextNumber is always the higher of the counter's own position and Start at, so it can never read
         // *behind* Start at here; "already at Start at" (the no-op) is the only equality case reachable.
         _currentNext = state is { IsSeeded: true } ? state.NextNumber : ConfiguredStart;
-        _isNoOp = GeneratedValuePreviewHelpers.IsStartAgainNoOp(_currentNext.Value, ConfiguredStart);
+        _retiredValueCount = await jim.ConnectedSystems.GetRetiredGeneratedValueCountAsync(MappingId);
+        _isNoOp = GeneratedValuePreviewHelpers.IsStartAgainNoOp(_currentNext.Value, ConfiguredStart, _retiredValueCount);
     }
+
+    private Task ViewRetiredValuesAsync() =>
+        RetiredGeneratedValuesDialog.ShowAsync(
+            DialogService, AttributeName, MetaverseAttributeId, ConnectedSystemObjectTypeAttributeId, _retiredValueCount);
 
     private async Task<bool> RestartAsync()
     {
@@ -106,14 +133,17 @@
     /// restart completed successfully.
     /// </summary>
     public static async Task<bool> ShowAsync(
-        IDialogService dialogService, int mappingId, string attributeName, long configuredStart, int? fixedWidth)
+        IDialogService dialogService, int mappingId, string attributeName, long configuredStart, int? fixedWidth,
+        int? metaverseAttributeId = null, int? connectedSystemObjectTypeAttributeId = null)
     {
         var parameters = new DialogParameters<GeneratedValueStartAgainDialog>
         {
             { x => x.MappingId, mappingId },
             { x => x.AttributeName, attributeName },
             { x => x.ConfiguredStart, configuredStart },
-            { x => x.FixedWidth, fixedWidth }
+            { x => x.FixedWidth, fixedWidth },
+            { x => x.MetaverseAttributeId, metaverseAttributeId },
+            { x => x.ConnectedSystemObjectTypeAttributeId, connectedSystemObjectTypeAttributeId }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<GeneratedValueStartAgainDialog>($"Start {attributeName} again?", parameters, options);

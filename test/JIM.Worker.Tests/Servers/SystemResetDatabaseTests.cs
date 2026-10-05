@@ -226,6 +226,38 @@ public class SystemResetDatabaseTests
         Assert.That(adminRows[0].Attribute.Name, Is.EqualTo(Constants.BuiltInAttributes.DisplayName));
     }
 
+    /// <summary>
+    /// The retired values register (#242, Phase 6) holds former people's identifiers and hangs off attributes, not
+    /// objects, so a built-in attribute's entries are only wiped because the truncate cascades into the register
+    /// through its foreign key to Connected System attributes (TRUNCATE CASCADE empties a referencing table whole).
+    /// This pins that, so a later change to the register's foreign keys cannot quietly leave leavers' values behind.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_RetiredValuesForABuiltInAttribute_AreWipedAsync()
+    {
+        await SeedAsync();
+        await using (var seed = NewContext())
+        {
+            var builtInAttributeId = await seed.MetaverseAttributes.Where(a => a.BuiltIn).Select(a => a.Id).FirstAsync();
+            seed.RetiredGeneratedValues.Add(new JIM.Models.Transactional.RetiredGeneratedValue
+            {
+                MetaverseAttributeId = builtInAttributeId,
+                Value = "leaver.name",
+                NormalisedValue = "leaver.name",
+                RetiredAt = DateTime.UtcNow,
+                Reason = JIM.Models.Transactional.RetiredGeneratedValueReason.ObjectDeleted,
+                FromObjectDisplayName = "Leaver Name"
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).System.ResetSystemAsync(includeAdministrators: false);
+
+        await using var verify = NewContext();
+        Assert.That(await verify.RetiredGeneratedValues.AnyAsync(), Is.False, "a factory reset forgets every retired value");
+    }
+
     [Test]
     public async Task ResetSystemAsync_IncludeAdministrators_RemovesAdministratorsTooAsync()
     {

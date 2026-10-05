@@ -11,15 +11,17 @@
     Sequence or Random), local gates (reservation within a run, Metaverse, connector space), a brownfield account kept
     by Attribute Priority (and, when that higher-priority flow is disabled, the generated flow taking the
     attribute back exactly as any Attribute Flow would, renaming the account), sticky assignments across
-    re-runs, and Start again. Release 1 does NOT include
-    probing, the retired values register, Collision Remediation or Needs Decision (those ship in
-    releases 2 to 4). A target-side collision in this release is an ordinary export error, which is
+    re-runs, Start again, and (release 2, Phase 6) the retired values register: a leaver's generated
+    values are retired and never reissued while "Never reuse a value" is on, and are free again with it
+    off. This scenario does NOT include probing, Collision Remediation or Needs Decision (releases 3
+    and 4). A target-side collision in this release is an ordinary export error, which is
     existing export behaviour rather than generation; it gets integration coverage with release 4's
     Collision Remediation, which reworks that path (and needs the harness to accept an intended export
     error, which its end-of-run log scan does not today).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
-    Setup-Scenario-001.ps1 -GenerateAccountName), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
+    Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName, so Email and User Principal Name
+    are derived from the generated Account Name, Metaverse-Derived Attribute Flows, #1750), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
     -OmitItOwnedAttributes so samAccountName, email and userPrincipalName are genuinely absent, the
     shape this feature exists to make representative. The target directory starts empty: every Account
     Name, Staff Number and Badge Code is generated, not sourced.
@@ -63,7 +65,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "NeverReuse", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -390,6 +392,43 @@ function New-OutOfBandLdapAccount {
     }
 }
 
+function Invoke-HrJoinerOrLeaverSync {
+    <#
+    .SYNOPSIS
+        HR CSV Full Import then HR CSV Delta Sync, and nothing else.
+    .DESCRIPTION
+        The Never reuse step's joiners and leavers only need the HR side: with a zero deletion grace period a
+        leaver's Metaverse Object is deleted in the Delta Sync itself, and a joiner withdrawn before any export
+        has its provisioning cancelled outright, so no directory round trip is needed to make or remove one.
+    #>
+    param([Parameter(Mandatory=$true)][hashtable]$Config, [Parameter(Mandatory=$true)][string]$Context)
+    $import = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $import.activityId -Name "HR CSV Full Import ($Context)"
+    $sync = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVDeltaSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $sync.activityId -Name "HR CSV Delta Sync ($Context)"
+}
+
+function Remove-HrCsvRow {
+    <#
+    .SYNOPSIS
+        Removes one person (by employeeId) from hr-users.csv, making them a leaver at the next import.
+    #>
+    param([Parameter(Mandatory=$true)][string]$EmployeeId)
+    $csv = @(Import-Csv $csvPath | Where-Object { $_.employeeId -ne $EmployeeId })
+    $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
+}
+
+function Get-PersonByEmployeeId {
+    <#
+    .SYNOPSIS
+        One User Metaverse Object, by its HR Employee ID, with its generated attributes; $null when absent.
+    #>
+    param([Parameter(Mandatory=$true)][string]$EmployeeId)
+    return @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue $EmployeeId `
+        -Attributes @("Account Name", "Staff Number", "Badge Code") -ErrorAction SilentlyContinue) | Select-Object -First 1
+}
+
 function Invoke-RawJimApi {
     <#
     .SYNOPSIS
@@ -439,7 +478,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "NeverReuse")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -495,12 +534,41 @@ try {
         Add-TestResult -Name "Intra-batch collision resolves to {marisol.fenwick, marisol.fenwick1}" -Passed (($marisolValues -join ',') -eq ($expectedMarisol -join ',')) `
             -Detail "Expected $($expectedMarisol -join ', '); got $($marisolValues -join ', ')"
 
-        # Email is generated as well when the HR feed carries none (Setup-Scenario-001.ps1 -GenerateAccountName),
-        # and an email-shaped value takes its suffix before the "@", not after it.
+        # Email is derived from the generated Account Name (Setup-Scenario-001.ps1 -DeriveFromAccountName),
+        # so the suffix lands before the "@", not after it.
         $marisolEmails = @($marisolGroup | ForEach-Object { (Get-MvoAttributeValue -MvoId $_.id -AttributeName "Email").ToLower() } | Sort-Object)
         $expectedEmails = @(@('marisol.fenwick@panoply.local', 'marisol.fenwick1@panoply.local') | Sort-Object)
         Add-TestResult -Name "Same-name joiners get distinct Emails with the suffix before the '@'" -Passed (($marisolEmails -join ',') -eq ($expectedEmails -join ',')) `
             -Detail "Expected $($expectedEmails -join ', '); got $($marisolEmails -join ', ')"
+
+        # Metaverse-Derived Attribute Flows (#1750; Setup-Scenario-023.ps1 composes Setup-Scenario-001.ps1
+        # -DeriveFromAccountName): Email is derived from the generated Account Name and User Principal Name
+        # from Email, so each person's three values carry the SAME suffix, whichever of the pair got it.
+        # The set assertion above cannot tell that apart from two independent generations that happened to
+        # agree; this pairs the values per person, in the Metaverse and in the directory.
+        $suffixMismatches = @()
+        foreach ($person in $marisolGroup) {
+            $accountName = $person.attributes.'Account Name'
+            $email = Get-MvoAttributeValue -MvoId $person.id -AttributeName "Email"
+            $upn = Get-MvoAttributeValue -MvoId $person.id -AttributeName "User Principal Name"
+            $expectedEmail = "$accountName@panoply.local"
+            if ($email -ne $expectedEmail -or $upn -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': Email '$email', User Principal Name '$upn' (expected '$expectedEmail' for both)"
+            }
+            $directoryUser = Get-LDAPUser -UserIdentifier $accountName -DirectoryConfig $DirectoryConfig
+            if (-not $directoryUser) {
+                $suffixMismatches += "Account Name '$accountName': no directory entry"
+                continue
+            }
+            if ($directoryUser['mail'] -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': directory mail '$($directoryUser['mail'])' (expected '$expectedEmail')"
+            }
+            if (-not $isRfcDirectory -and $directoryUser['userPrincipalName'] -ne $expectedEmail) {
+                $suffixMismatches += "Account Name '$accountName': directory userPrincipalName '$($directoryUser['userPrincipalName'])' (expected '$expectedEmail')"
+            }
+        }
+        Add-TestResult -Name "Email and User Principal Name follow each joiner's suffixed generated Account Name (derived, in the Metaverse and the directory)" `
+            -Passed ($marisolGroup.Count -eq 2 -and $suffixMismatches.Count -eq 0) -Detail ($suffixMismatches -join '; ')
 
         $reusedBase = Get-GeneratedBaseValue -FirstName $existingPerson.FirstName -LastName $existingPerson.LastName
         $reusedGroup = @($population | Where-Object { $_.attributes.'First Name' -eq $existingPerson.FirstName -and $_.attributes.'Last Name' -eq $existingPerson.LastName })
@@ -984,6 +1052,114 @@ try {
         Write-Host "  ✓ Re-enabled Features.UniqueValueGeneration" -ForegroundColor Green
     }
 
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Never reuse (release 2, Phase 6): a leaver's generated values are retired, and a new
+    # joiner with the same name is not given the leaver's Account Name; with "Never reuse a
+    # value" off, nothing is retired and the same joiner gets it. Last in the order because a
+    # retired value leaves a gap in a base's {base, base1, ...} set, which the Joiners and Gates
+    # steps' invariant does not allow for.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("NeverReuse")) {
+        Write-TestSection "Test 12: Never reuse a value (retired values register)"
+
+        # Immediate deletion for this step only (the 7-day grace period would merely schedule it); restored in
+        # the finally block, whatever happens. Nobody has left before this step, so nothing is pending deletion
+        # that zeroing the grace period could suddenly make eligible.
+        $userType = Get-JIMMetaverseObjectType -Name "User"
+        Assert-NotNull -Value $userType -Message "The 'User' Metaverse Object Type exists"
+        Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
+        try {
+            # ─── 12a: name-based (Account Name, "only if taken") and random (Badge Code), Never reuse on ───
+            Write-TestSection "Test 12a: A leaver's values are retired and not reissued"
+            Add-HrCsvJoiner -EmployeeId "EMP900060" -FirstName "Ottoline" -LastName "Vantreight" -Department "Finance"
+            Invoke-HrJoinerOrLeaverSync -Config $config -Context "Never reuse: first joiner"
+            $leaver = Get-PersonByEmployeeId -EmployeeId "EMP900060"
+            Assert-NotNull -Value $leaver -Message "The first Ottoline Vantreight was projected"
+            Add-TestResult -Name "The first Ottoline Vantreight is given the bare base value" `
+                -Passed ($leaver.attributes.'Account Name' -eq 'ottoline.vantreight') -Detail "Got '$($leaver.attributes.'Account Name')'"
+            $leaverBadgeCode = $leaver.attributes.'Badge Code'
+            $leaverStaffNumber = $leaver.attributes.'Staff Number'
+
+            Remove-HrCsvRow -EmployeeId "EMP900060"
+            Invoke-HrJoinerOrLeaverSync -Config $config -Context "Never reuse: leaver"
+            Add-TestResult -Name "The leaver's Metaverse Object is deleted (zero grace period)" `
+                -Passed ($null -eq (Get-PersonByEmployeeId -EmployeeId "EMP900060")) -Detail "The Metaverse Object still exists"
+
+            $retiredAccountName = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name" -Search "ottoline")
+            Add-TestResult -Name "The leaver's Account Name is in the retired values register, as Object deleted" `
+                -Passed ($retiredAccountName.Count -eq 1 -and $retiredAccountName[0].Value -eq 'ottoline.vantreight' -and $retiredAccountName[0].Reason -eq 'ObjectDeleted' -and -not $retiredAccountName[0].FromObjectExists) `
+                -Detail "Register entries: $($retiredAccountName | ConvertTo-Json -Compress)"
+            Add-TestResult -Name "The retired entry names its former holder and is read as deleted (HeldBy)" `
+                -Passed ($retiredAccountName.Count -eq 1 -and $retiredAccountName[0].HeldBy -eq 'Ottoline Vantreight (deleted)') `
+                -Detail "HeldBy: '$(if ($retiredAccountName.Count -gt 0) { $retiredAccountName[0].HeldBy })'"
+
+            $retiredBadgeCode = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Badge Code" -Search $leaverBadgeCode)
+            Add-TestResult -Name "The leaver's random Badge Code is retired too" `
+                -Passed ($retiredBadgeCode.Count -eq 1 -and $retiredBadgeCode[0].Reason -eq 'ObjectDeleted') `
+                -Detail "Badge Code '$leaverBadgeCode'; register entries: $($retiredBadgeCode | ConvertTo-Json -Compress)"
+            $retiredStaffNumber = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Staff Number" -Search $leaverStaffNumber)
+            Add-TestResult -Name "The leaver's Staff Number is retired (a Sequence always never reuses)" `
+                -Passed ($retiredStaffNumber.Count -eq 1) -Detail "Staff Number '$leaverStaffNumber'; register entries: $($retiredStaffNumber.Count)"
+
+            # REST read parity: the same register through the raw endpoint, with paging metadata.
+            $accountNameAttribute = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq "Account Name" } | Select-Object -First 1
+            $rawRetired = Invoke-RawJimApi -Endpoint "/api/v1/metaverse/attributes/$($accountNameAttribute.id)/retired-generated-values?search=ottoline"
+            Add-TestResult -Name "The REST register read returns the same retired Account Name (surface parity)" `
+                -Passed ($null -ne $rawRetired -and @($rawRetired.items).Count -eq 1 -and @($rawRetired.items)[0].value -eq 'ottoline.vantreight') `
+                -Detail "Raw response: $($rawRetired | ConvertTo-Json -Compress -Depth 4)"
+
+            $mappingAfterRetire = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.AccountNameMappingId }
+            Add-TestResult -Name "The Account Name mapping reports its retired value count" `
+                -Passed ($mappingAfterRetire.generation.retiredValueCount -ge 1) -Detail "retiredValueCount: $($mappingAfterRetire.generation.retiredValueCount)"
+
+            Add-HrCsvJoiner -EmployeeId "EMP900061" -FirstName "Ottoline" -LastName "Vantreight" -Department "Finance"
+            Invoke-HrJoinerOrLeaverSync -Config $config -Context "Never reuse: new joiner, same name"
+            $rejoiner = Get-PersonByEmployeeId -EmployeeId "EMP900061"
+            Assert-NotNull -Value $rejoiner -Message "The new Ottoline Vantreight was projected"
+            Add-TestResult -Name "A new joiner with the leaver's name is NOT given the retired Account Name" `
+                -Passed ($rejoiner.attributes.'Account Name' -eq 'ottoline.vantreight1') `
+                -Detail "Expected 'ottoline.vantreight1' (the bare base is retired), got '$($rejoiner.attributes.'Account Name')'"
+            Add-TestResult -Name "The new joiner's Badge Code is not the retired one" `
+                -Passed ($rejoiner.attributes.'Badge Code' -and $rejoiner.attributes.'Badge Code' -ne $leaverBadgeCode) `
+                -Detail "Retired '$leaverBadgeCode', new '$($rejoiner.attributes.'Badge Code')'"
+
+            # ─── 12b: Never reuse off: nothing is retired, and the same name gets the same value ───
+            Write-TestSection "Test 12b: With Never reuse off, a leaver's value is free again"
+            Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.AccountNameMappingId -NeverReuse $false | Out-Null
+            try {
+                Add-HrCsvJoiner -EmployeeId "EMP900062" -FirstName "Wilhelmina" -LastName "Strachan" -Department "Legal"
+                Invoke-HrJoinerOrLeaverSync -Config $config -Context "Reuse: first joiner"
+                $reuseLeaver = Get-PersonByEmployeeId -EmployeeId "EMP900062"
+                Assert-NotNull -Value $reuseLeaver -Message "The first Wilhelmina Strachan was projected"
+                Add-TestResult -Name "The first Wilhelmina Strachan is given the bare base value" `
+                    -Passed ($reuseLeaver.attributes.'Account Name' -eq 'wilhelmina.strachan') -Detail "Got '$($reuseLeaver.attributes.'Account Name')'"
+
+                Remove-HrCsvRow -EmployeeId "EMP900062"
+                Invoke-HrJoinerOrLeaverSync -Config $config -Context "Reuse: leaver"
+                $notRetired = @(Get-JIMRetiredGeneratedValue -MetaverseAttributeName "Account Name" -Search "wilhelmina")
+                Add-TestResult -Name "With Never reuse off, the leaver's Account Name is not retired" -Passed ($notRetired.Count -eq 0) `
+                    -Detail "Register entries: $($notRetired | ConvertTo-Json -Compress)"
+
+                Add-HrCsvJoiner -EmployeeId "EMP900063" -FirstName "Wilhelmina" -LastName "Strachan" -Department "Legal"
+                Invoke-HrJoinerOrLeaverSync -Config $config -Context "Reuse: new joiner, same name"
+                $reuseJoiner = Get-PersonByEmployeeId -EmployeeId "EMP900063"
+                Assert-NotNull -Value $reuseJoiner -Message "The new Wilhelmina Strachan was projected"
+                Add-TestResult -Name "With Never reuse off, a new joiner with the leaver's name IS given the leaver's Account Name" `
+                    -Passed ($reuseJoiner.attributes.'Account Name' -eq 'wilhelmina.strachan') `
+                    -Detail "Expected 'wilhelmina.strachan', got '$($reuseJoiner.attributes.'Account Name')'"
+            }
+            finally {
+                Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.AccountNameMappingId -NeverReuse $true | Out-Null
+            }
+
+            # Provision the two remaining joiners, so the run ends with Metaverse and directory in step.
+            Invoke-Cycle -Config $config | Out-Null
+        }
+        finally {
+            Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod ([TimeSpan]::FromDays(7)) | Out-Null
+        }
+    }
+
     Assert-NoWorkerErrors -Since $startTime
 }
 finally {
@@ -1010,6 +1186,6 @@ if ($failed -gt 0) {
 }
 
 Write-Host ""
-Write-Host "✓ Unique Value Generation (release 1) behaves as designed: tokens, gates, priority hand-over," -ForegroundColor Green
-Write-Host "  stability, Start again and surface parity all hold." -ForegroundColor Green
+Write-Host "✓ Unique Value Generation behaves as designed: tokens, gates, priority hand-over, stability," -ForegroundColor Green
+Write-Host "  Start again, surface parity and the retired values register all hold." -ForegroundColor Green
 exit 0
