@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)
+- 🐛 Synchronisation Rule scoping criteria nested more than two groups deep are now evaluated; previously the deeper groups were ignored, so such rules could include objects their criteria excluded, and the editor dropped those groups from view after saving. (#348)
 
 ## [0.16.0] - 2026-09-29
 
