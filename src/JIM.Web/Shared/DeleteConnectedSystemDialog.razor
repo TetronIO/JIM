@@ -1,3 +1,4 @@
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
@@ -12,10 +13,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* Thin surface over the shared ConsequenceConfirmationDialog: this component owns evaluating the *@
-@* deletion preview, the #809 deletion-mode choice and performing the delete; the shared dialog    *@
-@* owns presenting it and the consent rules.                                                       *@
-@* See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2) and                       *@
-@* engineering/plans/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md (Phase 4).                    *@
+@* deletion counts, the #809 deletion-mode choice, the #134 deletion impact preview slot and       *@
+@* performing the delete; the shared dialog owns presenting it and the consent rules.             *@
+@* See engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2),                           *@
+@* engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md (Phase 4) and            *@
+@* engineering/plans/doing/CONNECTED_SYSTEM_DELETION_IMPACT_PREVIEW.md (Phase 3).                  *@
 
 <ConsequenceConfirmationDialog Loading="@(_preview == null)"
                                LoadingText="Loading deletion preview..."
@@ -79,14 +81,118 @@
             </div>
         </MudRadioGroup>
 
-        @* Reserves the #134/#827 attribute impact preview spot, so the layout does not shift when it lands. *@
-        <div>
-            <MudTooltip Text="Arriving with configuration change preview" Arrow="true" Placement="Placement.Top">
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary" Disabled="true" data-testid="jim-delete-cs-preview-impact">
-                    Preview attribute impact
-                </MudButton>
-            </MudTooltip>
-        </div>
+        @* ─── Deletion impact preview (#134) ─── *@
+        @* A fenced system is mid-deletion, so a preview of deleting it can no longer be run or trusted. *@
+        @if (!_fenced)
+        {
+            <MudPaper Outlined="true" Class="pa-4" data-testid="jim-delete-cs-preview-slot">
+                <div class="d-flex align-center flex-wrap gap-2">
+                    <MudChip T="string" Variant="Variant.Text" Color="@PreviewChipColour" Class="ma-0">@PreviewChipLabel</MudChip>
+                    <MudText Typo="Typo.body1"><b>Deletion impact preview</b></MudText>
+                    @if (_previewState.Started is { } previewStarted)
+                    {
+                        <MudTooltip Text="@previewStarted.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@previewStarted.ToLocalTime().ToRelativeTime()</MudText>
+                        </MudTooltip>
+                    }
+                </div>
+
+                @switch (_previewState.Status)
+                {
+                    case DeletionImpactPreviewStatus.Running:
+                        @if (_previewState.PercentComplete is { } percentComplete)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Value="@percentComplete" Class="mt-3" />
+                        }
+                        else
+                        {
+                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
+                        }
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+                            A preview is still running. Deleting now cancels it, and the deletion will record that no
+                            preview informed it.
+                        </MudText>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Class="mt-2"
+                                   OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
+                            Wait for the preview
+                        </MudButton>
+                        break;
+
+                    case DeletionImpactPreviewStatus.Current:
+                        @if (_deleteImmediately)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                                This preview describes deprovisioning through synchronisation. Deleting immediately clears
+                                none of these values and sends no exports; Metaverse Objects whose last connector is this
+                                system still become eligible for deletion under their Object Type's deletion rule.
+                            </MudAlert>
+                        }
+                        else if (_previewState.Lines is not { Count: > 0 } previewLines)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-3">Deleting this system would change nothing outside it.</MudText>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="@previewLines[0].Severity" Dense="true" Class="mt-3">
+                                @foreach (var line in previewLines.Take(PreviewLinesShown))
+                                {
+                                    <MudText Typo="Typo.body2">@line.Sentence</MudText>
+                                }
+                                @if (previewLines.Count > PreviewLinesShown)
+                                {
+                                    <MudText Typo="Typo.body2">The full preview lists @(previewLines.Count - PreviewLinesShown) more.</MudText>
+                                }
+                            </MudAlert>
+                        }
+                        <div class="d-flex align-center flex-wrap gap-2 mt-2">
+                            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                       OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
+                                Open full preview
+                            </MudButton>
+                            <MudSpacer />
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Recorded on the deletion's Activity</MudText>
+                        </div>
+                        break;
+
+                    case DeletionImpactPreviewStatus.Stale:
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+                            @_previewState.StaleReason since this preview ran, so it may no longer describe what deleting would do. Run it
+                            again for a current answer; the deletion will record that no current preview informed it.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false" Class="mt-3"
+                                   StartIcon="@Icons.Material.Filled.Visibility"
+                                   OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
+                            Run again
+                        </MudButton>
+                        break;
+
+                    case DeletionImpactPreviewStatus.DidNotFinish:
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+                            The last preview did not finish, so it says nothing about what deleting would do. The deletion
+                            will record that no preview informed it.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false" Class="mt-3"
+                                   StartIcon="@Icons.Material.Filled.Visibility"
+                                   OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
+                            Preview again
+                        </MudButton>
+                        break;
+
+                    default:
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+                            See which values would be cleared or taken over by another Connected System, and what would be
+                            exported, before you delete. The deletion's Activity will record that it went ahead without a
+                            preview.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false" Class="mt-3"
+                                   StartIcon="@Icons.Material.Filled.Visibility"
+                                   OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
+                            Preview first
+                        </MudButton>
+                        break;
+                }
+            </MudPaper>
+        }
     </LeadingContent>
     <AdditionalContent>
         @* The estimate describes the immediate bulk delete; deprovisioning always queues and its helper text
@@ -122,8 +228,17 @@
     private const string GroupAffected = "Affected, not removed";
     private const string SubgroupMetaverseObjects = "Metaverse Objects";
 
+    /// <summary>
+    /// How many verdict sentences the slot states before pointing at the full preview: enough for the worst
+    /// consequences, few enough that the dialog stays a confirmation rather than a second preview panel.
+    /// </summary>
+    private const int PreviewLinesShown = 3;
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
 
     /// <summary>
     /// The Connected System to delete.
@@ -145,14 +260,51 @@
     private bool _fenced;
     private DeleteConnectedSystemWorkerTask? _fencedTask;
 
+    // The system's latest deletion impact preview (#134), and so which preview, if any, the deletion records.
+    private DeletionImpactPreviewState _previewState = new(DeletionImpactPreviewStatus.NotPreviewed);
+
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
         _fenced = ConnectedSystem.Status == ConnectedSystemStatus.Deleting;
         if (_fenced)
             _fencedTask = await jim.Tasking.GetDeleteConnectedSystemWorkerTaskAsync(ConnectedSystem.Id);
+        if (!_fenced)
+            _previewState = await LoadPreviewStateAsync(jim);
         _preview = await jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
     }
+
+    /// <summary>
+    /// Reads the system's latest deletion impact preview and, for a finished one, whether anything has overtaken it.
+    /// </summary>
+    private async Task<DeletionImpactPreviewState> LoadPreviewStateAsync(JimApplication jim)
+    {
+        var preview = await jim.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(
+            ConfigurationChangePreviewSurface.ConnectedSystemDeletion, ConnectedSystem.Id);
+        var staleness = preview is { IsComplete: true }
+            ? await jim.ConfigurationChangePreviews.GetPreviewStalenessAsync(preview.ActivityId)
+            : null;
+        return DeletionImpactPreviewState.From(preview, staleness);
+    }
+
+    private Color PreviewChipColour => _previewState.Status switch
+    {
+        DeletionImpactPreviewStatus.Running => Color.Info,
+        DeletionImpactPreviewStatus.Current => Color.Success,
+        DeletionImpactPreviewStatus.Stale => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string PreviewChipLabel => _previewState.Status switch
+    {
+        DeletionImpactPreviewStatus.Running => "Running",
+        DeletionImpactPreviewStatus.Current => "Complete",
+        DeletionImpactPreviewStatus.Stale => "Stale",
+        DeletionImpactPreviewStatus.DidNotFinish => "Did not finish",
+        _ => "Not previewed"
+    };
+
+    private void CloseWith(DeleteConnectedSystemDialogOutcome outcome) => MudDialog.Close(DialogResult.Ok(outcome));
 
     private IReadOnlyList<ImpactCount> BuildCounts()
     {
@@ -170,9 +322,9 @@
             new ImpactCount { Group = GroupRemoved, Label = "Partitions", Count = _preview.PartitionCount },
             new ImpactCount { Group = GroupRemoved, Label = "Containers", Count = _preview.ContainerCount },
             new ImpactCount { Group = GroupRemoved, Label = "Pending Exports", Count = _preview.PendingExportCount },
-            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Joined", Count = _preview.JoinedMvoCount, Note = "related objects; deprovisioned per the choice above" },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Joined", Count = _preview.JoinedMvoCount, Note = "disconnected from this system; they stay in the Metaverse unless this was their last connector, below" },
             new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Contributed attribute values", Count = _preview.ContributedValueCount, Note = "recalled or kept per the choice above" },
-            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Eligible for deletion rules", Count = _preview.MvosWithDeletionRuleCount, Note = "their own rules decide, when deprovisioning" },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Eligible for deletion rules", Count = _preview.MvosWithDeletionRuleCount, Note = "this system is their last connector; their Object Type's deletion rule decides" },
             new ImpactCount { Group = GroupAffected, Label = "Activities", Count = _preview.ActivityCount, Note = "kept: the audit history of what this system did" }
         ];
     }
@@ -183,8 +335,13 @@
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+            // A preview still running would go on describing a system that no longer exists (#134).
+            if (_previewState is { Status: DeletionImpactPreviewStatus.Running, ActivityId: { } runningPreviewId })
+                await jim.ConfigurationChangePreviews.CancelPreviewAsync(runningPreviewId);
+
             var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason,
-                synchronisedDeprovisioning: !_deleteImmediately);
+                synchronisedDeprovisioning: !_deleteImmediately, previewActivityId: _previewState.InformingPreviewActivityId);
 
             if (!result.Success)
             {
@@ -239,10 +396,10 @@
     }
 
     /// <summary>
-    /// Opens the delete dialog for a Connected System. Returns true when deletion was accepted,
-    /// whether it completed immediately or was queued; the caller should navigate away.
+    /// Opens the delete dialog for a Connected System and says how it was left: deleted (completed or queued; the
+    /// caller should navigate away), a request to preview or read the deletion's impact first (#134), or cancelled.
     /// </summary>
-    public static async Task<bool> ShowAsync(IDialogService dialogService, ConnectedSystem connectedSystem)
+    public static async Task<DeleteConnectedSystemDialogOutcome> ShowAsync(IDialogService dialogService, ConnectedSystem connectedSystem)
     {
         var parameters = new DialogParameters<DeleteConnectedSystemDialog>
         {
@@ -251,6 +408,11 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{connectedSystem.Name}\" Connected System", parameters, options);
         var result = await dialog.Result;
-        return result is { Canceled: false, Data: true };
+        return result switch
+        {
+            { Canceled: false, Data: true } => DeleteConnectedSystemDialogOutcome.Deleted,
+            { Canceled: false, Data: DeleteConnectedSystemDialogOutcome outcome } => outcome,
+            _ => DeleteConnectedSystemDialogOutcome.Cancelled
+        };
     }
 }

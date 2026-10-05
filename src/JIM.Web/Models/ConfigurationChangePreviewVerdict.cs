@@ -33,13 +33,7 @@ public static class ConfigurationChangePreviewVerdict
     /// </summary>
     public static PreviewVerdict? Describe(IReadOnlyList<PreviewImpactCount> counts)
     {
-        var stated = counts
-            .Where(c => c.ObjectCount > 0)
-            .OrderBy(c => ConsequenceWeight(OutcomeDisplayMap.Get(c.TransitionType).Tone))
-            .ThenByDescending(c => c.ObjectCount)
-            .ThenBy(c => c.TransitionType)
-            .ToList();
-
+        var stated = Stated(counts);
         if (stated.Count == 0)
             return null;
 
@@ -51,6 +45,26 @@ public static class ConfigurationChangePreviewVerdict
 
         return new PreviewVerdict(severity, lead, detail);
     }
+
+    /// <summary>
+    /// The same statements as <see cref="Describe"/>, one per transition and in the same order, for a space that lists
+    /// them rather than reading them as a paragraph (#134). Empty where <see cref="Describe"/> would say nothing.
+    /// </summary>
+    public static IReadOnlyList<PreviewVerdictLine> Lines(IReadOnlyList<PreviewImpactCount> counts) =>
+    [
+        .. Stated(counts).Select(c => new PreviewVerdictLine(ToSeverity(OutcomeDisplayMap.Get(c.TransitionType).Tone), Sentence(c)))
+    ];
+
+    /// <summary>
+    /// The counts worth stating, worst consequence first, then largest.
+    /// </summary>
+    private static List<PreviewImpactCount> Stated(IReadOnlyList<PreviewImpactCount> counts) =>
+        counts
+            .Where(c => c.ObjectCount > 0)
+            .OrderBy(c => ConsequenceWeight(OutcomeDisplayMap.Get(c.TransitionType).Tone))
+            .ThenByDescending(c => c.ObjectCount)
+            .ThenBy(c => c.TransitionType)
+            .ToList();
 
     /// <summary>
     /// How much an outcome's tone should weigh on the verdict, lowest first. Deliberately not the enum's own order:

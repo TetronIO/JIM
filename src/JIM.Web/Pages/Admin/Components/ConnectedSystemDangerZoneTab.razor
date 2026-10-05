@@ -1,11 +1,67 @@
+@using JIM.Models.Activities
+@using JIM.Models.Preview
 @using JIM.Models.Staging
+@using JIM.Web.Models
+@using JIM.Web.Services
+@using Serilog
 @inject IDialogService DialogService
 @inject NavigationManager NavManager
+@inject IJimApplicationFactory JimFactory
+@inject IConfigurationChangePreviewStarter PreviewStarter
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudPaper Class="pa-4 jim-paper-danger-zone">
+@* ─── Deletion impact (#134) ─── *@
+@* A deletion of a fenced system is already underway, so there is nothing left to preview. *@
+@if (ConnectedSystem.Status != ConnectedSystemStatus.Deleting)
+{
+    <MudPaper Class="pa-4" data-testid="jim-deletion-impact">
+        <MudText Typo="Typo.h6">Deletion impact</MudText>
+        <MudText Class="mt-2">
+            See what deleting this system would do before you do it: which attribute values would be cleared or taken
+            over by another Connected System, which Metaverse Objects would become eligible for deletion, and what would
+            be exported downstream. Nothing changes while the preview runs, and you can leave this page while it does.
+        </MudText>
+        <div class="d-flex align-center flex-wrap gap-3 mt-4">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Secondary"
+                       DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Visibility"
+                       Disabled="@(_startingPreview || _previewState.Status == DeletionImpactPreviewStatus.Running)"
+                       OnClick="StartPreviewAsync"
+                       data-testid="jim-preview-deletion-impact">
+                @(_previewActivityId.HasValue ? "Run again" : "Preview deletion impact")
+            </MudButton>
+            @if (!_previewActivityId.HasValue)
+            {
+                <MudText Class="mud-text-secondary">Not previewed yet</MudText>
+            }
+        </div>
+    </MudPaper>
+
+    @if (_previewActivityId.HasValue)
+    {
+        var previewActivityId = _previewActivityId.Value;
+
+        @if (_previewState.Status == DeletionImpactPreviewStatus.Stale)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-6" data-testid="jim-deletion-impact-stale">
+                @_previewState.StaleReason since this preview ran, so it may no longer be accurate. Run it again before deleting; a
+                deletion now would record that no current preview informed it.
+            </MudAlert>
+        }
+
+        <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                         Title="Deletion impact preview"
+                                         OnPreviewChanged="OnPreviewChangedAsync"
+                                         OnClose="DiscardPreview"
+                                         Class="mt-6" />
+    }
+}
+
+<MudPaper Class="@(ConnectedSystem.Status == ConnectedSystemStatus.Deleting ? "pa-4 jim-paper-danger-zone" : "pa-4 mt-6 jim-paper-danger-zone")">
     <MudText Typo="Typo.h6" Color="Color.Error">Delete Connected System</MudText>
     <MudText Class="mt-2">
         Permanently delete this Connected System and all its related data, including:
@@ -47,11 +103,126 @@
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    // The deletion impact preview on show (#134): the one started here, or the latest one found on arrival, so a
+    // preview keeps running and is reattached to when the administrator navigates away and comes back.
+    private Guid? _previewActivityId;
+    private DeletionImpactPreviewState _previewState = new(DeletionImpactPreviewStatus.NotPreviewed);
+    private bool _previewSettled;
+    private bool _startingPreview;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ConnectedSystem.Status != ConnectedSystemStatus.Deleting)
+            await ReloadPreviewStateAsync(attachToLatest: true);
+    }
+
+    /// <summary>
+    /// Reads the latest deletion preview and whether anything has overtaken it. Attaches the panel to it when asked
+    /// (on arrival, and when the delete dialog sends the administrator here to read it).
+    /// </summary>
+    private async Task ReloadPreviewStateAsync(bool attachToLatest)
+    {
+        using var jim = JimFactory.Create();
+        var preview = await jim.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(
+            ConfigurationChangePreviewSurface.ConnectedSystemDeletion, ConnectedSystem.Id);
+        var staleness = preview is { IsComplete: true }
+            ? await jim.ConfigurationChangePreviews.GetPreviewStalenessAsync(preview.ActivityId)
+            : null;
+
+        _previewState = DeletionImpactPreviewState.From(preview, staleness);
+        _previewSettled = _previewState.Status is not (DeletionImpactPreviewStatus.Running or DeletionImpactPreviewStatus.NotPreviewed);
+        if (attachToLatest && preview != null)
+            _previewActivityId = preview.ActivityId;
+    }
+
+    private async Task StartPreviewAsync()
+    {
+        if (_startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns asking whether a large preview keeps every
+            // drill-down row, so that question is asked the same way on every surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion,
+                TargetId = ConnectedSystem.Id,
+                TargetName = ConnectedSystem.Name,
+                ProposedConfiguration = new ConnectedSystemDeletionProposal(),
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user.Id,
+                InitiatedByName = user.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewState = new DeletionImpactPreviewState(DeletionImpactPreviewStatus.Running, activityId);
+            _previewSettled = false;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            Log.Error(ex, "Failed to start a deletion impact preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Re-reads the preview's state when it settles (finishes, fails or is cancelled), so the Run again button
+    /// re-enables and staleness is judged.
+    /// </summary>
+    /// <remarks>
+    /// Re-renders only on that one transition. The panel re-reads on every parameter set and raises this on every
+    /// read, so re-rendering on every call would set its parameters again and restart its poll indefinitely (the
+    /// reason recorded on the schema tab's equivalent handler).
+    /// </remarks>
+    private async Task OnPreviewChangedAsync(ConfigurationChangePreview? preview)
+    {
+        var settled = preview is { IsComplete: true } || preview is { HasFailed: true } || preview == null;
+        if (settled == _previewSettled)
+            return;
+
+        await ReloadPreviewStateAsync(attachToLatest: false);
+        StateHasChanged();
+    }
+
+    private void DiscardPreview()
+    {
+        _previewActivityId = null;
+        _previewState = new DeletionImpactPreviewState(DeletionImpactPreviewStatus.NotPreviewed);
+        _previewSettled = false;
+    }
+
     private async Task HandleShowDeleteConfirmationAsync()
     {
-        // The dialog reports success for both an immediate deletion and a queued one; either way this
-        // system's detail page is about to stop being meaningful, so return to the list.
-        if (await DeleteConnectedSystemDialog.ShowAsync(DialogService, ConnectedSystem))
-            NavManager.NavigateTo("/admin/connected-systems/");
+        switch (await DeleteConnectedSystemDialog.ShowAsync(DialogService, ConnectedSystem))
+        {
+            // Deleted or queued: this system's detail page is about to stop being meaningful, so return to the list.
+            case DeleteConnectedSystemDialogOutcome.Deleted:
+                NavManager.NavigateTo("/admin/connected-systems/");
+                break;
+
+            case DeleteConnectedSystemDialogOutcome.PreviewRequested:
+                await StartPreviewAsync();
+                break;
+
+            case DeleteConnectedSystemDialogOutcome.ShowPreview:
+                await ReloadPreviewStateAsync(attachToLatest: true);
+                break;
+        }
     }
 }

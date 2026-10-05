@@ -30,6 +30,27 @@ public class ConfigurationChangePreviewVerdictTests
     }
 
     [Test]
+    public void Lines_StatesEachTransitionAsItsOwnSentenceWorstFirst()
+    {
+        // A space too small for the verdict's paragraph (the delete dialog's preview slot) lists the same sentences in
+        // the same order, each with the tone that orders it.
+        var counts = new[]
+        {
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 40_000),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 2),
+            Count(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 0)
+        };
+
+        var lines = ConfigurationChangePreviewVerdict.Lines(counts);
+
+        Assert.That(lines, Is.EqualTo(new[]
+        {
+            new PreviewVerdictLine(Severity.Error, "2 objects would become eligible for deletion."),
+            new PreviewVerdictLine(OutcomeSeverity(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope), "40,000 objects would leave import scope.")
+        }));
+    }
+
+    [Test]
     public void Describe_EveryCountIsZero_SaysNothing()
     {
         var counts = new[] { Count(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 0) };
@@ -123,4 +144,7 @@ public class ConfigurationChangePreviewVerdictTests
 
     private static PreviewImpactCount Count(ActivityRunProfileExecutionItemSyncOutcomeType transition, int objectCount) =>
         new(transition, objectCount, null, null);
+
+    private static Severity OutcomeSeverity(ActivityRunProfileExecutionItemSyncOutcomeType transition) =>
+        ConfigurationChangePreviewVerdict.Describe([Count(transition, 1)])!.Severity;
 }
