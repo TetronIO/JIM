@@ -242,7 +242,17 @@
 
     private static string FormatRenewal(DateTime validTo) => validTo == default ? string.Empty : $", on {validTo:d MMM yyyy}";
 
-    private void Continue() => _step = Step.Confirm;
+    private void Continue() => MoveTo(Step.Confirm);
+
+    /// <summary>
+    /// The title is rendered by the dialog provider rather than this component, so it only follows a change of step
+    /// when the dialog instance is told to re-render as well.
+    /// </summary>
+    private void MoveTo(Step step)
+    {
+        _step = step;
+        MudDialog.StateHasChanged();
+    }
 
     private async Task TrustAsync()
     {
@@ -267,12 +277,12 @@
                 case ServerCertificateTrustOutcome.ThumbprintMismatch:
                     _expectedThumbprint = result.ExpectedThumbprint;
                     _presentedThumbprint = result.PresentedThumbprint;
-                    _step = Step.Refused;
+                    MoveTo(Step.Refused);
                     return;
 
                 default:
                     _failureMessage = result.Message ?? "JIM could not trust this certificate.";
-                    _step = Step.Failed;
+                    MoveTo(Step.Failed);
                     return;
             }
         }
