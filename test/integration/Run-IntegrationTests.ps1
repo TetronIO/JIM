@@ -3759,7 +3759,7 @@ if ($SetupOnly) {
         }
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
-        Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
+        Write-Step "Running scenario setup: $(Split-Path -Leaf $setupScript)..."
         $setupParams = @{
             JIMUrl = $script:Lane.JimUrl
             ApiKey = $apiKey
