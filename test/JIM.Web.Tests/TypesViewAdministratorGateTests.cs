@@ -93,7 +93,7 @@ public class TypesViewAdministratorGateTests
         var tabIndex = source.IndexOf("Text=\"Connections\"", System.StringComparison.Ordinal);
         Assert.That(tabIndex, Is.GreaterThanOrEqualTo(0));
         var tabDeclaration = source.Substring(tabIndex, 260);
-        Assert.That(tabDeclaration, Does.Contain("BadgeData=\"@(_connectorCount"),
+        Assert.That(tabDeclaration, Does.Contain("BadgeData=\"@(_object.ConnectorCount"),
             "The Connections tab badges how many Connected System Objects are joined, as the Changes tab badges its count.");
     }
 }
