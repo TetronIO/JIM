@@ -726,6 +726,7 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
 | `database-tests` | CI workflow | The `RequiresPostgres` NUnit tier against a real PostgreSQL server |
 | `ldaps-tests` | CI workflow | The `RequiresLdaps` NUnit tier against real directory servers over TLS |
+| `sql-tls-tests` | CI workflow | The `RequiresSqlTls` NUnit tier against a real Microsoft SQL Server over TLS |
 | `deployment-boot` | CI workflow | JIM installed from a release bundle built from the commit, with its own installer, on Docker, rootful Podman and rootless Podman, and what the runtimes run compared (see `engineering/TESTING_STRATEGY.md` > Deployment Boot Tests) |
 | `changelog-lint` | Changelog lint workflow (`.github/workflows/changelog-lint.yml`) | Changelog entries, docs coupling for user-facing entries, and PowerShell documentation examples |
 
