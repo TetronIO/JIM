@@ -18,7 +18,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// Metaverse-Derived Attribute Flows (#1750, plan Phase 4, FR 9): every writer that changes Metaverse attribute values
 /// outside a Connected System's own synchronisation marks the joined Connected System Objects of every system whose
 /// rules host a derived flow reading a changed attribute (transitively), so that system's next delta or full
-/// synchronisation re-derives. Runs with every feature flag on, except where a test says otherwise.
+/// synchronisation re-derives.
 /// </summary>
 /// <remarks>
 /// Topology: a Person Metaverse Object Type with Employee Id, Account Name, Email, User Principal Name, Nickname and
@@ -110,22 +110,6 @@ public class DerivedInputOutOfSyncMarkingWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task UpdateMetaverseObjectAsync_FlagOff_MarksNothingAsync()
-    {
-        var ctx = await SetUpAsync(flagOn: false);
-        var people = await SeedPeopleAndSynchroniseAsync(ctx, 1);
-        ResetMarks();
-
-        await EditAccountNameAsync(ctx, people.Single().Mvo, "jbloggs");
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(SyncRepo.DerivedInputMarkCalls, Is.Empty, "no graph, so nothing is ever marked");
-            Assert.That(SyncRepo.ConnectedSystemObjects.Values.Any(c => c.DerivedInputChangePending), Is.False);
-        }
-    }
-
-    [Test]
     public async Task UpdateMetaverseObjectAsync_Scenario5DirectAccountNameCorrection_NextHostingDeltaReDerivesEmailAndUpnAsync()
     {
         // PRD Scenario 5 without remediation: Account Name is corrected directly on the Metaverse Object (joe.bloggs
@@ -200,23 +184,6 @@ public class DerivedInputOutOfSyncMarkingWorkflowTests : WorkflowTestBase
         }
     }
 
-    [Test]
-    public async Task ExecuteSyncRuleDeletionRecallAsync_FlagOff_MarksNothingAsync()
-    {
-        var ctx = await SetUpAsync(adContributesAccountName: true, hrContributesAccountName: true, flagOn: false);
-        await SeedPeopleAndSynchroniseAsync(ctx, 2);
-        ResetMarks();
-
-        var task = await DisableRuleAndBuildRecallTaskAsync(ctx.AdImport);
-        await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(SyncRepo.DerivedInputMarkCalls, Is.Empty);
-            Assert.That(SyncRepo.ConnectedSystemObjects.Values.Any(c => c.DerivedInputChangePending), Is.False);
-        }
-    }
-
     // ---- Synchronised Deprovisioning ----
 
     [Test]
@@ -241,19 +208,6 @@ public class DerivedInputOutOfSyncMarkingWorkflowTests : WorkflowTestBase
                 Is.EquivalentTo(new[] { ctx.Hr.Id, ctx.Directory.Id }), "the deprovisioned system's rules are going away, so they host nothing");
             Assert.That(SyncRepo.DerivedInputMarkCalls.Single(), Has.Count.EqualTo(6));
         }
-    }
-
-    [Test]
-    public async Task ExecuteSynchronisedDeprovisioningAsync_FlagOff_MarksNothingAsync()
-    {
-        var ctx = await SetUpAsync(adContributesAccountName: true, hrContributesAccountName: true, flagOn: false);
-        await SeedPeopleAndSynchroniseAsync(ctx, 2);
-        ResetMarks();
-
-        var task = await FenceSystemAndBuildDeprovisioningTaskAsync(ctx.Ad);
-        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
-
-        Assert.That(SyncRepo.DerivedInputMarkCalls, Is.Empty);
     }
 
     // ---- The stranded value sweep ----
@@ -316,17 +270,10 @@ public class DerivedInputOutOfSyncMarkingWorkflowTests : WorkflowTestBase
         string HrAccountName);
 
     private async Task<Context> SetUpAsync(
-        bool flagOn = true,
         bool upnOnHr = false,
         bool adContributesAccountName = false,
         bool hrContributesAccountName = false)
     {
-        if (flagOn)
-        {
-            DbContext.ServiceSettingItems.AddRange(await InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
-            await DbContext.SaveChangesAsync();
-        }
-
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
         var accountName = await AddMvAttributeAsync(mvType, "Account Name");

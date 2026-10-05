@@ -132,7 +132,7 @@ flowchart LR
 Pending Exports are confirmed only by the confirming import path shown in "3. Confirming Import" above (`ISyncEngine.ReconcileCsoAgainstPendingExport`, driven by `SyncImportTaskProcessor.ReconcilePendingExportsAsync`). Synchronisation does not re-check them: every change to a CSO's values arrives through an import, so the import has always seen it first.
 
 - **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
-- **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation, which is in development and not yet available.)
+- **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation.)
 - **Executing** Pending Exports left behind by a worker crash or restart are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking

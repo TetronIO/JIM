@@ -57,16 +57,14 @@ public interface ISyncServer
     #region Metaverse-Derived Attribute Flows
 
     /// <summary>
-    /// Builds the run's Metaverse-Derived Attribute Flow graph (#1750) through <see cref="DerivedFlowGraphFactory"/>,
-    /// reading the feature flag from this unit of work. Null when the feature is off, which leaves the engine exactly
-    /// as it was before the feature. Call once at run start and attach the result to the run's
-    /// <see cref="AttributePriorityContext"/>.
+    /// Builds the run's Metaverse-Derived Attribute Flow graph (#1750) through <see cref="DerivedFlowGraphFactory"/>.
+    /// Call once at run start and attach the result to the run's <see cref="AttributePriorityContext"/>.
     /// </summary>
     /// <param name="allSyncRules">Every Synchronisation Rule the run's priority context is built from (all Connected
     /// Systems), with their Metaverse Object Types and attributes loaded, as the worker's all-rules load provides.</param>
     /// <exception cref="Exceptions.DerivedFlowCycleException">The enabled derived flows contain a dependency cycle:
     /// the run must fail hard before processing any object (plan decision 11).</exception>
-    Task<DerivedFlowGraph?> CreateDerivedFlowGraphAsync(IReadOnlyCollection<SyncRule> allSyncRules);
+    DerivedFlowGraph CreateDerivedFlowGraph(IReadOnlyCollection<SyncRule> allSyncRules);
 
     #endregion
 

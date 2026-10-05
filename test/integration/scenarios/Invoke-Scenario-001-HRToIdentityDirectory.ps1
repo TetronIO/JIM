@@ -21,6 +21,15 @@
     HR CSV includes Company attribute: "Panoply" for employees, partner companies for contractors.
     Partner companies: Nexus Dynamics, Akinya, Rockhopper, Stellar Logistics, Vertex Solutions.
 
+    Identifiers are generated and derived, not sourced (Setup-Scenario-001.ps1 -GenerateAccountName
+    -DeriveFromAccountName): Account Name is generated from the HR names (Lower(firstName) + "." +
+    Lower(lastName), with a number appended only when that value is taken; Unique Value Generation,
+    #242), Email is derived from it (Account Name + "@panoply.local") and User Principal Name from
+    Email (Metaverse-Derived Attribute Flows, #1750). The HR CSV's samAccountName column is only a row
+    key for the test's own CSV edits; each person's directory account is found by the Account Name JIM
+    generated for them. Test 1 asserts the generated and derived values, including two same-named
+    joiners receiving different suffixes.
+
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
 
@@ -106,6 +115,7 @@ if (-not $DirectoryConfig) {
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 . "$PSScriptRoot/../utils/Directory-Helpers.ps1"
+. "$PSScriptRoot/../utils/Resolve-IntegrationScenarioName.ps1"
 
 # Helper function to run the standard delta sync sequence with detailed output
 # This sequence is used after CSV changes to sync them through to both target systems:
@@ -294,9 +304,9 @@ function Set-DirectoryUserAttributes {
 }
 
 function Get-InitialExportOnlyDirectoryUser {
-    param([string]$SamAccountName, [string]$Label)
-    $directoryUser = Get-LDAPUser -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig
-    if (-not $directoryUser) { throw "$Label expected user '$SamAccountName' to exist in $($DirectoryConfig.ConnectedSystemName), but it was not found" }
+    param([string]$AccountName, [string]$Label)
+    $directoryUser = Get-LDAPUser -UserIdentifier $AccountName -DirectoryConfig $DirectoryConfig
+    if (-not $directoryUser) { throw "$Label expected user '$AccountName' to exist in $($DirectoryConfig.ConnectedSystemName), but it was not found" }
     return $directoryUser
 }
 
@@ -307,6 +317,116 @@ function Assert-DirectoryAttribute {
         throw "$Label expected directory attribute '$AttributeName' to be '$ExpectedValue' but it was '$actual'"
     }
     Write-Host "    OK $AttributeName = '$ExpectedValue'" -ForegroundColor Green
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generated and derived identifiers (Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName).
+# Account Name is not in the HR feed: JIM generates it, so a test reads it back from the Metaverse by
+# Employee ID rather than predicting it, and then finds the directory account by it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The domain the derived Email carries (Setup-Scenario-001.ps1: mv["Account Name"] + "@panoply.local"),
+# whatever the target directory.
+$script:DerivedEmailDomain = "panoply.local"
+
+function Get-GeneratedIdentity {
+    <#
+    .SYNOPSIS
+        The generated Account Name and the derived Email and User Principal Name of the person with the given
+        Employee ID, read from their Metaverse Object.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$EmployeeId,
+        [Parameter(Mandatory=$true)][string]$Label
+    )
+
+    $mvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue $EmployeeId `
+        -Attributes @("Account Name", "Email", "User Principal Name") -ErrorAction SilentlyContinue) | Select-Object -First 1
+    if (-not $mvo) { throw "$Label could not find the Metaverse Object for Employee ID '$EmployeeId'" }
+    $accountName = $mvo.attributes.'Account Name'
+    if (-not $accountName) { throw "$Label found the Metaverse Object for Employee ID '$EmployeeId', but it has no Account Name" }
+
+    return @{
+        MvoId             = $mvo.id
+        AccountName       = $accountName
+        Email             = $mvo.attributes.'Email'
+        UserPrincipalName = $mvo.attributes.'User Principal Name'
+    }
+}
+
+function Assert-GeneratedIdentity {
+    <#
+    .SYNOPSIS
+        Asserts a person's identifiers are generated and derived as configured: Account Name is
+        Lower(firstName) + "." + Lower(lastName), optionally followed by a numeric collision suffix; Email is
+        Account Name + "@panoply.local"; User Principal Name is Email. In the directory, the account carries
+        the Account Name and mail, and on Active Directory userPrincipalName, with exactly those values.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Identity,
+        [Parameter(Mandatory=$true)][string]$FirstName,
+        [Parameter(Mandatory=$true)][string]$LastName,
+        [Parameter(Mandatory=$true)][string]$Label
+    )
+
+    $base = "$($FirstName.ToLower()).$($LastName.ToLower())"
+    if ($Identity.AccountName -cnotmatch ('^' + [regex]::Escape($base) + '\d*$')) {
+        throw "$Label expected a generated Account Name of '$base' or '$base' followed by a number, but it was '$($Identity.AccountName)'"
+    }
+    $expectedEmail = "$($Identity.AccountName)@$($script:DerivedEmailDomain)"
+    if ($Identity.Email -ne $expectedEmail) {
+        throw "$Label expected Email to be derived as '$expectedEmail' from the generated Account Name, but it was '$($Identity.Email)'"
+    }
+    if ($Identity.UserPrincipalName -ne $expectedEmail) {
+        throw "$Label expected User Principal Name to be derived from Email as '$expectedEmail', but it was '$($Identity.UserPrincipalName)'"
+    }
+    Write-Host "    OK Account Name '$($Identity.AccountName)' generated; Email and User Principal Name '$expectedEmail' derived" -ForegroundColor Green
+
+    $directoryUser = Get-LDAPUser -UserIdentifier $Identity.AccountName -DirectoryConfig $DirectoryConfig
+    if (-not $directoryUser) {
+        throw "$Label expected a directory account '$($Identity.AccountName)' in $($DirectoryConfig.ConnectedSystemName), but it was not found"
+    }
+    $isRfc = Test-IsRfcDirectory $DirectoryConfig
+    $accountNameAttribute = if ($isRfc) { "uid" } else { "sAMAccountName" }
+    Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $accountNameAttribute -ExpectedValue $Identity.AccountName -Label $Label
+    Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName "mail" -ExpectedValue $expectedEmail -Label $Label
+    if (-not $isRfc) {
+        # An RFC directory has no userPrincipalName; there User Principal Name stays in the Metaverse.
+        Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName "userPrincipalName" -ExpectedValue $expectedEmail -Label $Label
+    }
+    return $directoryUser
+}
+
+function Add-HrCsvRow {
+    <#
+    .SYNOPSIS
+        Appends a person to the HR CSV, copying every other column from the first row, and seeds it to the
+        connector volume. The samAccountName, email and userPrincipalName columns are filled in for the CSV's
+        shape only: none of them flows anywhere, since JIM generates Account Name and derives the rest.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$EmployeeId,
+        [Parameter(Mandatory=$true)][string]$FirstName,
+        [Parameter(Mandatory=$true)][string]$LastName,
+        [Parameter(Mandatory=$true)][string]$Department
+    )
+
+    $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+    $csv = Import-Csv $csvPath
+    $row = $csv[0].PSObject.Copy()
+    $row.employeeId = $EmployeeId
+    $row.firstName = $FirstName
+    $row.lastName = $LastName
+    $row.displayName = "$FirstName $LastName ($EmployeeId)"
+    $row.department = $Department
+    $row.samAccountName = "unused.$($EmployeeId.ToLower())"
+    $row.email = "unused.$($EmployeeId.ToLower())@$($script:DerivedEmailDomain)"
+    $row.userPrincipalName = $row.email
+    $row.status = "Active"
+    $row.employeeEndDate = ""
+    $csv = @($csv) + $row
+    $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
 }
 
 Write-TestSection "Scenario 001: HR to Enterprise Directory"
@@ -376,7 +496,14 @@ try {
     }
     Write-Host "  ✓ Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
-    $config = & "$PSScriptRoot/../Setup-Scenario-001.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig
+    # Scenario 001 is the demonstration administrators see (the runner's -SetupOnly runs this same setup), so it
+    # shows identifiers as JIM manages them: Account Name generated, Email and User Principal Name derived from
+    # it (-GenerateAccountName -DeriveFromAccountName). Get-IntegrationScenarioSetupParameters is the one place
+    # that says so, for this script and -SetupOnly alike; the switches are not Setup-Scenario-001.ps1's default,
+    # because the scenarios that compose that setup as a substrate (004, 005, 006, 007, 017, 020, 021, 022, 024
+    # and others) depend on its sourced identifiers.
+    $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+    $config = & "$PSScriptRoot/../Setup-Scenario-001.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig @scenarioSetupParams
 
     if (-not $config) {
         throw "Failed to setup Scenario 001 configuration"
@@ -510,7 +637,7 @@ try {
         # All of these users are "joiners" - they don't exist in JIM yet and will be provisioned to AD
         # We'll validate using the first user in the CSV (index 1)
         $testUser = New-TestUser -Index 1
-        Write-Host "Testing joiner scenario with $($testUser.SamAccountName) and $((Get-TemplateScale -Template $Template).Users - 1) other users..." -ForegroundColor Gray
+        Write-Host "Testing joiner scenario with $($testUser.FirstName) $($testUser.LastName) ($($testUser.EmployeeId)) and $((Get-TemplateScale -Template $Template).Users - 1) other users..." -ForegroundColor Gray
 
         # Pair list reused for both parity checks in this step: once before the
         # first CSV import (detects truncation between setup-seed and first read)
@@ -664,8 +791,8 @@ try {
             } | Select-Object -First 1
 
             if (-not $testUserMVO) {
-                # Re-query with Account Name filter if not found in bulk results
-                $testUserMVO = Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue $testUser.SamAccountName -Attributes "Training Status"
+                # Re-query by Employee ID if not found in bulk results (Account Name is generated, not known up front)
+                $testUserMVO = Get-JIMMetaverseObject -AttributeName "Employee ID" -AttributeValue $testUser.EmployeeId -Attributes "Training Status"
             }
 
             if ($testUserMVO) {
@@ -685,10 +812,10 @@ try {
                     }
                 }
                 if ($null -ne $trainingStatus -and $trainingStatus -ne "") {
-                    Write-Host "    ✓ Test user ($($testUser.SamAccountName)) Training Status: '$trainingStatus'" -ForegroundColor Green
+                    Write-Host "    ✓ Test user ($($testUser.EmployeeId)) Training Status: '$trainingStatus'" -ForegroundColor Green
                 }
                 else {
-                    Write-Host "    ⚠ Test user ($($testUser.SamAccountName)) has no Training Status (may be in 15% without training)" -ForegroundColor Yellow
+                    Write-Host "    ⚠ Test user ($($testUser.EmployeeId)) has no Training Status (may be in 15% without training)" -ForegroundColor Yellow
                 }
             }
 
@@ -725,16 +852,50 @@ try {
         $directoryName = $DirectoryConfig.ConnectedSystemName
         Write-Host "Validating user in $directoryName..." -ForegroundColor Gray
 
-        $userIdentifier = $testUser.SamAccountName
-        $ldapUser = Get-LDAPUser -UserIdentifier $userIdentifier -DirectoryConfig $DirectoryConfig
+        $joinerSuccess = $true
+        $joinerErrorMessage = ""
+        try {
+            # The test user's identifiers: Account Name generated from their names, Email and User Principal Name
+            # derived from it, in the Metaverse and in the directory.
+            $testUserIdentity = Get-GeneratedIdentity -EmployeeId $testUser.EmployeeId -Label "Joiner"
+            Assert-GeneratedIdentity -Identity $testUserIdentity -FirstName $testUser.FirstName -LastName $testUser.LastName -Label "Joiner" | Out-Null
+            Write-Host "  ✓ User '$($testUserIdentity.AccountName)' provisioned to $directoryName" -ForegroundColor Green
 
-        if ($ldapUser) {
-            Write-Host "  ✓ User '$userIdentifier' provisioned to $directoryName" -ForegroundColor Green
+            # Two joiners with the same name as each other, and as nobody else, in one batch: the first value is
+            # taken by whichever is generated first, so the other gets the next suffix, and each one's Email and
+            # User Principal Name carry that person's own suffix (derived, never generated separately).
+            Write-Host "Adding two same-named joiners to the HR CSV..." -ForegroundColor Gray
+            $sameNameJoiners = @(
+                @{ EmployeeId = "EMP900101"; Department = "Marketing" }
+                @{ EmployeeId = "EMP900102"; Department = "Legal" }
+            )
+            foreach ($joiner in $sameNameJoiners) {
+                Add-HrCsvRow -EmployeeId $joiner.EmployeeId -FirstName "Marisol" -LastName "Fenwick" -Department $joiner.Department
+            }
+            Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+
+            $sameNameIdentities = @($sameNameJoiners | ForEach-Object {
+                $identity = Get-GeneratedIdentity -EmployeeId $_.EmployeeId -Label "Same-name joiner $($_.EmployeeId)"
+                Assert-GeneratedIdentity -Identity $identity -FirstName "Marisol" -LastName "Fenwick" -Label "Same-name joiner $($_.EmployeeId)" | Out-Null
+                $identity
+            })
+            $sameNameAccountNames = @($sameNameIdentities | ForEach-Object { $_.AccountName } | Sort-Object)
+            if (($sameNameAccountNames -join ',') -ne 'marisol.fenwick,marisol.fenwick1') {
+                throw "Expected the two same-named joiners to be given {marisol.fenwick, marisol.fenwick1}, but they were given {$($sameNameAccountNames -join ', ')}"
+            }
+            Write-Host "  ✓ Same-named joiners got different suffixes: $($sameNameAccountNames -join ', '), each with its own derived Email and User Principal Name" -ForegroundColor Green
+        }
+        catch {
+            $joinerSuccess = $false
+            $joinerErrorMessage = $_.Exception.Message
+            Write-Host "  ✗ $joinerErrorMessage" -ForegroundColor Red
+        }
+
+        if ($joinerSuccess) {
             $testResults.Steps += @{ Name = "Joiner"; Success = $true }
         }
         else {
-            Write-Host "  ✗ User '$userIdentifier' NOT found in $directoryName" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = "User not found in $directoryName" }
+            $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = $joinerErrorMessage }
             if (-not $ContinueOnError) {
                 Write-Host ""
                 Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
@@ -762,6 +923,7 @@ try {
         # Parse CSV properly to update the correct column
         # CSV columns: employeeId,firstName,lastName,email,department,title,company,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
         $moverSamAccountName = $moverUser.SamAccountName
+        $moverAccountName = (Get-GeneratedIdentity -EmployeeId $moverUser.EmployeeId -Label "Mover").AccountName
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
         if ($targetUser) {
@@ -788,7 +950,7 @@ try {
         $directoryName = $DirectoryConfig.ConnectedSystemName
         Write-Host "Validating attribute update in $directoryName..." -ForegroundColor Gray
 
-        $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+        $updatedUser = Get-LDAPUser -UserIdentifier $moverAccountName -DirectoryConfig $DirectoryConfig
         $updatedTitle = if ($updatedUser) { $updatedUser["title"] } else { $null }
 
         if ($updatedTitle -match "Senior Developer") {
@@ -815,6 +977,7 @@ try {
         # Continue using the first user (index 1) for mover tests
         $moverUser = New-TestUser -Index 1
         $moverSamAccountName = $moverUser.SamAccountName
+        $moverAccountName = (Get-GeneratedIdentity -EmployeeId $moverUser.EmployeeId -Label "Mover-Rename").AccountName
         $newFirstName = "Renamed"
         $newDisplayName = "$newFirstName $($moverUser.LastName)"
 
@@ -850,7 +1013,7 @@ try {
         if ($isRfcDirectory) {
             # For OpenLDAP, the DN doesn't change when displayName changes (RDN is uid, not CN).
             # Verify the attributes (cn, displayName, givenName) were updated instead.
-            $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+            $updatedUser = Get-LDAPUser -UserIdentifier $moverAccountName -DirectoryConfig $DirectoryConfig
             $updatedCn = if ($updatedUser) { $updatedUser["cn"] } else { $null }
 
             if ($updatedCn -match [regex]::Escape($newDisplayName)) {
@@ -869,7 +1032,7 @@ try {
         }
         else {
             # For Samba AD and Active Directory, verify the DN changed (CN= component reflects new displayName)
-            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'displayName') -AsText
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverAccountName)" -Attributes @('dn', 'displayName') -AsText
 
             if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
                 Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in $directoryName" -ForegroundColor Green
@@ -886,6 +1049,17 @@ try {
                 }
             }
         }
+        # A generated value is kept once assigned: the rename changes the names it was generated from, not the
+        # Account Name (nor, so, the Email and User Principal Name derived from it).
+        $renamedAccountName = (Get-GeneratedIdentity -EmployeeId $moverUser.EmployeeId -Label "Mover-Rename").AccountName
+        if ($renamedAccountName -ne $moverAccountName) {
+            Write-Host "  ✗ Account Name changed from '$moverAccountName' to '$renamedAccountName' on rename; a generated value must be kept" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "Generated Account Name not kept across a rename" }
+            if (-not $ContinueOnError) { exit 1 }
+        }
+        else {
+            Write-Host "  ✓ Generated Account Name '$moverAccountName' kept across the rename" -ForegroundColor Green
+        }
         $stepTimings["2b. Mover-Rename"] = (Get-Date) - $step2bStart
     }
 
@@ -897,6 +1071,7 @@ try {
         # Continue using the first user (index 1) for mover tests
         $moverUser = New-TestUser -Index 1
         $moverSamAccountName = $moverUser.SamAccountName
+        $moverAccountName = (Get-GeneratedIdentity -EmployeeId $moverUser.EmployeeId -Label "Mover-Move").AccountName
 
         Write-Host "Updating user department to trigger OU move..." -ForegroundColor Gray
 
@@ -933,7 +1108,7 @@ try {
             # For OpenLDAP, DN doesn't change with department (flat ou=People structure).
             # Verify the department attribute was updated instead.
             $deptAttr = $DirectoryConfig.DepartmentAttr  # "departmentNumber" for OpenLDAP
-            $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+            $updatedUser = Get-LDAPUser -UserIdentifier $moverAccountName -DirectoryConfig $DirectoryConfig
             $updatedDept = if ($updatedUser) { $updatedUser[$deptAttr] } else { $null }
 
             if ($updatedDept -eq "Finance") {
@@ -952,7 +1127,7 @@ try {
         }
         else {
             # For Samba AD and Active Directory, verify user moved to OU=Finance in the DN
-            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'department') -AsText
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverAccountName)" -Attributes @('dn', 'department') -AsText
 
             if ($adUserInfo -match "OU=Finance") {
                 Write-Host "  ✓ User moved to OU=Finance in $directoryName" -ForegroundColor Green
@@ -992,6 +1167,7 @@ try {
         # Use the second user (index 2) for disable/enable tests to preserve user 1 for other tests
         $disableUser = New-TestUser -Index 2
         $disableSamAccountName = $disableUser.SamAccountName
+        $disableAccountName = (Get-GeneratedIdentity -EmployeeId $disableUser.EmployeeId -Label "Disable").AccountName
 
         Write-Host "Setting user status to Archived in CSV (triggers AD account disable)..." -ForegroundColor Gray
 
@@ -1019,7 +1195,7 @@ try {
         # userAccountControl 514 = 512 (normal) + 2 (disabled)
         Write-Host "Validating account disabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$disableSamAccountName)" -Attributes @('userAccountControl') -AsText
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$disableAccountName)" -Attributes @('userAccountControl') -AsText
 
         # Check if userAccountControl is 514 (disabled) - the search returns the decimal value
         if ($adUserInfo -match "userAccountControl: 514") {
@@ -1067,6 +1243,7 @@ try {
         # Continue using the second user (index 2) that was disabled in the previous test
         $enableUser = New-TestUser -Index 2
         $enableSamAccountName = $enableUser.SamAccountName
+        $enableAccountName = (Get-GeneratedIdentity -EmployeeId $enableUser.EmployeeId -Label "Enable").AccountName
 
         Write-Host "Setting user status back to Active in CSV (triggers AD account enable)..." -ForegroundColor Gray
 
@@ -1092,7 +1269,7 @@ try {
         # Validate account is enabled in AD
         Write-Host "Validating account enabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$enableSamAccountName)" -Attributes @('userAccountControl') -AsText
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$enableAccountName)" -Attributes @('userAccountControl') -AsText
 
         # Check if userAccountControl is 512 (enabled)
         if ($adUserInfo -match "userAccountControl: 512") {
@@ -1154,7 +1331,8 @@ try {
             $csv = Import-Csv $csvPath
             $leaverRow = $csv | Where-Object { $_.samAccountName -eq $userToRemove }
             if (-not $leaverRow) { throw "Could not find $userToRemove in the HR CSV before removal" }
-            $expectedAccountName = $leaverRow.samAccountName
+            # Account Name is generated, not taken from the CSV row.
+            $expectedAccountName = (Get-GeneratedIdentity -EmployeeId $leaverRow.employeeId -Label "Leaver").AccountName
             $expectedLastName = $leaverRow.lastName
             $expectedDisplayName = $leaverRow.displayName
 
@@ -1234,14 +1412,14 @@ try {
 
             # Assert: the directory account is untouched - still present, identity attributes intact.
             $directoryName = $DirectoryConfig.ConnectedSystemName
-            $leaverDirectoryUser = Get-LDAPUser -UserIdentifier $userToRemove -DirectoryConfig $DirectoryConfig
-            if (-not $leaverDirectoryUser) { throw "User '$userToRemove' was removed from $directoryName; HR disconnection during the grace period must not deprovision the directory account" }
+            $leaverDirectoryUser = Get-LDAPUser -UserIdentifier $expectedAccountName -DirectoryConfig $DirectoryConfig
+            if (-not $leaverDirectoryUser) { throw "User '$expectedAccountName' was removed from $directoryName; HR disconnection during the grace period must not deprovision the directory account" }
 
             $accountNameAttr = if ($isRfcDirectory) { "uid" } else { "sAMAccountName" }
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName $accountNameAttr -ExpectedValue $expectedAccountName -Label "Leaver"
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "sn" -ExpectedValue $expectedLastName -Label "Leaver"
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "cn" -ExpectedValue $expectedDisplayName -Label "Leaver"
-            Write-Host "  OK Directory account for $userToRemove untouched in $directoryName (uid/sn/cn intact)" -ForegroundColor Green
+            Write-Host "  OK Directory account for $expectedAccountName untouched in $directoryName (uid/sn/cn intact)" -ForegroundColor Green
             Write-Host "    Note: account will be deprovisioned after the 7-day grace period elapses" -ForegroundColor DarkGray
         }
         catch {
@@ -1282,7 +1460,8 @@ try {
         $reconnectErrorMessage = ""
 
         try {
-            # Create test user
+            # Create test user. Its Account Name is generated from its names, Test Reconnect, so it is
+            # "test.reconnect" (no other person shares the name), the value the directory lookups below use.
             $reconnectUser = New-TestUser -Index 8888
             $reconnectUser.EmployeeId = "EMP888888"
             $reconnectUser.SamAccountName = "test.reconnect"
@@ -1449,6 +1628,8 @@ try {
             Set-JIMMetaverseObjectType -Id $withdrawnUserType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
             Wait-ForPendingDeletionsToDrain -Config $config
 
+            # Account Name is generated from the names below (Test Withdrawn), giving the value the
+            # directory lookups use.
             $withdrawnUser = New-TestUser -Index 8877
             $withdrawnUser.EmployeeId = "EMP887700"
             $withdrawnUser.SamAccountName = "test.withdrawn"
@@ -1588,6 +1769,8 @@ try {
             Set-JIMMetaverseObjectType -Id $withdrawnLateUserType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
             Wait-ForPendingDeletionsToDrain -Config $config
 
+            # Account Name is generated from the names below (Test Withdrawnlate), giving the value the
+            # directory lookups use.
             $withdrawnLateUser = New-TestUser -Index 8878
             $withdrawnLateUser.EmployeeId = "EMP887800"
             $withdrawnLateUser.SamAccountName = "test.withdrawnlate"
@@ -1813,7 +1996,9 @@ try {
 
             Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO Provision"
 
-            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO Provision"
+            # The directory account is found by the Account Name JIM generated for the joiner.
+            $ieoAccountName = (Get-GeneratedIdentity -EmployeeId $ieoUser.EmployeeId -Label "IEO Provision").AccountName
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -AccountName $ieoAccountName -Label "IEO Provision"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoUser.Title -Label "IEO Provision"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoUser.EmployeeType -Label "IEO Provision"
             Write-Host "  OK Provisioning exported both the managed title and the Initial Export Only employeeType" -ForegroundColor Green
@@ -1851,7 +2036,7 @@ try {
 
             Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO Source Change"
 
-            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO Source Change"
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -AccountName $ieoAccountName -Label "IEO Source Change"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoChangedTitle -Label "IEO Source Change"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoUser.EmployeeType -Label "IEO Source Change"
             Write-Host "  OK Metaverse change flowed for the managed title only; the Initial Export Only employeeType kept its provisioning value" -ForegroundColor Green
@@ -1862,7 +2047,7 @@ try {
             $ieoExternalTitle = "IEO External Drift Title"
             $ieoExternalEmployeeType = "IEO Externally Owned"
 
-            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO External Change"
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -AccountName $ieoAccountName -Label "IEO External Change"
             $ieoUserDn = $directoryUser["dn"]
 
             Write-Host "Modifying title and employeeType directly in $($DirectoryConfig.ConnectedSystemName)..." -ForegroundColor Gray
@@ -1890,7 +2075,7 @@ try {
 
             Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO External Change"
 
-            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO External Change"
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -AccountName $ieoAccountName -Label "IEO External Change"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoChangedTitle -Label "IEO External Change"
             Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoExternalEmployeeType -Label "IEO External Change"
             Write-Host "  OK Drift Correction reverted the managed title and left the externally-owned employeeType untouched" -ForegroundColor Green

@@ -32,8 +32,7 @@ public class SyncRuleDeletionQueuedResponse
     /// <summary>
     /// The Metaverse-Derived Attribute Flows on other Synchronisation Rules that the deletion leaves with a missing
     /// input, because an attribute they read lost its last enabled contributor. The rule is disabled at once, so they
-    /// are affected from now. The deletion goes ahead regardless. Always present; empty when the Metaverse-Derived
-    /// Attribute Flows feature is off.
+    /// are affected from now. The deletion goes ahead regardless. Always present.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 }

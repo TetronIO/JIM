@@ -15,9 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
 - ✨ Preview what deleting a Connected System would do (values taken over or cleared, identities made eligible for deletion, downstream corrections) from its Danger Zone tab, `New-JIMConfigurationChangePreview -Deletion` or REST; the deletion's Activity records the preview. (#134)
 - ✨ REST and `Get-JIMActivity -Id` now return a change's `PreviewActivityId`, so a script can read back which Configuration Change Preview informed it. (#134)
+- ✨ JIM can now generate unique values such as account names, employee numbers and badge codes: a **Generated Value** Attribute Flow adds a number only if a value is taken, or uses a forward-only sequence or a random token, and keeps each value once issued. (#242)
+- ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
+- ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
+- ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
 
 ### Changed
 
+- 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
 ### Fixed

@@ -58,7 +58,7 @@ public partial class ConnectedSystemServer
             // the deleted rule's own contribution is ineligible (other rules of the same system are
             // legitimate survivors here, unlike the obsoletion path).
             var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
-            var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+            var priorityContext = BuildRecallPriorityContext(allSyncRules);
             var syncEngine = new SyncEngine();
             var expressionEvaluator = new DynamicExpressoEvaluator();
             var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
@@ -67,7 +67,7 @@ public partial class ConnectedSystemServer
             // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the deletion completes: the
             // deleted rule's own derived mappings go with it, so they must not count as hosting flows, whatever its
             // Enabled state (it is disabled at queue time, but the marking must not depend on that).
-            var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+            var derivedInputMarks = CreateDerivedInputMarkBatch(
                 allSyncRules.Where(rule => rule.Id != task.SyncRuleId), "Synchronisation Rule deletion recall");
 
             var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(task.SyncRuleId);
@@ -143,8 +143,7 @@ public partial class ConnectedSystemServer
     /// <param name="exportEvaluationCache">The pre-built export evaluation cache driving Pending Export staging.</param>
     /// <param name="activity">The Activity the per-object results are recorded on.</param>
     /// <param name="derivedInputMarks">Collects the Metaverse-Derived Attribute Flow marks (#1750 Phase 4) for every
-    /// object whose attribute values change, flushed once per batch after the batch is persisted; inert when the
-    /// feature is off.</param>
+    /// object whose attribute values change, flushed once per batch after the batch is persisted.</param>
     /// <param name="reElectedDetailMessage">The outcome wording for values a surviving contributor took over.</param>
     /// <param name="clearedDetailMessage">The outcome wording for values cleared with no remaining contributor.</param>
     /// <param name="trackActivityProgress">Whether to advance the Activity's ObjectsProcessed counter per batch

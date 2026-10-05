@@ -566,7 +566,7 @@ public class SyncEngineDerivedFlowTests
             .ToList();
     }
 
-    // ---- flag off: graph null reproduces today's behaviour ----
+    // ---- no graph on the context: mv in an import expression reads nothing ----
 
     [Test]
     public void GraphNull_LegacyImportExpressionReadingMv_FlowsInTheOrdinaryPassAndReadsNothing()
@@ -584,7 +584,7 @@ public class SyncEngineDerivedFlowTests
         {
             Assert.That(errors, Is.Empty);
             Assert.That(AddedText(mvo, _model.Email), Is.EqualTo("@corp.local"),
-                "flag off, mv in an import expression reads nothing, exactly as before the feature");
+                "with no graph, mv in an import expression reads nothing");
             Assert.That(Added(mvo, _model.Email), Has.Count.EqualTo(1), "and the derived pass is a no-op, so it flows exactly once");
         }
     }

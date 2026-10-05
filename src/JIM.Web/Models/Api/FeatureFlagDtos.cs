@@ -11,7 +11,7 @@ namespace JIM.Web.Models.Api;
 public class FeatureFlagDto
 {
     /// <summary>
-    /// The flag's key, e.g. "Features.UniqueValueGeneration".
+    /// The flag's key, e.g. "Features.SomeInDevelopmentFeature".
     /// </summary>
     public string Key { get; set; } = string.Empty;
 

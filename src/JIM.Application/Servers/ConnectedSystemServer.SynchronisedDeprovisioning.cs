@@ -88,7 +88,7 @@ public partial class ConnectedSystemServer
         // ineligible and none of its objects counts as a survivor.
         var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
         var systemSyncRules = allSyncRules.Where(sr => sr.ConnectedSystemId == task.ConnectedSystemId).ToList();
-        var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+        var priorityContext = BuildRecallPriorityContext(allSyncRules);
         var syncEngine = new SyncEngine();
         var syncServer = new SyncServer(Application);
         var expressionEvaluator = new DynamicExpressoEvaluator();
@@ -98,7 +98,7 @@ public partial class ConnectedSystemServer
         // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the system is gone: its own
         // rules' derived mappings go with it, so they neither mark it (its objects are being deleted anyway) nor carry
         // transitivity onwards. Collected per batch and flushed once the batch is persisted.
-        var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+        var derivedInputMarks = CreateDerivedInputMarkBatch(
             allSyncRules.Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId), "Synchronised Deprovisioning");
 
         var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(Application.SyncRepo);

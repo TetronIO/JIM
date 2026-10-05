@@ -95,7 +95,7 @@ public partial class ConnectedSystemServer
         // The run's support set, exactly as ExecuteSynchronisedDeprovisioningAsync builds it.
         var allSyncRules = await guard.GetAllSyncRulesAsync();
         var systemSyncRules = allSyncRules.Where(rule => rule.ConnectedSystemId == connectedSystemId).ToList();
-        var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+        var priorityContext = BuildRecallPriorityContext(allSyncRules);
         var syncEngine = new SyncEngine();
         var expressionEvaluator = new DynamicExpressoEvaluator();
         var recallScope = ContributorRecallScope.ForDeletedConnectedSystem(connectedSystemId);

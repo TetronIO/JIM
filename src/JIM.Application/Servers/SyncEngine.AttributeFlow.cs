@@ -556,8 +556,8 @@ public partial class SyncEngine
         // Object's effective values as of this pass, so an absent input on either side is an absent input, reported
         // in accessor form (cs["x"], mv["x"]); an asserted-null marker is excluded from that view, so it reads as
         // absent exactly as it does to an export expression. Everywhere else (the ordinary inbound pass, and every
-        // inbound pass when the feature is off) there is no Metaverse view: mv[...] reads nothing, as it always
-        // has, and counting it as missing would fail every object on a mapping over something no object can
+        // inbound pass on a context built with no derived flow graph) there is no Metaverse view: mv[...] reads
+        // nothing, and counting it as missing would fail every object on a mapping over something no object can
         // supply. There only Connected System inputs are considered.
         if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
         {

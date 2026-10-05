@@ -128,7 +128,7 @@ public partial class ConnectedSystemServer
         // cache is built from every Synchronisation Rule, the export cache drives Pending Export staging,
         // and the scope excludes the swept system's own rules from re-election.
         var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
-        var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+        var priorityContext = BuildRecallPriorityContext(allSyncRules);
         var syncEngine = new SyncEngine();
         var expressionEvaluator = new DynamicExpressoEvaluator();
         var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);

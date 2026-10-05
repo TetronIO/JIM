@@ -26,8 +26,7 @@ namespace JIM.Web.Tests;
 /// The Attribute Flow tab's Metaverse-Derived Attribute Flow affordances (#1750, Phase 6, mockups A to D), against a
 /// real <see cref="JimApplication"/> over mocked repositories so the analysis and the dependant checks are the
 /// Application layer's own: the Derived chip, the Insert attribute menu, the live analysis in the dialog (the panel and
-/// the loop that disables Update), and the confirmation before removing a flow derived flows read. With the feature
-/// off, none of it appears.
+/// the loop that disables Update), and the confirmation before removing a flow derived flows read.
 /// </summary>
 /// <remarks>
 /// The rule is the runtime scenario's: HR Inbound flows Account Name from the directory, derives Email from Account
@@ -40,7 +39,6 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     private readonly FreshJimApplicationFactory _factory = new();
     private Mock<IConnectedSystemRepository> _csRepo = null!;
     private Mock<IMetaverseRepository> _mvRepo = null!;
-    private bool _flagEnabled = true;
 
     private static readonly MetaverseAttribute AccountName = new() { Id = 10, Name = "Account Name", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
     private static readonly MetaverseAttribute Email = new() { Id = 11, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
@@ -57,9 +55,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
             var repo = new Mock<IRepository>();
             repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
             repo.Setup(r => r.Metaverse).Returns(_mvRepo.Object);
-            repo.Setup(r => r.ServiceSettings).Returns(_flagEnabled
-                ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-                : new InMemoryServiceSettingsRepository());
+            repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
             return repo.Object;
         };
         Services.AddSingleton<IJimApplicationFactory>(_factory);
@@ -69,7 +65,6 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     [SetUp]
     public void SetUp()
     {
-        _flagEnabled = true;
         _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(UserTypeId)).ReturnsAsync(() => [BuildRule()]);
         _csRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
         _csRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(new Dictionary<int, string> { [5] = "HR" });
@@ -189,15 +184,6 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
             "Email at step 2 and User Principal Name at step 3; Account Name is an ordinary flow");
     }
 
-    [Test]
-    public void Cards_FlagOff_ShowNoDerivedChip()
-    {
-        _flagEnabled = false;
-        var (_, tab) = RenderCards(BuildRule());
-
-        Assert.That(tab.HasComponent<DerivedFlowChip>(), Is.False);
-    }
-
     // ─── B: Insert attribute ───
 
     [Test]
@@ -218,23 +204,9 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_FlagOff_OffersOnlyTheConnectedSystemGroup()
+    public void EditDialog_ExportRule_OffersOnlyTheMetaverseGroup()
     {
-        _flagEnabled = false;
-        var (provider, tab) = RenderCards(BuildRule());
-        OpenEdit(tab, 1);
-
-        provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
-        Assert.That(provider.FindComponent<InsertAttributeMenu>().Instance.MetaverseAttributes, Is.Null);
-    }
-
-    [TestCase(true)]
-    [TestCase(false)]
-    public void EditDialog_ExportRule_OffersOnlyTheMetaverseGroupWhateverTheFlag(bool flagEnabled)
-    {
-        // An export expression is evaluated against the Metaverse Object alone (cs[...] resolves to nothing there), and
-        // reading mv on export long predates Metaverse-Derived Attribute Flows, so the flag has no say.
-        _flagEnabled = flagEnabled;
+        // An export expression is evaluated against the Metaverse Object alone (cs[...] resolves to nothing there).
         var (provider, tab) = RenderCards(BuildExportRule());
         OpenEdit(tab, 0);
 
@@ -298,18 +270,6 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
         Assert.That(UpdateButton(provider).Instance.Disabled, Is.True, "the save would refuse it, so Update is not offered");
     }
 
-    [Test]
-    public void EditDialog_FlagOff_RunsNoAnalysis()
-    {
-        _flagEnabled = false;
-        var (provider, tab) = RenderCards(BuildRule());
-        OpenEdit(tab, 1);
-
-        provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
-        Assert.That(provider.FindComponent<DerivedFlowPanel>().Instance.Analysis, Is.Null);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
-
     // ─── D: the dependants confirmation ───
 
     [Test]
@@ -350,18 +310,6 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
 
         provider.WaitForState(() => provider.Markup.Contains("Are you sure you want to remove this Attribute Mapping?", StringComparison.Ordinal));
         Assert.That(provider.FindAll("[data-testid='jim-dependent-derived-flow-row']"), Is.Empty);
-    }
-
-    [Test]
-    public void Remove_FlagOff_ShowsTheOrdinaryConfirmationAndReadsNothing()
-    {
-        _flagEnabled = false;
-        var (provider, tab) = RenderCards(BuildRule());
-
-        Press(tab, "delete", 0);
-
-        provider.WaitForState(() => provider.Markup.Contains("Are you sure you want to remove this Attribute Mapping?", StringComparison.Ordinal));
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Test]

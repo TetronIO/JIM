@@ -636,8 +636,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     }
 
     /// <summary>
-    /// What the proposal means for Metaverse-Derived Attribute Flows (#1750, plan Phase 5, FR 3 and FR 11): nothing at
-    /// all when the feature is off.
+    /// What the proposal means for Metaverse-Derived Attribute Flows (#1750, plan Phase 5, FR 3 and FR 11).
     /// <list type="bullet">
     /// <item>Blocking: the save-time validation would refuse it (a dependency cycle, an <c>mv["..."]</c> name that is not
     /// an attribute of the type, a Reference input or target), in the validator's own words.</item>
@@ -651,11 +650,6 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private async Task<List<PreviewValidationFinding>> DescribeDerivedFlowsAsync(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
     {
         var findings = new List<PreviewValidationFinding>();
-
-        // Flag first, so a preview with the feature off reads and materialises nothing more than it did before it; it
-        // only predicts the save's flag-off refusal, from the proposal and the stored rule it already holds.
-        if (!await _application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
-            return DescribeFeatureDisabledRefusals(rule, proposal);
 
         SyncRule standIn;
         try
@@ -691,48 +685,6 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         findings.AddRange(DescribeDerivedReadersOnOtherSystems(rule, proposal, assessment));
         return findings;
     }
-
-    /// <summary>
-    /// With the feature off, saving an import mapping that newly reads <c>mv["..."]</c> is refused with
-    /// <see cref="FeatureDisabledException"/> (plan Phase 1, <c>ConnectedSystemServer.EnsureDerivedFlowProposalAllowedAsync</c>),
-    /// so the preview predicts the refusal as a Blocking finding in that exception's words. "Newly" is judged as the save
-    /// judges it, against the stored rule: a proposed mapping reading <c>mv</c> is new unless the rule already has a
-    /// mapping to the same target that reads it (a proposal carries no mapping ids, so the target stands in for one).
-    /// Pure: nothing is read when no proposed mapping reads <c>mv</c>, nor when one does.
-    /// </summary>
-    private static List<PreviewValidationFinding> DescribeFeatureDisabledRefusals(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
-    {
-        var alreadyReading = rule.AttributeFlowRules
-            .Where(mapping => mapping.ResolveTargetMetaverseAttributeId() != null && DerivedFlowGraph.ReadsMetaverse(mapping))
-            .Select(mapping => mapping.ResolveTargetMetaverseAttributeId()!.Value)
-            .ToHashSet();
-
-        var attributeNames = (rule.MetaverseObjectType?.Attributes ?? [])
-            .GroupBy(attribute => attribute.Id)
-            .ToDictionary(group => group.Key, group => group.First().Name);
-        var refusal = new FeatureDisabledException(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows).Message;
-
-        return
-        [
-            .. proposal.Mappings
-                .Where(mapping => mapping.TargetMetaverseAttributeId is { } targetId
-                    && !alreadyReading.Contains(targetId)
-                    && ProposedMappingReadsMetaverse(mapping))
-                .Select(mapping => mapping.TargetMetaverseAttributeId!.Value)
-                .Distinct()
-                .Select(targetId => attributeNames.GetValueOrDefault(targetId) ?? $"Metaverse Attribute {targetId}")
-                .Select(attributeName => new PreviewValidationFinding(
-                    PreviewValidationSeverity.Blocking,
-                    $"{refusal} The proposal makes the Attribute Flow to '{attributeName}' read Metaverse attributes, so " +
-                    "saving it would be refused until the feature is enabled.",
-                    nameof(SyncRule.AttributeFlowRules),
-                    attributeName))
-        ];
-    }
-
-    private static bool ProposedMappingReadsMetaverse(SyncRuleMappingProposal mapping) =>
-        mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression)
-            && ExpressionInputResolver.ResolveCached(source.Expression).Any(input => input.Source == ExpressionInputSource.Metaverse));
 
     private static string DescribeMissingInputs(IReadOnlyList<DerivedFlowMissingInput> missingInputs) =>
         string.Join(" and ", missingInputs.Select(input => input.ThroughDerivedFlows
