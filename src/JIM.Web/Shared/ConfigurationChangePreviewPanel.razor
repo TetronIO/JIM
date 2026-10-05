@@ -275,7 +275,10 @@
                                         }
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Attribute" Sortable="false">
+                                @* The fill column: a value transition can run long ("Not eligible for deletion ->
+                                   Eligible for deletion immediately"), and without a bounded column the one-line clamp
+                                   never clips, so the row widens the table and pushes Objects off the panel. *@
+                                <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                                     <HeaderTemplate>
                                         <VirtualisedSortHeader Title="Attribute" Name="attribute" />
                                     </HeaderTemplate>
