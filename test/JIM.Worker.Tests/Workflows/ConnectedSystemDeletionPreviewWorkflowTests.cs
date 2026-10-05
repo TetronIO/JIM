@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -198,8 +199,13 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
 
         var deltas = await PreviewAsync(ctx.Hr);
 
-        Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject).Select(d => d.ConnectedSystemObjectId),
-            Is.EqualTo(new Guid?[] { targetCso.Id }));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject).Select(d => d.ConnectedSystemObjectId),
+                Is.EqualTo(new Guid?[] { targetCso.Id }));
+            Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible), Has.Count.EqualTo(1),
+                "the disconnected target was the object's last connector, so it becomes eligible for deletion");
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -241,6 +247,275 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         Assert.That(deltas, Is.Not.Empty, "precondition: the preview found something to report");
         Assert.That(Snapshot(), Is.EqualTo(before), "a preview must leave every object, value, join and export as it found them");
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Preview equals execution: each state is previewed, then really deprovisioned, and the facts the preview reported
+    // must be exactly the facts the deletion produced. This is the guarantee the preview exists to give, enforced by a
+    // test rather than by both sides calling one core.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task PreviewEqualsExecution_SoleContributorAsync()
+    {
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    [Test]
+    public async Task PreviewEqualsExecution_SurvivingContributorWithDifferentValueAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    [Test]
+    public async Task PreviewEqualsExecution_SurvivingContributorWithSameValueAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync(trainingDescription: HrDescription);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    [Test]
+    public async Task PreviewEqualsExecution_RecallDisabledObjectTypeAsync()
+    {
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        SyncRepo.ConnectedSystemObjects.Values.First(c => c.ConnectedSystemId == ctx.Hr.Id).Type.RemoveContributedAttributesOnObsoletion = false;
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    [TestCase(OutboundDeprovisionAction.Delete)]
+    [TestCase(OutboundDeprovisionAction.Disconnect)]
+    public async Task PreviewEqualsExecution_RecallTakesObjectOutOfExportScopeAsync(OutboundDeprovisionAction action)
+    {
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true, scopeExitAction: action);
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    [TestCase(0)]
+    [TestCase(7)]
+    public async Task PreviewEqualsExecution_LastConnectorAsync(int gracePeriodDays)
+    {
+        var (hrSystem, _, mvType, _, _) = await SetUpHrContributorAsync();
+        await RunFullSyncAsync(hrSystem);
+        if (gracePeriodDays > 0)
+            mvType.DeletionGracePeriod = TimeSpan.FromDays(gracePeriodDays);
+
+        await AssertPreviewEqualsExecutionAsync(hrSystem);
+    }
+
+    [Test]
+    public async Task PreviewEqualsExecution_AuthoritativeSourceDeletionCascadesDownstreamAsync()
+    {
+        // The Metaverse Object is deleted immediately because its authoritative source leaves, although the target's
+        // object is still joined, so the deletion's cascade deprovisions that object downstream.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: false);
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        var mvType = SyncRepo.MetaverseObjects.Values.Single().Type!;
+        mvType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        mvType.DeletionTriggerConnectedSystemIds = [ctx.Hr.Id];
+        foreach (var rule in SyncRepo.SyncRules.Values.Where(r => r.ConnectedSystemId == ctx.Target.Id))
+            rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+
+        var facts = await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-delete|")),
+            "precondition: the scenario must actually exercise the downstream cascade");
+    }
+
+    [Test]
+    public async Task PreviewEqualsExecution_StrandedValueAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        SeedStrandedMetaverseObject(ctx);
+
+        await AssertPreviewEqualsExecutionAsync(ctx.Hr);
+    }
+
+    /// <summary>
+    /// Previews deleting the system, then really deprovisions it, and asserts the two describe the same facts. Returns
+    /// the facts, so a test can also check its scenario exercised what it set out to.
+    /// </summary>
+    private async Task<HashSet<string>> AssertPreviewEqualsExecutionAsync(ConnectedSystem connectedSystem)
+    {
+        var before = CaptureObservableState();
+        var previewed = FactsFromPreview(await PreviewAsync(connectedSystem));
+
+        SyncRepo.ClearAllPendingExports();
+        var (task, _) = await FenceSystemAndBuildTaskAsync(connectedSystem);
+        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+        var executed = FactsFromExecution(before, CaptureObservableState(), connectedSystem.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(previewed.Except(executed), Is.Empty, "the preview reported something the deletion did not do");
+            Assert.That(executed.Except(previewed), Is.Empty, "the deletion did something the preview did not report");
+        }
+        return executed;
+    }
+
+    private static HashSet<string> FactsFromPreview(IEnumerable<PreviewDelta> deltas)
+    {
+        var facts = new HashSet<string>();
+        foreach (var delta in deltas)
+        {
+            switch (delta.TransitionType)
+            {
+                case ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor:
+                    facts.Add($"cleared|{delta.MetaverseObjectId}|{delta.AttributeName}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue:
+                    facts.Add($"changed|{delta.MetaverseObjectId}|{delta.AttributeName}|{delta.NewValue}");
+                    facts.Add($"source|{delta.MetaverseObjectId}|{delta.AttributeName}|{delta.ConnectedSystemId}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue:
+                    facts.Add($"source|{delta.MetaverseObjectId}|{delta.AttributeName}|{delta.ConnectedSystemId}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible:
+                    facts.Add($"eligible|{delta.MetaverseObjectId}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues:
+                    facts.Add($"kept|{delta.MetaverseObjectId}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport:
+                    facts.Add($"export-update|{delta.ConnectedSystemObjectId}|{delta.AttributeName}|{delta.NewValue}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport:
+                    facts.Add($"export-delete|{delta.ConnectedSystemObjectId}");
+                    break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject:
+                    facts.Add($"disconnect|{delta.ConnectedSystemObjectId}");
+                    break;
+                default:
+                    facts.Add($"unexpected|{delta.TransitionType}|{delta.MetaverseObjectId}|{delta.AttributeName}");
+                    break;
+            }
+        }
+        return facts;
+    }
+
+    private HashSet<string> FactsFromExecution(ObservableState before, ObservableState after, int deletedSystemId)
+    {
+        var facts = new HashSet<string>();
+
+        foreach (var (mvoId, beforeObject) in before.MetaverseObjects)
+        {
+            if (!after.MetaverseObjects.TryGetValue(mvoId, out var afterObject))
+            {
+                facts.Add($"eligible|{mvoId}");
+                continue;
+            }
+
+            // Marked for deletion: by the deletion rule (values frozen for the grace window, so they read as kept and are
+            // not a separate fact), or by a scope exit disconnecting its last connector after its values were recalled.
+            var markedForDeletion = afterObject.LastConnectorDisconnectedDate.HasValue && !beforeObject.LastConnectorDisconnectedDate.HasValue;
+            if (markedForDeletion)
+                facts.Add($"eligible|{mvoId}");
+
+            foreach (var attributeName in beforeObject.Values
+                         .Where(v => v.ContributedBySystemId == deletedSystemId)
+                         .Select(v => v.AttributeName)
+                         .Distinct())
+            {
+                var beforeValues = beforeObject.Values.Where(v => v.AttributeName == attributeName).ToList();
+                var afterValues = afterObject.Values.Where(v => v.AttributeName == attributeName).ToList();
+
+                if (afterValues.Count == 0)
+                {
+                    facts.Add($"cleared|{mvoId}|{attributeName}");
+                    continue;
+                }
+
+                var beforeText = JIM.Application.Servers.Preview.PreviewValueRenderer.Join(beforeValues.Select(v => v.Value));
+                var afterText = JIM.Application.Servers.Preview.PreviewValueRenderer.Join(afterValues.Select(v => v.Value));
+                var newSource = afterValues.Select(v => v.ContributedBySystemId).FirstOrDefault(id => id.HasValue);
+
+                if (newSource.HasValue && newSource != deletedSystemId)
+                {
+                    if (afterText != beforeText)
+                        facts.Add($"changed|{mvoId}|{attributeName}|{afterText}");
+                    facts.Add($"source|{mvoId}|{attributeName}|{newSource}");
+                }
+                else if (!markedForDeletion)
+                {
+                    facts.Add($"kept|{mvoId}");
+                }
+            }
+        }
+
+        var attributeNames = DbContext.ConnectedSystemObjectTypes.SelectMany(t => t.Attributes).ToDictionary(a => a.Id, a => a.Name);
+        foreach (var pendingExport in SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId != deletedSystemId))
+        {
+            if (pendingExport.ChangeType == PendingExportChangeType.Delete)
+            {
+                facts.Add($"export-delete|{pendingExport.ConnectedSystemObjectId}");
+                continue;
+            }
+
+            foreach (var changes in pendingExport.AttributeValueChanges.GroupBy(c => c.AttributeId))
+            {
+                var name = changes.Select(c => c.Attribute?.Name).FirstOrDefault(n => n != null) ?? attributeNames.GetValueOrDefault(changes.Key);
+                var value = JIM.Application.Servers.Preview.PreviewValueRenderer.Join(changes.Select(JIM.Application.Servers.Preview.PreviewValueRenderer.Render));
+                facts.Add($"export-update|{pendingExport.ConnectedSystemObjectId}|{name}|{value}");
+            }
+        }
+
+        // A disconnection that comes with a Delete is one consequence, the removal, as the preview reports it: deleting a
+        // Metaverse Object both stages its objects' deletion and breaks their joins.
+        var deletedCsoIds = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ChangeType == PendingExportChangeType.Delete && pe.ConnectedSystemObjectId.HasValue)
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        foreach (var (csoId, joinedTo) in before.Joins.Where(j => j.Value.ConnectedSystemId != deletedSystemId && !deletedCsoIds.Contains(j.Key)))
+        {
+            var stillThere = after.Joins.TryGetValue(csoId, out var afterJoin);
+            if (stillThere && afterJoin!.MetaverseObjectId == null && joinedTo.MetaverseObjectId != null)
+                facts.Add($"disconnect|{csoId}");
+        }
+
+        return facts;
+    }
+
+    private sealed record ObservedValue(string? AttributeName, string? Value, int? ContributedBySystemId);
+
+    private sealed record ObservedMetaverseObject(DateTime? LastConnectorDisconnectedDate, List<ObservedValue> Values);
+
+    private sealed record ObservedJoin(int ConnectedSystemId, Guid? MetaverseObjectId);
+
+    private sealed record ObservableState(Dictionary<Guid, ObservedMetaverseObject> MetaverseObjects, Dictionary<Guid, ObservedJoin> Joins);
+
+    /// <summary>
+    /// A detached copy of what a deletion can change, so the before and after states can be compared once the same
+    /// instances have been mutated.
+    /// </summary>
+    private ObservableState CaptureObservableState() => new(
+        SyncRepo.MetaverseObjects.Values.ToDictionary(
+            m => m.Id,
+            m => new ObservedMetaverseObject(m.LastConnectorDisconnectedDate, m.AttributeValues
+                .Where(v => !v.NullValue)
+                .Select(v => new ObservedValue(v.Attribute?.Name, JIM.Application.Servers.Preview.PreviewValueRenderer.Render(v), v.ContributedBySystemId))
+                .ToList())),
+        SyncRepo.ConnectedSystemObjects.Values.ToDictionary(c => c.Id, c => new ObservedJoin(c.ConnectedSystemId, c.MetaverseObjectId)));
 
     // -----------------------------------------------------------------------------------------------------------------
     // Helpers

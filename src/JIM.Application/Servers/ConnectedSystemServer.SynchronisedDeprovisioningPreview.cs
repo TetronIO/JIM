@@ -80,8 +80,6 @@ public partial class ConnectedSystemServer
         var recallScope = ContributorRecallScope.ForDeletedConnectedSystem(connectedSystemId);
         var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guard);
         var survivorObjectTypes = new List<ConnectedSystemObjectType>();
-        var objectTypesById = (await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId))
-            .ToDictionary(type => type.Id);
         var exportEvaluationCache = await new ExportEvaluationServer(Application, guard).BuildExportEvaluationCacheAsync(allSyncRules);
 
         // What the per-object pass did to each Metaverse Object, so the residue pass leaves alone what the real run's
@@ -113,9 +111,8 @@ public partial class ConnectedSystemServer
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var objectType = importRule.ConnectedSystemObjectType
-                ?? (objectTypesById.TryGetValue(importRule.ConnectedSystemObjectTypeId, out var resolvedType) ? resolvedType : null);
-            if (objectType is { RemoveContributedAttributesOnObsoletion: false })
+            var objectType = await ResolveImportRuleObjectTypeAsync(importRule, connectedSystemId);
+            if (!objectType.RemoveContributedAttributesOnObsoletion)
                 continue;
 
             var residueMvoIds = (await guard.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(importRule.Id))
@@ -125,7 +122,7 @@ public partial class ConnectedSystemServer
             foreach (var batch in residueMvoIds.Chunk(batchSize))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var delta in await PreviewResidueBatchAsync(pass, importRule.Id, batch))
+                foreach (var delta in await PreviewResidueBatchAsync(pass, importRule.Id, batch, outcome))
                     yield return delta;
             }
         }
@@ -156,7 +153,6 @@ public partial class ConnectedSystemServer
         // One clone per Metaverse Object for the page, so two of the system's objects joined to the same identity act on
         // the same working copy, as they act on the same instance in the real run.
         var mvoClones = new Dictionary<Guid, MetaverseObject>();
-        var eligibilityReported = new HashSet<Guid>();
 
         foreach (var original in page)
         {
@@ -183,7 +179,7 @@ public partial class ConnectedSystemServer
             if (mvo == null)
                 continue;
 
-            if (result.MvoDeletionDecision is { Fate: not MvoDeletionFate.NotDeleted } decision && eligibilityReported.Add(mvo.Id))
+            if (result.MvoDeletionDecision is { Fate: not MvoDeletionFate.NotDeleted } decision && progress.EligibilityReported.Add(mvo.Id))
             {
                 deltas.Add(new PreviewDelta(
                     ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
@@ -234,7 +230,10 @@ public partial class ConnectedSystemServer
             {
                 var outbound = await previewExportServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(
                     [exportEvaluation.Mvo], pass.ExportEvaluationCache, (exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes));
-                deltas.AddRange(ClassifyOutbound(pass, exportEvaluation.Mvo, outbound));
+                var outboundDeltas = ClassifyOutbound(pass, exportEvaluation.Mvo, outbound).ToList();
+                deltas.AddRange(outboundDeltas);
+                if (await PreviewLastConnectorDisconnectAsync(pass, exportEvaluation.Mvo, outboundDeltas, progress) is { } eligibility)
+                    deltas.Add(eligibility);
             }
         }
 
@@ -246,7 +245,8 @@ public partial class ConnectedSystemServer
     /// <see cref="RecallSyncRuleContributedValuesAsync"/> for the deleted-system scope (no preservation gate, objects
     /// pending deletion left alone), on clones.
     /// </summary>
-    private async Task<List<PreviewDelta>> PreviewResidueBatchAsync(DeprovisioningPreviewPass pass, int syncRuleId, Guid[] batch)
+    private async Task<List<PreviewDelta>> PreviewResidueBatchAsync(DeprovisioningPreviewPass pass, int syncRuleId, Guid[] batch,
+        DeprovisioningPreviewProgress progress)
     {
         var deltas = new List<PreviewDelta>();
         await using var rollbackScope = await pass.Guard.BeginRollbackOnlyTransactionAsync();
@@ -277,10 +277,61 @@ public partial class ConnectedSystemServer
 
             var outbound = await previewExportServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(
                 [mvo], pass.ExportEvaluationCache, (changedAttributes, removals.ToHashSet()));
-            deltas.AddRange(ClassifyOutbound(pass, mvo, outbound));
+            var outboundDeltas = ClassifyOutbound(pass, mvo, outbound).ToList();
+            deltas.AddRange(outboundDeltas);
+            if (await PreviewLastConnectorDisconnectAsync(pass, mvo, outboundDeltas, progress) is { } eligibility)
+                deltas.Add(eligibility);
         }
 
         return deltas;
+    }
+
+    /// <summary>
+    /// A scope exit whose Deprovisioning Action is Disconnect breaks the target object's join, and where that leaves the
+    /// Metaverse Object with no connector at all, synchronisation marks it as having lost its last one
+    /// (<c>ExportEvaluationServer.HandleOutboundDeprovisioningAsync</c>), which housekeeping then deletes under the
+    /// type's grace period. Asked of the engine's own rule (<see cref="ISyncEngine.ShouldMarkLastConnectorDisconnected"/>)
+    /// against the end state: none of the deleted system's objects, and none of the disconnected targets.
+    /// </summary>
+    private async Task<PreviewDelta?> PreviewLastConnectorDisconnectAsync(
+        DeprovisioningPreviewPass pass, MetaverseObject mvo, IReadOnlyCollection<PreviewDelta> outboundDeltas, DeprovisioningPreviewProgress progress)
+    {
+        var disconnectedSystemIds = outboundDeltas
+            .Where(delta => delta.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject && delta.ConnectedSystemId.HasValue)
+            .Select(delta => delta.ConnectedSystemId!.Value)
+            .ToList();
+        if (disconnectedSystemIds.Count == 0 || progress.EligibilityReported.Contains(mvo.Id))
+            return null;
+
+        var remaining = (await pass.Guard.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id))
+            .Where(id => id != pass.ConnectedSystemId)
+            .ToList();
+        foreach (var disconnectedSystemId in disconnectedSystemIds)
+            remaining.Remove(disconnectedSystemId);
+        if (remaining.Count > 0)
+            return null;
+
+        // A probe carrying no connectors, so the engine is asked the question it asks itself after the removal.
+        if (!pass.SyncEngine.ShouldMarkLastConnectorDisconnected(new MetaverseObject { Origin = mvo.Origin, Type = mvo.Type }))
+            return null;
+
+        progress.EligibilityReported.Add(mvo.Id);
+        progress.PendingDeletion.Add(mvo.Id);
+        var gracePeriod = mvo.Type?.DeletionGracePeriod;
+        var decision = gracePeriod is { } grace && grace > TimeSpan.Zero
+            ? new MvoDeletionDecision { Fate = MvoDeletionFate.DeletionScheduled, GracePeriod = grace }
+            : new MvoDeletionDecision { Fate = MvoDeletionFate.DeletedImmediately };
+
+        return new PreviewDelta(
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
+            ObjectDisplayName: mvo.NameOrId,
+            ObjectTypeName: mvo.Type?.Name,
+            MetaverseObjectTypeId: mvo.Type?.Id,
+            MetaverseObjectId: mvo.Id,
+            ConnectedSystemId: disconnectedSystemIds[0],
+            AttributeName: PreviewDeletionEligibilityEvaluator.DeletionEligibilityAttributeName,
+            OldValue: PreviewDeletionEligibilityEvaluator.NotDeletionEligible,
+            NewValue: PreviewDeletionEligibilityEvaluator.DescribeDeletionOutcome(decision));
     }
 
     /// <summary>
@@ -529,5 +580,8 @@ public partial class ConnectedSystemServer
 
         /// <summary>Objects the deletion would delete immediately.</summary>
         public HashSet<Guid> Deleted { get; } = [];
+
+        /// <summary>Objects already reported as becoming eligible for deletion, so none is reported twice.</summary>
+        public HashSet<Guid> EligibilityReported { get; } = [];
     }
 }

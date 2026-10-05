@@ -153,11 +153,6 @@ public partial class ConnectedSystemServer
         // provenance.
         if (task.CheckpointPhase is not SynchronisedDeprovisioningPhase.FinalDeletion)
         {
-            // Fetched once: the rules from GetAllSyncRulesAsync carry their Connected System Object Type
-            // navigation already, so this is the defensive fallback, not the ordinary path.
-            var objectTypesById = (await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystem.Id))
-                .ToDictionary(t => t.Id);
-
             var importRules = systemSyncRules
                 .Where(sr => sr.Direction == SyncRuleDirection.Import)
                 .OrderBy(sr => sr.Id)
@@ -171,11 +166,8 @@ public partial class ConnectedSystemServer
                 // An Object Type with RemoveContributedAttributesOnObsoletion switched off keeps the values it
                 // contributed: the per-object pass honoured that and left them in place, provenance intact, which
                 // is exactly what this pass selects on. Recalling them here would override the policy, so the rule
-                // is skipped, as the stranded-value sweep skips it for the same reason. An unresolvable type is a
-                // hard failure rather than a guess: recalling values the policy may protect cannot be undone.
-                var objectType = importRule.ConnectedSystemObjectType
-                    ?? (objectTypesById.TryGetValue(importRule.ConnectedSystemObjectTypeId, out var resolvedType) ? resolvedType : null)
-                    ?? throw new InvalidDataException($"ExecuteSynchronisedDeprovisioningAsync: Synchronisation Rule {importRule.Id} names Connected System Object Type {importRule.ConnectedSystemObjectTypeId}, which Connected System {connectedSystem.Id} does not have; refusing to recall by provenance without knowing its recall policy.");
+                // is skipped, as the stranded-value sweep skips it for the same reason.
+                var objectType = await ResolveImportRuleObjectTypeAsync(importRule, connectedSystem.Id);
                 if (!objectType.RemoveContributedAttributesOnObsoletion)
                 {
                     Log.Information(
@@ -490,5 +482,22 @@ public partial class ConnectedSystemServer
             "{PendingExportCount} recall Pending Export(s) staged.",
             task.ConnectedSystemId, batch.Count, mvosToPersist.Count, pendingMvoDeletions.Count,
             graceMarkedMvos.Count, stagedPendingExports.Count);
+    }
+
+    /// <summary>
+    /// The Connected System Object Type an import rule of the system being deprovisioned reads from, whose recall policy
+    /// decides whether the residue pass may recall the rule's values. Shared by the deprovisioning run and its preview so
+    /// both answer identically. The rules from <c>GetAllSyncRulesAsync</c> carry the type already; the system's types are
+    /// loaded only when one does not, which is the defensive fallback rather than the ordinary path. An unresolvable type
+    /// is a hard failure rather than a guess: recalling values the policy may protect cannot be undone.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType> ResolveImportRuleObjectTypeAsync(SyncRule importRule, int connectedSystemId)
+    {
+        if (importRule.ConnectedSystemObjectType != null)
+            return importRule.ConnectedSystemObjectType;
+
+        var objectTypes = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        return objectTypes.SingleOrDefault(type => type.Id == importRule.ConnectedSystemObjectTypeId)
+            ?? throw new InvalidDataException($"Synchronisation Rule {importRule.Id} names Connected System Object Type {importRule.ConnectedSystemObjectTypeId}, which Connected System {connectedSystemId} does not have; refusing to recall by provenance without knowing its recall policy.");
     }
 }
