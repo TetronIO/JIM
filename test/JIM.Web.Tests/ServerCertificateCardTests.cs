@@ -104,6 +104,27 @@ public class ServerCertificateCardTests : JimComponentTestContext
         Assert.That(cut.Markup, Does.Contain("Expired"));
     }
 
+    /// <summary>
+    /// "No problem found" is the good outcome (JIM trusts the certificate, or the connection failed for some other
+    /// reason), so it must not be presented as a refusal.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithNothingWrong_PresentsTheVerdictAsGood()
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.None)));
+
+        Assert.That(cut.Find(".jim-certificate-verdict").ClassList, Does.Contain("jim-certificate-verdict-ok"));
+    }
+
+    [TestCase(ServerCertificateFailureReason.UntrustedIssuer)]
+    [TestCase(ServerCertificateFailureReason.Expired)]
+    public void ServerCertificateCard_WithAProblem_PresentsTheVerdictAsARefusal(ServerCertificateFailureReason reason)
+    {
+        var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(reason)));
+
+        Assert.That(cut.Find(".jim-certificate-verdict").ClassList, Does.Not.Contain("jim-certificate-verdict-ok"));
+    }
+
     [Test]
     public void ServerCertificateCard_ShowsTheRemediation()
     {

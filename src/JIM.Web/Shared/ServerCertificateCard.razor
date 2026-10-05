@@ -80,8 +80,10 @@
                     }
                 </div>
 
-                <div class="jim-certificate-verdict">
-                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Class="mr-2" />
+                @* Nothing wrong is the good outcome (JIM trusts it, or the connection failed for another reason), so it
+                   is not drawn as a refusal. *@
+                <div class="jim-certificate-verdict @(IsSound ? "jim-certificate-verdict-ok" : "")">
+                    <MudIcon Icon="@(IsSound ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Block)" Size="Size.Small" Class="mr-2" />
                     <span class="jim-certificate-verdict-reason">@DescribeReason(Diagnostic.FailureReason)</span>
                 </div>
 
@@ -221,6 +223,8 @@
         Diagnostic == null ? [] : ServerCertificateTrustOption.For(Diagnostic);
 
     private bool HasAChoice => ChainFromTheTop.Count > 1;
+
+    private bool IsSound => Diagnostic?.FailureReason == ServerCertificateFailureReason.None;
 
     private async Task TrustAsync()
     {

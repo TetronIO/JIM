@@ -3843,6 +3843,10 @@ html[lang] .jim-kv-table td:first-child {
     font-weight: 500;
 }
 
+.jim-certificate-verdict.jim-certificate-verdict-ok {
+    color: var(--mud-palette-success);
+}
+
 .jim-certificate-verdict-reason {
     text-align: left;
 }
