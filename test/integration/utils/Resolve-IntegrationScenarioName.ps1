@@ -81,3 +81,29 @@ function Get-IntegrationScenarioNumber {
     if ($Scenario -match '^Scenario-(\d{3})-') { return [int]$Matches[1] }
     return $null
 }
+
+function Get-IntegrationScenarioSetupScript {
+    <#
+    .SYNOPSIS
+        The path of a scenario's Setup-Scenario-NNN.ps1 (Scenario 14 -> Setup-Scenario-014.ps1), or $null when
+        the scenario has none. Used by -SetupOnly, which runs the setup script and stops. Setup scripts carry
+        the same three-digit numbers as the scenarios (#1832); building the name from the bare number instead
+        looked for Setup-Scenario1.ps1, found nothing, and left -SetupOnly configuring no scenario at all.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber,
+
+        # The directory holding the Setup-Scenario-NNN.ps1 scripts.
+        [Parameter(Mandatory = $true)]
+        [string]$SetupScriptsPath
+    )
+
+    if ($null -eq $ScenarioNumber) { return $null }
+    $candidate = Join-Path $SetupScriptsPath ('Setup-Scenario-{0:D3}.ps1' -f $ScenarioNumber)
+    if (Test-Path -LiteralPath $candidate) { return $candidate }
+    return $null
+}

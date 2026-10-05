@@ -127,3 +127,38 @@ Describe 'Get-IntegrationScenarioNumber' {
         Get-IntegrationScenarioNumber -Scenario 'Pre-Release' | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Get-IntegrationScenarioSetupScript' {
+    BeforeAll {
+        $script:setupPath = Join-Path ([System.IO.Path]::GetTempPath()) "jim-scenario-setups-$([System.Guid]::NewGuid())"
+        New-Item -ItemType Directory -Path $script:setupPath -Force | Out-Null
+        foreach ($name in @('Setup-Scenario-001.ps1', 'Setup-Scenario-014.ps1')) {
+            Set-Content -LiteralPath (Join-Path $script:setupPath $name) -Value '# setup'
+        }
+    }
+
+    AfterAll {
+        Remove-Item -LiteralPath $script:setupPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'finds a scenario''s zero-padded setup script by its number (-SetupOnly)' {
+        Get-IntegrationScenarioSetupScript -ScenarioNumber 1 -SetupScriptsPath $script:setupPath |
+            Should -Be (Join-Path $script:setupPath 'Setup-Scenario-001.ps1')
+        Get-IntegrationScenarioSetupScript -ScenarioNumber 14 -SetupScriptsPath $script:setupPath |
+            Should -Be (Join-Path $script:setupPath 'Setup-Scenario-014.ps1')
+    }
+
+    It 'returns null for a scenario with no setup script' {
+        Get-IntegrationScenarioSetupScript -ScenarioNumber 5 -SetupScriptsPath $script:setupPath | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when there is no scenario number' {
+        Get-IntegrationScenarioSetupScript -ScenarioNumber $null -SetupScriptsPath $script:setupPath | Should -BeNullOrEmpty
+    }
+
+    It 'finds the real Scenario 001 setup script' {
+        $realPath = Split-Path -Parent $PSScriptRoot
+        Get-IntegrationScenarioSetupScript -ScenarioNumber 1 -SetupScriptsPath $realPath |
+            Should -Be (Join-Path $realPath 'Setup-Scenario-001.ps1')
+    }
+}

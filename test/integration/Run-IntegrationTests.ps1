@@ -3737,10 +3737,7 @@ if ($SetupOnly) {
     Write-Section "Step 5: Setting Up Scenario Configuration (SetupOnly)"
 
     # Validate that a setup script exists for this scenario
-    $setupScript = if ($scenarioNumber) {
-        $candidate = Join-Path $scriptRoot "Setup-Scenario$scenarioNumber.ps1"
-        if (Test-Path $candidate) { $candidate } else { $null }
-    } else { $null }
+    $setupScript = Get-IntegrationScenarioSetupScript -ScenarioNumber $scenarioNumber -SetupScriptsPath $scriptRoot
 
     if (-not $setupScript) {
         Write-RunnerWarning "No dedicated setup script found for '$Scenario'"
