@@ -25,17 +25,17 @@ So an administrator answering a helpdesk ticket has to open each export Synchron
 - An administrator can copy a plain-text summary of why a person is not connected and paste it into a message to a colleague or the helpdesk.
 - The explanation can never disagree with what synchronisation actually does: it is produced by the same evaluation code path, proven by tests across every operator, value type and group shape.
 - Every capability above is available through the REST API and PowerShell with the same content.
-- Non-Administrators can no longer see which systems contribute to or hold data about a person through the Inspect view or the Changes tab.
+- How a join came about is recorded durably from now on, so the answer does not age out with Activity history.
 
 ## Non-Goals
 
 - **Historical re-evaluation.** Criteria are evaluated against the object's current values. "Why was this person projected last March" is answered by the recorded Synchronisation Rule and Activity, not by reconstructing past attribute values.
 - **Explaining missing joins to source systems.** A Connected System with only import Synchronisation Rules and no joined object cannot be explained from the Metaverse Object's side; that is a join-rule question about objects in another Connector Space. Such systems are not listed.
-- **Changing scoping semantics.** This PRD explains the evaluator as it behaves; it does not change how any criterion evaluates. In particular, the evaluator's handling of multi-valued attributes (only the first value is compared) is out of scope; see Open Questions.
+- **Changing scoping semantics.** This PRD explains the evaluator as it behaves; it does not change how any criterion evaluates. In particular, the evaluator's handling of multi-valued attributes (only the first value is compared) is out of scope and tracked in [#1923](https://github.com/TetronIO/JIM/issues/1923).
 - **Explaining Attribute Flow or export values.** What would be exported is already answered by Preview Sync and Preview Exports.
 - **Remediation actions.** No "fix it" buttons; the page explains, it does not edit rules or attribute values.
 - **Persisting explanations.** Explanations are computed on request and never stored.
-- **Role-based access control.** Only the interim Administrator restriction described here; finer-grained permissions remain with the RBAC work.
+- **Changing who can see existing views.** The Inspect view, the Changes tab and the Activity pages keep their current access. Who may see which systems hold or contribute data about a person is re-evaluated as part of the RBAC work. The new explanations live on the Connections tab, which is already Administrator-only.
 
 ## User Stories
 
@@ -44,7 +44,6 @@ So an administrator answering a helpdesk ticket has to open each export Synchron
 3. As an identity architect troubleshooting a rule, I want to see the full criteria tree with the person's current value against each criterion, so that I can tell a data problem (missing Cost Centre) from a rule problem (wrong comparison).
 4. As an administrator investigating an existing account, I want to see which Synchronisation Rule projected or provisioned it, when, and whether the person is still in scope, so that I can explain why the account exists and whether it is about to be deprovisioned.
 5. As an administrator who scripts JIM, I want the same explanations from PowerShell and the REST API, so that I can report on out-of-scope people in bulk or build them into my own tooling.
-6. As a security officer, I want only Administrators to see which systems hold or contribute data about a person, so that ordinary signed-in users cannot map another person's footprint across the estate.
 
 ## Requirements
 
@@ -69,7 +68,7 @@ So an administrator answering a helpdesk ticket has to open each export Synchron
 #### B. Joined connections: why connected
 
 9. Each row of the Connections tab's joined table must expand to show:
-   - **How it joined**, from recorded history: the join type, the Synchronisation Rule that projected, provisioned or joined it (where recorded), the date joined, and a link to the Activity (where recorded). Where history does not record a value, the expansion must say "not recorded" rather than guess.
+   - **How it joined**: the join type, the Synchronisation Rule that projected, provisioned or joined it, the date joined, and a link to the Activity where history still holds it. The joining rule is recorded on the Connected System Object at the moment of joining (requirement 28); for objects joined before that, it is derived from Activity history where possible. Where neither source has a value, the expansion must say "not recorded" rather than guess.
    - **Scoping, evaluated now**: the explanation (requirement 1) for each enabled Synchronisation Rule of the connection's Connected System and object type that is relevant to its role (import rules evaluated against the Connected System Object's values for a source, export rules evaluated against the Metaverse Object's values for a target).
 10. The scoping section must be labelled as evaluated now, against current values, with the evaluation time, so it is not mistaken for the reason at the time of joining.
 11. A joined connection that is now out of scope of a relevant rule (for example an import rule set to remain joined, or an export rule whose deprovisioning is pending) must show that clearly, with the failing criteria.
@@ -84,7 +83,7 @@ So an administrator answering a helpdesk ticket has to open each export Synchron
     - **Not in scope**: the object fails the rule's scoping criteria.
     - **Rule doesn't provision**: the object is in scope, but the rule does not provision new objects (`ProvisionToConnectedSystem` is off or unset), and no object exists to join.
     - **Rule misconfigured**: the rule's scoping cannot be evaluated because a criterion is Invalid (requirement 6); the expansion names the criterion.
-    - **Not yet provisioned**: the object is in scope and the rule provisions, but nothing has been staged. Synchronisation evaluates provisioning only when an object's attribute values change, so this is the state of every already-in-scope object after an export rule is created, has provisioning switched on, or has its criteria widened. The expansion must say what will and will not trigger provisioning, accurately for the engine as it then behaves (see Open Questions).
+    - **Not yet provisioned**: the object is in scope and the rule provisions, but nothing has been staged. Synchronisation evaluates provisioning only when an object's attribute values change, so this is the state of every already-in-scope object after an export rule is created, has provisioning switched on, or has its criteria widened. The expansion must say what will and will not trigger provisioning, accurately for the engine as it then behaves (see Resolved Decisions).
 
     Provisioning that is already under way, and Object Type conflicts, always involve a joined object, so they appear on the joined rows (requirements 12 and 13), never here.
 17. Each entry's row must show the Connected System, the Synchronisation Rule, the reason chip followed by a one-line hint, and a **Copy summary** action. The hint names the failing attributes without their values (for example "Fails on Department; Cost Centre or Job Title") or briefly qualifies a non-scoping reason ("In scope; nothing staged yet"). The hint must not wrap; overflow is truncated with an ellipsis.
@@ -116,12 +115,11 @@ So an administrator answering a helpdesk ticket has to open each export Synchron
 26. Criteria must be returned as flat, filterable objects carrying a path that locates each in the tree, so that `Where-Object { -not $_.Met }` lists every failing criterion. The path is the top-level group's position followed by each child's position within its group, one-based and dot-separated, counting criteria before child groups as the evaluator does (`1.3.2` is the second child of the third child of the first top-level group).
 27. `Get-JIMMetaverseObject` must surface Created By and Last Updated By.
 
-#### G. Interim Administrator restriction
+#### G. Durable join record
 
-28. The Details tab's **Inspect** view and the **Changes** tab must be visible only to Administrators.
-29. For non-Administrators, provenance and change history must not be loaded server-side at all, not merely hidden.
-30. A saved view preference or a deep link that points a non-Administrator at a hidden view or tab must fall back to the Form view and the Details tab, without an error.
-31. This removes access non-Administrators have today; the changelog must record it as changed behaviour.
+28. When a Connected System Object is joined to a Metaverse Object (by projection, inbound matching, export matching or provisioning), JIM must record the Synchronisation Rule responsible and a snapshot of its name on the Connected System Object, and clear both when the join is broken.
+29. Deleting a Synchronisation Rule must not fail or remove the Connected System Object; the recorded rule reference is cleared and the name snapshot kept.
+30. Recording must not change any synchronisation outcome or add measurable cost to synchronisation.
 
 ### Non-Functional Requirements
 
@@ -168,7 +166,7 @@ Evaluated 4 Oct 2026 10:41 UTC.
 
 **Given** a new export rule "Learning Platform Users Export" (provisioning on) was created after Jane's attribute values last changed, and Jane meets its criteria
 **When** the administrator expands Not connected
-**Then** a Learning Platform row shows "Not yet provisioned · In scope; nothing staged yet", and its expansion explains what will stage the provisioning export, worded for the engine's behaviour at the time (today: the next change to Jane's attribute values; see Open Questions).
+**Then** a Learning Platform row shows "Not yet provisioned · In scope; nothing staged yet", and its expansion explains what will stage the provisioning export, worded for the engine's behaviour at the time (today: the next change to Jane's attribute values; see Resolved Decisions).
 
 ### Scenario 3: In scope, rule does not provision
 
@@ -187,12 +185,7 @@ Evaluated 4 Oct 2026 10:41 UTC.
 **When** the administrator opens the Connections tab
 **Then** the rule's entry shows the criterion as Invalid and the rule's outcome as undetermined; every other entry still loads.
 
-### Scenario 6: Non-Administrator
-
-**Given** a user without the Administrator role opens Jane's Metaverse Object
-**Then** only the Details and Properties tabs are shown, the Details tab offers Form and Tabs views but not Inspect, and no provenance or change history is loaded. A deep link to the Changes tab (`?t=changes`), or to the Inspect view (`?view=inspect`), opens the Details tab in Form view instead.
-
-### Scenario 7: PowerShell
+### Scenario 6: PowerShell
 
 ```powershell
 PS> Get-JIMMetaverseObjectConnection -Id $jane.Id -IncludeNotConnected | Format-Table ConnectedSystem, Object, Role, Join, State
@@ -220,7 +213,7 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 
 - No new NuGet packages or third-party dependencies.
 - Self-contained and air-gap deployable; no external services.
-- No database schema change is needed for the explanations themselves. Recording the joining Synchronisation Rule durably needs one (see Open Questions); that is an explicit decision, not an assumption.
+- One schema change only: two nullable columns on Connected System Objects for the durable join record (section G). The explanations themselves need none.
 - Must not change any synchronisation outcome. The shared evaluation path is a refactor for synchronisation, verified by the existing synchronisation test suites passing unchanged.
 - Surface parity: portal, REST and PowerShell ship in the same PR (or stack).
 
@@ -232,15 +225,15 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 | Models | Explanation tree types, not-connected entry and reason enum, extended connection DTO |
 | API | New `GET` connections endpoint on `MetaverseController`; Created By and Last Updated By on the Metaverse Object DTO |
 | PowerShell | New `Get-JIMMetaverseObjectConnection`; `Get-JIMMetaverseObject` output gains two properties |
-| UI | `View.razor` Connections tab (row expansion, Not connected section, Copy summary); shared explanation tree component; Inspect view and Changes tab gated to Administrators |
-| Worker | None functionally (synchronisation keeps calling the boolean methods); records the joining rule at the four join sites if Open Question 3 is adopted |
-| Database | None for the explanations; two nullable columns on Connected System Objects if the durable join record (Open Question 3) is adopted |
+| UI | `View.razor` Connections tab (row expansion, Not connected section, Copy summary); shared explanation tree component |
+| Worker | Records the joining rule at the join sites; otherwise none (synchronisation keeps calling the boolean methods) |
+| Database | Two nullable columns on Connected System Objects (joining rule reference, name snapshot); one migration |
 
 ## Documentation Impact
 
 | Doc | Change |
 |------|--------|
-| `docs/configuration/metaverse.md` | New "Connections" section under Objects: joined rows and their expansion, the Not connected section, reasons, Copy summary, "evaluated now"; note that Inspect and Changes are Administrator-only |
+| `docs/configuration/metaverse.md` | New "Connections" section under Objects: joined rows and their expansion, the Not connected section, reasons, Copy summary, "evaluated now" |
 | `docs/configuration/synchronisation-rules.md` | Short cross-link from scoping criteria to the Connections explanation, including how missing values and top-level groups evaluate |
 | `docs/configuration/sync-preview.md` | Update the passing mention of the Connections tab |
 | `docs/powershell/metaverse.md` | New `Get-JIMMetaverseObjectConnection` section with output shapes; Created By and Last Updated By on `Get-JIMMetaverseObject` |
@@ -254,17 +247,13 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 
 ## Open Questions
 
-Research for the plan turned up four findings that bear on this PRD. Questions 1, 3 and 4 need a decision; question 2 needs a verifying test before anything else is built.
+1. **Scoping groups nested more than two levels deep may never load.** The criteria editor lets a group hold child groups at any depth, but the rule loader synchronisation uses (`ConnectedSystemRepository.GetSyncRulesAsync`) includes only top-level groups and their direct child groups. A third-level group would be absent at evaluation time, and an absent group's parent can evaluate as an empty group, which counts as met, silently widening scope. If a database test confirms this, it is a synchronisation integrity defect and must be fixed first, in its own stack layer, because the explanation must load the same tree as synchronisation or the two will disagree.
 
-1. **Multi-valued attributes in scoping.** The evaluator compares only the first value of a multi-valued attribute (`FirstOrDefault`), and the criteria editor lets administrators pick multi-valued attributes, so "Groups contains Finance Readers" passes or fails on whichever value happens to be first. This PRD only makes that visible (requirement 7). Recommendation: file a separate issue to decide the intended semantics (any value for positive operators, no value for negated ones) and fix them there; because the explanation shares the evaluator, it will follow automatically.
-2. **Scoping groups nested more than two levels deep may never load.** The criteria editor lets a group hold child groups at any depth, but the rule loader synchronisation uses (`ConnectedSystemRepository.GetSyncRulesAsync`) includes only top-level groups and their direct child groups. A third-level group would be absent at evaluation time, and an absent group's parent can evaluate as an empty group, which counts as met, silently widening scope. If a database test confirms this, it is a synchronisation integrity defect and must be fixed first, in its own stack layer, because the explanation must load the same tree as synchronisation or the two will disagree.
-3. **How a join came about is only partly recorded.** No Connected System Object records the Synchronisation Rule that joined it. Today the projecting rule can be recovered from the Activity history, and the provisioning rule while its export is pending (or from Activity history afterwards); the rule behind an inbound or export-matching join is recorded nowhere, and everything that is recorded ages out with Activity retention. Options:
-   - **Derive only** (no schema change): best effort from history, "not recorded" for every join and for anything older than retention.
-   - **Record durably** (recommended): two nullable columns on Connected System Objects (the joining rule, and a snapshot of its name), set at the four places a join is made, with derivation as the fallback for existing data. The Activity link stays derived, since Activities are purged anyway.
-4. **Activity pages show the same information to every signed-in user.** The Activity list, Activity detail and execution item pages are open to the User role, and an execution item shows the Connected System Object, its Connected System and the Metaverse Object attribute changes that run made. Restricting the Inspect view and the Changes tab therefore narrows, but does not close, what a non-Administrator can learn about a person's footprint. Recommendation: accept this for #348 and carry it into the RBAC work, rather than restricting Activity pages here.
+## Resolved Decisions
 
-Resolved:
-
+2. **Multi-valued attributes in scoping** compare only the first value. Filed as [#1923](https://github.com/TetronIO/JIM/issues/1923); this PRD only makes the behaviour visible (requirement 7), and the explanation follows whatever #1923 decides because it shares the evaluator.
+3. **How a join came about is recorded durably** (section G): two nullable columns on Connected System Objects, set where joins are made, with derivation from Activity history as the fallback for existing objects. Deriving only was rejected because the rule behind an inbound or export-matching join is recorded nowhere today, and everything derived ages out with Activity retention.
+4. **Access to existing views is unchanged.** An interim Administrator restriction on the Inspect view and the Changes tab was considered and dropped: the Activity pages show the same per-run information to every signed-in user, so the restriction would narrow exposure without closing it. All three are re-evaluated together in the RBAC work.
 5. **Rules on disabled Connected Systems** are listed with their reason and a "Connected System disabled" qualifier in the hint; rules on a Connected System being deleted are excluded (requirement 15).
 6. **"Provisions at next sync" was the wrong promise.** Synchronisation evaluates provisioning only when an object's attribute values change, so creating an export rule, switching provisioning on, or widening criteria does not provision objects that are already in scope until their data next changes. The reason is therefore named **Not yet provisioned**, and its wording describes what actually triggers provisioning (requirement 16). Whether that engine behaviour is itself a defect is a separate question for a separate issue: once confirmed by a test, it should be filed and linked here.
 
@@ -278,8 +267,8 @@ Resolved:
 - [ ] An Invalid criterion is reported per rule without breaking the page; credential values never appear.
 - [ ] `Get-JIMMetaverseObjectConnection` and the new REST endpoint return the same information, with tests and docs.
 - [ ] Created By and Last Updated By on the Metaverse Object DTO and `Get-JIMMetaverseObject`.
-- [ ] Inspect view and Changes tab hidden from non-Administrators, with no server-side data load for them, and safe fallback for saved preferences and deep links.
-- [ ] Changelog entries (new feature; changed behaviour for the restriction) and the public docs listed above.
+- [ ] Each new join records the responsible Synchronisation Rule on the Connected System Object; deleting the rule clears the reference and keeps the name; synchronisation outcomes are unchanged.
+- [ ] Changelog entry and the public docs listed above.
 
 ## Additional Context
 
