@@ -1,10 +1,10 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Planned
+- **Status:** Doing (Phases 0-1 and layers 1-2 complete)
 - **Created:** 2026-10-05
 - **Author:** Jay
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
-- **Plan:** [`../plans/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../plans/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
+- **Plan:** [`../../plans/doing/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../plans/doing/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
 - **UI mockups:** [MVO Connections Mocks](https://claude.ai/artifact/4Tj5DYpEMR7c8g9pSoAqD9) (board 1B is the chosen layout; 1A is the rejected alternative)
 
 ## Problem Statement
@@ -243,7 +243,7 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 ## Dependencies
 
 - None blocking. Builds on the Connections tab (#1519) and value provenance (#399).
-- Related: [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements (its "validate whether an object is in scope" item is partly delivered here, for saved rules), [PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md) (integration coverage of the same evaluator; complementary, and an explanation endpoint could later give it a no-commit evaluation path), [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping (any new criterion kind must extend the explanation too).
+- Related: [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements (its "validate whether an object is in scope" item is partly delivered here, for saved rules), [PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](../PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md) (integration coverage of the same evaluator; complementary, and an explanation endpoint could later give it a no-commit evaluation path), [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping (any new criterion kind must extend the explanation too).
 
 ## Resolved Decisions
 
@@ -253,6 +253,8 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 4. **Access to existing views is unchanged.** An interim Administrator restriction on the Inspect view and the Changes tab was considered and dropped: the Activity pages show the same per-run information to every signed-in user, so the restriction would narrow exposure without closing it. All three are re-evaluated together in the RBAC work.
 5. **Rules on disabled Connected Systems** are listed with their reason and a "Connected System disabled" qualifier in the hint; rules on a Connected System being deleted are excluded (requirement 15).
 6. **"Provisions at next sync" was the wrong promise.** Synchronisation evaluates provisioning only when an object's attribute values change, so creating an export rule, switching provisioning on, or widening criteria does not provision objects that are already in scope until their data next changes. The reason is therefore named **Not yet provisioned**, and its wording describes what actually triggers provisioning (requirement 16). A workflow test confirms the engine behaviour, which is a defect in its own right: filed as [#1925](https://github.com/TetronIO/JIM/issues/1925). When it is fixed, the Not yet provisioned wording changes with it.
+7. **An Invalid criterion makes the outcome undetermined only where synchronisation would fail.** Synchronisation stops at the first met top-level group, so an invalid criterion in a later group is never reached and the object is in scope. Reporting such a rule as undetermined would contradict requirement 5, so the explanation reports the outcome synchronisation reaches (in scope there) and still marks the criterion Invalid; requirement 6's undetermined outcome applies where synchronisation would reach the invalid criterion first. Either way the criterion is visible, so Rule misconfigured is shown wherever it changes the answer.
+8. **Masking (requirement 8)** applies to attributes on the credential denylist, and to attributes whose name looks like a credential when their type could hold one (text or binary). A credential-like name on a date, number or flag (`pwdLastSet`, `badPwdCount`) is shown, since it cannot carry credential material and is often exactly why a rule scopes someone out.
 
 ## Acceptance Criteria
 
@@ -269,7 +271,7 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 
 ## Additional Context
 
-- Scoping evaluator: [src/JIM.Application/Servers/ScopingEvaluationServer.cs](../../src/JIM.Application/Servers/ScopingEvaluationServer.cs)
-- Scoping behaviour reference: [engineering/SYNC_RULE_SCOPING.md](../SYNC_RULE_SCOPING.md)
-- Connections tab: [src/JIM.Web/Shared/MetaverseObjectConnectionsTable.razor](../../src/JIM.Web/Shared/MetaverseObjectConnectionsTable.razor), [src/JIM.Web/Pages/Types/View.razor](../../src/JIM.Web/Pages/Types/View.razor)
+- Scoping evaluator: [src/JIM.Application/Servers/ScopingEvaluationServer.cs](../../../src/JIM.Application/Servers/ScopingEvaluationServer.cs)
+- Scoping behaviour reference: [engineering/SYNC_RULE_SCOPING.md](../../SYNC_RULE_SCOPING.md)
+- Connections tab: [src/JIM.Web/Shared/MetaverseObjectConnectionsTable.razor](../../../src/JIM.Web/Shared/MetaverseObjectConnectionsTable.razor), [src/JIM.Web/Pages/Types/View.razor](../../../src/JIM.Web/Pages/Types/View.razor)
 - The original #348 also asked for Metaverse Object metadata and attribute provenance; those shipped in the Properties tab, #1519 and #399, and are not repeated here.

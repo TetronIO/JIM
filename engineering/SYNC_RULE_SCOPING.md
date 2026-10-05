@@ -143,7 +143,7 @@ A DateTime scoping criterion can compare against a date resolved relative to "no
 
 `RelativeDateResolver.Resolve(count, unit, direction, nowUtc)` (`src/JIM.Models/Search/`) turns those fields into a concrete UTC boundary: FromNow adds and Ago subtracts; month/year arithmetic is calendar-correct (clamping short months); every unit except Hours is rounded down to midnight UTC (whole-day rounding), while Hours keeps instant precision. It is a pure function: the caller supplies `nowUtc` so the boundary is deterministic and resolved once per evaluation pass.
 
-`ScopingEvaluationServer` resolves "now" once at the top of `IsMvoInScopeForExportRule` / `IsCsoInScopeForImportRule` (injectable for tests) and feeds the resolved boundary into the existing `EvaluateDateTimeComparison`. A relative criterion never matches an object with no value for the attribute. The predefined-search query translator resolves the boundary to a literal before building the SQL predicate, so the per-column DateTime index stays usable.
+`ScopingEvaluationServer` resolves "now" once at the top of `IsMvoInScopeForExportRule` / `IsCsoInScopeForImportRule` (injectable for tests) and the shared evaluator compares against the resolved boundary (see Evaluation and explanations below). A relative criterion never matches an object with no value for the attribute. The predefined-search query translator resolves the boundary to a literal before building the SQL predicate, so the per-column DateTime index stays usable.
 
 Worked examples (export rule on a Person's termination-date attribute):
 
@@ -155,6 +155,19 @@ Worked examples (export rule on a Person's termination-date attribute):
 A rule's criteria are a tree: top-level groups (ORed together; the rule is in scope if any top-level group is met), each an `All` or `Any` group of criteria and child groups, nested to any depth. An empty group counts as met, and a rule with no groups is in scope.
 
 Because an empty group counts as met, a group that fails to load silently widens the rule's scope, so loading the whole tree is a synchronisation integrity requirement, not a convenience. Include chains cannot express "every level", so every repository path that reads a rule's tree goes through `SyncRuleScopingTreeLoader` (`src/JIM.PostgresData/Repositories/`): `LoadAsync` completes rules' trees (tracked or untracked, matching the rules), and `GetCriterionOwnershipAsync` resolves criteria at any depth to their owning rule for reference queries (configuration drift scope, the attribute-in-use check). Only top-level groups carry the rule id; deeper groups carry only `ParentGroupId`, so the loader walks the tree level by level. Do not add scoping-group `Include`s to a rule loader; call the loader. `SyncRuleScopingDepthDatabaseTests` guards every path against real PostgreSQL. (Before #348's prerequisite fix, the loaders included two levels, so deeper groups were ignored at evaluation and dropped from the editor.)
+
+## Evaluation and explanations
+
+There is one implementation of scoping evaluation: `ScopingEvaluator` (`src/JIM.Application/Servers/Scoping/`). `ScopingEvaluationServer.IsMvoInScopeForExportRule` / `IsCsoInScopeForImportRule`, which every synchronisation path calls, and `ExplainMvoForExportRule` / `ExplainCsoForImportRule`, which tell an administrator why an object is or is not in scope (#348), are thin wrappers over it, so an explanation always reports the outcome synchronisation reaches. Its semantics:
+
+- Top-level groups are ORed, and synchronisation stops at the first one met. Within a group every child is evaluated (no short-circuit), then `All` or `Any` applies; an empty group is met.
+- A missing value (no row, or a Metaverse asserted-null marker, #91) fails every comparison except Equals against an all-empty absolute criterion.
+- Only an attribute's first value is compared ([#1923](https://github.com/TetronIO/JIM/issues/1923)).
+- An operator invalid for the attribute's type throws `InvalidOperationException` when synchronisation reaches it (defence in depth behind the write path's validation).
+
+The evaluator reads objects through a struct value source (`MvoScopingValueSource`, `CsoScopingValueSource`) under a generic constraint, so there is no boxing or interface dispatch, and builds an explanation tree only when one is asked for: the boolean path allocates nothing per evaluation (`ScopingExplanationTests` guards this; it previously cost a list per group and a closure per criterion). In explain mode an invalid criterion is recorded as `Invalid` rather than thrown, every top-level group is evaluated so the whole tree can be shown, and the rule outcome is still the one synchronisation would reach: `Undetermined` only where synchronisation would reach the invalid criterion before a met group, `InScope` where it stops at an earlier met group.
+
+An explanation (`ScopingExplanation`, `src/JIM.Models/Logic/Scoping/`) records each group's outcome, met count and child count, and each criterion's attribute, comparison, expected value (a relative date's resolved boundary too), the value compared, how many further values went uncompared, and an outcome (Met, Not met, No value, Attribute missing, Invalid). Nodes carry a one-based dot path (`1.3.2`), criteria counted before child groups as the evaluator takes them. Values are rendered culture-invariantly (dates in UTC, `4 Oct 2026` at midnight, `4 Oct 2026 10:41 UTC` otherwise). Values of credential attributes are withheld: names on `CredentialAttributes`' denylist always, and credential-like names on text or binary attributes (a date such as `pwdLastSet` cannot hold a credential, and its value is often why a rule scopes someone out). `ScopingExplanationTests` compares the two modes across every operator, data type and value state, relative dates, trees to depth four, and a few thousand seeded random trees, on both sides.
 
 ## What scoping does not do today
 
@@ -169,4 +182,5 @@ The following behaviours are out of scope for the current implementation. They a
 - Inbound flow: `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`, `src/JIM.Application/Servers/ScopingEvaluationServer.cs`.
 - Outbound flow: `src/JIM.Application/Servers/ExportEvaluationServer.cs`.
 - Deletion rule evaluation: `src/JIM.Application/Servers/SyncEngine.cs`.
-- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.
+- Evaluation and explanations: `src/JIM.Application/Servers/Scoping/ScopingEvaluator.cs`, `src/JIM.Models/Logic/Scoping/`.
+- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `ScopingExplanationTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.

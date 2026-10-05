@@ -1,11 +1,11 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Planned
+- **Status:** Doing (Phases 0-1 and layers 1-2 complete)
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
-- **PRD:** [`../prd/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../prd/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
+- **PRD:** [`../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
 - **UI mockups:** [MVO Connections Mocks](https://claude.ai/artifact/4Tj5DYpEMR7c8g9pSoAqD9) (board 1B chosen)
-- **Related:** [#1519](https://github.com/TetronIO/JIM/issues/1519) Connections tab and Sync Preview, [#399](https://github.com/TetronIO/JIM/issues/399) value provenance, [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements, [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping, [`../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md`](../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)
-- **Last Updated:** 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
+- **Related:** [#1519](https://github.com/TetronIO/JIM/issues/1519) Connections tab and Sync Preview, [#399](https://github.com/TetronIO/JIM/issues/399) value provenance, [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements, [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping, [`../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md`](../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)
+- **Last Updated:** 2026-10-05 (Phase 1: shared evaluator); 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
 
 ## Overview
 
@@ -183,7 +183,7 @@ Results (2026-10-05):
 
 [#1932](https://github.com/TetronIO/JIM/pull/1932), base `main`. Wider than planned: the Changes tab kept the previous object's rows (and Load more appended the new object's page 2 to them), the Connections tab and badge could be overwritten by a load still running for the previous object, the Password tab never reloaded when the reader arrived on the same tab, and Created By / Last Updated By survived to an object with none recorded. Rather than resetting fields one by one, everything the page holds about the object moved into `MetaverseObjectViewState` (`src/JIM.Web/Models/`), replaced wholesale when the object changes; every load writes into the instance it captured, so late results land in one no longer shown. Arriving on the same `?t=` tab reports no tab change, so the page loads that tab itself (`LoadTabAsync`, keyed on the slug for every lazy tab). `MetaverseObjectViewNavigationTests` (bUnit, page level) covers each tab and the late-arrival cases. **Phase 5's explanation and Not connected state belongs on `MetaverseObjectViewState`**, which resets it for free.
 
-### Phase 1: Shared evaluator and explanation model
+### Phase 1: Shared evaluator and explanation model ✅
 
 1. Explanation model types (above) in `JIM.Models`.
 2. `ScopingEvaluator` with struct value sources and `ScopingTraceBuilder`; `ScopingEvaluationServer` boolean methods delegate to it; add `ExplainMvoForExportRule` and `ExplainCsoForImportRule`.
@@ -193,6 +193,8 @@ Results (2026-10-05):
    - Seeded randomised tree generator comparing both outputs over a few thousand cases.
    - Invalid criterion: boolean throws (unchanged); explanation returns Undetermined with the Invalid node; attribute missing; credential masking; additional values count.
 4. Existing synchronisation suites (`JIM.Worker.Tests`, preview tests) pass unchanged; an allocation check (or BenchmarkDotNet-free micro-measure in a test) shows the boolean path allocates no more than before.
+
+Results: `ScopingEvaluator` (`src/JIM.Application/Servers/Scoping/`) is now the only evaluation code; both boolean methods and both explain methods wrap it. `ScopingExplanationTests` (47 tests) compares the two modes across every operator, data type and value state on both sides, every relative date unit and direction, trees to depth four, and 2,500 seeded random trees per side including invalid and attribute-less criteria; the existing `ScopingEvaluationTests` pass unchanged. The boolean path now allocates nothing per evaluation (it was 392 bytes for a two-group, three-criterion rule), guarded by a test. Two refinements, recorded in the PRD's Resolved Decisions 7 and 8: an invalid criterion in a top-level group after a met one leaves the outcome In scope, as synchronisation decides it; and credential-like names are masked only on text or binary attributes. Comparison of a criterion's ordered types now goes through one generic `CompareOrdered<T>` rather than four copies; behaviour is identical (null handling, scale-insensitive decimals and tick-based date comparison included), proven by the agreement sweep.
 
 ### Phase 2: Summariser
 
