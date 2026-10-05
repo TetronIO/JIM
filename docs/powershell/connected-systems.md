@@ -344,45 +344,74 @@ Deletes a Connected System and all its associated data.
 
 ```powershell
 # ById (default)
-Remove-JIMConnectedSystem -Id <int> [-Force] [-PassThru]
+Remove-JIMConnectedSystem -Id <int> [-DeleteImmediately] [-ChangeReason <string>]
+    [-PreviewActivityId <guid>] [-PassThru] [-Force]
 
 # ByInputObject
-Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-Force] [-PassThru]
+Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-DeleteImmediately] [-ChangeReason <string>]
+    [-PreviewActivityId <guid>] [-PassThru] [-Force]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected System identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
-| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted Connected System Object |
+| `Id` | `int` | Yes (ById) | | Connected System identifier. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System object from the pipeline |
+| `DeleteImmediately` | `switch` | No | `$false` | Deletes immediately and **keeps** the attribute values the system contributed, instead of deprovisioning through synchronisation. The kept values lose their provenance, so nothing can ever recall them, and downstream systems are not corrected. |
+| `ChangeReason` | `string` | No | | Reason for the deletion, recorded on its Activity and on the configuration change history tombstone |
+| `PreviewActivityId` | `guid` | No | | The deletion preview this deletion was made after reading, as returned by [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion`](previews.md#new-jimconfigurationchangepreview). Recorded on the deletion's Activity. JIM refuses the deletion, deleting nothing, when the id is not a deletion preview of this same Connected System. |
+| `PassThru` | `switch` | No | `$false` | Returns the deletion result for a deletion that completes immediately |
+| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt, and the lookup of headline counts the prompt uses |
+
+By default the deletion deprovisions the system through synchronisation: the system is fenced and a background run takes every Connected System Object through the same obsoletion a synchronisation disconnect would, so other systems take over the values they also contribute, values nothing else contributes are cleared, Deletion Rules are evaluated, and corrections are staged for the other Connected Systems, before the system itself is deleted. To see all of that before it happens, run [`New-JIMConfigurationChangePreview -Deletion`](previews.md#new-jimconfigurationchangepreview) first and pass its `ActivityId` to `-PreviewActivityId`.
+
+If a deprovisioning run fails partway, the system stays fenced (its Status remains `Deleting`). Running the cmdlet again retries the run from its checkpoint; running it with `-DeleteImmediately` finishes the deletion immediately, abandoning the remaining deprovisioning work.
 
 ### Output
 
-When `-PassThru` is specified, returns the deleted Connected System Object. Otherwise, no output.
+When the deletion queues (always the case by default), returns a tracking object:
+
+| Property | Description |
+|----------|-------------|
+| `ActivityId` | The deletion Activity's id; monitor it with `Get-JIMActivity` |
+| `WorkerTaskId` | The queued Worker Task's id |
+| `Outcome` | `QueuedAsBackgroundJob`, or `QueuedAfterSync` when a running synchronisation delays it |
+| `ConnectedSystemObjectCount`, `ContributedValueCount`, `ContributedValueObjectCount` | Headline counts from the deletion's impact summary, or `$null` when `-Force` skipped the lookup |
+
+When an immediate deletion completes synchronously, nothing is returned unless `-PassThru` is specified, in which case the deletion result (`Outcome`, `ActivityId`) is returned.
 
 ### Examples
 
-```powershell title="Delete a Connected System with confirmation"
+```powershell title="Deprovision a Connected System with confirmation"
 Remove-JIMConnectedSystem -Id 3
 ```
 
-```powershell title="Delete without confirmation"
-Remove-JIMConnectedSystem -Id 3 -Force
+```powershell title="Preview the deletion, then delete and record the preview"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -Deletion -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+Remove-JIMConnectedSystem -Id 3 -PreviewActivityId $preview.ActivityId -ChangeReason "Decommissioned (CHG0123)"
 ```
 
-```powershell title="Delete every Connected System matching a name pattern"
+```powershell title="Deprovision without confirmation and follow the run"
+$tracking = Remove-JIMConnectedSystem -Id 3 -Force
+Get-JIMActivity -Id $tracking.ActivityId
+```
+
+```powershell title="Delete immediately, keeping the values the system contributed"
+Remove-JIMConnectedSystem -Id 3 -DeleteImmediately -Force
+```
+
+```powershell title="Delete every Connected System matching a name pattern, immediately"
 # -Name supports wildcards, so this deletes ALL matching Connected Systems and
 # their connector spaces. Run it without -Force first to confirm the matches.
-Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Force
+Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -DeleteImmediately -Force
 ```
 
 ### Notes
 
-- Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Small Connected Systems (fewer than 1,000 objects) are deleted immediately. Large systems are queued as a background job; you can monitor progress in the activities log.
+- Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation, and the prompt states the headline impact of the chosen mode.
+- Deprovisioning always runs as a background job. An immediate deletion of a small Connected System (fewer than 1,000 objects) completes straight away; a larger one is queued as a background job.
 
 ---
 
@@ -413,7 +442,7 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-Disab
 
 ### Output
 
-With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input (in development). Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings).
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input. Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings).
 
 ### Examples
 

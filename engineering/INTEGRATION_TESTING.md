@@ -118,7 +118,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-022-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 022 (cumulative): Discovery, Provision, Override (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-024-ActiveDirectoryPasswordPolicy" -DirectoryType ActiveDirectory -Step Discovery  # Scenario 024 (cumulative): Policy, Discovery, Provision, Override (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-025-ActiveDirectoryDeltaImportIntegrity" -DirectoryType ActiveDirectory -Step RestoreFromBackup  # Scenario 025 (independent steps): RecycleBin, RestoreFromBackup (lab only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-023-UniqueValueGeneration" -Step Brownfield  # Scenario 023 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag, NeverReuse
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-023-UniqueValueGeneration" -Step Brownfield  # Scenario 023 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, NeverReuse
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-026-DerivedAttributeFlows" -Step WrongOrder  # Scenario 026 (cumulative): Ordering, Stability, CrossSystem, WrongOrder, MissingInput, Cycle, SurfaceParity
 
 # Combine scenario, template, and step
@@ -546,13 +546,15 @@ All templates generate realistic enterprise data following normal distribution p
 - HR CSV includes Company attribute: "Panoply" for employees, partner companies for contractors
 - Partner companies: Nexus Dynamics, Akinya, Rockhopper, Stellar Logistics, Vertex Solutions
 
+**Generated and derived identifiers** (since [#1803](https://github.com/TetronIO/JIM/issues/1803)): the scenario runs `Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName`, so Account Name is generated (`Lower(firstName) + "." + Lower(lastName)`, a number appended only when taken), Email is derived from it (`mv["Account Name"] + "@panoply.local"`) and User Principal Name from Email; the HR CSV's `samAccountName` column is a row key for the scenario's own CSV edits and flows nowhere. Each test finds its person's directory account by the Account Name read back from the Metaverse by Employee ID. The switches come from `Get-IntegrationScenarioSetupParameters` (`utils/Resolve-IntegrationScenarioName.ps1`), which `-SetupOnly` uses too, so the demonstration environment matches the scenario; they stay opt-in on the setup script because Scenarios 004 to 007, 017, 020, 021, 022 and 024 compose it with sourced identifiers.
+
 **Test Steps** (executed sequentially):
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **Joiner** | User added to HR CSV -> provisioned to AD with correct attributes and group memberships |
+| 1 | **Joiner** | User added to HR CSV -> provisioned to AD with correct attributes and group memberships; Account Name generated, Email and User Principal Name derived from it (in the Metaverse and the directory); two same-named joiners get `marisol.fenwick` and `marisol.fenwick1`, each with its own derived Email and User Principal Name |
 | 2a | **Mover** | User title changed in CSV -> attribute updated in AD (no DN impact) |
-| 2b | **Mover-Rename** | User name changed in CSV -> DN renamed in AD (same container) |
+| 2b | **Mover-Rename** | User name changed in CSV -> DN renamed in AD (same container); the generated Account Name is kept |
 | 2c | **Mover-Move** | User department changed in CSV (Admin->Finance) -> DN recalculated with new OU, LDAP move operation executed |
 | 2d | **Disable** | User status set to `Archived` in CSV -> AD account disabled via `userAccountControl` (Samba AD only; skipped for OpenLDAP, which has no `userAccountControl` equivalent) |
 | 2e | **Enable** | User status set back to `Active` in CSV -> AD account re-enabled (Samba AD only) |
@@ -1325,11 +1327,11 @@ Samba AD and OpenLDAP.
 
 #### Scenario 023: Unique Value Generation
 
-**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP and Samba AD (54 assertions each, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario-001.ps1 -GenerateAccountName` enables it.
+**Status**: implemented for releases 1 and 2 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP and Samba AD. The In development `Features.UniqueValueGeneration` flag the feature was built behind was removed when it shipped ([#1803](https://github.com/TetronIO/JIM/issues/1803)), and the scenario's flag step with it.
 
 **Purpose**: prove generated values end to end against a real directory: the HR feed carries no IT-owned columns (`Generate-TestCSV.ps1 -OmitItOwnedAttributes`) and JIM generates the Account Name instead, plus a sequence (Staff Number), a random token (Badge Code) and an export-mode value on the directory (`preferredLanguage`). The unit and database tiers cover the service in isolation; this is the only coverage of generation interacting with joins, Attribute Priority, drift detection and a directory's own uniqueness.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario-023-UniqueValueGeneration.ps1` and `test/integration/Setup-Scenario-023.ps1`, which composes `Setup-Scenario-001.ps1 -GenerateAccountName`. Scenario 001 itself is unchanged; it moves to generated Account Names when the feature flag is removed ([#1803](https://github.com/TetronIO/JIM/issues/1803)), because its setup is shared by Scenarios 004 to 007, 017, 020, 021 and 22.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-023-UniqueValueGeneration.ps1` and `test/integration/Setup-Scenario-023.ps1`, which composes `Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName`. Scenario 001 itself runs on the same generated and derived identifiers since #1803; the switches stay opt-in on `Setup-Scenario-001.ps1`, because its setup is also the substrate of Scenarios 004 to 007, 017, 020, 021, 022 and 024, which rely on sourced identifiers.
 
 | Test | Assertion |
 |------|-----------|
@@ -1344,21 +1346,20 @@ Samba AD and OpenLDAP.
 | 8 Start again | Counter back to the configured Start; survivors keep their numbers; no collisions; the REST route answers too |
 | 9 Failure | An attempt limit of 1 on a constant base: one object wins, the rest fail with `GeneratedValueExhausted`, nothing partial written |
 | 10 Surface parity | A mapping configured through raw REST and one through PowerShell behave identically |
-| 11 Feature flag | With the flag off, creating a generated mapping is refused with a 400 and existing mappings keep generating |
-| 12a Never reuse | Release 2 (Phase 6): with a zero deletion grace period, a leaver's Account Name, random Badge Code and Staff Number are retired (`ObjectDeleted`, `HeldBy` reads "(deleted)"), the raw REST read and the mapping's `retiredValueCount` agree, and a new joiner with the leaver's name gets `base1`, not the retired bare value. Last in the order, because a retired value leaves a gap that Tests 1 and 2's `{base, base1, ...}` invariant does not allow for. Not yet run green: added with Phase 6 part 1, to be run by the orchestrating session |
-| 12b Reuse | With the Account Name mapping's Never reuse off, the leaver's value is not retired and the same-named joiner is given it again |
+| 11a Never reuse | Release 2 (Phase 6): with a zero deletion grace period, a leaver's Account Name, random Badge Code and Staff Number are retired (`ObjectDeleted`, `HeldBy` reads "(deleted)"), the raw REST read and the mapping's `retiredValueCount` agree, and a new joiner with the leaver's name gets `base1`, not the retired bare value. Last in the order, because a retired value leaves a gap that Tests 1 and 2's `{base, base1, ...}` invariant does not allow for |
+| 11b Reuse | With the Account Name mapping's Never reuse off, the leaver's value is not retired and the same-named joiner is given it again |
 
 **Not covered here: a target-side collision.** In release 1 a value the target already holds (outside JIM's view) is an ordinary export error, which is existing export behaviour, not generation. It gets integration coverage with release 4's Collision Remediation, which reworks that path. It also needs a harness change first: the LDAP Connector logs a rejected object at Error level, and the runner's end-of-run log scan fails a run on any Error line with no way to mark one as intended, so no scenario can yet include a deliberate export failure.
 
 **What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back (then treated as stale; since 2026-10-01 that reassertion is the intended behaviour, by product-owner decision, exactly as for any Attribute Flow); and a deliberate feature-disabled refusal logged as an unhandled Error.
 
-**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 001 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag, NeverReuse.
+**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 001 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, NeverReuse.
 
 **Derived Email and User Principal Name.** Since Metaverse-Derived Attribute Flows ([#1750](https://github.com/TetronIO/JIM/issues/1750)) Phase 7, `Setup-Scenario-023.ps1` also passes `-DeriveFromAccountName`, so Email is `mv["Account Name"] + "@panoply.local"` and User Principal Name is `mv["Email"]` rather than a separately generated Email. Test 2 asserts that each same-named joiner's Email and User Principal Name carry that joiner's own Account Name suffix, in the Metaverse and the directory.
 
 #### Scenario 026: Metaverse-Derived Attribute Flows
 
-**Status**: implemented for [#1750](https://github.com/TetronIO/JIM/issues/1750) Phase 7; signed off on 2026-10-04 at Medium on Samba AD and OpenLDAP (both passed). The feature is behind the In development `Features.MetaverseDerivedAttributeFlows` flag (removal [#1878](https://github.com/TetronIO/JIM/issues/1878)); `Setup-Scenario-001.ps1 -DeriveFromAccountName` enables it, together with `Features.UniqueValueGeneration` through `-GenerateAccountName`. Medium is the sign-off template on both Samba AD and OpenLDAP, because Small fits in one synchronisation page.
+**Status**: implemented for [#1750](https://github.com/TetronIO/JIM/issues/1750) Phase 7; signed off on 2026-10-04 at Medium on Samba AD and OpenLDAP (both passed). The In development `Features.MetaverseDerivedAttributeFlows` flag the feature was built behind was removed when it shipped ([#1878](https://github.com/TetronIO/JIM/issues/1878)), so the setup enables nothing. Medium is the sign-off template on both Samba AD and OpenLDAP, because Small fits in one synchronisation page.
 
 **Purpose**: prove derived Attribute Flows end to end: ordering inside one synchronisation, the hosting-system rule, the derived-input mark that makes the hosting system's next synchronisation (delta included) pick up an object whose input changed in another system, and the save-time and authoring surfaces. The unit and workflow tiers cover the engine with the in-memory repository; this is the only coverage against PostgreSQL, a real directory and the real Run Profile sequence.
 
@@ -2473,7 +2474,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 020 | ✅ Complete | Password Synchronisation, outbound half: held while switched off, delivered when switched on, coalescing, parked-change retry (Samba AD or OpenLDAP) (#1119) |
 | Scenario 021 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
 | Scenario 022 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
-| Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
+| Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity; release 2: never reuse (#242) |
 | Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |

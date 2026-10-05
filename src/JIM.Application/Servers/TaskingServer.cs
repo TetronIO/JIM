@@ -203,6 +203,10 @@ namespace JIM.Application.Servers
                 if (!string.IsNullOrWhiteSpace(deleteConnectedSystemTask.ChangeReason))
                     activity.ChangeReason = deleteConnectedSystemTask.ChangeReason.Trim();
 
+                // Likewise the preview that informed the deletion (#134), so the Activity answers whether the
+                // administrator looked first however the task ends.
+                activity.PreviewActivityId = deleteConnectedSystemTask.PreviewActivityId;
+
                 // A finish-immediately deletion on a fenced system abandons the remaining Synchronised
                 // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
                 // says so however the task ends.

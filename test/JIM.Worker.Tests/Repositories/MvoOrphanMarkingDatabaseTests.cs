@@ -258,4 +258,34 @@ public class MvoOrphanMarkingDatabaseTests
         Assert.That(orphanedIds, Does.Not.Contain(specificModeUnaffectedMvoId));
         Assert.That(orphanedCount, Is.EqualTo(orphanedMvos.Count));
     }
+
+    [Test]
+    public async Task DeletionSummaryCounts_GracePeriodAndOtherConnectors_TranslateAndCountOnRealPostgresAsync()
+    {
+        // Arrange: the grace period comparison is an interval comparison in SQL, which the mocked suite cannot exercise
+        var hr = await SeedConnectedSystemAsync($"HR {Guid.NewGuid():N}");
+        var ad = await SeedConnectedSystemAsync($"AD {Guid.NewGuid():N}");
+        var withGraceTypeId = await SeedMetaverseObjectTypeAsync(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            AuthoritativeSourceTriggerMode.AllSourcesDisconnect, [], TimeSpan.FromDays(30));
+        var immediateTypeId = await SeedMetaverseObjectTypeAsync(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            AuthoritativeSourceTriggerMode.AllSourcesDisconnect, [], null);
+
+        await SeedProjectedMvoAsync(withGraceTypeId, hr);      // orphaned, scheduled for later
+        await SeedProjectedMvoAsync(immediateTypeId, hr);      // orphaned, deleted at once
+        await SeedProjectedMvoAsync(withGraceTypeId, hr, ad);  // joined elsewhere too
+        await SeedProjectedMvoAsync(immediateTypeId, ad);      // not joined here
+
+        // Act
+        await using var context = NewContext();
+        var repository = new PostgresDataRepository(context);
+        var gracePeriodCount = await repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(hr.SystemId);
+        var otherConnectorsCount = await repository.Metaverse.GetMvosJoinedToOtherConnectedSystemsCountAsync(hr.SystemId);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(gracePeriodCount, Is.EqualTo(1));
+            Assert.That(otherConnectorsCount, Is.EqualTo(1));
+        }
+    }
 }

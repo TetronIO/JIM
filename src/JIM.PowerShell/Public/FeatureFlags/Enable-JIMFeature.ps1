@@ -14,7 +14,7 @@ function Enable-JIMFeature {
         Supports ShouldProcess; use -WhatIf or -Confirm to preview or confirm the operation.
 
     .PARAMETER Name
-        The flag's key, e.g. "Features.UniqueValueGeneration".
+        The flag's key, e.g. "Features.SomeInDevelopmentFeature".
 
     .PARAMETER AllowInDevelopment
         Required to enable an In Development flag. Used by the integration harness in scenario
@@ -32,7 +32,7 @@ function Enable-JIMFeature {
         Enables a Preview-tier feature flag.
 
     .EXAMPLE
-        Enable-JIMFeature -Name "Features.UniqueValueGeneration" -AllowInDevelopment
+        Enable-JIMFeature -Name "Features.SomeInDevelopmentFeature" -AllowInDevelopment
 
         Enables an In Development feature flag, as the integration harness does in scenario setup.
 

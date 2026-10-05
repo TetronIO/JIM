@@ -109,7 +109,7 @@ internal static class PreviewDeletionEligibilityEvaluator
         }
     };
 
-    private static string DescribeDeletionOutcome(MvoDeletionDecision decision) =>
+    internal static string DescribeDeletionOutcome(MvoDeletionDecision decision) =>
         decision is { Fate: MvoDeletionFate.DeletionScheduled, GracePeriod: { } grace }
             ? $"{DeletionEligible} after {grace.ToFriendlyDuration()}"
             : $"{DeletionEligible} immediately";

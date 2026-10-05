@@ -529,6 +529,64 @@ public class MetaverseRepositoryOrphanDetectionTests
 
     #endregion
 
+    #region Deletion Summary Counts (#134)
+
+    [Test]
+    public async Task GetMvosJoinedToOtherConnectedSystemsCountAsync_MixedPopulation_CountsOnlyThoseAlsoJoinedElsewhereAsync()
+    {
+        // Arrange - joined only here, joined here and elsewhere, joined here twice, and joined only elsewhere
+        var onlyHere = CreateProjectedMvo(_personTypeWithDeletionRule);
+        onlyHere.ConnectedSystemObjects.Add(CreateCso(HrSystemId, onlyHere));
+        var hereAndElsewhere = CreateProjectedMvo(_personTypeWithDeletionRule);
+        hereAndElsewhere.ConnectedSystemObjects.Add(CreateCso(HrSystemId, hereAndElsewhere));
+        hereAndElsewhere.ConnectedSystemObjects.Add(CreateCso(AdSystemId, hereAndElsewhere));
+        var twiceHere = CreateProjectedMvo(_personTypeWithDeletionRule);
+        twiceHere.ConnectedSystemObjects.Add(CreateCso(HrSystemId, twiceHere));
+        twiceHere.ConnectedSystemObjects.Add(CreateCso(HrSystemId, twiceHere));
+        var onlyElsewhere = CreateProjectedMvo(_personTypeWithDeletionRule);
+        onlyElsewhere.ConnectedSystemObjects.Add(CreateCso(AdSystemId, onlyElsewhere));
+        _metaverseObjectsData.AddRange(new[] { onlyHere, hereAndElsewhere, twiceHere, onlyElsewhere });
+        SetupMockDbContext();
+
+        // Act
+        var count = await _repository.Metaverse.GetMvosJoinedToOtherConnectedSystemsCountAsync(HrSystemId);
+
+        // Assert - a second connector in the same system is not "another connector"
+        Assert.That(count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync_MixedGracePeriods_CountsOnlyThoseScheduledForLaterAsync()
+    {
+        // Arrange - three orphans whose types differ only in grace period, and a non-orphan with one
+        var noGracePeriodType = new MetaverseObjectType { Id = 10, Name = "Immediate", DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected };
+        var zeroGracePeriodType = new MetaverseObjectType { Id = 11, Name = "Zero", DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, DeletionGracePeriod = TimeSpan.Zero };
+        var withGracePeriod = CreateProjectedMvo(_personTypeWithDeletionRule);
+        withGracePeriod.ConnectedSystemObjects.Add(CreateCso(HrSystemId, withGracePeriod));
+        var withNoGracePeriod = CreateProjectedMvo(noGracePeriodType);
+        withNoGracePeriod.ConnectedSystemObjects.Add(CreateCso(HrSystemId, withNoGracePeriod));
+        var withZeroGracePeriod = CreateProjectedMvo(zeroGracePeriodType);
+        withZeroGracePeriod.ConnectedSystemObjects.Add(CreateCso(HrSystemId, withZeroGracePeriod));
+        var notOrphaned = CreateProjectedMvo(_personTypeWithDeletionRule);
+        notOrphaned.ConnectedSystemObjects.Add(CreateCso(HrSystemId, notOrphaned));
+        notOrphaned.ConnectedSystemObjects.Add(CreateCso(AdSystemId, notOrphaned));
+        _metaverseObjectsData.AddRange(new[] { withGracePeriod, withNoGracePeriod, withZeroGracePeriod, notOrphaned });
+        SetupMockDbContext();
+
+        // Act
+        var orphanedCount = await _repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(HrSystemId);
+        var gracePeriodCount = await _repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(HrSystemId);
+
+        // Assert - a subset of the orphans, by the same predicate
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(orphanedCount, Is.EqualTo(3));
+            Assert.That(gracePeriodCount, Is.EqualTo(1));
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static MetaverseObject CreateProjectedMvo(MetaverseObjectType type)

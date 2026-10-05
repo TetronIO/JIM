@@ -23,8 +23,7 @@ public class SyncRuleSaveResponse : SyncRuleHeader
     /// <summary>
     /// The Metaverse-Derived Attribute Flows the save left with a missing input (for example by disabling the rule
     /// holding the last enabled contributor of an attribute they read). The save went ahead regardless; each flow's
-    /// Missing Input Behaviour now decides what it contributes. Always present; empty when the Metaverse-Derived
-    /// Attribute Flows feature is off.
+    /// Missing Input Behaviour now decides what it contributes. Always present.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 

@@ -11,7 +11,7 @@ Expressions live inside **Synchronisation Rules**, in what is known as the **Att
 Within a Synchronisation Rule, expressions are used in:
 
 - **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a Connected System.
-- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse, and (in development) derive Metaverse attributes from other attributes of the same Metaverse Object.
+- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
 
@@ -53,9 +53,6 @@ cs["userAccountControl"]
 ```
 
 Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) for the evaluation order, loops, and which synchronisation evaluates the flow.
-
-!!! note "`mv` on import is in development"
-    Reading `mv["..."]` in an import expression is still in development and not yet available; it is hidden behind a feature flag. While the flag is off, JIM refuses to save an import expression that newly reads `mv["..."]`, and one saved before that check reads no value.
 
 In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
 

@@ -1,14 +1,19 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Claims;
+using System.Text.Json;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Web.Models;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -20,7 +25,7 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// Covers the Connected System delete dialog's #809 surface: the deletion-mode choice (Deprovision through
 /// synchronisation pre-selected, Delete immediately behind a revealed warning), the counts regrouped by
-/// fate, the reserved attribute-impact preview affordance, and the fenced-system wording for the retry and
+/// fate, the deletion impact preview slot (#134), and the fenced-system wording for the retry and
 /// finish-immediately exits. The mode choice decides whether downstream systems are corrected or left with
 /// whatever the system last exported, so the default and the warning reveal are the behaviour that matters.
 /// </summary>
@@ -30,13 +35,19 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     private const int ConnectedSystemId = 7;
     private const string SystemName = "Old HR System";
     private const string ImmediateWarningMarker = "jim-delete-cs-immediate-warning";
-    private const string PreviewImpactMarker = "jim-delete-cs-preview-impact";
+    private const string PreviewSlotMarker = "jim-delete-cs-preview-slot";
+    private const string PhraseFieldMarker = "jim-consequence-phrase";
+    private const string ConfirmButtonMarker = "jim-consequence-confirm";
     private const string FencedNoticeMarker = "jim-delete-cs-fenced-notice";
 
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<ITaskingRepository> _mockTaskingRepo = null!;
+    private Mock<IConfigurationChangePreviewRepository> _mockPreviewRepo = null!;
+    private Mock<IActivityRepository> _mockActivityRepo = null!;
     private JimApplication _jim = null!;
+    private ConfigurationChangePreview? _latestPreview;
+    private ConfigurationChangePreviewStaleness _staleness = new(null, null);
     private ConnectedSystemStatus _systemStatus = ConnectedSystemStatus.Active;
 
     protected override void ConfigureAdditionalServices()
@@ -45,6 +56,10 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockTaskingRepo = new Mock<ITaskingRepository>();
+        _mockPreviewRepo = new Mock<IConfigurationChangePreviewRepository>();
+        _mockActivityRepo = new Mock<IActivityRepository>();
+        mockRepository.Setup(r => r.ConfigurationChangePreviews).Returns(_mockPreviewRepo.Object);
+        mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         mockRepository.Setup(r => r.Tasking).Returns(_mockTaskingRepo.Object);
@@ -67,6 +82,22 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
             .Setup(r => r.GetContributedValueCountsByConnectedSystemAsync(ConnectedSystemId))
             .ReturnsAsync((5600, 310));
 
+        // The latest deletion preview, and what has happened since it started (#134).
+        _mockPreviewRepo
+            .Setup(r => r.GetLatestConnectedSystemPreviewAsync(ConfigurationChangePreviewSurface.ConnectedSystemDeletion, ConnectedSystemId))
+            .ReturnsAsync(() => _latestPreview);
+        _mockActivityRepo
+            .Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => _latestPreview?.ActivityId == id ? _latestPreview.Activity : null);
+        _mockActivityRepo
+            .Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>()))
+            .ReturnsAsync(() => _staleness);
+
+        // Deleting is attributed to the signed-in administrator.
+        var administratorId = Guid.NewGuid();
+        AddAuthorization().SetAuthorized("Ada Lovelace").SetClaims(new Claim(Constants.BuiltInClaims.MetaverseObjectId, administratorId.ToString()));
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(administratorId)).ReturnsAsync(new MetaverseObject { Id = administratorId });
+
         _jim = new JimApplication(mockRepository.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
     }
@@ -76,13 +107,17 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     {
         _jim?.Dispose();
         _systemStatus = ConnectedSystemStatus.Active;
+        _latestPreview = null;
+        _staleness = new ConfigurationChangePreviewStaleness(null, null);
     }
 
     /// <summary>
     /// Opens the dialog through the dialog service and waits for the preview-loaded state (the mode radios
     /// render only once the preview arrives), so tests never race the async initialisation.
     /// </summary>
-    private IRenderedComponent<MudDialogProvider> ShowDialog()
+    private IRenderedComponent<MudDialogProvider> ShowDialog() => ShowDialogWithReference().Provider;
+
+    private (IRenderedComponent<MudDialogProvider> Provider, IDialogReference Reference) ShowDialogWithReference()
     {
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
@@ -90,10 +125,47 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
         {
             { x => x.ConnectedSystem, new ConnectedSystem { Id = ConnectedSystemId, Name = SystemName, Status = _systemStatus } }
         };
-        provider.InvokeAsync(() => dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{SystemName}\" Connected System", parameters));
+        IDialogReference? reference = null;
+        provider.InvokeAsync(async () => reference = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{SystemName}\" Connected System", parameters));
         provider.WaitForElement("input[type='radio']");
-        return provider;
+        return (provider, reference!);
     }
+
+    /// <summary>
+    /// Types the system's name into the confirmation field and confirms, as an administrator deleting does.
+    /// </summary>
+    private static void ConfirmDeletion(IRenderedComponent<MudDialogProvider> provider)
+    {
+        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(SystemName);
+        provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
+    }
+
+    /// <summary>
+    /// A deletion preview for the system, with its Activity, in the given state.
+    /// </summary>
+    private static ConfigurationChangePreview Preview(ActivityStatus activityStatus, ConfigurationChangePreviewStageStatus stageStatus,
+        params PreviewImpactCount[] counts)
+    {
+        var activityId = Guid.CreateVersion7();
+        return new ConfigurationChangePreview
+        {
+            ActivityId = activityId,
+            Activity = new Activity
+            {
+                Id = activityId, Created = DateTime.UtcNow.AddMinutes(-4), Status = activityStatus,
+                TargetType = ActivityTargetType.ConnectedSystem, ObjectsToProcess = 12_000, ObjectsProcessed = 4_000
+            },
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion,
+            ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
+            ImpactCountsStatus = stageStatus,
+            SummaryStatus = stageStatus,
+            DeltasStatus = stageStatus,
+            ImpactCounts = JsonSerializer.Serialize(counts.ToList())
+        };
+    }
+
+    private void VerifyDeletionRecorded(Guid? previewActivityId) =>
+        _mockTaskingRepo.Verify(r => r.CreateWorkerTaskAsync(It.Is<DeleteConnectedSystemWorkerTask>(t => t.PreviewActivityId == previewActivityId)), Times.Once);
 
     /// <summary>
     /// Selects the immediate-deletion radio. MudRadio's input commits on click rather than change, so a
@@ -142,17 +214,92 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_ReservesDisabledPreviewImpactButton()
+    public async Task DeleteConnectedSystemDialog_NotPreviewed_OffersToPreviewFirstAsync()
     {
-        // The #134/#827 attribute impact preview lands later; a disabled affordance reserves its spot so
-        // the layout does not shift when it does.
+        var (provider, reference) = ShowDialogWithReference();
+
+        var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
+        Assert.That(slot.TextContent, Does.Contain("Not previewed"));
+        slot.QuerySelectorAll("button").Single(b => b.TextContent.Contains("Preview first")).Click();
+
+        var result = await reference.Result;
+        Assert.That(result?.Data, Is.EqualTo(DeleteConnectedSystemDialogOutcome.PreviewRequested),
+            "the host starts the preview where its panel lives, the Danger Zone");
+    }
+
+    [Test]
+    public void DeleteConnectedSystemDialog_NotPreviewed_RecordsThatNoPreviewInformedTheDeletion()
+    {
         var provider = ShowDialog();
 
-        var button = provider.Find($"[data-testid='{PreviewImpactMarker}']");
+        ConfirmDeletion(provider);
+
+        VerifyDeletionRecorded(null);
+    }
+
+    [Test]
+    public void DeleteConnectedSystemDialog_CurrentPreview_StatesItsVerdictAndRecordsItOnTheDeletion()
+    {
+        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
+            new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
+        var provider = ShowDialog();
+
+        var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
+        Assert.That(slot.TextContent, Does.Contain("312 objects would become eligible for deletion."));
+        ConfirmDeletion(provider);
+
+        VerifyDeletionRecorded(_latestPreview.ActivityId);
+    }
+
+    [Test]
+    public void DeleteConnectedSystemDialog_CurrentPreviewWhenDeletingImmediately_StatesThePreviewDescribesTheOtherMode()
+    {
+        // The preview is of deprovisioning; its cleared values and exports do not happen when deleting immediately,
+        // so listing them under that choice would describe a deletion nobody is about to make.
+        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
+            new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 662));
+        var provider = ShowDialog();
+
+        ChooseImmediate(provider);
+
+        var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(button.TextContent, Does.Contain("Preview attribute impact"));
-            Assert.That(button.HasAttribute("disabled"), Is.True);
+            Assert.That(slot.TextContent, Does.Contain("describes deprovisioning through synchronisation"));
+            Assert.That(slot.TextContent, Does.Not.Contain("662 objects"));
+        }
+    }
+
+    [Test]
+    public void DeleteConnectedSystemDialog_StalePreview_SaysSoAndRecordsNone()
+    {
+        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
+            new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
+        _staleness = new ConfigurationChangePreviewStaleness(null, DateTime.UtcNow.AddMinutes(-1));
+        var provider = ShowDialog();
+
+        var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
+        Assert.That(slot.TextContent, Does.Contain("may no longer"));
+        ConfirmDeletion(provider);
+
+        VerifyDeletionRecorded(null);
+    }
+
+    [Test]
+    public void DeleteConnectedSystemDialog_RunningPreview_DeletingCancelsItAndRecordsNone()
+    {
+        _latestPreview = Preview(ActivityStatus.InProgress, ConfigurationChangePreviewStageStatus.InProgress);
+        var provider = ShowDialog();
+
+        var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
+        Assert.That(slot.TextContent, Does.Contain("Deleting now cancels it"));
+        ConfirmDeletion(provider);
+
+        using (Assert.EnterMultipleScope())
+        {
+            _mockTaskingRepo.Verify(r => r.GetWorkerTaskByActivityIdAsync(_latestPreview.ActivityId), Times.Once,
+                "the running preview is cancelled rather than left to describe a system that no longer exists");
+            VerifyDeletionRecorded(null);
         }
     }
 
@@ -170,11 +317,9 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
 
             // The affected rows and their qualifying notes.
             Assert.That(provider.Markup, Does.Contain("Joined"));
-            Assert.That(provider.Markup, Does.Contain("related objects; deprovisioned per the choice above"));
             Assert.That(provider.Markup, Does.Contain("Contributed attribute values"));
             Assert.That(provider.Markup, Does.Contain("recalled or kept per the choice above"));
             Assert.That(provider.Markup, Does.Contain("Eligible for deletion rules"));
-            Assert.That(provider.Markup, Does.Contain("their own rules decide, when deprovisioning"));
             Assert.That(provider.Markup, Does.Contain("Activities"));
             Assert.That(provider.Markup, Does.Contain("kept: the audit history of what this system did"));
 

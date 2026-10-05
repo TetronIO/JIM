@@ -76,6 +76,14 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     [NotMapped]
     public string? ChangeReason { get; set; }
 
+    /// <summary>
+    /// The Configuration Change Preview the administrator read before requesting the deletion, if any (#134).
+    /// Transient like <see cref="ChangeReason"/>: copied onto the task's Activity when the task is created, so the
+    /// audit trail records what the person deleting was told the deletion would do. Null when no preview informed it.
+    /// </summary>
+    [NotMapped]
+    public Guid? PreviewActivityId { get; set; }
+
     public DeleteConnectedSystemWorkerTask()
     {
         // For use by EntityFramework to construct db-sourced objects.

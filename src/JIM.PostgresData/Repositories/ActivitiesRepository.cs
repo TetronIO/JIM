@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Preview;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -2194,6 +2195,54 @@ public class ActivityRepository : IActivityRepository
                 ServiceSettingKey = a.ServiceSettingKey
             })
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The work that moves the identity data a preview evaluated, as the target and operation each records. Named
+    /// pair by pair rather than by target type alone, because a target type spans both data and configuration: a Run
+    /// Profile is executed (data) but also created and edited (configuration that moves nothing until it runs), and the
+    /// only Metaverse Object Activities JIM writes are an administrator's first sign-in, which no preview reasoned about.
+    /// </summary>
+    private static readonly ActivityTargetType[] DataMovingExecutions =
+    [
+        ActivityTargetType.ConnectedSystemRunProfile,
+        ActivityTargetType.MetaverseObjectHousekeeping,
+        ActivityTargetType.TemporalScopeReconciliation,
+        ActivityTargetType.DataGeneration
+    ];
+
+    /// <summary>
+    /// Connected System operations that move identity data: clearing a connector space, the data-removal half of a schema
+    /// refresh, and deleting a system by either mode.
+    /// </summary>
+    private static readonly ActivityTargetOperationType[] DataMovingConnectedSystemOperations =
+    [
+        ActivityTargetOperationType.Clear,
+        ActivityTargetOperationType.SchemaRefreshRemoval,
+        ActivityTargetOperationType.Deprovision,
+        ActivityTargetOperationType.Delete
+    ];
+
+    public async Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessSinceAsync(DateTime since)
+    {
+        var dataChangedAt = await Repository.Database.Activities
+            .Where(a => a.Created > since
+                        && ((a.TargetOperationType == ActivityTargetOperationType.Execute && DataMovingExecutions.Contains(a.TargetType))
+                            || (a.TargetType == ActivityTargetType.ConnectedSystem && DataMovingConnectedSystemOperations.Contains(a.TargetOperationType))
+                            || (a.TargetType == ActivityTargetType.SynchronisationRule
+                                && a.TargetOperationType == ActivityTargetOperationType.RecallAttributeValues)))
+            .MaxAsync(a => (DateTime?)a.Created);
+
+        // A new Synchronisation Rule carries no class (a create has nothing to diff), but it can contribute exactly
+        // what a preview reported as cleared, so it counts as surely as an edit to an existing rule does.
+        var configurationChangedAt = await Repository.Database.Activities
+            .Where(a => a.Created > since
+                        && (a.ConfigurationChangeClass >= ConfigurationChangeClass.SyncAffecting
+                            || (a.TargetType == ActivityTargetType.SynchronisationRule
+                                && a.TargetOperationType == ActivityTargetOperationType.Create)))
+            .MaxAsync(a => (DateTime?)a.Created);
+
+        return new ConfigurationChangePreviewStaleness(dataChangedAt, configurationChangedAt);
     }
     #endregion
 

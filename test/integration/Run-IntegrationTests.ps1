@@ -3737,10 +3737,7 @@ if ($SetupOnly) {
     Write-Section "Step 5: Setting Up Scenario Configuration (SetupOnly)"
 
     # Validate that a setup script exists for this scenario
-    $setupScript = if ($scenarioNumber) {
-        $candidate = Join-Path $scriptRoot "Setup-Scenario$scenarioNumber.ps1"
-        if (Test-Path $candidate) { $candidate } else { $null }
-    } else { $null }
+    $setupScript = Get-IntegrationScenarioSetupScript -ScenarioNumber $scenarioNumber -SetupScriptsPath $scriptRoot
 
     if (-not $setupScript) {
         Write-RunnerWarning "No dedicated setup script found for '$Scenario'"
@@ -3762,7 +3759,7 @@ if ($SetupOnly) {
         }
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
-        Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
+        Write-Step "Running scenario setup: $(Split-Path -Leaf $setupScript)..."
         $setupParams = @{
             JIMUrl = $script:Lane.JimUrl
             ApiKey = $apiKey
@@ -3774,6 +3771,12 @@ if ($SetupOnly) {
         }
         if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
             $setupParams.MaxExportParallelism = $MaxExportParallelism
+        }
+        # The switches the scenario itself passes to its setup (Scenario 001: generated and derived
+        # identifiers), so the environment left for exploration is the one the scenario runs against.
+        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber
+        foreach ($key in $scenarioSetupParams.Keys) {
+            $setupParams[$key] = $scenarioSetupParams[$key]
         }
         $config = & $setupScript @setupParams
         if ($config) {

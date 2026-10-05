@@ -31,6 +31,13 @@ public interface IConfigurationChangePreviewRepository
     /// <summary>The preview row alone, without its groups or deltas.</summary>
     Task<ConfigurationChangePreview?> GetPreviewAsync(Guid activityId);
 
+    /// <summary>
+    /// The most recently started preview of <paramref name="surface"/> for a Connected System, with its Activity, or
+    /// null when there has been none. How a host finds the preview it started earlier again after the administrator
+    /// has navigated away (#134).
+    /// </summary>
+    Task<ConfigurationChangePreview?> GetLatestConnectedSystemPreviewAsync(ConfigurationChangePreviewSurface surface, int connectedSystemId);
+
     /// <summary>The preview's summary groups, largest first: the panel's landing view.</summary>
     Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId);
 

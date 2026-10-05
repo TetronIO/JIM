@@ -17,7 +17,8 @@ namespace JIM.Worker.Tests.Servers;
 /// <summary>
 /// Tests <see cref="FeatureFlagServer"/> (#1781): reading a flag's state, the tier gate on enabling an In
 /// Development flag, the not-found behaviour for an unknown key, and that a flag change persists through the
-/// same Service Setting update path (and therefore the same audit Activity) as an ordinary setting.
+/// same Service Setting update path (and therefore the same audit Activity) as an ordinary setting. Runs against a
+/// synthetic In Development flag substituted into the catalogue, which declares no real flag while none is needed.
 /// </summary>
 [TestFixture]
 public class FeatureFlagServerTests
@@ -31,7 +32,7 @@ public class FeatureFlagServerTests
         repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
         using var jim = new JimApplication(repo.Object);
 
-        var enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key);
+        var enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key);
 
         Assert.That(enabled, Is.True);
     }
@@ -43,7 +44,7 @@ public class FeatureFlagServerTests
         repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         using var jim = new JimApplication(repo.Object);
 
-        var enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key);
+        var enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key);
 
         Assert.That(enabled, Is.False, "an unseeded flag (e.g. before the seeding pass runs) must default off, never throw");
     }
@@ -66,7 +67,7 @@ public class FeatureFlagServerTests
         repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
         using var jim = new JimApplication(repo.Object);
 
-        Assert.That(async () => await jim.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key), Throws.Nothing);
+        Assert.That(async () => await jim.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key), Throws.Nothing);
     }
 
     [Test]
@@ -77,10 +78,10 @@ public class FeatureFlagServerTests
         using var jim = new JimApplication(repo.Object);
 
         var ex = Assert.ThrowsAsync<FeatureDisabledException>(async () =>
-            await jim.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key));
+            await jim.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key));
 
-        Assert.That(ex!.Definition.Key, Is.EqualTo(FeatureFlagCatalogue.UniqueValueGeneration.Key));
-        Assert.That(ex.Message, Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.DisplayName));
+        Assert.That(ex!.Definition.Key, Is.EqualTo(FeatureFlagCatalogueScope.InDevelopmentFlag.Key));
+        Assert.That(ex.Message, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName));
     }
 
     [Test]
@@ -92,7 +93,7 @@ public class FeatureFlagServerTests
 
         var flags = await jim.FeatureFlags.GetFeatureFlagsAsync(includeInDevelopment: false);
 
-        Assert.That(flags.Select(f => f.Definition.Key), Does.Not.Contain(FeatureFlagCatalogue.UniqueValueGeneration.Key),
+        Assert.That(flags.Select(f => f.Definition.Key), Does.Not.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.Key),
             "an In Development flag must never be returned unless explicitly requested");
     }
 
@@ -117,11 +118,13 @@ public class FeatureFlagServerTests
     private JimApplication _jim = null!;
     private Activity? _completedActivity;
     private readonly Dictionary<string, ServiceSetting> _persisted = new();
+    private IDisposable _catalogue = null!;
 
     [SetUp]
     public void SetUp()
     {
         TestUtilities.SetEnvironmentVariables();
+        _catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
 
         _repo = new Mock<IRepository>();
         _activityRepo = new Mock<IActivityRepository>();
@@ -152,15 +155,15 @@ public class FeatureFlagServerTests
 
         var inDevelopmentSetting = new ServiceSetting
         {
-            Key = FeatureFlagCatalogue.UniqueValueGeneration.Key,
-            DisplayName = FeatureFlagCatalogue.UniqueValueGeneration.DisplayName,
-            Description = FeatureFlagCatalogue.UniqueValueGeneration.Description,
+            Key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
+            DisplayName = FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName,
+            Description = FeatureFlagCatalogueScope.InDevelopmentFlag.Description,
             Category = ServiceSettingCategory.FeatureFlags,
             ValueType = ServiceSettingValueType.Boolean,
             DefaultValue = "false",
             Value = "false"
         };
-        _persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key] = inDevelopmentSetting;
+        _persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key] = inDevelopmentSetting;
 
         _settingsRepo.Setup(r => r.GetSettingAsync(It.IsAny<string>()))
             .Returns((string key) => Task.FromResult(_persisted.GetValueOrDefault(key)));
@@ -172,14 +175,18 @@ public class FeatureFlagServerTests
     }
 
     [TearDown]
-    public void TearDown() => _jim?.Dispose();
+    public void TearDown()
+    {
+        _jim?.Dispose();
+        _catalogue?.Dispose();
+    }
 
     [Test]
     public async Task SetFeatureFlagAsync_PersistsThroughTheOrdinarySettingUpdatePathAsync()
     {
-        // The catalogue's only flag today is In Development, so allowInDevelopment is needed to enable it; the
-        // point of this test is the persistence/audit path, which is identical whatever the tier.
-        var key = FeatureFlagCatalogue.UniqueValueGeneration.Key;
+        // The synthetic flag is In Development, so allowInDevelopment is needed to enable it; the point of this test
+        // is the persistence/audit path, which is identical whatever the tier.
+        var key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key;
 
         var state = await _jim.FeatureFlags.SetFeatureFlagAsync(key, true, NewUser(), allowInDevelopment: true);
 
@@ -197,9 +204,9 @@ public class FeatureFlagServerTests
     public void SetFeatureFlagAsync_EnablingInDevelopmentFlagWithoutAcknowledgement_Throws()
     {
         Assert.That(async () => await _jim.FeatureFlags.SetFeatureFlagAsync(
-                FeatureFlagCatalogue.UniqueValueGeneration.Key, true, NewUser()),
+                FeatureFlagCatalogueScope.InDevelopmentFlag.Key, true, NewUser()),
             Throws.InvalidOperationException);
-        Assert.That(_persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key].Value, Is.EqualTo("false"),
+        Assert.That(_persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key].Value, Is.EqualTo("false"),
             "a rejected enable must not write anything");
     }
 
@@ -207,18 +214,18 @@ public class FeatureFlagServerTests
     public async Task SetFeatureFlagAsync_EnablingInDevelopmentFlagWithAcknowledgement_SucceedsAsync()
     {
         var state = await _jim.FeatureFlags.SetFeatureFlagAsync(
-            FeatureFlagCatalogue.UniqueValueGeneration.Key, true, NewUser(), allowInDevelopment: true);
+            FeatureFlagCatalogueScope.InDevelopmentFlag.Key, true, NewUser(), allowInDevelopment: true);
 
         Assert.That(state.Enabled, Is.True);
-        Assert.That(_persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key].Value, Is.EqualTo("true"));
+        Assert.That(_persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key].Value, Is.EqualTo("true"));
     }
 
     [Test]
     public async Task SetFeatureFlagAsync_DisablingInDevelopmentFlag_NeedsNoAcknowledgementAsync()
     {
-        _persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key].Value = "true";
+        _persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key].Value = "true";
 
-        var state = await _jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key, false, NewUser());
+        var state = await _jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key, false, NewUser());
 
         Assert.That(state.Enabled, Is.False);
     }
@@ -236,7 +243,7 @@ public class FeatureFlagServerTests
         var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "automation" };
 
         var state = await _jim.FeatureFlags.SetFeatureFlagAsync(
-            FeatureFlagCatalogue.UniqueValueGeneration.Key, true, apiKey, allowInDevelopment: true);
+            FeatureFlagCatalogueScope.InDevelopmentFlag.Key, true, apiKey, allowInDevelopment: true);
 
         Assert.That(state.Enabled, Is.True);
         Assert.That(_completedActivity, Is.Not.Null);

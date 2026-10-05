@@ -14,6 +14,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -38,10 +39,14 @@ public class FeatureFlagsControllerTests
     private FeatureFlagsController _controller = null!;
     private readonly Dictionary<string, ServiceSetting> _persisted = new();
     private Guid _apiKeyId;
+    private IDisposable _catalogue = null!;
 
     [SetUp]
     public void SetUp()
     {
+        // The real catalogue declares no flag while none is in development; exercise the surface against a synthetic one.
+        _catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
+
         _mockRepository = new Mock<IRepository>();
         _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
@@ -65,10 +70,10 @@ public class FeatureFlagsControllerTests
             ValueType = ServiceSettingValueType.Boolean,
             Value = "false"
         };
-        _persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key] = new ServiceSetting
+        _persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key] = new ServiceSetting
         {
-            Key = FeatureFlagCatalogue.UniqueValueGeneration.Key,
-            DisplayName = FeatureFlagCatalogue.UniqueValueGeneration.DisplayName,
+            Key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
+            DisplayName = FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName,
             Category = ServiceSettingCategory.FeatureFlags,
             ValueType = ServiceSettingValueType.Boolean,
             DefaultValue = "false",
@@ -110,7 +115,11 @@ public class FeatureFlagsControllerTests
     }
 
     [TearDown]
-    public void TearDown() => _application?.Dispose();
+    public void TearDown()
+    {
+        _application?.Dispose();
+        _catalogue?.Dispose();
+    }
 
     #region GetAllAsync
 
@@ -121,7 +130,7 @@ public class FeatureFlagsControllerTests
         var flags = (result?.Value as IEnumerable<FeatureFlagDto>)?.ToList();
 
         Assert.That(flags, Is.Not.Null);
-        Assert.That(flags!.Select(f => f.Key), Does.Not.Contain(FeatureFlagCatalogue.UniqueValueGeneration.Key));
+        Assert.That(flags!.Select(f => f.Key), Does.Not.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.Key));
     }
 
     [Test]
@@ -131,10 +140,10 @@ public class FeatureFlagsControllerTests
         var flags = (result?.Value as IEnumerable<FeatureFlagDto>)?.ToList();
 
         Assert.That(flags, Is.Not.Null);
-        Assert.That(flags!.Select(f => f.Key), Does.Contain(FeatureFlagCatalogue.UniqueValueGeneration.Key));
-        var flag = flags!.Single(f => f.Key == FeatureFlagCatalogue.UniqueValueGeneration.Key);
+        Assert.That(flags!.Select(f => f.Key), Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.Key));
+        var flag = flags!.Single(f => f.Key == FeatureFlagCatalogueScope.InDevelopmentFlag.Key);
         Assert.That(flag.Tier, Is.EqualTo(nameof(FeatureFlagTier.InDevelopment)));
-        Assert.That(flag.TrackingIssueNumber, Is.EqualTo(242));
+        Assert.That(flag.TrackingIssueNumber, Is.EqualTo(FeatureFlagCatalogueScope.InDevelopmentFlag.TrackingIssueNumber));
     }
 
     #endregion
@@ -146,7 +155,7 @@ public class FeatureFlagsControllerTests
     {
         // Disabling never needs allowInDevelopment, whatever the flag's tier; the seeded value starts true so the
         // change is real, not a no-op.
-        var key = FeatureFlagCatalogue.UniqueValueGeneration.Key;
+        var key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key;
         _persisted[key].Value = "true";
 
         var result = await _controller.UpdateAsync(key, new FeatureFlagUpdateRequestDto { Enabled = false }) as OkObjectResult;
@@ -173,7 +182,7 @@ public class FeatureFlagsControllerTests
         Activity? recorded = null;
         _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
 
-        var result = await _controller.UpdateAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key,
+        var result = await _controller.UpdateAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
             new FeatureFlagUpdateRequestDto { Enabled = true, AllowInDevelopment = true });
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>(), () => System.Text.Json.JsonSerializer.Serialize((result as ObjectResult)?.Value));
@@ -192,17 +201,17 @@ public class FeatureFlagsControllerTests
     [Test]
     public async Task UpdateAsync_EnableInDevelopmentFlagWithoutAcknowledgement_ReturnsBadRequestAsync()
     {
-        var result = await _controller.UpdateAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key,
+        var result = await _controller.UpdateAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
             new FeatureFlagUpdateRequestDto { Enabled = true, AllowInDevelopment = false });
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
-        Assert.That(_persisted[FeatureFlagCatalogue.UniqueValueGeneration.Key].Value, Is.EqualTo("false"));
+        Assert.That(_persisted[FeatureFlagCatalogueScope.InDevelopmentFlag.Key].Value, Is.EqualTo("false"));
     }
 
     [Test]
     public async Task UpdateAsync_EnableInDevelopmentFlagWithAcknowledgement_ReturnsOkAsync()
     {
-        var result = await _controller.UpdateAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key,
+        var result = await _controller.UpdateAsync(FeatureFlagCatalogueScope.InDevelopmentFlag.Key,
             new FeatureFlagUpdateRequestDto { Enabled = true, AllowInDevelopment = true }) as OkObjectResult;
         var dto = result?.Value as FeatureFlagDto;
 

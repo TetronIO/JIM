@@ -118,6 +118,43 @@ public class ConfigurationChangePreviewServer
         await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
 
     /// <summary>
+    /// The most recently started preview of <paramref name="surface"/> for a Connected System, with its Activity, or
+    /// null when there has been none. How a host finds the preview it started again after the administrator has
+    /// navigated away and come back, so a running preview is reattached rather than started twice (#134).
+    /// </summary>
+    public async Task<ConfigurationChangePreview?> GetLatestConnectedSystemPreviewAsync(ConfigurationChangePreviewSurface surface, int connectedSystemId) =>
+        await _application.Repository.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(surface, connectedSystemId);
+
+    /// <summary>
+    /// Whether <paramref name="activityId"/> is a preview of <paramref name="surface"/> for the given Connected System.
+    /// How a change citing a preview is checked at the boundary (#134): a deletion recording another system's preview,
+    /// or a preview of a different kind of change, as the one that informed it would make its audit trail say
+    /// something untrue.
+    /// </summary>
+    public async Task<bool> IsConnectedSystemPreviewAsync(Guid activityId, ConfigurationChangePreviewSurface surface, int connectedSystemId)
+    {
+        var preview = await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
+        if (preview?.Surface != surface)
+            return false;
+
+        var activity = await _application.Repository.Activity.GetActivityAsync(activityId);
+        return activity is { TargetOperationType: ActivityTargetOperationType.Preview } && activity.ConnectedSystemId == connectedSystemId;
+    }
+
+    /// <summary>
+    /// Whether anything has happened since the preview started that could change its answer: a run or object edit
+    /// (the data it read has moved), or a configuration change that can change synchronisation outcomes (#134).
+    /// Measured from the start, not the finish, because a run during the preview moved data it may already have read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No preview Activity has this id.</exception>
+    public async Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessAsync(Guid activityId)
+    {
+        var activity = await _application.Repository.Activity.GetActivityAsync(activityId)
+            ?? throw new InvalidOperationException($"No preview Activity {activityId} exists to judge the staleness of.");
+        return await _application.Repository.Activity.GetPreviewStalenessSinceAsync(activity.Created);
+    }
+
+    /// <summary>
     /// A preview's summary groups, largest first: the landing view.
     /// </summary>
     public async Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId) =>
@@ -529,10 +566,11 @@ public class ConfigurationChangePreviewServer
             case ConfigurationChangePreviewSurface.SynchronisationRuleAttributeFlow:
                 activity.SyncRuleId = request.TargetId;
                 break;
-            // Both Connected System surfaces land in the same column, for the same reason as the Synchronisation
-            // Rule's: import scope and schema selection are different kinds of change to one system.
+            // Every Connected System surface lands in the same column, for the same reason as the Synchronisation
+            // Rule's: import scope, schema selection and deletion are different kinds of change to one system.
             case ConfigurationChangePreviewSurface.ConnectedSystem:
             case ConfigurationChangePreviewSurface.ConnectedSystemSchema:
+            case ConfigurationChangePreviewSurface.ConnectedSystemDeletion:
                 activity.ConnectedSystemId = request.TargetId;
                 break;
             // Object Matching is previewed per Connected System, in both modes and across the switch between them,

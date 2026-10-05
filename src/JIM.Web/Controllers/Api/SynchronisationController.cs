@@ -1836,6 +1836,68 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview deleting a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Answers what deleting the Connected System with <b>Deprovision through synchronisation</b> would do, without
+    /// doing it (#134): which Metaverse attribute values would be cleared because no other system contributes them,
+    /// which would be taken over by another contributor (with the same value or a different one), which values an
+    /// Object Type with recall switched off would keep, which Metaverse Objects would become eligible for deletion,
+    /// and what every other Connected System would be sent as a result: corrective updates, and removal of the objects
+    /// a recalled value takes out of an export rule's scope. The evaluation is the deprovisioning itself, run read-only,
+    /// so it cannot disagree with what the deletion then does.
+    ///
+    /// <b>Delete immediately and keep contributed data</b> is not previewed separately: it clears none of these values
+    /// and sends no exports, and its only per-object consequence is deletion eligibility for objects whose last
+    /// connector is this system.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the request has been validated, with the Activity id to
+    /// poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with <c>DELETE /previews/{activityId}</c>.
+    /// Pass the Activity id as <c>previewActivityId</c> when deleting the system, so the deletion's Activity records
+    /// what the deletion was expected to do.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">Optional: how much drill-down detail to keep.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/deletion/preview", Name = "StartConnectedSystemDeletionPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemDeletionPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemDeletionPreviewRequest? request)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemDeletion,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = new ConnectedSystemDeletionProposal(),
+            DeltaPersistence = request?.DeltaPersistence ?? ConfigurationChangePreviewDeltaPersistence.Capped,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started deletion impact preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Preview a change to a Connected System's schema selection
     /// </summary>
     /// <remarks>
@@ -2571,10 +2633,11 @@ public class SynchronisationController(
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone. Supplied as a query parameter because HTTP DELETE bodies are awkward for clients.</param>
     /// <param name="synchronisedDeprovisioning">True (the default) to deprovision through synchronisation; false to delete immediately and keep contributed data.</param>
+    /// <param name="previewActivityId">Optional: the deletion impact preview read before deleting (from <c>POST connected-systems/{id}/deletion/preview</c>), recorded on the deletion's Activity so its audit trail says what the deletion was expected to do. Must be a deletion preview of this Connected System.</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
     /// <response code="200">Deletion completed immediately (immediate mode, small system only).</response>
     /// <response code="202">Deletion has been queued as a background job; the result carries the Activity and Worker Task ids to track it by. Always the case for the default deprovisioning mode.</response>
-    /// <response code="400">Deletion failed.</response>
+    /// <response code="400">Deletion failed, or <c>previewActivityId</c> is not a deletion preview of this Connected System.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("connected-systems/{connectedSystemId:int}", Name = "DeleteConnectedSystem")]
     [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status200OK)]
@@ -2585,10 +2648,20 @@ public class SynchronisationController(
         int connectedSystemId,
         [FromQuery] bool deleteChangeHistory = false,
         [FromQuery] string? changeReason = null,
-        [FromQuery] bool synchronisedDeprovisioning = true)
+        [FromQuery] bool synchronisedDeprovisioning = true,
+        [FromQuery] Guid? previewActivityId = null)
     {
         _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
             connectedSystemId, deleteChangeHistory, synchronisedDeprovisioning);
+
+        // A deletion citing another system's preview, or a preview of a different change, would make its audit trail
+        // say the administrator was told something they were not (#134). Checked before anything is fenced.
+        if (previewActivityId is { } citedPreviewId &&
+            !await _application.ConfigurationChangePreviews.IsConnectedSystemPreviewAsync(citedPreviewId, ConfigurationChangePreviewSurface.ConnectedSystemDeletion, connectedSystemId))
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Activity {citedPreviewId} is not a deletion impact preview of Connected System {connectedSystemId}."));
+        }
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -2600,8 +2673,8 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         var result = apiKey != null
-            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason, synchronisedDeprovisioning)
-            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason, synchronisedDeprovisioning);
+            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason, synchronisedDeprovisioning, previewActivityId)
+            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason, synchronisedDeprovisioning, previewActivityId);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));
@@ -4567,7 +4640,7 @@ public class SynchronisationController(
 
     /// <summary>
     /// Sets each mapping response's <see cref="SyncRuleMappingDto.Derived"/> from the Application layer's step facts,
-    /// which carry an entry only for Metaverse-Derived Attribute Flows (and none with the feature off).
+    /// which carry an entry only for Metaverse-Derived Attribute Flows.
     /// </summary>
     private static void AttachDerivedFlowInfo(IEnumerable<SyncRuleMappingDto> dtos, IReadOnlyDictionary<int, DerivedFlowStepInfo> steps)
     {

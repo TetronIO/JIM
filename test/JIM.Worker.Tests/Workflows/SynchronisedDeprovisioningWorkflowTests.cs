@@ -26,43 +26,8 @@ namespace JIM.Worker.Tests.Workflows;
 /// behaviour bit-for-bit.
 /// </summary>
 [TestFixture]
-public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
+public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisioningTestBase
 {
-    private const string HrDescription = "HR Description";
-    private const string TrainingDescription = "Training Description";
-    private const string SharedEmployeeId = "EMP001";
-
-    private FailingSyncRepository _failingSyncRepo = null!;
-
-    /// <summary>
-    /// In-memory sync repository whose Metaverse Object batch update can be made to throw, simulating a
-    /// database failure partway through the deprovisioning run.
-    /// </summary>
-    private sealed class FailingSyncRepository : JIM.InMemoryData.SyncRepository
-    {
-        public bool ThrowOnUpdateMetaverseObjects { get; set; }
-
-        public override Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        {
-            if (ThrowOnUpdateMetaverseObjects)
-                throw new InvalidOperationException("Simulated database failure during the deprovisioning batch.");
-            return base.UpdateMetaverseObjectsAsync(metaverseObjects);
-        }
-    }
-
-    [SetUp]
-    public void SetUpFailableSyncRepo()
-    {
-        // Replace the base harness's sync repository with the failable twin BEFORE any seeding, so every
-        // test (not just the failure one) runs against the same repository instance the helpers seed.
-        // The base Jim instance is NOT disposed here: disposing it would dispose the shared repository and
-        // DbContext this replacement wraps; base tear-down disposes the replacement, which owns them both.
-        _failingSyncRepo = new FailingSyncRepository();
-        _failingSyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
-        SyncRepo = _failingSyncRepo;
-        Jim = new JimApplication(Repository, syncRepository: SyncRepo);
-    }
-
     // -----------------------------------------------------------------------------------------------------------------
     // Queue path (DeleteAsync with synchronisedDeprovisioning: true) and the scheduling fence
     // -----------------------------------------------------------------------------------------------------------------
@@ -221,6 +186,55 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallTakesObjectOutOfExportScope_DeprovisionsTargetAsync()
+    {
+        // The export rule's scope depends on Description, which only HR contributes. Deprovisioning HR clears it,
+        // taking the Metaverse Object out of that scope; a synchronisation disconnecting the HR object would
+        // then deprovision the target per the rule's Outbound Deprovision Action (Delete here), so the
+        // deprovisioning run must too (PRD FR 3: the state a normal synchronisation disconnect would produce).
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true);
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var stagedPendingExport = SyncRepo.PendingExports.Values
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == targetCso.Id);
+        var rpei = DbContext.ActivityRunProfileExecutionItems.Single(item => item.ActivityId == activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stagedPendingExport?.ChangeType, Is.EqualTo(PendingExportChangeType.Delete),
+                "the target left the export rule's scope, so it must be staged for deletion");
+            Assert.That(result.PendingExportsStaged, Is.EqualTo(1), "the deprovisioning must be counted");
+            Assert.That(rpei.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
+                Is.True, "the deprovisioning must be recorded on the object's execution item");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallTakesObjectOutOfExportScopeWithDisconnectAction_DisconnectsTargetAsync()
+    {
+        // As above, under the default Outbound Deprovision Action: the target object stays in the target system
+        // but is no longer joined, and nothing is exported to it.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync(exportScopedOnDescription: true,
+            scopeExitAction: OutboundDeprovisionAction.Disconnect);
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targetCso.MetaverseObjectId, Is.Null, "the target left the export rule's scope, so its join must be broken");
+            Assert.That(targetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.False,
+                "a disconnected target is left as it is, with nothing exported to it");
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Executor: Metaverse Object deletion rules
     // -----------------------------------------------------------------------------------------------------------------
@@ -327,6 +341,72 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallDisabledObjectType_ResiduePassKeepsContributedValuesAsync()
+    {
+        // The Object Type's "Remove contributed attributes on obsoletion" is off, so deprovisioning must leave
+        // the values it contributed in place, exactly as disconnecting the object through a synchronisation
+        // would (PRD decision 3: honour the setting unchanged). The per-object pass keeps them with their
+        // provenance intact, which is precisely what the residue pass selects on; it must not then recall
+        // them by provenance, overriding the policy the per-object pass just honoured.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        var hrType = SyncRepo.ConnectedSystemObjects.Values.First(c => c.ConnectedSystemId == ctx.Hr.Id).Type;
+        hrType.RemoveContributedAttributesOnObsoletion = false;
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription),
+                "recall is off for the Object Type, so the contributed Description must be kept");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDisplayNameAttributeId)?.StringValue, Is.EqualTo("John Smith"),
+                "recall is off for the Object Type, so the contributed DisplayName must be kept");
+            Assert.That(result.ResidueValuesRecalled, Is.Zero,
+                "the residue pass must not recall values the Object Type's policy keeps");
+            Assert.That(result.AttributesCleared, Is.Zero,
+                "no value may be cleared when recall is off");
+            Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.False,
+                "kept values change nothing downstream, so no Pending Export may be staged to the target");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Null,
+                "the Connected System must be deleted as the run's final step");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ResidueRuleWithUnresolvableObjectType_FailsHardAndStaysFencedAsync()
+    {
+        // The residue pass must know an import rule's Object Type to know whether its values are protected by
+        // policy. A rule naming a type the system does not have is corrupt configuration; recalling by
+        // provenance regardless could withdraw values the policy protects, which cannot be undone, so the run
+        // must stop and leave the system fenced for investigation rather than guess.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        // Corrupt the rule only now, after the per-object pass's inputs are settled, so the failure can only come
+        // from the residue pass's policy lookup.
+        task.CheckpointPhase = SynchronisedDeprovisioningPhase.ResiduePass;
+        ctx.HrImportRule.ConnectedSystemObjectType = null!;
+        ctx.HrImportRule.ConnectedSystemObjectTypeId = int.MaxValue;
+
+        var ex = Assert.ThrowsAsync<InvalidDataException>(() => Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task));
+
+        var system = await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("refusing to recall by provenance"));
+            Assert.That(system, Is.Not.Null, "the system must survive a failed run");
+            Assert.That(system!.Status, Is.EqualTo(ConnectedSystemStatus.Deleting), "and stay fenced");
+            Assert.That(GetAttributeValue(SyncRepo.MetaverseObjects.Values.Single(), ctx.MvDescriptionAttributeId), Is.Not.Null,
+                "nothing may be recalled when the policy cannot be read");
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Executor: failure and resumability
     // -----------------------------------------------------------------------------------------------------------------
@@ -339,7 +419,7 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
 
         var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
-        _failingSyncRepo.ThrowOnUpdateMetaverseObjects = true;
+        FailingSyncRepo.ThrowOnUpdateMetaverseObjects = true;
 
         // The executor must fail fast and hard; the Worker's dispatch boundary then fails the Activity,
         // mirrored here (the same contract Worker.cs applies to every queued task type).
@@ -660,313 +740,5 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
             Assert.That(result.ErrorMessage, Does.Contain("immediate deletion is already queued"));
             Assert.That(DbContext.DeleteConnectedSystemWorkerTasks.Count(), Is.EqualTo(1), "nothing new may be queued");
         }
-    }
-
-    // -----------------------------------------------------------------------------------------------------------------
-    // Topology builders
-    // -----------------------------------------------------------------------------------------------------------------
-
-    private sealed record DeprovisioningContext(
-        ConnectedSystem Hr,
-        ConnectedSystem? Training,
-        SyncRule HrImportRule,
-        int TrainingImportRuleId,
-        int MvDescriptionAttributeId,
-        int MvDisplayNameAttributeId,
-        ConnectedSystem Target,
-        ConnectedSystemObjectTypeAttribute TargetDescriptionAttribute,
-        ConnectedSystemObjectTypeAttribute TargetDisplayNameAttribute);
-
-    private static MetaverseObjectAttributeValue? GetAttributeValue(MetaverseObject mvo, int attributeId) =>
-        mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == attributeId && !av.NullValue);
-
-    private async Task<MetaverseObject> CreateAdministratorAsync()
-    {
-        var mvType = await CreateMvObjectTypeAsync("Administrator");
-        var user = new MetaverseObject
-        {
-            Id = Guid.NewGuid(),
-            Type = mvType,
-            Created = DateTime.UtcNow,
-            CachedDisplayName = "Test Administrator",
-            Origin = MetaverseObjectOrigin.Internal
-        };
-        DbContext.MetaverseObjects.Add(user);
-        await DbContext.SaveChangesAsync();
-        return user;
-    }
-
-    /// <summary>
-    /// Fences the system with the Deleting status, exactly as the queue step does, without building a task:
-    /// the state a failed deprovisioning run leaves behind once the worker's boundary has deleted its task row.
-    /// </summary>
-    private async Task FenceSystemAsync(ConnectedSystem system)
-    {
-        // Detach processor-modified entities first (the same guard the base harness's helpers apply): the
-        // full syncs above leave tracked entities in states the in-memory store no longer recognises.
-        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified).ToList())
-            entry.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
-
-        var persistedSystem = await DbContext.ConnectedSystems.FindAsync(system.Id);
-        persistedSystem!.Status = ConnectedSystemStatus.Deleting;
-        await DbContext.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Fences the system with the Deleting status (as the queue step does) and builds the worker task with
-    /// its Activity, mirroring what TaskingServer records at queue time.
-    /// </summary>
-    private async Task<(DeleteConnectedSystemWorkerTask Task, Activity Activity)> FenceSystemAndBuildTaskAsync(ConnectedSystem system)
-    {
-        await FenceSystemAsync(system);
-
-        var activity = new Activity
-        {
-            TargetName = system.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Deprovision,
-            Status = ActivityStatus.InProgress,
-            Executed = DateTime.UtcNow
-            // ConnectedSystemId deliberately not set: the system is deleted before the Activity completes.
-        };
-        DbContext.Activities.Add(activity);
-        await DbContext.SaveChangesAsync();
-
-        var task = new DeleteConnectedSystemWorkerTask(system.Id, evaluateMvoDeletionRules: true, deleteChangeHistory: false)
-        {
-            SynchronisedDeprovisioning = true,
-            InitiatedByType = ActivityInitiatorType.User,
-            InitiatedById = Guid.NewGuid(),
-            InitiatedByName = "Test Administrator",
-            Activity = activity
-        };
-        return (task, activity);
-    }
-
-    /// <summary>
-    /// Sole-contributor topology plus a downstream export target: HR projects and flows DisplayName,
-    /// EmployeeId and Description; a target system maps DisplayName and Description outbound.
-    /// </summary>
-    private async Task<DeprovisioningContext> SetUpSoleContributorWithExportTargetAsync()
-    {
-        var (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr) = await SetUpHrContributorAsync();
-        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr);
-        return new DeprovisioningContext(hrSystem, null, hrImportRule, 0, mvDescriptionAttr.Id,
-            mvDisplayNameAttr.Id, target.System, target.DescriptionAttribute, target.DisplayNameAttribute);
-    }
-
-    /// <summary>
-    /// Two-contributor topology plus a downstream export target: HR (Description priority 1, projects) and
-    /// Training (Description priority 2, joins on EmployeeId).
-    /// </summary>
-    private async Task<DeprovisioningContext> SetUpTwoContributorsWithExportTargetAsync()
-    {
-        var (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr) = await SetUpHrContributorAsync();
-        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
-
-        var trainingSystem = await CreateConnectedSystemAsync("Training Source");
-        var trainingExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
-        var trainingEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
-        var trainingDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "TrainingDescription", Type = AttributeDataType.Text, Selected = true };
-        var trainingType = await CreateCsoTypeAsync(trainingSystem.Id, "TrainingRecord",
-            new List<ConnectedSystemObjectTypeAttribute> { trainingExternalIdAttr, trainingEmployeeIdAttr, trainingDescriptionAttr });
-
-        var trainingImportRule = await CreateImportSyncRuleAsync(trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
-        trainingImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(trainingImportRule, mvDescriptionAttr, trainingDescriptionAttr, priority: 2));
-        trainingImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
-        {
-            SyncRule = trainingImportRule,
-            SyncRuleId = trainingImportRule.Id,
-            Order = 0,
-            CaseSensitive = true,
-            TargetMetaverseAttribute = mvEmployeeIdAttr,
-            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new() { Order = 0, ConnectedSystemAttribute = trainingEmployeeIdAttr, ConnectedSystemAttributeId = trainingEmployeeIdAttr.Id }
-            }
-        });
-        await DbContext.SaveChangesAsync();
-
-        var trainingCso = await CreateCsoAsync(trainingSystem.Id, trainingType, "unused", SharedEmployeeId);
-        trainingCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = trainingDescriptionAttr.Id, Attribute = trainingDescriptionAttr, StringValue = TrainingDescription, ConnectedSystemObject = trainingCso
-        });
-
-        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr);
-        return new DeprovisioningContext(hrSystem, trainingSystem, hrImportRule, trainingImportRule.Id,
-            mvDescriptionAttr.Id, mvDisplayNameAttr.Id, target.System, target.DescriptionAttribute, target.DisplayNameAttribute);
-    }
-
-    /// <summary>
-    /// Sole-contributor topology with TWO HR objects (distinct Metaverse Objects) and an export target, for
-    /// the resume-from-checkpoint test.
-    /// </summary>
-    private async Task<DeprovisioningContext> SetUpTwoObjectsWithExportTargetAsync()
-    {
-        var (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr) = await SetUpHrContributorAsync();
-
-        var hrType = SyncRepo.ConnectedSystemObjects.Values
-            .First(c => c.ConnectedSystemId == hrSystem.Id).Type;
-        var hrDescriptionAttr = hrType.Attributes.First(a => a.Name == "HrDescription");
-        var secondCso = await CreateCsoAsync(hrSystem.Id, hrType, "Jane Doe", "EMP002");
-        secondCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = hrDescriptionAttr.Id, Attribute = hrDescriptionAttr, StringValue = HrDescription, ConnectedSystemObject = secondCso
-        });
-
-        var target = await AddExportTargetAsync(mvType, mvDisplayNameAttr, mvDescriptionAttr);
-        return new DeprovisioningContext(hrSystem, null, hrImportRule, 0, mvDescriptionAttr.Id,
-            mvDisplayNameAttr.Id, target.System, target.DescriptionAttribute, target.DisplayNameAttribute);
-    }
-
-    private async Task<(ConnectedSystem HrSystem, SyncRule HrImportRule, MetaverseObjectType MvType, MetaverseAttribute MvDescriptionAttr, MetaverseAttribute MvDisplayNameAttr)> SetUpHrContributorAsync()
-    {
-        var hrSystem = await CreateConnectedSystemAsync("HR Source");
-        var hrExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
-        var hrDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
-        var hrEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
-        var hrDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "HrDescription", Type = AttributeDataType.Text, Selected = true };
-        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser",
-            new List<ConnectedSystemObjectTypeAttribute> { hrExternalIdAttr, hrDisplayNameAttr, hrEmployeeIdAttr, hrDescriptionAttr });
-
-        var mvType = await CreateMvObjectTypeAsync("Person");
-        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
-        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
-        var mvDescriptionAttr = new MetaverseAttribute
-        {
-            Name = "Description",
-            Type = AttributeDataType.Text,
-            AttributePlurality = AttributePlurality.SingleValued,
-            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
-            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
-        };
-        DbContext.MetaverseAttributes.Add(mvDescriptionAttr);
-        await DbContext.SaveChangesAsync();
-        mvType.Attributes.Add(mvDescriptionAttr);
-
-        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
-        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDisplayNameAttr, hrDisplayNameAttr));
-        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvEmployeeIdAttr, hrEmployeeIdAttr));
-        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDescriptionAttr, hrDescriptionAttr, priority: 1));
-        await DbContext.SaveChangesAsync();
-
-        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", SharedEmployeeId);
-        hrCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = hrDescriptionAttr.Id, Attribute = hrDescriptionAttr, StringValue = HrDescription, ConnectedSystemObject = hrCso
-        });
-
-        return (hrSystem, hrImportRule, mvType, mvDescriptionAttr, mvDisplayNameAttr);
-    }
-
-    private sealed record ExportTarget(
-        ConnectedSystem System,
-        ConnectedSystemObjectTypeAttribute DescriptionAttribute,
-        ConnectedSystemObjectTypeAttribute DisplayNameAttribute);
-
-    private async Task<ExportTarget> AddExportTargetAsync(
-        MetaverseObjectType mvType, MetaverseAttribute mvDisplayNameAttr, MetaverseAttribute mvDescriptionAttr)
-    {
-        var targetSystem = await CreateConnectedSystemAsync("AD Target");
-        var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
-        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
-        var targetDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "Description", Type = AttributeDataType.Text, Selected = true };
-        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "TargetUser",
-            new List<ConnectedSystemObjectTypeAttribute> { targetExternalIdAttr, targetDisplayNameAttr, targetDescriptionAttr });
-
-        var exportRule = new SyncRule
-        {
-            ConnectedSystemId = targetSystem.Id,
-            Name = "AD Export",
-            Direction = SyncRuleDirection.Export,
-            Enabled = true,
-            ConnectedSystemObjectTypeId = targetType.Id,
-            ConnectedSystemObjectType = targetType,
-            MetaverseObjectTypeId = mvType.Id,
-            MetaverseObjectType = mvType,
-            ProvisionToConnectedSystem = true
-        };
-        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
-        {
-            SyncRule = exportRule,
-            TargetConnectedSystemAttribute = targetDisplayNameAttr,
-            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
-            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDisplayNameAttr, MetaverseAttributeId = mvDisplayNameAttr.Id } }
-        });
-        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
-        {
-            SyncRule = exportRule,
-            TargetConnectedSystemAttribute = targetDescriptionAttr,
-            TargetConnectedSystemAttributeId = targetDescriptionAttr.Id,
-            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescriptionAttr, MetaverseAttributeId = mvDescriptionAttr.Id } }
-        });
-
-        DbContext.SyncRules.Add(exportRule);
-        await DbContext.SaveChangesAsync();
-        SyncRepo.SeedSyncRule(exportRule);
-
-        return new ExportTarget(targetSystem, targetDescriptionAttr, targetDisplayNameAttr);
-    }
-
-    /// <summary>
-    /// Simulates the provisioning export having been executed against the target Connected System: marks the
-    /// provisioned target CSO Normal, writes the exported values onto it, and clears all Pending Exports so
-    /// assertions only see exports staged by the deprovisioning run under test.
-    /// </summary>
-    private ConnectedSystemObject SimulateTargetExportExecuted(DeprovisioningContext ctx, string displayName, string description)
-    {
-        var targetCso = SyncRepo.ConnectedSystemObjects.Values.First(c => c.ConnectedSystemId == ctx.Target.Id);
-        targetCso.Status = ConnectedSystemObjectStatus.Normal;
-        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = ctx.TargetDisplayNameAttribute.Id,
-            Attribute = ctx.TargetDisplayNameAttribute,
-            StringValue = displayName,
-            ConnectedSystemObject = targetCso
-        });
-        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = ctx.TargetDescriptionAttribute.Id,
-            Attribute = ctx.TargetDescriptionAttribute,
-            StringValue = description,
-            ConnectedSystemObject = targetCso
-        });
-        SyncRepo.ClearAllPendingExports();
-        return targetCso;
-    }
-
-    /// <summary>
-    /// Marks every provisioned CSO of the target system Normal and clears all Pending Exports, simulating
-    /// their provisioning exports having executed.
-    /// </summary>
-    private void SimulateAllTargetExportsExecuted(ConnectedSystem targetSystem)
-    {
-        foreach (var targetCso in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == targetSystem.Id))
-            targetCso.Status = ConnectedSystemObjectStatus.Normal;
-        SyncRepo.ClearAllPendingExports();
-    }
-
-    private static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue)
-    {
-        return new SyncRuleMapping
-        {
-            SyncRule = rule,
-            SyncRuleId = rule.Id,
-            Priority = priority,
-            TargetMetaverseAttribute = target,
-            TargetMetaverseAttributeId = target.Id,
-            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source, ConnectedSystemAttributeId = source.Id } }
-        };
-    }
-
-    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
-    {
-        var reloaded = await ReloadEntityAsync(connectedSystem);
-        var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new JIM.Application.Servers.SyncEngine(), new JIM.Application.Servers.SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
     }
 }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Preview;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Scheduling;
@@ -498,4 +499,12 @@ public interface IActivityRepository
     /// deletions are recorded without one and are precisely the changes that most need surfacing.
     /// </summary>
     public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
+
+    /// <summary>
+    /// What has happened since <paramref name="since"/> that could change a configuration change preview's answer
+    /// (#134): the latest data-moving Activity (a run, housekeeping, a connector space cleared, a system deleted) and
+    /// the latest configuration change that can change synchronisation outcomes, each null when there has been none.
+    /// Previews and reads are neither.
+    /// </summary>
+    public Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessSinceAsync(DateTime since);
 }

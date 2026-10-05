@@ -13,7 +13,7 @@ function Disable-JIMFeature {
         Supports ShouldProcess; use -WhatIf or -Confirm to preview or confirm the operation.
 
     .PARAMETER Name
-        The flag's key, e.g. "Features.UniqueValueGeneration".
+        The flag's key, e.g. "Features.SomeInDevelopmentFeature".
 
     .PARAMETER PassThru
         If specified, returns the updated feature flag object.
@@ -22,7 +22,7 @@ function Disable-JIMFeature {
         If -PassThru is specified, returns the updated feature flag object.
 
     .EXAMPLE
-        Disable-JIMFeature -Name "Features.UniqueValueGeneration"
+        Disable-JIMFeature -Name "Features.SomeInDevelopmentFeature"
 
         Disables the named feature flag.
 

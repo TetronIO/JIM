@@ -6874,7 +6874,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // ConnectedSystemAttribute via two paths (ObjectType.Attributes and
         // AttributeFlowRules.Sources.ConnectedSystemAttribute), and re-attaching either of those collided with
         // the existing tracker entries ("another instance with the same key value is already being tracked").
+        DeleteScopingCriteriaRemovedFromTheRule();
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Deletes the Scoping Criteria groups and criteria the caller took out of the rule. The portal and the API remove
+    /// one by taking it out of its owner's collection, and each of those links is optional (a nested group hangs off its
+    /// parent, not the rule), so EF Core's own answer is to null the link and keep the row: a group or criterion
+    /// belonging to nothing, still referencing the Connected System attribute it compared, which then refused that
+    /// system's deletion with 23503 for good. A group left with neither a rule nor a parent, or a criterion left with no
+    /// group, can only be one the caller removed; deleting a group takes its criteria and nested groups with it.
+    /// </summary>
+    private void DeleteScopingCriteriaRemovedFromTheRule()
+    {
+        var changeTracker = Repository.Database.ChangeTracker;
+        changeTracker.DetectChanges();
+
+        var removedGroups = changeTracker.Entries<SyncRuleScopingCriteriaGroup>()
+            .Where(entry => entry.State == EntityState.Modified &&
+                            entry.Property("SyncRuleId").CurrentValue == null &&
+                            entry.Property("ParentGroupId").CurrentValue == null)
+            .ToList();
+        var removedCriteria = changeTracker.Entries<SyncRuleScopingCriteria>()
+            .Where(entry => entry.State == EntityState.Modified && entry.Property("SyncRuleScopingCriteriaGroupId").CurrentValue == null)
+            .ToList();
+
+        foreach (var entry in removedGroups)
+            entry.State = EntityState.Deleted;
+        foreach (var entry in removedCriteria)
+            entry.State = EntityState.Deleted;
     }
         
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
@@ -7525,6 +7554,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleScopingCriteriaGroups""
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 9b. Sweep Scoping Criteria orphaned from their rule that still compare one of this system's attributes. Removing
+        //     a group or a criterion used to sever it rather than delete it (the same failure as #1589's matching rules),
+        //     leaving rows steps 8 and 9 cannot reach through the system's rules; they then refuse the attribute delete
+        //     at step 12 and the whole deletion rolls back. The save path now deletes properly, but existing
+        //     deployments may already hold orphans. Any criterion still naming one of this system's attributes after
+        //     step 9 compares an attribute that is about to stop existing, so it goes whatever group it hangs off.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleScopingCriteria""
+              WHERE ""ConnectedSystemAttributeId"" IN (
+                SELECT a.""Id"" FROM ""ConnectedSystemAttributes"" a
+                INNER JOIN ""ConnectedSystemObjectTypes"" ot ON a.""ConnectedSystemObjectTypeId"" = ot.""Id""
+                WHERE ot.""ConnectedSystemId"" = {0}
+              )",
             connectedSystemId);
 
         // 10. Delete Object Matching Rules for this system. Both ownership foreign keys now cascade

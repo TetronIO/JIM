@@ -38,7 +38,7 @@ public class SyncRuleDeletionResult
     /// The Metaverse-Derived Attribute Flows (#1750, FR 3) on other Synchronisation Rules that the deletion leaves with
     /// a missing input, because an attribute they read, directly or through other derived attributes, lost its last
     /// enabled contributor. A queued deletion disables the rule at once, so its dependants are reported at the same
-    /// moment. Reported, never blocking. Always empty when the Metaverse-Derived Attribute Flows feature is off.
+    /// moment. Reported, never blocking.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 }

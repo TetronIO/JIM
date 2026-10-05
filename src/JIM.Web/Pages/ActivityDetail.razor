@@ -190,6 +190,44 @@
                 </MudItem>
             }
 
+            @* ─── The preview behind this change (#134) ─── *@
+            @switch (ActivityPreviewProvenance.For(_activity))
+            {
+                case ActivityPreviewProvenanceKind.InformedByPreview when _activity.PreviewActivityId is { } informingPreviewId:
+                    <MudItem xs="12" data-testid="jim-activity-preview-provenance">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Preview:</MudText>
+                        @if (_informingPreviewActivity is { } informingPreviewActivity)
+                        {
+                            <MudText>
+                                Informed by a preview run
+                                <span title="@informingPreviewActivity.Created.ToLocalTime().ToFriendlyDate()">@informingPreviewActivity.Created.ToLocalTime().ToRelativeTime()</span>.
+                                <MudLink Href="@($"/activity/{informingPreviewId}")">Open preview</MudLink>
+                            </MudText>
+                            @if (_informingPreviewLines.Count > 0)
+                            {
+                                <MudAlert Severity="@_informingPreviewLines[0].Severity" Dense="true" Class="mt-2">
+                                    @foreach (var line in _informingPreviewLines.Take(3))
+                                    {
+                                        <MudText Typo="Typo.body2">@line.Sentence</MudText>
+                                    }
+                                </MudAlert>
+                            }
+                        }
+                        else
+                        {
+                            <MudText>Informed by a preview that has since been removed under the history retention period.</MudText>
+                        }
+                    </MudItem>
+                    break;
+
+                case ActivityPreviewProvenanceKind.WentAheadWithoutAPreview:
+                    <MudItem xs="12" data-testid="jim-activity-preview-provenance">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Preview:</MudText>
+                        <MudText>Went ahead without a preview</MudText>
+                    </MudItem>
+                    break;
+            }
+
             @* While a run is in flight the message is live progress narration, and it belongs with
                the step it describes rather than repeated in the summary. *@
             @if (!string.IsNullOrEmpty(_activity.Message) && _activity.Status != ActivityStatus.InProgress)
@@ -1116,6 +1154,10 @@
     /// </summary>
     private ServerCertificateDiagnostic? _serverCertificate;
     private Activity? _parentActivity;
+
+    // The preview that informed this change (#134), its Activity, and its verdict; empty where there is none.
+    private Activity? _informingPreviewActivity;
+    private IReadOnlyList<PreviewVerdictLine> _informingPreviewLines = [];
     private ConfigurationChangeDetail? _configChangeDetail;
     private bool _isAdministrator;
     private VirtualisedDataGrid<Activity>? _childActivitiesGrid;
@@ -1302,6 +1344,17 @@
         // Load the parent activity (if any) so the Summary can render its type and target name rather than a bare link.
         if (_activity.ParentActivityId.HasValue)
             _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
+
+        // The preview the administrator read before this change (#134), and what it said. Both are gone once the
+        // preview's Activity ages out under retention, which the Summary says rather than linking to nothing.
+        _informingPreviewActivity = null;
+        _informingPreviewLines = [];
+        if (_activity.PreviewActivityId is { } previewActivityId)
+        {
+            _informingPreviewActivity = await jim.Activities.GetActivityAsync(previewActivityId);
+            if (_informingPreviewActivity != null && await jim.ConfigurationChangePreviews.GetPreviewAsync(previewActivityId) is { } informingPreview)
+                _informingPreviewLines = ConfigurationChangePreviewVerdict.Lines(informingPreview.ReadImpactCounts());
+        }
 
         if (ShowsExecutionItems)
         {

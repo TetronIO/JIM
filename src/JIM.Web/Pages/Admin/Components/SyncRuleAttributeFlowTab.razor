@@ -508,17 +508,10 @@
                 <div>Expression</div>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Computes a value using an expression</MudText>
             </MudSelectItem>
-            @* Unique Value Generation (#242) is gated behind its feature flag while in development: offering the
-               option to create new generated configuration only when it is on, while an already-generated mapping
-               being edited keeps showing its own Source Type regardless (checked once in OnInitializedAsync, not
-               per render). *@
-            @if (_uniqueValueGenerationEnabled || _attributeFlowMappingSourceType == "Generated")
-            {
-                <MudSelectItem Value="@("Generated")">
-                    <div>Generated Value</div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Generates a unique, persistent value</MudText>
-                </MudSelectItem>
-            }
+            <MudSelectItem Value="@("Generated")">
+                <div>Generated Value</div>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Generates a unique, persistent value</MudText>
+            </MudSelectItem>
         </MudSelect>
 
         @if (_attributeFlowMapping != null && _attributeFlowMappingSource != null && SyncRule.MetaverseObjectType !=
@@ -1059,13 +1052,6 @@
         _ => sourceType
     };
 
-    /// <summary>
-    /// Whether Unique Value Generation (#242) is on, gating the "Generated Value" Source Type option in the Add/Edit
-    /// Attribute Flow dialog. Checked once in <see cref="OnInitializedAsync"/>, not per render; existing generated
-    /// configuration keeps working and displaying regardless of this flag (see the Source Type MudSelect markup).
-    /// </summary>
-    private bool _uniqueValueGenerationEnabled;
-
     // Advisory Standard Mapping hints for the dialog's attribute pickers (#1122). Loaded when the dialog opens
     // and cached for as long as the rule keeps pointing at the same Connected System and Metaverse Object Type.
     private StandardMappingHints _standardMappingHints = StandardMappingHints.Empty;
@@ -1077,13 +1063,6 @@
         "not flow this attribute and will be recorded as an error; a single value flows normally.";
 
     // ─── Metaverse-Derived Attribute Flows (#1750, Phase 6) ───
-
-    /// <summary>
-    /// Whether Metaverse-Derived Attribute Flows are on. Checked once in <see cref="OnInitializedAsync"/>, like
-    /// <see cref="_uniqueValueGenerationEnabled"/>; with it off, every derived-specific affordance on this tab is absent
-    /// and nothing derived-specific is read.
-    /// </summary>
-    private bool _derivedFlowsEnabled;
 
     /// <summary>
     /// The step facts of the rule's saved derived flows, keyed by mapping id, for the Derived chips. Loaded once with
@@ -1114,12 +1093,6 @@
     {
         var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
         _attributeFlowTableView = storedView != "cards";
-
-        using (var jim = JimFactory.Create())
-        {
-            _uniqueValueGenerationEnabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key);
-            _derivedFlowsEnabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key);
-        }
 
         await LoadDerivedFlowStepsAsync();
         await LoadRetiredValueCountsAsync();
@@ -1210,7 +1183,7 @@
 
     private async Task LoadDerivedFlowStepsAsync()
     {
-        if (!_derivedFlowsEnabled || SyncRule.Direction != SyncRuleDirection.Import)
+        if (SyncRule.Direction != SyncRuleDirection.Import)
         {
             _derivedFlowSteps = new Dictionary<int, DerivedFlowStepInfo>();
             return;
@@ -1221,7 +1194,7 @@
     }
 
     /// <summary>
-    /// A flow's Derived chip facts; null for an ordinary flow, an unsaved one, or with the feature off.
+    /// A flow's Derived chip facts; null for an ordinary flow or an unsaved one.
     /// </summary>
     private DerivedFlowStepInfo? DerivedStepInfoFor(SyncRuleMapping mapping) =>
         mapping.Id > 0 && _derivedFlowSteps.TryGetValue(mapping.Id, out var stepInfo) ? stepInfo : null;
@@ -1229,13 +1202,10 @@
     /// <summary>
     /// The Metaverse attributes the Insert attribute menu offers as <c>mv["..."]</c>: always on an export rule, whose
     /// expressions are evaluated against the Metaverse Object (long before derived flows existed), and on an import
-    /// rule only with the feature on, where an expression reading the Metaverse is a derived flow. Null leaves the
-    /// group out.
+    /// rule, where an expression reading the Metaverse is a derived flow.
     /// </summary>
     private IEnumerable<MetaverseAttribute>? InsertableMetaverseAttributes =>
-        SyncRule.Direction == SyncRuleDirection.Export || (_derivedFlowsEnabled && SyncRule.Direction == SyncRuleDirection.Import)
-            ? SyncRule.MetaverseObjectType?.Attributes
-            : null;
+        SyncRule.MetaverseObjectType?.Attributes;
 
     /// <summary>
     /// The Connected System attributes the Insert attribute menu offers as <c>cs["..."]</c>: on an import rule only. An
@@ -1250,10 +1220,9 @@
 
     /// <summary>
     /// Whether the flow open in the dialog is one the derived flow analysis answers for: an import Expression or
-    /// Generated flow with a target, with the feature on.
+    /// Generated flow with a target.
     /// </summary>
     private bool CanAnalyseDerivedFlow() =>
-        _derivedFlowsEnabled &&
         _addAttributeFlowRuleDialogVisible &&
         SyncRule.Direction == SyncRuleDirection.Import &&
         _attributeFlowMappingSourceType is "Expression" or "Generated" &&
@@ -1917,12 +1886,11 @@
 
     /// <summary>
     /// Asks before an edit that leaves Metaverse-Derived Attribute Flows without an input (#1750, FR 3); true to go
-    /// ahead. Asks nothing, and reads nothing, for an edit that cannot take a contribution away, on an export rule, or
-    /// with the feature off.
+    /// ahead. Asks nothing, and reads nothing, for an edit that cannot take a contribution away, or on an export rule.
     /// </summary>
     private async Task<bool> ConfirmEditDependantsAsync(SyncRuleMapping edited)
     {
-        if (!_derivedFlowsEnabled || SyncRule.Direction != SyncRuleDirection.Import ||
+        if (SyncRule.Direction != SyncRuleDirection.Import ||
             _editBaseline == null || !_editBaseline.MayTakeAContributionAway(edited))
             return true;
 
@@ -1964,8 +1932,7 @@
     private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)
     {
         // FR 3 (#1750): when Metaverse-Derived Attribute Flows read an attribute this flow is the last enabled
-        // contributor of, say which before anything else; that confirmation stands in for the plain one below. With
-        // none (or the feature off) the flow is exactly as it was.
+        // contributor of, say which before anything else; that confirmation stands in for the plain one below.
         var dependants = await GetDependantsOfRemovalAsync(attributeFlowRule);
         if (dependants.Count > 0 && !await DependentDerivedFlowsDialog.ConfirmAsync(DialogService, "Remove Attribute Flow?",
                 $"remove the Attribute Flow to {attributeFlowRule.TargetMetaverseAttribute?.Name ?? "this attribute"}", dependants, "Remove"))
@@ -2027,11 +1994,11 @@
 
     /// <summary>
     /// The Metaverse-Derived Attribute Flows removing <paramref name="mapping"/> from the rule as staged would leave
-    /// without an input; empty, with nothing read, on an export rule or with the feature off.
+    /// without an input; empty, with nothing read, on an export rule.
     /// </summary>
     private async Task<List<DependentDerivedFlow>> GetDependantsOfRemovalAsync(SyncRuleMapping mapping)
     {
-        if (!_derivedFlowsEnabled || SyncRule.Direction != SyncRuleDirection.Import)
+        if (SyncRule.Direction != SyncRuleDirection.Import)
             return [];
 
         using var jim = JimFactory.Create();

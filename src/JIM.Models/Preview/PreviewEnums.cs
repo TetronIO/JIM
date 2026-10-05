@@ -91,7 +91,18 @@ public enum ConfigurationChangePreviewSurface
     /// different questions answered from different data: scope asks which objects are read, schema asks which kinds
     /// of object and which of their attributes. One adapter may serve one surface, so they could not share.
     /// </remarks>
-    ConnectedSystemSchema = 9
+    ConnectedSystemSchema = 9,
+
+    /// <summary>
+    /// Deleting a Connected System with its Synchronised Deprovisioning (#134): what withdrawing everything the system
+    /// contributes would do to the Metaverse and to every other Connected System, before the administrator confirms.
+    /// </summary>
+    /// <remarks>
+    /// A surface of its own rather than a change to <see cref="ConnectedSystem"/>'s, because a deletion is not a change
+    /// to the system's settings: it is the system's whole contribution leaving, evaluated by running the deprovisioning
+    /// itself read-only, which no settings adapter does.
+    /// </remarks>
+    ConnectedSystemDeletion = 10
 }
 
 /// <summary>

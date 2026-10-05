@@ -24,8 +24,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// Metaverse-Derived Attribute Flows in the worker (#1750, plan Phase 3), driven through the real Full and Delta
 /// Synchronisation processors: the per-object level loop (derived levels interleaved with generation resolution), the
 /// derived-input mark set on other hosting systems' objects at page flush ("Position 2"), and delta and full
-/// selection honouring the mark. Runs with the feature flag on, as though it had shipped, except where a test says
-/// otherwise.
+/// selection honouring the mark.
 /// </summary>
 /// <remarks>
 /// Topology: a Person Metaverse Object Type with Employee Id, Account Name, Region, Email and User Principal Name. HR
@@ -68,28 +67,6 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             var attributeIds = directoryExports.Single().AttributeValueChanges.Select(c => c.AttributeId).ToList();
             Assert.That(attributeIds, Does.Contain(ctx.DirectoryMail!.Id));
             Assert.That(attributeIds, Does.Contain(ctx.DirectoryUpn!.Id));
-        }
-    }
-
-    [Test]
-    public async Task FullSync_FlagOff_LegacyMetaverseReadSeesNothingAndNoMarksAreWrittenAsync()
-    {
-        // Flag off, the engine is exactly as it was before the feature: an import expression reading mv["..."] is an
-        // ordinary flow that reads nothing, and marking and selection are inert.
-        var ctx = await SetUpAsync(emailExpression: EmailFromAccountNameAndRegion, withUpn: false, withAd: true, flagOn: false);
-        SeedHr(ctx, "E1", "jbloggs");
-        SeedAd(ctx, "E1", "EMEA");
-
-        await RunFullSyncAsync(ctx.Hr);
-        await RunFullSyncAsync(ctx.Ad!);
-
-        var mvo = SyncRepo.MetaverseObjects.Values.Single();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("@.corp.local"), "legacy: mv[\"...\"] in an import expression reads null");
-            Assert.That(Text(mvo, ctx.Region), Is.EqualTo("EMEA"));
-            Assert.That(SyncRepo.DerivedInputMarkCalls, Is.Empty, "no graph, so nothing is ever marked");
-            Assert.That(SyncRepo.ConnectedSystemObjects.Values.Any(c => c.DerivedInputChangePending), Is.False);
         }
     }
 
@@ -605,15 +582,11 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         bool withUpn,
         bool withAd = false,
         bool withDirectoryExport = false,
-        bool flagOn = true,
         MissingInputBehaviour emailMissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
         string? generatedAccountNameBase = null,
         bool adContributesEmail = false,
         bool withOrdinaryFailingMapping = false)
     {
-        if (flagOn)
-            await EnableAllFeatureFlagsAsync();
-
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
         var accountName = await AddMvAttributeAsync(mvType, "Account Name");
@@ -734,17 +707,6 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
 
         return new Context(hr, hrType, hrAccountName, hrImport, emailMapping, accountName, region, email, upn,
             ad, adType, adRegion, adImportRule, directory, directoryMail, directoryUpn);
-    }
-
-    /// <summary>
-    /// Tests run as though the features had shipped (test/CLAUDE.md): every catalogued flag on, taken from the
-    /// shared <see cref="InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled"/> fixture. The workflow harness
-    /// reads Service Settings from its database, so the rows are stored there rather than substituting a repository.
-    /// </summary>
-    private async Task EnableAllFeatureFlagsAsync()
-    {
-        DbContext.ServiceSettingItems.AddRange(await InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
-        await DbContext.SaveChangesAsync();
     }
 
     private async Task<MetaverseAttribute> AddMvAttributeAsync(MetaverseObjectType mvType, string name)

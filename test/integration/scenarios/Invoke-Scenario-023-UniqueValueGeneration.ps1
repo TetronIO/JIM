@@ -65,7 +65,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "NeverReuse", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -478,7 +478,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "NeverReuse")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -1010,49 +1010,6 @@ try {
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
-    # Feature flag: disabled, creating a NEW generated mapping is refused (400); existing
-    # mappings keep generating.
-    # ─────────────────────────────────────────────────────────────────────────────────────
-    if ($lastStepIndex -ge $stepOrder.IndexOf("FeatureFlag")) {
-        Write-TestSection "Test 11: Feature flag (Features.UniqueValueGeneration)"
-
-        Disable-JIMFeature -Name "Features.UniqueValueGeneration" | Out-Null
-
-        $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
-        $throwawayAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq "Flag Test Attribute" }
-        if (-not $throwawayAttr) {
-            $throwawayAttr = New-JIMMetaverseAttribute -Name "Flag Test Attribute" -Type Text -AttributePlurality SingleValued -ObjectTypeIds @($mvUserType.id)
-        }
-
-        $refused = $false
-        $refusalMessage = $null
-        try {
-            New-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -TargetMetaverseAttributeId $throwawayAttr.id `
-                -Generate -TokenKind Random -RandomFormat Hex -RandomLength 4 -ErrorAction Stop | Out-Null
-        }
-        catch {
-            $refused = $true
-            $refusalMessage = $_.Exception.Message
-        }
-        Add-TestResult -Name "Creating a new generated mapping is refused (400) while the feature flag is disabled" -Passed $refused `
-            -Detail "Expected the create call to fail; refusal message: $refusalMessage"
-        if ($refused) {
-            Add-TestResult -Name "The refusal names HTTP 400" -Passed ($refusalMessage -match '\(400\)') `
-                -Detail "Message was: $refusalMessage"
-        }
-
-        # Existing generated mappings keep generating while the flag is off.
-        Add-HrCsvJoiner -EmployeeId "EMP900050" -FirstName "Cordelia" -LastName "Whitlock"
-        Invoke-Cycle -Config $config | Out-Null
-        $flagOffJoiner = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Cordelia' -and $_.attributes.'Last Name' -eq 'Whitlock' }) | Select-Object -First 1
-        Add-TestResult -Name "An existing generated mapping (Account Name) keeps generating with the flag disabled" -Passed ($flagOffJoiner -and $flagOffJoiner.attributes.'Account Name' -eq 'cordelia.whitlock') `
-            -Detail "Expected 'cordelia.whitlock', got '$($flagOffJoiner.attributes.'Account Name')'"
-
-        Enable-JIMFeature -Name "Features.UniqueValueGeneration" -AllowInDevelopment | Out-Null
-        Write-Host "  ✓ Re-enabled Features.UniqueValueGeneration" -ForegroundColor Green
-    }
-
-    # ─────────────────────────────────────────────────────────────────────────────────────
     # Never reuse (release 2, Phase 6): a leaver's generated values are retired, and a new
     # joiner with the same name is not given the leaver's Account Name; with "Never reuse a
     # value" off, nothing is retired and the same joiner gets it. Last in the order because a
@@ -1060,7 +1017,7 @@ try {
     # steps' invariant does not allow for.
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("NeverReuse")) {
-        Write-TestSection "Test 12: Never reuse a value (retired values register)"
+        Write-TestSection "Test 11: Never reuse a value (retired values register)"
 
         # Immediate deletion for this step only (the 7-day grace period would merely schedule it); restored in
         # the finally block, whatever happens. Nobody has left before this step, so nothing is pending deletion
@@ -1069,8 +1026,8 @@ try {
         Assert-NotNull -Value $userType -Message "The 'User' Metaverse Object Type exists"
         Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
         try {
-            # ─── 12a: name-based (Account Name, "only if taken") and random (Badge Code), Never reuse on ───
-            Write-TestSection "Test 12a: A leaver's values are retired and not reissued"
+            # ─── 11a: name-based (Account Name, "only if taken") and random (Badge Code), Never reuse on ───
+            Write-TestSection "Test 11a: A leaver's values are retired and not reissued"
             Add-HrCsvJoiner -EmployeeId "EMP900060" -FirstName "Ottoline" -LastName "Vantreight" -Department "Finance"
             Invoke-HrJoinerOrLeaverSync -Config $config -Context "Never reuse: first joiner"
             $leaver = Get-PersonByEmployeeId -EmployeeId "EMP900060"
@@ -1123,8 +1080,8 @@ try {
                 -Passed ($rejoiner.attributes.'Badge Code' -and $rejoiner.attributes.'Badge Code' -ne $leaverBadgeCode) `
                 -Detail "Retired '$leaverBadgeCode', new '$($rejoiner.attributes.'Badge Code')'"
 
-            # ─── 12b: Never reuse off: nothing is retired, and the same name gets the same value ───
-            Write-TestSection "Test 12b: With Never reuse off, a leaver's value is free again"
+            # ─── 11b: Never reuse off: nothing is retired, and the same name gets the same value ───
+            Write-TestSection "Test 11b: With Never reuse off, a leaver's value is free again"
             Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.AccountNameMappingId -NeverReuse $false | Out-Null
             try {
                 Add-HrCsvJoiner -EmployeeId "EMP900062" -FirstName "Wilhelmina" -LastName "Strachan" -Department "Legal"

@@ -58,7 +58,7 @@ public partial class ConnectedSystemServer
             // the deleted rule's own contribution is ineligible (other rules of the same system are
             // legitimate survivors here, unlike the obsoletion path).
             var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
-            var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+            var priorityContext = BuildRecallPriorityContext(allSyncRules);
             var syncEngine = new SyncEngine();
             var expressionEvaluator = new DynamicExpressoEvaluator();
             var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
@@ -67,7 +67,7 @@ public partial class ConnectedSystemServer
             // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the deletion completes: the
             // deleted rule's own derived mappings go with it, so they must not count as hosting flows, whatever its
             // Enabled state (it is disabled at queue time, but the marking must not depend on that).
-            var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+            var derivedInputMarks = CreateDerivedInputMarkBatch(
                 allSyncRules.Where(rule => rule.Id != task.SyncRuleId), "Synchronisation Rule deletion recall");
 
             var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(task.SyncRuleId);
@@ -143,8 +143,7 @@ public partial class ConnectedSystemServer
     /// <param name="exportEvaluationCache">The pre-built export evaluation cache driving Pending Export staging.</param>
     /// <param name="activity">The Activity the per-object results are recorded on.</param>
     /// <param name="derivedInputMarks">Collects the Metaverse-Derived Attribute Flow marks (#1750 Phase 4) for every
-    /// object whose attribute values change, flushed once per batch after the batch is persisted; inert when the
-    /// feature is off.</param>
+    /// object whose attribute values change, flushed once per batch after the batch is persisted.</param>
     /// <param name="reElectedDetailMessage">The outcome wording for values a surviving contributor took over.</param>
     /// <param name="clearedDetailMessage">The outcome wording for values cleared with no remaining contributor.</param>
     /// <param name="trackActivityProgress">Whether to advance the Activity's ObjectsProcessed counter per batch
@@ -197,6 +196,7 @@ public partial class ConnectedSystemServer
             var removedValueIds = new List<Guid>();
             var stagedPendingExports = new List<PendingExport>();
             var executionItems = new List<ActivityRunProfileExecutionItem>();
+            var scopeExitCandidates = new List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem ExecutionItem)>();
 
             // A Metaverse Object marked for deferred deletion keeps its values for the grace window;
             // recalling them here would undo the per-object pass's deliberate freeze.
@@ -272,7 +272,9 @@ public partial class ConnectedSystemServer
                     .ToList();
                 stagedPendingExports.AddRange(newlyStagedExports);
 
-                executionItems.Add(BuildRecallExecutionItem(mvo, reElectedDetailMessage, clearedDetailMessage, additions.Count, clearedAttributeCount));
+                var executionItem = BuildRecallExecutionItem(mvo, reElectedDetailMessage, clearedDetailMessage, additions.Count, clearedAttributeCount);
+                executionItems.Add(executionItem);
+                scopeExitCandidates.Add((mvo, executionItem));
 
                 result.MetaverseObjectsProcessed++;
                 result.ValuesRecalled += recalledValues.Count;
@@ -310,6 +312,14 @@ public partial class ConnectedSystemServer
                 await Application.SyncRepo.CreatePendingExportsAsync(stagedPendingExports);
                 result.PendingExportsStaged += stagedPendingExports.Count;
             }
+
+            // The export rules the recall took objects out of: deprovisioned as a synchronisation would (#134). Only
+            // now, with the batch's Metaverse changes and staged exports persisted, mirroring synchronisation's own
+            // order (persist the page's objects, then evaluate exports): the evaluation saves what it decides as it
+            // goes, and must neither flush a half-applied object nor have its Delete replaced by the staging above.
+            foreach (var (scopeExitMvo, scopeExitItem) in scopeExitCandidates)
+                result.PendingExportsStaged += await DeprovisionRecallScopeExitsAsync(
+                    scopeExitMvo, exportEvaluationCache, scopeExitItem, recordOutcomes: true);
 
             // The batch's Metaverse changes are persisted; mark their hosting systems in one bulk update. Marking
             // after the write means a hosting system's run that clears a mark has seen the values that caused it.
@@ -402,6 +412,75 @@ public partial class ConnectedSystemServer
 
         item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved}:1";
         return item;
+    }
+
+    /// <summary>
+    /// The scope-exit half of a recall's outbound evaluation (#134). A recall stages corrective updates for the
+    /// export Synchronisation Rules a Metaverse Object is still in scope of, but a synchronisation that withdrew the
+    /// same values would also deprovision the targets of any rule the object has now left, per each rule's Outbound
+    /// Deprovision Action (<c>SyncTaskProcessorBase.EvaluateOutboundExportsAsync</c>). Without this, a recall that
+    /// takes an object out of an export rule's scope leaves its target provisioned, and nothing revisits it. Shared
+    /// by every recall executor (Synchronised Deprovisioning's per-object pass, and
+    /// <see cref="RecallSyncRuleContributedValuesAsync"/> for Synchronisation Rule deletion, the residue pass and the
+    /// stranded-value sweep) so they cannot diverge from each other or from synchronisation.
+    /// </summary>
+    /// <remarks>
+    /// The evaluation persists what it decides as it goes, exactly as on the synchronisation path: a Delete Pending
+    /// Export, a broken join, or a cancelled never-exported provisioning. Each is idempotent on a resumed run (an
+    /// existing Delete Pending Export is reused, a broken join is no longer found). Call it after the object's
+    /// recalled values have been applied, so scope is judged on the values the object is left with.
+    /// </remarks>
+    /// <param name="executionItem">The object's execution item; each staged deprovisioning and cancelled
+    /// provisioning is recorded on it, as synchronisation records them.</param>
+    /// <returns>The number of Delete Pending Exports staged or reused.</returns>
+    private async Task<int> DeprovisionRecallScopeExitsAsync(
+        MetaverseObject mvo,
+        ExportEvaluationCache exportEvaluationCache,
+        ActivityRunProfileExecutionItem executionItem,
+        bool recordOutcomes)
+    {
+        var workingSet = new ExportEvaluationWorkingSet();
+        var deprovisioningExports = await Application.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo, exportEvaluationCache, workingSet);
+        if (deprovisioningExports.Count == 0 && workingSet.CancelledProvisionings.Count == 0)
+            return 0;
+
+        Log.Information(
+            "DeprovisionRecallScopeExitsAsync: Metaverse Object {MvoId} left the scope of {ExportRuleCount} export rule(s) when its values were recalled: " +
+            "{DeleteCount} deprovisioning Pending Export(s) staged, {CancelledCount} never-exported provisioning(s) cancelled.",
+            mvo.Id, deprovisioningExports.Count + workingSet.CancelledProvisionings.Count, deprovisioningExports.Count,
+            workingSet.CancelledProvisionings.Count);
+
+        if (recordOutcomes)
+        {
+            var exportRules = exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules).ToList();
+            string? SystemName(int connectedSystemId) =>
+                exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == connectedSystemId)?.ConnectedSystem?.Name;
+            string? ObjectTypeName(int connectedSystemId) =>
+                exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == connectedSystemId)?.ConnectedSystemObjectType?.Name;
+
+            foreach (var pendingExport in deprovisioningExports)
+            {
+                SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
+                    targetEntityId: pendingExport.Id,
+                    targetEntityDescription: SystemName(pendingExport.ConnectedSystemId),
+                    detailCount: pendingExport.AttributeValueChanges.Count,
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, ObjectTypeName(pendingExport.ConnectedSystemId)),
+                    stagedChangeType: pendingExport.ChangeType);
+            }
+
+            foreach (var cancellation in workingSet.CancelledProvisionings)
+            {
+                SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                    targetEntityDescription: SystemName(cancellation.ConnectedSystemId),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, ObjectTypeName(cancellation.ConnectedSystemId)));
+            }
+
+            SyncOutcomeBuilder.BuildOutcomeSummary(executionItem);
+        }
+
+        return deprovisioningExports.Count;
     }
 
     /// <summary>

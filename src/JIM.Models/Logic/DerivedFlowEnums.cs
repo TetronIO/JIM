@@ -26,8 +26,7 @@ public enum DerivedFlowGraphScope
 public enum DerivedFlowAnalysisStatus
 {
     /// <summary>
-    /// Nothing to analyse: the Metaverse-Derived Attribute Flows feature is off, the rule is an export rule, or the
-    /// mapping has no target Metaverse attribute yet.
+    /// Nothing to analyse: the rule is an export rule, or the mapping has no target Metaverse attribute yet.
     /// </summary>
     NotApplicable = 0,
 

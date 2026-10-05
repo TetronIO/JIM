@@ -60,9 +60,7 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
-        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
-        // the flag on these paths (#1750).
-        _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
         _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);

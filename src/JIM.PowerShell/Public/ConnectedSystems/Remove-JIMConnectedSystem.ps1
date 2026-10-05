@@ -32,7 +32,13 @@ function Remove-JIMConnectedSystem {
 
         Unless -Force is used, the cmdlet retrieves the deletion preview first so the confirmation states
         the impact of the chosen mode. Use Get-JIMConnectedSystem -Id <id> -DeletionPreview to review the
-        impact yourself before deleting.
+        headline counts yourself before deleting.
+
+        For the full consequences of deprovisioning through synchronisation (which values other systems
+        would take over, which would be cleared, which Metaverse Objects would become eligible for deletion,
+        and what would be staged for the other Connected Systems), run New-JIMConfigurationChangePreview
+        -ConnectedSystemId <id> -Deletion first, and pass its ActivityId to -PreviewActivityId so the
+        deletion's Activity records that the preview informed it.
 
     .PARAMETER Id
         The unique identifier of the Connected System to delete.
@@ -56,6 +62,12 @@ function Remove-JIMConnectedSystem {
 
     .PARAMETER ChangeReason
         Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone.
+
+    .PARAMETER PreviewActivityId
+        The deletion preview this deletion was made after reading, as returned by
+        New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion. Recorded on the deletion's
+        Activity so "previewed, then deleted" is auditable rather than a claim. JIM refuses the deletion,
+        deleting nothing, when the id is not a deletion preview of this same Connected System.
 
     .OUTPUTS
         When the deletion queues (always the case for the default deprovisioning mode), a PSCustomObject
@@ -109,9 +121,18 @@ function Remove-JIMConnectedSystem {
 
         Deprovisions the Connected System, recording the reason on the deletion's change history tombstone.
 
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 1 -Deletion -Wait
+        $preview.ImpactCounts
+        Remove-JIMConnectedSystem -Id 1 -PreviewActivityId $preview.ActivityId
+
+        Previews the deletion, shows how many objects each consequence reaches, then deprovisions the
+        Connected System (prompting for confirmation) and records the preview on the deletion's Activity.
+
     .LINK
         Get-JIMConnectedSystem
         New-JIMConnectedSystem
+        New-JIMConfigurationChangePreview
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'ById')]
@@ -129,7 +150,9 @@ function Remove-JIMConnectedSystem {
 
         [switch]$Force,
 
-        [string]$ChangeReason
+        [string]$ChangeReason,
+
+        [guid]$PreviewActivityId
     )
 
     process {
@@ -197,6 +220,9 @@ function Remove-JIMConnectedSystem {
                 }
                 if ($PSBoundParameters.ContainsKey('ChangeReason')) {
                     $queryParts += "changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+                }
+                if ($PSBoundParameters.ContainsKey('PreviewActivityId')) {
+                    $queryParts += "previewActivityId=$PreviewActivityId"
                 }
                 if ($queryParts.Count -gt 0) {
                     $deleteEndpoint += '?' + ($queryParts -join '&')

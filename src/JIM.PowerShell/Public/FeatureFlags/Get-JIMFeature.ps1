@@ -13,7 +13,7 @@ function Get-JIMFeature {
         -IncludeInDevelopment is specified.
 
     .PARAMETER Name
-        The flag's key, e.g. "Features.UniqueValueGeneration". Filters to a single flag.
+        The flag's key, e.g. "Features.SomeInDevelopmentFeature". Filters to a single flag.
 
     .PARAMETER IncludeInDevelopment
         Also return In Development flags. Intended for development and the integration harness;
@@ -34,7 +34,7 @@ function Get-JIMFeature {
         Gets every feature flag, including In Development ones (integration harness setup).
 
     .EXAMPLE
-        Get-JIMFeature -Name "Features.UniqueValueGeneration" -IncludeInDevelopment
+        Get-JIMFeature -Name "Features.SomeInDevelopmentFeature" -IncludeInDevelopment
 
         Gets a single In Development flag by key.
 

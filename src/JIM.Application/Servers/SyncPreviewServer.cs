@@ -465,14 +465,13 @@ public class SyncPreviewServer
         // Metaverse-Derived Attribute Flows (#1750, plan Phase 5): the run's dependency graph, built by the same factory
         // from the same all-systems rule set the worker builds it from (with any proposal substituted, so a
         // Configuration Change Preview evaluates the derived flows the proposal would leave), and attached to the
-        // priority context exactly as the worker attaches it. Null when the feature is off: the preview is then exactly
-        // as it was. A cycle refuses the whole run in the worker (decision 11), so here it is recorded on the context
+        // priority context exactly as the worker attaches it. A cycle refuses the whole run in the worker (decision 11), so here it is recorded on the context
         // and every preview built from it reports it as a blocking error instead of evaluating on a guessed order.
         DerivedFlowGraph? derivedFlowGraph = null;
         string? derivedFlowCycleMessage = null;
         try
         {
-            derivedFlowGraph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, allSyncRules, []);
+            derivedFlowGraph = DerivedFlowGraphFactory.Create(allSyncRules, []);
         }
         catch (DerivedFlowCycleException cycle)
         {
@@ -862,7 +861,7 @@ public class SyncPreviewServer
     /// in-scope rules' Metaverse Object Types the engine evaluates that level's derived flows hosted on
     /// <paramref name="inScopeRules"/> (this Connected System's rules only, as in the real run), and any generation
     /// requests they recorded are resolved before the next level reads them. Each level is evaluated exactly once. With
-    /// no derived flow graph (the feature off) only level 0 runs, which is the preview exactly as it was.
+    /// no derived flow graph (a cycle, reported on the context instead) only level 0 runs.
     /// </summary>
     /// <remarks>
     /// Mapping-level errors are appended to <paramref name="flowErrors"/> and reported with the ordinary pass's. A thrown
@@ -1739,32 +1738,7 @@ public class SyncPreviewServer
     /// Renders an attribute value for display, without the attribute-name prefix the entity's own
     /// ToString carries.
     /// </summary>
-    private static string? RenderValue(MetaverseObjectAttributeValue value)
-    {
-        if (value.NullValue)
-            return null;
-        if (value.StringValue != null)
-            return value.StringValue;
-        if (value.IntValue.HasValue)
-            return value.IntValue.Value.ToString();
-        if (value.LongValue.HasValue)
-            return value.LongValue.Value.ToString();
-        if (value.DecimalValue.HasValue)
-            return value.DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (value.DateTimeValue.HasValue)
-            return value.DateTimeValue.Value.ToString("O");
-        if (value.BoolValue.HasValue)
-            return value.BoolValue.Value.ToString();
-        if (value.GuidValue.HasValue)
-            return value.GuidValue.Value.ToString();
-        if (value.ReferenceValueId.HasValue || value.ReferenceValue != null)
-            return (value.ReferenceValueId ?? value.ReferenceValue!.Id).ToString();
-        if (value.UnresolvedReferenceValueId.HasValue || value.UnresolvedReferenceValue != null)
-            return (value.UnresolvedReferenceValueId ?? value.UnresolvedReferenceValue!.Id).ToString();
-        if (value.ByteValue != null)
-            return $"{value.ByteValue.Length} bytes";
-        return null;
-    }
+    private static string? RenderValue(MetaverseObjectAttributeValue value) => PreviewValueRenderer.Render(value);
 
     #endregion
 }

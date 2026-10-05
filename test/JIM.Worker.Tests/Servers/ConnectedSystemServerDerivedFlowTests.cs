@@ -19,12 +19,11 @@ using static JIM.Worker.Tests.Services.DerivedFlowTestModel;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// Metaverse-Derived Attribute Flow save-time validation and feature-flag gate, wired into every
+/// Metaverse-Derived Attribute Flow save-time validation, wired into every
 /// <see cref="JIM.Application.Servers.ConnectedSystemServer"/> path that can change an import mapping's expression or
 /// target (#1750, plan Phase 1 point 3): single mapping create (both initiator overloads), full update, settings
 /// update (both overloads), and the whole-rule save (both overloads). Validation loads every import rule of the
-/// Metaverse Object Type with the proposal substituted and disabled mappings included; the flag off refuses an import
-/// expression that newly reads <c>mv</c> and runs no validation at all.
+/// Metaverse Object Type with the proposal substituted and disabled mappings included.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemServerDerivedFlowTests
@@ -88,11 +87,12 @@ public class ConnectedSystemServerDerivedFlowTests
         return [hr, ad];
     }
 
-    private JimApplication BuildApplication(bool flagEnabled = true)
+    private JimApplication BuildApplication()
     {
-        _repo.Setup(r => r.ServiceSettings).Returns(flagEnabled
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
+        // An empty settings store: no feature flag is set. Validation used to run only with the
+        // Features.MetaverseDerivedAttributeFlows flag on; the flag was removed when the feature shipped (#1878), so
+        // every test here also proves the validation needs no flag.
+        _repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         return new JimApplication(_repo.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
     }
 
@@ -177,7 +177,7 @@ public class ConnectedSystemServerDerivedFlowTests
     [Test]
     public async Task CreateSyncRuleMappingAsync_ExportMappingReadingMetaverse_IsNotDerivedFlowWorkAsync()
     {
-        var jim = BuildApplication(flagEnabled: false);
+        var jim = BuildApplication();
         var export = ExportRule(5, "AD Export", connectedSystemId: 20);
         var mapping = new SyncRuleMapping
         {
@@ -190,22 +190,8 @@ public class ConnectedSystemServerDerivedFlowTests
 
         await jim.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _initiator);
 
-        _csRepo.Verify(r => r.CreateSyncRuleMappingAsync(mapping), Times.Once, "export expressions have always read mv and are never gated");
+        _csRepo.Verify(r => r.CreateSyncRuleMappingAsync(mapping), Times.Once, "export expressions have always read mv and are never derived-flow work");
         _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
-
-    [Test]
-    public void CreateSyncRuleMappingAsync_FlagOff_ImportMappingReadingMetaverse_ThrowsFeatureDisabled()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var mapping = NewAdMapping(0, _model.Email, "mv[\"Display Name\"] + \"@corp.local\"");
-
-        var ex = Assert.ThrowsAsync<FeatureDisabledException>(async () =>
-            await jim.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _initiator));
-
-        Assert.That(ex!.Definition, Is.SameAs(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows));
-        Assert.That(ex.Message, Does.Contain("Metaverse-Derived Attribute Flows"));
-        _csRepo.Verify(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
     }
 
     // ---- UpdateSyncRuleMappingAsync ----
@@ -233,32 +219,6 @@ public class ConnectedSystemServerDerivedFlowTests
             await jim.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping, _initiator));
 
         Assert.That(ex!.Message, Is.EqualTo(CycleMessage), "the proposal replaces the persisted mapping with the same id");
-    }
-
-    [Test]
-    public void UpdateSyncRuleMappingAsync_FlagOff_MappingNewlyReadingMetaverse_ThrowsFeatureDisabled()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var mapping = NewAdMapping(103, _model.Region, "mv[\"Account Name\"]");
-
-        Assert.ThrowsAsync<FeatureDisabledException>(async () =>
-            await jim.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping, _initiator));
-        _csRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
-    }
-
-    [Test]
-    public async Task UpdateSyncRuleMappingAsync_FlagOff_MappingAlreadyReadingMetaverse_SavesWithoutValidationAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        // HR Import's Display Name (101) already reads mv. Rewriting it into a self-reference would be refused with
-        // the flag on; with it off, legacy behaviour is untouched: no gate (it is not newly reading mv) and no validation.
-        var hr = ImportRule(1, "HR Import", connectedSystemId: 10);
-        var mapping = Expression(hr, 101, _model.DisplayName, "mv[\"Display Name\"] + FormatDate(Now(), \"yyyy\")");
-
-        await jim.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping, _initiator);
-
-        _csRepo.Verify(r => r.UpdateSyncRuleMappingAsync(mapping), Times.Once);
-        Assert.That(mapping.SaveWarnings, Is.Empty, "with the flag off the validator never runs, so it raises no warnings either");
     }
 
     // ---- UpdateSyncRuleMappingSettingsAsync ----
@@ -312,20 +272,9 @@ public class ConnectedSystemServerDerivedFlowTests
     }
 
     [Test]
-    public void UpdateSyncRuleMappingSettingsAsync_FlagOff_ExpressionNewlyReadingMetaverse_ThrowsFeatureDisabled()
+    public async Task UpdateSyncRuleMappingSettingsAsync_SettingUnrelatedToTheExpression_ReadsNoDerivedFlowConfigurationAsync()
     {
-        var jim = BuildApplication(flagEnabled: false);
-        TrackedAdMapping(103);
-
-        Assert.ThrowsAsync<FeatureDisabledException>(async () =>
-            await jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(103, new SyncRuleMappingSettingsUpdate { Expression = "mv[\"Account Name\"]" }, _initiator));
-        _csRepo.Verify(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Never);
-    }
-
-    [Test]
-    public async Task UpdateSyncRuleMappingSettingsAsync_FlagOff_SettingUnrelatedToTheExpression_IsUnaffectedAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
+        var jim = BuildApplication();
         TrackedAdMapping(103);
 
         var updated = await jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(103, new SyncRuleMappingSettingsUpdate { NullIsValue = true }, _initiator);
@@ -406,34 +355,5 @@ public class ConnectedSystemServerDerivedFlowTests
         Assert.ThrowsAsync<DerivedFlowValidationException>(async () =>
             await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator),
             "enabling the paused flow later must never be able to complete a cycle (plan decision 2)");
-    }
-
-    [Test]
-    public void CreateOrUpdateSyncRuleAsync_FlagOff_NewMappingReadingMetaverse_ThrowsFeatureDisabled()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var rule = WholeRuleProposal(2, "AD Import");
-        Expression(rule, 102, _model.MailNickname, "cs[\"mailNickname\"]");
-        Expression(rule, 0, _model.Email, "mv[\"Display Name\"] + \"@corp.local\"");
-
-        Assert.ThrowsAsync<FeatureDisabledException>(async () =>
-            await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
-        _csRepo.Verify(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
-    }
-
-    [Test]
-    public async Task CreateOrUpdateSyncRuleAsync_FlagOff_ExistingMetaverseReadingMappingUnchanged_SavesWithoutValidationAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        // HR Import saved as-is: its Display Name flow already read mv before this save, so the gate lets it through;
-        // and with the flag off nothing is validated, so even a self-reference introduced by an earlier release is left alone.
-        var rule = WholeRuleProposal(1, "HR Import");
-        var displayName = Expression(rule, 101, _model.DisplayName, "mv[\"Display Name\"]");
-
-        var saved = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
-
-        Assert.That(saved, Is.True);
-        _csRepo.Verify(r => r.UpdateSyncRuleAsync(rule), Times.Once);
-        Assert.That(displayName.SaveWarnings, Is.Empty);
     }
 }

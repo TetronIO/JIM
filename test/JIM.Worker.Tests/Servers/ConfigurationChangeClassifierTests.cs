@@ -9,6 +9,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Moq;
+using JIM.TestSupport;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Servers;
@@ -196,8 +197,9 @@ public class ConfigurationChangeClassifierTests
     public void ClassifyKey_FeatureFlagValue_IsCosmeticWithoutAPerKeyEntry()
     {
         // Feature flags (#1781) classify as a category, not one hand-added row per catalogue entry.
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         var result = ConfigurationChangeClassifier.ClassifyKey(
-            ConfigurationSnapshotService.ServiceSettingObjectType, "value", FeatureFlagCatalogue.UniqueValueGeneration.Key);
+            ConfigurationSnapshotService.ServiceSettingObjectType, "value", FeatureFlagCatalogueScope.InDevelopmentFlag.Key);
 
         Assert.That(result, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
     }

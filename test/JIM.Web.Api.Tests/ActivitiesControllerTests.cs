@@ -1098,6 +1098,44 @@ public class ActivitiesControllerTests
 
     #endregion
 
+    #region Preview provenance (#134)
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ChangeInformedByAPreview_CarriesThePreviewsActivityId()
+    {
+        // Read parity: the portal says "Informed by a preview" on the change's Activity page, and a script that recorded
+        // the preview with -PreviewActivityId has to be able to read the link back to audit it.
+        var previewActivityId = Guid.CreateVersion7();
+        var activity = new Activity
+        {
+            Id = Guid.CreateVersion7(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Deprovision,
+            PreviewActivityId = previewActivityId
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.PreviewActivityId, Is.EqualTo(previewActivityId));
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ChangeMadeWithoutAPreview_LeavesThePreviewNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.CreateVersion7(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Deprovision
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        Assert.That(dto.PreviewActivityId, Is.Null);
+    }
+
+    #endregion
+
     #region Connector Space clear statistics (#1605)
 
     [Test]

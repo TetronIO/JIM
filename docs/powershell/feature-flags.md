@@ -25,7 +25,7 @@ Get-JIMFeature [[-Name] <string>] [-IncludeInDevelopment]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | No, Position 0 | | The flag's key, e.g. `"Features.UniqueValueGeneration"`. Filters to a single flag. |
+| `Name` | `string` | No, Position 0 | | The flag's key, e.g. `"Features.SomeInDevelopmentFeature"`. Filters to a single flag. |
 | `IncludeInDevelopment` | `switch` | No | `$false` | Also return In Development flags. |
 
 ### Output
@@ -54,7 +54,7 @@ Get-JIMFeature -IncludeInDevelopment
 ```
 
 ```powershell title="Get a single flag by key"
-Get-JIMFeature -Name "Features.UniqueValueGeneration" -IncludeInDevelopment
+Get-JIMFeature -Name "Features.SomeInDevelopmentFeature" -IncludeInDevelopment
 ```
 
 ```powershell title="List only the flags currently switched on"
@@ -92,7 +92,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature"
 ```
 
 ```powershell title="Enable an In Development flag, as the integration harness does in scenario setup"
-Enable-JIMFeature -Name "Features.UniqueValueGeneration" -AllowInDevelopment
+Enable-JIMFeature -Name "Features.SomeInDevelopmentFeature" -AllowInDevelopment
 ```
 
 ```powershell title="Enable a flag and see its new state"
@@ -130,7 +130,7 @@ When `-PassThru` is specified, returns the updated feature flag object. Otherwis
 ### Examples
 
 ```powershell title="Disable a feature flag"
-Disable-JIMFeature -Name "Features.UniqueValueGeneration"
+Disable-JIMFeature -Name "Features.SomeInDevelopmentFeature"
 ```
 
 ```powershell title="Disable every flag Get-JIMFeature currently returns"

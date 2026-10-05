@@ -14,8 +14,7 @@ namespace JIM.Application.Servers;
 /// <summary>
 /// Metaverse-Derived Attribute Flows' authoring surfaces (#1750, plan Phase 6): the FR 3 dependants every removal and
 /// disable path reports, the read-only analysis the portal runs as an administrator types, and the step facts the
-/// read surfaces show. Everything here reads; nothing writes. With the feature off every method returns its empty
-/// answer and reads no Synchronisation Rules at all.
+/// read surfaces show. Everything here reads; nothing writes.
 /// </summary>
 public partial class ConnectedSystemServer
 {
@@ -30,16 +29,14 @@ public partial class ConnectedSystemServer
     /// <param name="hostRule">The Synchronisation Rule the mapping belongs to, saved or not: its id, name, Connected
     /// System, Metaverse Object Type, direction and enabled state are read; its mappings are not.</param>
     /// <param name="proposedMapping">The mapping as the administrator has it, saved (non-zero id) or not.</param>
-    /// <returns><see cref="DerivedFlowAnalysis.NotApplicable"/>, reading nothing, when the feature is off, the rule is
-    /// an export rule, or the mapping has no target Metaverse attribute yet.</returns>
+    /// <returns><see cref="DerivedFlowAnalysis.NotApplicable"/>, reading nothing, when the rule is an export rule, or
+    /// the mapping has no target Metaverse attribute yet.</returns>
     public async Task<DerivedFlowAnalysis> AnalyseDerivedFlowAsync(SyncRule hostRule, SyncRuleMapping proposedMapping)
     {
         ArgumentNullException.ThrowIfNull(hostRule);
         ArgumentNullException.ThrowIfNull(proposedMapping);
 
         if (hostRule.Direction != SyncRuleDirection.Import || GetTargetMetaverseAttributeId(proposedMapping) is not { } targetAttributeId)
-            return DerivedFlowAnalysis.NotApplicable;
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return DerivedFlowAnalysis.NotApplicable;
 
         var metaverseObjectTypeId = hostRule.ResolveMetaverseObjectTypeId();
@@ -114,7 +111,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="syncRule">The rule, with its Attribute Flow mappings loaded.</param>
     /// <returns>The step facts keyed by mapping id, for the rule's derived mappings only. Empty, with nothing read,
-    /// when the feature is off, the rule is an export rule, or none of its mappings reads <c>mv["..."]</c>.</returns>
+    /// when the rule is an export rule, or none of its mappings reads <c>mv["..."]</c>.</returns>
     public async Task<IReadOnlyDictionary<int, DerivedFlowStepInfo>> GetDerivedFlowStepsAsync(SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
@@ -124,8 +121,6 @@ public partial class ConnectedSystemServer
 
         var readingMetaverse = syncRule.AttributeFlowRules.Where(mapping => mapping.Id > 0 && ReadsMetaverseAsImportMapping(mapping)).ToList();
         if (readingMetaverse.Count == 0)
-            return new Dictionary<int, DerivedFlowStepInfo>();
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return new Dictionary<int, DerivedFlowStepInfo>();
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
@@ -148,13 +143,11 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// <see cref="GetDerivedFlowStepsAsync(SyncRule)"/> for a rule the caller has not loaded, such as straight after a
-    /// mapping save. With the feature off nothing is read, the rule included.
+    /// mapping save.
     /// </summary>
     /// <param name="syncRuleId">The Synchronisation Rule's id.</param>
     public async Task<IReadOnlyDictionary<int, DerivedFlowStepInfo>> GetDerivedFlowStepsAsync(int syncRuleId)
     {
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
-            return new Dictionary<int, DerivedFlowStepInfo>();
 
         var syncRule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         return syncRule == null
@@ -170,7 +163,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="stagedRule">The rule as the editor holds it, with every change staged so far, the mapping included.</param>
     /// <param name="mapping">The mapping about to be removed, by reference.</param>
-    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    /// <returns>Nothing, and nothing read, when the rule is an export rule.</returns>
     public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfMappingRemovalAsync(SyncRule stagedRule, SyncRuleMapping mapping)
     {
         ArgumentNullException.ThrowIfNull(stagedRule);
@@ -191,7 +184,7 @@ public partial class ConnectedSystemServer
     /// <param name="stagedRule">The rule as the editor holds it, holding <paramref name="editedMapping"/>.</param>
     /// <param name="mappingAsOpened">A copy of the mapping as it stood when the editor opened it.</param>
     /// <param name="editedMapping">The mapping as edited, by reference among the staged rule's mappings.</param>
-    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    /// <returns>Nothing, and nothing read, when the rule is an export rule.</returns>
     public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfMappingEditAsync(SyncRule stagedRule, SyncRuleMapping mappingAsOpened, SyncRuleMapping editedMapping)
     {
         ArgumentNullException.ThrowIfNull(stagedRule);
@@ -212,7 +205,7 @@ public partial class ConnectedSystemServer
     /// reported again. Read only.
     /// </summary>
     /// <param name="stagedRule">The rule as the editor holds it.</param>
-    /// <returns>Nothing, and nothing read, when the feature is off or the rule is an export rule.</returns>
+    /// <returns>Nothing, and nothing read, when the rule is an export rule.</returns>
     public Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfRuleDisableAsync(SyncRule stagedRule)
     {
         ArgumentNullException.ThrowIfNull(stagedRule);
@@ -229,7 +222,7 @@ public partial class ConnectedSystemServer
     /// exactly as the deletion itself reports them, for the portal to confirm before it deletes. Read only.
     /// </summary>
     /// <param name="syncRule">The rule to be deleted.</param>
-    /// <returns>Nothing, and nothing read, when the feature is off, the rule is an export rule or it is not saved.</returns>
+    /// <returns>Nothing, and nothing read, when the rule is an export rule or it is not saved.</returns>
     public async Task<List<DependentDerivedFlow>> GetDependentDerivedFlowsOfRuleDeletionAsync(SyncRule syncRule)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
@@ -288,8 +281,6 @@ public partial class ConnectedSystemServer
         int connectedSystemId, IReadOnlyList<SyncRule> systemRules, SchemaRefreshDependents dependents)
     {
         if (dependents.InvalidatedSyncRules.Count == 0 && dependents.InvalidatedMappings.Count == 0)
-            return [];
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return [];
 
         var invalidatedRuleIds = dependents.InvalidatedSyncRules.Select(rule => rule.SyncRuleId).ToHashSet();
@@ -369,10 +360,10 @@ public partial class ConnectedSystemServer
     /// attribute they read, directly or through other derived attributes, loses its last enabled contributor. Reads the
     /// import rules of the Metaverse Object Type as they stand (so call it before the change is written), applies the
     /// change to a copy with <paramref name="applyChange"/>, and compares. A change is never refused for this; the
-    /// dependants are reported. With the feature off, returns nothing and reads nothing, not even the type id.
+    /// dependants are reported.
     /// </summary>
     /// <param name="resolveMetaverseObjectTypeId">Resolves the Metaverse Object Type the change concerns; null for a
-    /// change no import rule is involved in. Called only with the feature on.</param>
+    /// change no import rule is involved in.</param>
     /// <param name="applyChange">Builds the rules as they will stand after the change. Must not modify what it is given.</param>
     /// <param name="changeDescription">Names the change in the log summary.</param>
     /// <param name="applyBaseline">Builds the rules the change is measured from, when that is not the persisted state
@@ -384,8 +375,6 @@ public partial class ConnectedSystemServer
         string changeDescription,
         Func<List<SyncRule>, List<SyncRule>>? applyBaseline = null)
     {
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
-            return [];
         if (await resolveMetaverseObjectTypeId() is not { } metaverseObjectTypeId)
             return [];
 

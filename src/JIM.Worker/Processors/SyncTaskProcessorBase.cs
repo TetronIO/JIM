@@ -2066,8 +2066,8 @@ public abstract class SyncTaskProcessorBase
     /// hosted on <paramref name="inScopeRules"/> (this Connected System's rules only: a derived flow runs in its
     /// hosting system's own synchronisation), and any generation requests they recorded are resolved in one batch
     /// before the next level reads them. Each level is evaluated exactly once per object per pass: running a mapping
-    /// twice would stage a duplicate pending addition. With no derived flow graph (the feature is off) only level 0
-    /// runs, which is exactly the single generation resolve this replaced.
+    /// twice would stage a duplicate pending addition. With no derived flow graph only level 0 runs, which is exactly
+    /// the single generation resolve this replaced.
     /// </summary>
     /// <returns>The generated-value outcomes for the object's RPEI, <paramref name="outcomesSoFar"/> included; null
     /// when there are none, as before.</returns>
@@ -2150,7 +2150,7 @@ public abstract class SyncTaskProcessorBase
     /// Systems must re-evaluate <paramref name="mvo"/> because a derived flow on their rules reads one of the attributes
     /// in <paramref name="changedValues"/>. The system being synchronised is excluded: its own derived pass has already
     /// run on this pass's values. In memory only; the marks are applied in one bulk update per page. A no-op when the
-    /// feature is off (no graph) or nothing changed.
+    /// run has no derived flow graph or nothing changed.
     /// </summary>
     private void CollectDerivedInputMarks(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> changedValues)
     {
@@ -2249,7 +2249,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// End-of-run summary for the derived-input mark (#1750): how many other systems' objects this run marked for
     /// re-evaluation, and how many of this system's marked objects it re-evaluated and cleared. Only logged when the
-    /// feature is on, so a run with the feature off logs exactly what it did before.
+    /// run has a derived flow graph.
     /// </summary>
     protected void LogDerivedInputMarkSummary()
     {
@@ -6231,8 +6231,8 @@ public abstract class SyncTaskProcessorBase
     /// <param name="allSyncRules">All Synchronisation Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
     /// <param name="currentSystemSyncRules">Synchronisation Rules for the current Connected System being synced.</param>
     /// <param name="derivedFlowGraph">The run's Metaverse-Derived Attribute Flow graph (#1750) from
-    /// <see cref="ISyncServer.CreateDerivedFlowGraphAsync"/>, attached to the priority context; null when the feature is
-    /// off, which leaves the engine exactly as it was.</param>
+    /// <see cref="ISyncServer.CreateDerivedFlowGraph"/>, attached to the priority context; null (only ever passed by
+    /// tests) builds the context with no derived flows.</param>
     protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules, DerivedFlowGraph? derivedFlowGraph = null)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");

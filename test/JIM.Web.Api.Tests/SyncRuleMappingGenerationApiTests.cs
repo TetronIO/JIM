@@ -66,10 +66,7 @@ public class SyncRuleMappingGenerationApiTests
         mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         mockRepository.Setup(r => r.ApiKeys).Returns(mockApiKeyRepo.Object);
         mockRepository.Setup(r => r.Sync).Returns(_syncRepository);
-        // Unique Value Generation is gated behind its feature flag (#242, Phase 3.5); these tests exercise the
-        // feature as shipped, so run with it enabled (test/CLAUDE.md > "Tests run with flags on"). The gate
-        // itself is covered separately by ConnectedSystemServerGeneratedMappingGateTests.
-        mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 

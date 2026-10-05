@@ -1135,6 +1135,8 @@ public partial class ConnectedSystemServer
         // predicate ExecuteDeletionAsync's marking uses, so the preview always agrees with what
         // execution does (#119).
         preview.MvosWithDeletionRuleCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
+        preview.MvosWithGracePeriodCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(connectedSystemId);
+        preview.MvosWithOtherConnectorsCount = await Application.Metaverse.GetMvosJoinedToOtherConnectedSystemsCountAsync(connectedSystemId);
 
         // Deprovisioning impact (#809): the attribute values this system's Synchronisation Rules
         // contribute (by provenance) and the distinct Metaverse Objects holding them; what a
@@ -1270,8 +1272,11 @@ public partial class ConnectedSystemServer
     /// small-system path), where every Connected System Object is processed through the synchronisation
     /// engine's obsoletion semantics before the deletion. False (the default) keeps the immediate deletion
     /// exactly as it is.</param>
+    /// <param name="previewActivityId">The deletion impact preview the administrator read before requesting this
+    /// deletion, if any (#134). Recorded on the deletion's Activity so the audit answers whether they looked first,
+    /// and what they were told.</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false, Guid? previewActivityId = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
             connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory, synchronisedDeprovisioning);
@@ -1327,6 +1332,7 @@ public partial class ConnectedSystemServer
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
+            deleteTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1343,6 +1349,7 @@ public partial class ConnectedSystemServer
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
             deprovisioningTask.ChangeReason = changeReason;
+            deprovisioningTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
@@ -1362,6 +1369,7 @@ public partial class ConnectedSystemServer
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
+            deleteTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1379,6 +1387,7 @@ public partial class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Delete,
+            PreviewActivityId = previewActivityId,
             // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
             Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
             // ConnectedSystemId intentionally not set - the CS will be deleted before activity completes
@@ -1430,7 +1439,7 @@ public partial class ConnectedSystemServer
     /// carries the same semantics as the user-initiated overload: true always queues the worker-side
     /// Synchronised Deprovisioning run; false keeps the immediate deletion exactly as it is.
     /// </summary>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false, string? changeReason = null, bool synchronisedDeprovisioning = false, Guid? previewActivityId = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}, synchronisedDeprovisioning={Deprovision}",
             connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory, synchronisedDeprovisioning);
@@ -1483,6 +1492,7 @@ public partial class ConnectedSystemServer
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning);
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
+            deleteTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1496,6 +1506,7 @@ public partial class ConnectedSystemServer
 
             var deprovisioningTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
             deprovisioningTask.ChangeReason = changeReason;
+            deprovisioningTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
@@ -1512,6 +1523,7 @@ public partial class ConnectedSystemServer
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
+            deleteTask.PreviewActivityId = previewActivityId;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1526,6 +1538,7 @@ public partial class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Delete,
+            PreviewActivityId = previewActivityId,
             // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
             Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
         };
@@ -6961,12 +6974,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row.
-        await EnsureGeneratedMappingAllowedAsync(mapping);
-        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
-        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
-        // no I/O, unless this is an import mapping whose expression reads mv.
+        // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
+        // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
@@ -7014,12 +7023,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row.
-        await EnsureGeneratedMappingAllowedAsync(mapping);
-        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
-        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
-        // no I/O, unless this is an import mapping whose expression reads mv.
+        // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
+        // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
@@ -7066,12 +7071,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row.
-        await EnsureGeneratedMappingAllowedAsync(mapping);
-        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
-        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
-        // no I/O, unless this is an import mapping whose expression reads mv.
+        // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
+        // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
         // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
@@ -7154,12 +7155,8 @@ public partial class ConnectedSystemServer
         ValidateMappingWritability(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row.
-        await EnsureGeneratedMappingAllowedAsync(mapping);
-        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
-        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
-        // no I/O, unless this is an import mapping whose expression reads mv.
+        // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
+        // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
         // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
         // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
@@ -8801,10 +8798,7 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row on any mapping.
-        await EnsureGeneratedMappingsAllowedAsync(syncRule);
-        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
+        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
@@ -9031,10 +9025,7 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
-        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
-        // this save would persist a new SyncRuleMappingGeneration row on any mapping.
-        await EnsureGeneratedMappingsAllowedAsync(syncRule);
-        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
+        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
         // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last

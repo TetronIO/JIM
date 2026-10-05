@@ -40,7 +40,8 @@ public partial class ConnectedSystemServer
     /// <item><b>Residue pass</b>: per import Synchronisation Rule, remaining contributed values are
     /// recalled by provenance (values stranded with no backing Connected System Object, #1549's scenario),
     /// strictly BEFORE any rule is deleted: deletion's ON DELETE SET NULL severs the provenance the recall
-    /// selects on.</item>
+    /// selects on. A rule whose Connected System Object Type has RemoveContributedAttributesOnObsoletion
+    /// switched off is skipped: the values it contributed are kept by policy, not residue.</item>
     /// <item><b>Final step</b>: the existing <see cref="ExecuteDeletionAsync"/> (tombstone snapshot,
     /// orphan marking, bulk delete), then the Activity message is set with summary statistics (the worker's
     /// dispatch boundary owns the completion call itself).</item>
@@ -87,7 +88,7 @@ public partial class ConnectedSystemServer
         // ineligible and none of its objects counts as a survivor.
         var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
         var systemSyncRules = allSyncRules.Where(sr => sr.ConnectedSystemId == task.ConnectedSystemId).ToList();
-        var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
+        var priorityContext = BuildRecallPriorityContext(allSyncRules);
         var syncEngine = new SyncEngine();
         var syncServer = new SyncServer(Application);
         var expressionEvaluator = new DynamicExpressoEvaluator();
@@ -97,7 +98,7 @@ public partial class ConnectedSystemServer
         // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the system is gone: its own
         // rules' derived mappings go with it, so they neither mark it (its objects are being deleted anyway) nor carry
         // transitivity onwards. Collected per batch and flushed once the batch is persisted.
-        var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+        var derivedInputMarks = CreateDerivedInputMarkBatch(
             allSyncRules.Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId), "Synchronised Deprovisioning");
 
         var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(Application.SyncRepo);
@@ -162,6 +163,19 @@ public partial class ConnectedSystemServer
 
             foreach (var importRule in importRules)
             {
+                // An Object Type with RemoveContributedAttributesOnObsoletion switched off keeps the values it
+                // contributed: the per-object pass honoured that and left them in place, provenance intact, which
+                // is exactly what this pass selects on. Recalling them here would override the policy, so the rule
+                // is skipped, as the stranded-value sweep skips it for the same reason.
+                var objectType = await ResolveImportRuleObjectTypeAsync(importRule, connectedSystem.Id);
+                if (!objectType.RemoveContributedAttributesOnObsoletion)
+                {
+                    Log.Information(
+                        "ExecuteSynchronisedDeprovisioningAsync: residue pass skipped Synchronisation Rule {SyncRuleId}: recall is switched off for Object Type {ObjectTypeName}, so its contributed values are kept.",
+                        importRule.Id, objectType.Name);
+                    continue;
+                }
+
                 var residueResult = await RecallSyncRuleContributedValuesAsync(
                     importRule.Id,
                     recallScope,
@@ -226,7 +240,7 @@ public partial class ConnectedSystemServer
     /// obsoletion core, then persists the batch in dependency order (Metaverse Object updates and recalled
     /// value deletions, Connected System Object deletions with change records, immediate Metaverse Object
     /// deletions with their deletion-cascade and reference-recall Pending Exports, recall export staging,
-    /// per-object results, Activity counters). Everything is persisted before the caller records the
+    /// deprovisioning for the export rules a recall took an object out of, per-object results, Activity counters). Everything is persisted before the caller records the
     /// checkpoint.
     /// </summary>
     private async Task ProcessDeprovisioningBatchAsync(
@@ -266,6 +280,7 @@ public partial class ConnectedSystemServer
         var executionItems = new List<ActivityRunProfileExecutionItem>();
         var pendingMvoDeletions = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
         var preRecallAttributeSnapshots = new Dictionary<Guid, List<MetaverseObjectAttributeValue>>();
+        var scopeExitCandidates = new List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem ExecutionItem)>();
 
         // The Metaverse Object deletion rule delegate: evaluates and applies the marking fields via the
         // shared applier (also used by the post-clear reconciliation sweep, #1605), then queues the fate at
@@ -355,6 +370,12 @@ public partial class ConnectedSystemServer
                     .Where(pendingExport => !stagedPendingExports.Contains(pendingExport))
                     .ToList();
                 stagedPendingExports.AddRange(newlyStagedExports);
+
+                // Gated as synchronisation gates its scope-exit evaluation: only an object whose values changed is
+                // re-evaluated, and one about to be deleted immediately has no export evaluation here at all (its
+                // deletion cascade stages its deprovisioning instead). Evaluated after the batch persists; see Step 5.
+                if (obsoletionResult.MvoAttributeChange is { } changeForOutcomes)
+                    scopeExitCandidates.Add((exportEvaluationInput.Mvo, changeForOutcomes.ExecutionItem));
             }
 
             result.ConnectedSystemObjectsProcessed++;
@@ -429,11 +450,20 @@ public partial class ConnectedSystemServer
             result.PendingExportsStaged += stagedPendingExports.Count;
         }
 
-        // Step 5: every Metaverse change of the batch is persisted (and any immediately deleted object is gone, so a
+        // Step 5: the export rules the recall took objects out of, deprovisioned per each rule's Deprovisioning Action
+        // exactly as synchronisation disconnecting the object would (#134; PRD FR 3). Only now, with the batch's
+        // Metaverse changes and staged exports persisted, mirroring synchronisation's own order (persist the page's
+        // objects, then evaluate exports): the evaluation saves what it decides as it goes, and must neither flush a
+        // half-applied object nor have its Delete replaced by Step 4's delete-then-create.
+        foreach (var (scopeExitMvo, scopeExitItem) in scopeExitCandidates)
+            result.PendingExportsStaged += await DeprovisionRecallScopeExitsAsync(scopeExitMvo, exportEvaluationCache, scopeExitItem,
+                recordOutcomes: syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None);
+
+        // Step 6: every Metaverse change of the batch is persisted (and any immediately deleted object is gone, so a
         // mark on it matches nothing); mark the hosting systems of the changed derived inputs in one bulk update.
         await derivedInputMarks.FlushAsync(Application.SyncRepo);
 
-        // Step 6: persist the per-object results. The deleted objects' rows are gone, so the items must
+        // Step 7: persist the per-object results. The deleted objects' rows are gone, so the items must
         // reference them by snapshot only (the core snapshotted the display fields eagerly, and the
         // CsoDeleted outcome carries the deleted id durably); a foreign key to a deleted row would fail.
         foreach (var executionItem in executionItems)
@@ -452,5 +482,22 @@ public partial class ConnectedSystemServer
             "{PendingExportCount} recall Pending Export(s) staged.",
             task.ConnectedSystemId, batch.Count, mvosToPersist.Count, pendingMvoDeletions.Count,
             graceMarkedMvos.Count, stagedPendingExports.Count);
+    }
+
+    /// <summary>
+    /// The Connected System Object Type an import rule of the system being deprovisioned reads from, whose recall policy
+    /// decides whether the residue pass may recall the rule's values. Shared by the deprovisioning run and its preview so
+    /// both answer identically. The rules from <c>GetAllSyncRulesAsync</c> carry the type already; the system's types are
+    /// loaded only when one does not, which is the defensive fallback rather than the ordinary path. An unresolvable type
+    /// is a hard failure rather than a guess: recalling values the policy may protect cannot be undone.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType> ResolveImportRuleObjectTypeAsync(SyncRule importRule, int connectedSystemId)
+    {
+        if (importRule.ConnectedSystemObjectType != null)
+            return importRule.ConnectedSystemObjectType;
+
+        var objectTypes = await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        return objectTypes.SingleOrDefault(type => type.Id == importRule.ConnectedSystemObjectTypeId)
+            ?? throw new InvalidDataException($"Synchronisation Rule {importRule.Id} names Connected System Object Type {importRule.ConnectedSystemObjectTypeId}, which Connected System {connectedSystemId} does not have; refusing to recall by provenance without knowing its recall policy.");
     }
 }
