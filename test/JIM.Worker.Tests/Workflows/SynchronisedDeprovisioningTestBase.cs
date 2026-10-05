@@ -93,10 +93,11 @@ public abstract class SynchronisedDeprovisioningTestBase : WorkflowTestBase
     /// </summary>
     protected async Task FenceSystemAsync(ConnectedSystem system)
     {
-        // Detach processor-modified entities first (the same guard the base harness's helpers apply): the
-        // full syncs above leave tracked entities in states the in-memory store no longer recognises.
-        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified).ToList())
-            entry.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        // Start the fence from a clean tracker: the full syncs above leave tracked entities in states the in-memory
+        // store no longer recognises, and graphs holding detached copies of persisted rows (a Connector Definition
+        // still listing the Connected System instance a sync detached, reachable through reference values), which the
+        // save below would try to re-attach the moment anything loads the system afresh, as a preview does.
+        DbContext.ChangeTracker.Clear();
 
         var persistedSystem = await DbContext.ConnectedSystems.FindAsync(system.Id);
         persistedSystem!.Status = ConnectedSystemStatus.Deleting;

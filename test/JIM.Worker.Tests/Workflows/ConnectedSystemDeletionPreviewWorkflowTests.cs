@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -352,6 +353,23 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         await AssertPreviewEqualsExecutionAsync(ctx.Hr);
     }
 
+    [TestCase(true, TestName = "PreviewEqualsExecution_ReferenceTakenOverByAnotherContributor_ExportsTheNewReferenceAsync")]
+    [TestCase(false, TestName = "PreviewEqualsExecution_ReferenceWithNoOtherContributor_ExportsItsRemovalAsync")]
+    public async Task PreviewEqualsExecution_ReferenceRecallAsync(bool trainingMentorsJohn)
+    {
+        // A reference recalled by the deletion reaches the target as a reference to the new referent's object there, or
+        // as its removal; and the referent HR alone knew (Mary) is still exported to, so the update must resolve.
+        var topology = await SetUpManagerReferenceWithExportTargetAsync(trainingMentorsJohn);
+        await RunFullSyncAsync(topology.Hr);
+        await RunFullSyncAsync(topology.Training);
+        ApplyStagedExports(topology.Target);
+
+        var facts = await AssertPreviewEqualsExecutionAsync(topology.Hr);
+
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("export-update|") && f.Contains("|Manager|")),
+            "precondition: the scenario must actually export the recalled reference");
+    }
+
     /// <summary>
     /// Previews deleting the system, then really deprovisions it, and asserts the two describe the same facts. Returns
     /// the facts, so a test can also check its scenario exercised what it set out to.
@@ -520,6 +538,161 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
     // -----------------------------------------------------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------------------------------------------------
+
+    private sealed record ManagerReferenceTopology(ConnectedSystem Hr, ConnectedSystem Training, ConnectedSystem Target);
+
+    /// <summary>
+    /// HR projects Mary, Bob and John and contributes John's Manager (Mary) at priority 1; Training joins Bob and John
+    /// on EmployeeId and, when <paramref name="trainingMentorsJohn"/>, contributes John's Mentor (Bob) to Manager at
+    /// priority 2. A target provisions every person with DisplayName and Manager.
+    /// </summary>
+    private async Task<ManagerReferenceTopology> SetUpManagerReferenceWithExportTargetAsync(bool trainingMentorsJohn)
+    {
+        var hrSystem = await CreateConnectedSystemAsync("HR Source");
+        var hrExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var hrDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var hrEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var hrManagerAttr = new ConnectedSystemObjectTypeAttribute { Name = "Manager", Type = AttributeDataType.Reference, Selected = true };
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser",
+            new List<ConnectedSystemObjectTypeAttribute> { hrExternalIdAttr, hrDisplayNameAttr, hrEmployeeIdAttr, hrManagerAttr });
+
+        var trainingSystem = await CreateConnectedSystemAsync("Training Source");
+        var trainingExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var trainingEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var trainingMentorAttr = new ConnectedSystemObjectTypeAttribute { Name = "Mentor", Type = AttributeDataType.Reference, Selected = true };
+        var trainingType = await CreateCsoTypeAsync(trainingSystem.Id, "TrainingRecord",
+            new List<ConnectedSystemObjectTypeAttribute> { trainingExternalIdAttr, trainingEmployeeIdAttr, trainingMentorAttr });
+
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvManagerAttr = new MetaverseAttribute
+        {
+            Name = "Manager",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(mvManagerAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvManagerAttr);
+
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDisplayNameAttr, hrDisplayNameAttr));
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvEmployeeIdAttr, hrEmployeeIdAttr));
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvManagerAttr, hrManagerAttr, priority: 1));
+
+        var trainingImportRule = await CreateImportSyncRuleAsync(trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
+        trainingImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(trainingImportRule, mvManagerAttr, trainingMentorAttr, priority: 2));
+        trainingImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = trainingImportRule,
+            SyncRuleId = trainingImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new() { Order = 0, ConnectedSystemAttribute = trainingEmployeeIdAttr, ConnectedSystemAttributeId = trainingEmployeeIdAttr.Id }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var hrMaryCso = await CreateCsoAsync(hrSystem.Id, hrType, "Mary Manager", "EMP002");
+        await CreateCsoAsync(hrSystem.Id, hrType, "Bob Mentor", "EMP003");
+        var hrJohnCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", SharedEmployeeId);
+        hrJohnCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = hrManagerAttr.Id, Attribute = hrManagerAttr,
+            ReferenceValueId = hrMaryCso.Id, ReferenceValue = hrMaryCso, ConnectedSystemObject = hrJohnCso
+        });
+
+        var trainingBobCso = await CreateCsoAsync(trainingSystem.Id, trainingType, "unused", "EMP003");
+        var trainingJohnCso = await CreateCsoAsync(trainingSystem.Id, trainingType, "unused", SharedEmployeeId);
+        if (trainingMentorsJohn)
+        {
+            trainingJohnCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                AttributeId = trainingMentorAttr.Id, Attribute = trainingMentorAttr,
+                ReferenceValueId = trainingBobCso.Id, ReferenceValue = trainingBobCso, ConnectedSystemObject = trainingJohnCso
+            });
+        }
+
+        var targetSystem = await CreateConnectedSystemAsync("AD Target");
+        var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var targetManagerAttr = new ConnectedSystemObjectTypeAttribute { Name = "Manager", Type = AttributeDataType.Reference, Selected = true };
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "TargetUser",
+            new List<ConnectedSystemObjectTypeAttribute> { targetExternalIdAttr, targetDisplayNameAttr, targetManagerAttr });
+
+        var exportRule = new SyncRule
+        {
+            ConnectedSystemId = targetSystem.Id,
+            Name = "AD Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = targetType.Id,
+            ConnectedSystemObjectType = targetType,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType,
+            ProvisionToConnectedSystem = true
+        };
+        foreach (var (target, source) in new[] { (targetDisplayNameAttr, mvDisplayNameAttr), (targetManagerAttr, mvManagerAttr) })
+        {
+            exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+            {
+                SyncRule = exportRule,
+                TargetConnectedSystemAttribute = target,
+                TargetConnectedSystemAttributeId = target.Id,
+                Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = source, MetaverseAttributeId = source.Id } }
+            });
+        }
+        DbContext.SyncRules.Add(exportRule);
+        await DbContext.SaveChangesAsync();
+        SyncRepo.SeedSyncRule(exportRule);
+
+        return new ManagerReferenceTopology(hrSystem, trainingSystem, targetSystem);
+    }
+
+    /// <summary>
+    /// Simulates the target Connected System having exported what synchronisation staged for it: each provisioned
+    /// object goes Normal and holds the values its Pending Export carried, and the Pending Exports are cleared so only
+    /// what the deletion stages is seen afterwards. A reference is staged as the referent's Metaverse Object id and
+    /// resolved on export to the referent's object in the target, so it is resolved here the same way, and held as
+    /// the optimistic export apply holds it: the resolved object plus the reference string the export wrote.
+    /// </summary>
+    private void ApplyStagedExports(ConnectedSystem targetSystem)
+    {
+        var targetObjects = SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == targetSystem.Id).ToList();
+        foreach (var pendingExport in SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == targetSystem.Id && pe.ConnectedSystemObjectId.HasValue))
+        {
+            var cso = SyncRepo.ConnectedSystemObjects[pendingExport.ConnectedSystemObjectId!.Value];
+            cso.Status = ConnectedSystemObjectStatus.Normal;
+            foreach (var change in pendingExport.AttributeValueChanges.Where(c => c.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update))
+            {
+                var referent = change.ResolvedReferenceCsoId.HasValue
+                    ? SyncRepo.ConnectedSystemObjects[change.ResolvedReferenceCsoId.Value]
+                    : Guid.TryParse(change.UnresolvedReferenceValue, out var referentMvoId)
+                        ? targetObjects.Single(c => c.MetaverseObjectId == referentMvoId)
+                        : null;
+                cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = change.AttributeId,
+                    Attribute = change.Attribute,
+                    StringValue = change.StringValue,
+                    GuidValue = change.GuidValue,
+                    ReferenceValueId = referent?.Id,
+                    ReferenceValue = referent,
+                    UnresolvedReferenceValue = referent == null ? null : $"CN={referent.Id}",
+                    ConnectedSystemObject = cso
+                });
+            }
+        }
+        SyncRepo.ClearAllPendingExports();
+    }
 
     private async Task<List<PreviewDelta>> PreviewAsync(ConnectedSystem connectedSystem)
     {
