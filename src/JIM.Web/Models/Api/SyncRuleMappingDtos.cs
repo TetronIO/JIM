@@ -84,7 +84,7 @@ public class SyncRuleMappingDto
     /// <summary>
     /// Present when this is a Metaverse-Derived Attribute Flow (an import Expression reading <c>mv["..."]</c>): the
     /// Metaverse attributes it reads and where it sits in the evaluation order, as "step N of M". Null for every other
-    /// mapping, and whenever the Metaverse-Derived Attribute Flows feature is off.
+    /// mapping.
     /// </summary>
     public DerivedFlowInfoDto? Derived { get; set; }
 
@@ -92,7 +92,7 @@ public class SyncRuleMappingDto
     /// On the response to an update that disabled this mapping, rewrote its Expression or changed what it writes: the
     /// Metaverse-Derived Attribute Flows the change left with a missing input, because an attribute they read lost its
     /// last enabled contributor. The update went ahead regardless; each flow's Missing Input Behaviour now decides
-    /// what it contributes. Always present; empty on every read, and whenever the feature is off.
+    /// what it contributes. Always present; empty on every read.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 

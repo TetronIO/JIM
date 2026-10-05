@@ -6,7 +6,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using JIM.Application.Exceptions;
-using JIM.Models.Core;
+using JIM.TestSupport;
 using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Hosting;
@@ -22,7 +22,7 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Confirms the REST layer's mapping of <see cref="FeatureDisabledException"/> (thrown by
 /// <c>FeatureFlagServer.EnsureEnabledAsync</c> when a caller reaches a feature-flag-gated entry point while the
-/// flag is off, #242 Phase 3.5, #1781) to a clear, non-500 response naming the feature. No REST controller action
+/// flag is off, #1781) to a clear, non-500 response naming the feature. No REST controller action
 /// catches this exception itself (see <see cref="GlobalExceptionHandler"/>'s doc comment); it is the middleware
 /// that turns it into an HTTP response, so that is what this test exercises directly.
 /// </summary>
@@ -47,7 +47,7 @@ public class GlobalExceptionHandlerFeatureDisabledTests
     [Test]
     public async Task InvokeAsync_FeatureDisabledException_Returns400NamingTheFeatureAsync()
     {
-        var definition = FeatureFlagCatalogue.UniqueValueGeneration;
+        var definition = FeatureFlagCatalogueScope.InDevelopmentFlag;
         var handler = new GlobalExceptionHandler(
             _ => throw new FeatureDisabledException(definition),
             NullLogger<GlobalExceptionHandler>.Instance);
@@ -74,7 +74,7 @@ public class GlobalExceptionHandlerFeatureDisabledTests
         var logger = new Mock<ILogger<GlobalExceptionHandler>>();
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         var handler = new GlobalExceptionHandler(
-            _ => throw new FeatureDisabledException(FeatureFlagCatalogue.UniqueValueGeneration),
+            _ => throw new FeatureDisabledException(FeatureFlagCatalogueScope.InDevelopmentFlag),
             logger.Object);
 
         await handler.InvokeAsync(BuildHttpContext(isDevelopment: false));

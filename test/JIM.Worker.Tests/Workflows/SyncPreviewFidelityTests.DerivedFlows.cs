@@ -154,26 +154,6 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
-    [Test]
-    public async Task PreviewSyncForCsoAsync_FlagOff_PreviewAndRealRunBothKeepTheLegacyBehaviourAsync()
-    {
-        // Flag off, no graph: an import expression reading mv["..."] is an ordinary flow reading nothing, in the preview
-        // exactly as in the run.
-        var ctx = await SetUpDerivedAsync(flagOn: false, withUpn: false);
-        var cso = SeedDerivedHr(ctx, "E1", "jbloggs");
-
-        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Hr.Id, cso.Id);
-        var activity = await RunDerivedFullSyncAsync(ctx.Hr);
-
-        var mvo = SyncRepo.MetaverseObjects.Values.Single();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(PreviewedValue(preview, "Email"), Is.EqualTo("@corp.local"), "legacy: mv[\"...\"] in an import expression reads null");
-            Assert.That(DerivedText(mvo, ctx.Email), Is.EqualTo("@corp.local"));
-            Assert.That(DescribeTree(preview.OutcomeTree), Is.EqualTo(DescribeTree(MapRealOutcomeTree(activity))));
-        }
-    }
-
     // ---- A cycle in the preview's rule set ----
 
     [Test]
@@ -289,17 +269,10 @@ public partial class SyncPreviewFidelityTests
         bool withUpn = true,
         bool withAd = false,
         bool withDirectoryExport = false,
-        bool flagOn = true,
         string? generatedAccountNameBase = null,
         int derivedEmailPriority = int.MaxValue,
         int adEmailPriority = int.MaxValue)
     {
-        if (flagOn)
-        {
-            DbContext.ServiceSettingItems.AddRange(await InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
-            await DbContext.SaveChangesAsync();
-        }
-
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
         var accountName = await AddDerivedMvAttributeAsync(mvType, "Account Name");

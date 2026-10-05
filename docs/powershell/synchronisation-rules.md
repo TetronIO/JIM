@@ -365,7 +365,7 @@ Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
 
 ### Derived Attribute Flow warnings
 
-Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) reads (in development). The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
+Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
 
 ```text
 WARNING: This change left 2 Attribute Flow(s) deriving Metaverse attributes with a missing input. The change went ahead; each flow's Missing Input Behaviour now decides what it contributes.
@@ -373,7 +373,7 @@ WARNING: Email (Synchronisation Rule 'Directory Import', Connected System 'Direc
 WARNING: Display Name (Synchronisation Rule 'Directory Import', Connected System 'Directory', mapping 3) reads Account Name through Email, which no longer has an enabled contributor.
 ```
 
-Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`; each missing input has `MetaverseAttributeName` (the attribute that lost its last contributor), `Indirect`, and `Via` (the derived attributes in between, empty when read directly). Collect the warnings with `-WarningVariable` to act on them in a script. The list is empty, and nothing is written, whenever the feature is off.
+Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`; each missing input has `MetaverseAttributeName` (the attribute that lost its last contributor), `Indirect`, and `Via` (the derived attributes in between, empty when read directly). Collect the warnings with `-WarningVariable` to act on them in a script.
 
 ---
 
@@ -408,7 +408,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int>
 
 Returns one or more mapping objects representing Attribute Flow Rules. Each mapping includes the source attribute(s) or expression, the target attribute, and the flow direction.
 
-`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), in development), and is `$null` on every other mapping and whenever the feature is off:
+`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes)), and is `$null` on every other mapping:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -437,9 +437,6 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 ## New-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
-
-!!! note "Generated mappings (`-Generate`) are in development"
-    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready; everything else on this page works as documented.
 
 ### Syntax
 
@@ -522,7 +519,7 @@ Returns the created mapping object. A generated mapping's `Generation` property 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242), in development.** Once the feature is available, `-Generate` applies to import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
+- **Unique Value Generation (#242).** `-Generate` applies to import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
 - Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples
@@ -579,8 +576,8 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
-!!! note "Generated-mapping parameters are in development"
-    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **Generated Value**, a Source Type still in development and not yet available for a new mapping (see `New-JIMSyncRuleMapping`); it is hidden behind a feature flag until it is ready. Everything else on this page works as documented.
+!!! note "Generated-mapping parameters"
+    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **Generated Value**; create one with `New-JIMSyncRuleMapping -Generate`.
 
 ### Syntax
 
@@ -678,9 +675,6 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
 
 ## Get-JIMGeneratedValueSequence
 
-!!! note "In development"
-    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
-
 Gets a generated Sequence mapping's counter state (Unique Value Generation, #242): the next number it
 would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
 this. Only meaningful for a generated mapping whose token kind is Sequence; every other mapping returns a
@@ -725,9 +719,6 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 ---
 
 ## Restart-JIMGeneratedValues
-
-!!! note "In development"
-    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
 
 "Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;

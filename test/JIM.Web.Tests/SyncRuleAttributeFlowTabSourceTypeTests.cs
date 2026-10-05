@@ -21,14 +21,13 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// The "Generated Value" Source Type option's visibility, gated behind Unique Value Generation's feature flag
-/// (#242, Phase 3.5): offered only while the flag is on, but an already-generated mapping still opens for editing
-/// and still shows its own Source Type, flag off or on, so existing configuration is never stranded. See
-/// <see cref="SyncRuleAttributeFlowGeneratedFormTests"/> for the form itself (run with the flag on throughout, as
-/// every non-flag test in this area is).
+/// The "Generated Value" Source Type option (Unique Value Generation, #242): offered when adding an Attribute Flow on a
+/// deployment with no feature flags set (it was gated behind the <c>Features.UniqueValueGeneration</c> flag until the
+/// feature shipped, #1803), and shown as an existing generated mapping's own Source Type when it opens for editing.
+/// See <see cref="SyncRuleAttributeFlowGeneratedFormTests"/> for the form itself.
 /// </summary>
 [TestFixture]
-public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
+public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
 {
     private readonly FakeJimApplicationFactory _factory = new();
     private Mock<IConnectedSystemRepository> _csRepo = null!;
@@ -52,22 +51,9 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddDialog_FlagOff_GeneratedSourceTypeOptionIsAbsent()
+    public void AddDialog_GeneratedSourceTypeOptionIsOffered()
     {
-        BuildJim(flagEnabled: false);
-        var (provider, _) = OpenAddDialog();
-
-        var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
-        var options = sourceTypePicker.FindComponents<MudSelectItem<string>>().Select(i => i.Instance.Value).ToList();
-
-        Assert.That(options, Does.Not.Contain("Generated"),
-            "with the flag off, an administrator must not be offered the option to create new generated configuration");
-    }
-
-    [Test]
-    public void AddDialog_FlagOn_GeneratedSourceTypeOptionIsOffered()
-    {
-        BuildJim(flagEnabled: true);
+        BuildJim();
         var (provider, _) = OpenAddDialog();
 
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
@@ -77,9 +63,9 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_FlagOffOnAnExistingGeneratedMapping_StillShowsGeneratedAsTheSourceType()
+    public void EditDialog_ExistingGeneratedMapping_ShowsGeneratedAsTheSourceType()
     {
-        BuildJim(flagEnabled: false);
+        BuildJim();
         var rule = BuildRuleWithExistingGeneratedMapping(out var existingMapping);
 
         var provider = Render<MudDialogProvider>();
@@ -99,10 +85,10 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(sourceTypePicker.Instance.Value, Is.EqualTo("Generated"),
-                "the dialog must still open showing the mapping's real Source Type, flag off or on");
+                "the dialog must open showing the mapping's real Source Type");
             Assert.That(sourceTypePicker.FindComponents<MudSelectItem<string>>().Select(i => i.Instance.Value),
                 Does.Contain("Generated"),
-                "the option must still render so the selected value resolves to its label, not the raw string");
+                "the option must render so the selected value resolves to its label, not the raw string");
             Assert.That(sourceTypePicker.Find("input").GetAttribute("value"), Is.EqualTo("Generated Value"),
                 "the Source Type reads as a noun beside Attribute and Expression");
         }
@@ -111,13 +97,16 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
 
     // ─── scaffolding ───
 
-    private void BuildJim(bool flagEnabled)
+    private void BuildJim()
     {
         var repo = new Mock<IRepository>();
         repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
-        repo.Setup(r => r.ServiceSettings).Returns(flagEnabled
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
+        // The dialog's live Metaverse-Derived Attribute Flow analysis (#1750) reads the Metaverse Object Type's import
+        // rules and the type itself; none here.
+        _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRule>());
+        repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
+        // An empty settings store: no feature flag is set.
+        repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The tab reads the retired values register's counts for its generated rows (#242, Phase 6).
         var syncRepo = new Mock<ISyncRepository>();
         syncRepo.Setup(r => r.GetRetiredGeneratedValueCountsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))

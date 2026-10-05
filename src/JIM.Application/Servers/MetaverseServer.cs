@@ -1303,7 +1303,6 @@ public partial class MetaverseServer
     /// edit of a derived attribute itself needs nothing special: its hosting flow reasserts the value by priority on the
     /// next synchronisation, and its readers are marked here like any other.
     /// <para>
-    /// Reads the flag before loading any configuration, so with the feature off an edit costs exactly what it did.
     /// A dependency cycle in the enabled derived flows is logged and marks nothing rather than failing the edit: the
     /// edit is already saved, every hosting synchronisation fails hard on the cycle until it is broken, and this path
     /// serves sign-in (the SSO profile supplement), which must not lock an administrator out of fixing the cycle.
@@ -1313,9 +1312,6 @@ public partial class MetaverseServer
     {
         const string writerName = "Metaverse Object edit";
         if (changedValues.Count == 0)
-            return;
-
-        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
             return;
 
         if (metaverseObject.Type == null)
@@ -1333,7 +1329,7 @@ public partial class MetaverseServer
             // does), with the type's attributes for resolving mv["..."] names.
             var importRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
             var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true);
-            graph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, importRules,
+            graph = DerivedFlowGraphFactory.Create(importRules,
                 metaverseObjectType == null ? [] : [metaverseObjectType]);
         }
         catch (DerivedFlowCycleException ex)

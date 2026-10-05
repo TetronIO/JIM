@@ -77,8 +77,7 @@ public class SynchronisationControllerAttributeFlowPreviewTests
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
         _repository.Setup(r => r.ConfigurationChangePreviews).Returns(_previewRepo.Object);
         _repository.Setup(r => r.Tasking).Returns(_taskingRepo.Object);
-        // Tests run with every feature flag on (test/CLAUDE.md).
-        _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
 
         _queuedWorkerTasks = [];
         _previewActivity = null;

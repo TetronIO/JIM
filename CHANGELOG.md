@@ -13,9 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
 - ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
+- ✨ JIM can now generate unique values such as account names, employee numbers and badge codes: a **Generated Value** Attribute Flow adds a number only if a value is taken, or uses a forward-only sequence or a random token, and keeps each value once issued. (#242)
+- ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
+- ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
+- ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
 
 ### Changed
 
+- 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
 ### Fixed

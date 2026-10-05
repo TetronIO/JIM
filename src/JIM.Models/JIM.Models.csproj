@@ -14,4 +14,10 @@
   <ItemGroup>
     <None Remove="Tasking\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- FeatureFlagCatalogue.SubstituteForTesting: lets tests exercise the feature-flag mechanism against synthetic
+         flags while the real catalogue is empty. Reached through JIM.TestSupport.FeatureFlagCatalogueScope. -->
+    <InternalsVisibleTo Include="JIM.TestSupport" />
+  </ItemGroup>
 </Project>

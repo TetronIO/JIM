@@ -23,8 +23,7 @@ namespace JIM.Worker.Tests.Servers;
 /// Metaverse-Derived Attribute Flows' authoring surfaces in <see cref="JIM.Application.Servers.ConnectedSystemServer"/>
 /// (#1750, plan Phase 6): the FR 3 dependants every removal and disable path reports (mapping deletion, full and
 /// settings update, whole-rule save, Synchronisation Rule deletion, schema refresh), the read-only analysis the portal
-/// runs as an administrator types, and the step facts the read surfaces show. With the flag off, every one of them is
-/// inert and reads nothing.
+/// runs as an administrator types, and the step facts the read surfaces show.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemServerDerivedFlowDependentsTests
@@ -95,11 +94,9 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         return [hr, ad];
     }
 
-    private JimApplication BuildApplication(bool flagEnabled = true)
+    private JimApplication BuildApplication()
     {
-        _repo.Setup(r => r.ServiceSettings).Returns(flagEnabled
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
+        _repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         return new JimApplication(_repo.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
     }
 
@@ -185,18 +182,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
     }
 
     [Test]
-    public async Task DeleteSyncRuleMappingAsync_FlagOff_ReportsNothingAndReadsNoRulesAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-
-        var result = await jim.ConnectedSystems.DeleteSyncRuleMappingAsync(AdMappingAsCallerHoldsIt(102), _initiator);
-
-        Assert.That(result.DependentDerivedFlows, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-        _mvRepo.Verify(r => r.GetMetaverseObjectTypeAsync(It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
-    }
-
-    [Test]
     public async Task DeleteSyncRuleMappingAsync_ExportMapping_ReadsNoRulesAsync()
     {
         var jim = BuildApplication();
@@ -252,18 +237,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         TrackForUpdate(102);
 
         var updated = await jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(102, new SyncRuleMappingSettingsUpdate { NullIsValue = true }, _initiator);
-
-        Assert.That(updated!.SaveDependentDerivedFlows, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
-
-    [Test]
-    public async Task UpdateSyncRuleMappingSettingsAsync_FlagOff_DisablingTheLastContributor_ReportsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        TrackForUpdate(102);
-
-        var updated = await jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(102, new SyncRuleMappingSettingsUpdate { Enabled = false }, _initiator);
 
         Assert.That(updated!.SaveDependentDerivedFlows, Is.Empty);
         _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
@@ -337,18 +310,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
-    [Test]
-    public async Task CreateOrUpdateSyncRuleAsync_FlagOff_DisablingTheRule_ReportsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var rule = AdRuleProposal(enabled: false);
-
-        await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
-
-        Assert.That(rule.SaveDependentDerivedFlows, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
-
     // ---- DeleteSyncRuleAsync ----
 
     [Test]
@@ -361,18 +322,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
 
         AssertMailNicknameDependant(result.DependentDerivedFlows);
         _csRepo.Verify(r => r.DeleteSyncRuleAsync(rule), Times.Once);
-    }
-
-    [Test]
-    public async Task DeleteSyncRuleAsync_FlagOff_ReportsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var rule = AdRuleProposal(enabled: true);
-
-        var result = await jim.ConnectedSystems.DeleteSyncRuleAsync(rule, _apiKey, recallContributedValues: false);
-
-        Assert.That(result.DependentDerivedFlows, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
     // ---- DetectSchemaRefreshDependentsAsync ----
@@ -405,18 +354,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
 
         Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EqualTo(new[] { 102 }), "the existing report is unchanged");
         AssertMailNicknameDependant(dependents.DependentDerivedFlows);
-    }
-
-    [Test]
-    public async Task DetectSchemaRefreshDependentsAsync_FlagOff_AddsNothingAndReadsNoImportRulesAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-
-        var dependents = await jim.ConnectedSystems.DetectSchemaRefreshDependentsAsync(20, MailNicknameRemovedFromTheDirectory());
-
-        Assert.That(dependents.InvalidatedMappings, Has.Count.EqualTo(1));
-        Assert.That(dependents.DependentDerivedFlows, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
     // ---- AnalyseDerivedFlowAsync ----
@@ -535,18 +472,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         Assert.That(analysis.Status, Is.EqualTo(DerivedFlowAnalysisStatus.NotDerived));
         Assert.That(analysis.Step, Is.Null);
         Assert.That(analysis.StepCount, Is.EqualTo(2));
-    }
-
-    [Test]
-    public async Task AnalyseDerivedFlowAsync_FlagOff_IsNotApplicableAndReadsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-
-        var analysis = await jim.ConnectedSystems.AnalyseDerivedFlowAsync(AdHostRule(), Proposal(0, _model.Email, "mv[\"Display Name\"]"));
-
-        Assert.That(analysis.Status, Is.EqualTo(DerivedFlowAnalysisStatus.NotApplicable));
-        Assert.That(analysis.StepCount, Is.Zero);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Test]
@@ -770,18 +695,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
     }
 
     [Test]
-    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_FlagOff_ReportsNothingAndReadsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var staged = StagedAdRule();
-
-        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(staged, staged.AttributeFlowRules.Single(m => m.Id == 102));
-
-        Assert.That(dependants, Is.Empty);
-        VerifyNoRulesRead();
-    }
-
-    [Test]
     public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_ExportRule_ReadsNothingAsync()
     {
         var jim = BuildApplication();
@@ -871,19 +784,6 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
     }
 
     [Test]
-    public async Task GetDependentDerivedFlowsOfRuleDisableAsync_FlagOff_ReportsNothingAndReadsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var staged = StagedAdRule();
-        staged.Enabled = false;
-
-        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDisableAsync(staged);
-
-        Assert.That(dependants, Is.Empty);
-        VerifyNoRulesRead();
-    }
-
-    [Test]
     public async Task GetDependentDerivedFlowsOfRuleDeletionAsync_RuleHoldingTheLastContributor_ReportsTheDependantAsync()
     {
         var jim = BuildApplication();
@@ -935,14 +835,4 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
     }
 
-    [Test]
-    public async Task GetDerivedFlowStepsAsync_FlagOff_ReportsNothingAndReadsNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-
-        var steps = await jim.ConnectedSystems.GetDerivedFlowStepsAsync(ComposePersistedRules()[0]);
-
-        Assert.That(steps, Is.Empty);
-        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
 }

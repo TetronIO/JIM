@@ -59,11 +59,9 @@ public class MetaverseServerDerivedInputMarkingTests
         _syncRepo = new JIM.InMemoryData.SyncRepository();
     }
 
-    private JimApplication BuildApplication(bool flagEnabled = true)
+    private JimApplication BuildApplication()
     {
-        _repo.Setup(r => r.ServiceSettings).Returns(flagEnabled
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
+        _repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         return new JimApplication(_repo.Object, syncRepository: _syncRepo);
     }
 
@@ -92,23 +90,6 @@ public class MetaverseServerDerivedInputMarkingTests
         await jim.Metaverse.UpdateMetaverseObjectAsync(mvo, additions: null, removals: [value], initiatedByType: ActivityInitiatorType.User);
 
         Assert.That(_syncRepo.DerivedInputMarkCalls.Single().Select(m => m.ConnectedSystemId), Is.EquivalentTo(new[] { Hr, Directory }));
-    }
-
-    [Test]
-    public async Task UpdateMetaverseObjectAsync_FlagOff_ReadsNoConfigurationAndMarksNothingAsync()
-    {
-        var jim = BuildApplication(flagEnabled: false);
-        var (mvo, addition) = PersonWithAccountName();
-
-        await jim.Metaverse.UpdateMetaverseObjectAsync(mvo, additions: [addition], removals: [], initiatedByType: ActivityInitiatorType.User);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(_syncRepo.DerivedInputMarkCalls, Is.Empty);
-            _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
-                "with the feature off no graph is built, so no rule is read");
-            _mvRepo.Verify(r => r.UpdateMetaverseObjectAsync(mvo), Times.Once, "the edit itself is saved as before");
-        }
     }
 
     [Test]

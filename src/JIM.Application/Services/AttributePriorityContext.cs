@@ -42,13 +42,12 @@ public sealed class AttributePriorityContext
     public bool HonourNullAssertions { get; }
 
     /// <summary>
-    /// The run's Metaverse-Derived Attribute Flow dependency graph (#1750), or null when the feature is off. When
-    /// present, derived mappings (import mappings whose expression reads <c>mv["..."]</c>) are excluded from the
+    /// The run's Metaverse-Derived Attribute Flow dependency graph (#1750), or null for a context built without one
+    /// (a narrow caller with no derived flows to evaluate). When present, derived mappings (import mappings whose expression reads <c>mv["..."]</c>) are excluded from the
     /// ordinary inbound pass, and so from the reference-only pass and contributor re-election re-flows, which all
     /// route through <c>FlowInboundAttributes</c>; they are evaluated instead by the engine's derived pass, level by
-    /// level. Null reproduces the behaviour before the feature exactly: such a mapping flows in the ordinary pass
-    /// and reads nothing from <c>mv</c>. Built by <see cref="DerivedFlowGraphFactory.CreateAsync"/>, the one place
-    /// the feature flag is read at run time.
+    /// level. With null, such a mapping flows in the ordinary pass and reads nothing from <c>mv</c>. Built by
+    /// <see cref="DerivedFlowGraphFactory.Create"/>, which every run, preview and recall calls.
     /// </summary>
     public DerivedFlowGraph? DerivedFlowGraph { get; }
 

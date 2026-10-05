@@ -44,7 +44,7 @@ public class SyncRuleAttributeFlowTabRetiredValuesTests : JimComponentTestContex
 
         var repo = new Mock<IRepository>();
         repo.Setup(r => r.ConnectedSystems).Returns(new Mock<IConnectedSystemRepository>().Object);
-        repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         Services.AddSingleton<IJimApplicationFactory>(
             new FakeJimApplicationFactory(new JimApplication(repo.Object, syncRepository: _syncRepository.Object)));
     }

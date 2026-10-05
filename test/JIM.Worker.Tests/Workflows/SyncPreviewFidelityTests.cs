@@ -681,9 +681,6 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     [Test]
     public async Task PreviewSyncForCsoAsync_GeneratedAttributeOnProjection_TreeMatchesTheRealSyncOutcomeTreeAsync()
     {
-        DbContext.ServiceSettingItems.AddRange(await JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
-        await DbContext.SaveChangesAsync();
-
         var sourceSystem = await CreateConnectedSystemAsync("HR Source");
         var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
         var mvType = await CreateMvObjectTypeAsync("Person");

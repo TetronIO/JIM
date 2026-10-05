@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 
@@ -22,10 +23,14 @@ public class SeedingServerFeatureFlagsTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IServiceSettingsRepository> _mockServiceSettingsRepo = null!;
     private JimApplication _application = null!;
+    private IDisposable _catalogue = null!;
 
     [SetUp]
     public void SetUp()
     {
+        // The real catalogue declares no flag while none is needed; seed against a synthetic one so the creation and
+        // keep paths are exercised, not merely vacuous.
+        _catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         _mockRepository = new Mock<IRepository>();
         _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
@@ -41,7 +46,11 @@ public class SeedingServerFeatureFlagsTests
     }
 
     [TearDown]
-    public void TearDown() => _application?.Dispose();
+    public void TearDown()
+    {
+        _application?.Dispose();
+        _catalogue?.Dispose();
+    }
 
     [Test]
     public async Task SyncServiceSettings_FirstRun_SeedsEveryCatalogueFlagAsBooleanDefaultFalseAsync()
@@ -66,34 +75,24 @@ public class SeedingServerFeatureFlagsTests
     }
 
     [Test]
-    public async Task SyncServiceSettings_UniqueValueGeneration_SeededAsAgreedAsync()
+    public async Task SyncServiceSettings_CatalogueFlag_SeededFromItsDefinitionAsync()
     {
+        var flag = FeatureFlagCatalogueScope.InDevelopmentFlag;
         ServiceSetting? captured = null;
-        _mockServiceSettingsRepo.Setup(r => r.CreateSettingAsync(It.Is<ServiceSetting>(s => s.Key == FeatureFlagCatalogue.UniqueValueGeneration.Key)))
+        _mockServiceSettingsRepo.Setup(r => r.CreateSettingAsync(It.Is<ServiceSetting>(s => s.Key == flag.Key)))
             .Callback<ServiceSetting>(s => captured = s)
             .Returns(Task.CompletedTask);
 
         await _application.Seeding.SyncServiceSettingsAsync();
 
         Assert.That(captured, Is.Not.Null);
-        Assert.That(captured!.DisplayName, Is.EqualTo("Unique Value Generation"));
-        Assert.That(captured!.Category, Is.EqualTo(ServiceSettingCategory.FeatureFlags));
-    }
-
-    [Test]
-    public async Task SyncServiceSettings_MetaverseDerivedAttributeFlows_SeededAsAgreedAsync()
-    {
-        ServiceSetting? captured = null;
-        _mockServiceSettingsRepo.Setup(r => r.CreateSettingAsync(It.Is<ServiceSetting>(s => s.Key == FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key)))
-            .Callback<ServiceSetting>(s => captured = s)
-            .Returns(Task.CompletedTask);
-
-        await _application.Seeding.SyncServiceSettingsAsync();
-
-        Assert.That(captured, Is.Not.Null);
-        Assert.That(captured!.DisplayName, Is.EqualTo("Metaverse-Derived Attribute Flows"));
-        Assert.That(captured!.Category, Is.EqualTo(ServiceSettingCategory.FeatureFlags));
-        Assert.That(captured!.DefaultValue, Is.EqualTo("false"), "every flag defaults off");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured!.DisplayName, Is.EqualTo(flag.DisplayName));
+            Assert.That(captured!.Description, Is.EqualTo(flag.Description));
+            Assert.That(captured!.Category, Is.EqualTo(ServiceSettingCategory.FeatureFlags));
+            Assert.That(captured!.DefaultValue, Is.EqualTo("false"), "every flag defaults off");
+        }
     }
 
     [Test]
@@ -136,11 +135,36 @@ public class SeedingServerFeatureFlagsTests
         _mockServiceSettingsRepo.Setup(r => r.GetSettingsByCategoryAsync(ServiceSettingCategory.FeatureFlags))
             .ReturnsAsync(new List<ServiceSetting>
             {
-                new() { Key = FeatureFlagCatalogue.UniqueValueGeneration.Key, DisplayName = "Unique Value Generation", Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean }
+                new() { Key = FeatureFlagCatalogueScope.InDevelopmentFlag.Key, DisplayName = FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName, Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean }
             });
 
         await _application.Seeding.SyncServiceSettingsAsync();
 
         _mockServiceSettingsRepo.Verify(r => r.DeleteSettingAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task SyncServiceSettings_ShippedFlagsRetiredFromTheCatalogue_ArePrunedAsync()
+    {
+        // Unique Value Generation (#1803) and Metaverse-Derived Attribute Flows (#1878) shipped and their flags were
+        // deleted from the real catalogue; a deployment that ran with them still holds their rows, which the next
+        // seeding pass must remove. Measured against the real catalogue, so the synthetic one is set aside.
+        _catalogue.Dispose();
+        string[] retiredKeys = ["Features.UniqueValueGeneration", "Features.MetaverseDerivedAttributeFlows"];
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingsByCategoryAsync(ServiceSettingCategory.FeatureFlags))
+            .ReturnsAsync(retiredKeys.Select(key => new ServiceSetting
+            {
+                Key = key,
+                DisplayName = key,
+                Category = ServiceSettingCategory.FeatureFlags,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "false",
+                Value = "true"
+            }).ToList());
+
+        await _application.Seeding.SyncServiceSettingsAsync();
+
+        foreach (var key in retiredKeys)
+            _mockServiceSettingsRepo.Verify(r => r.DeleteSettingAsync(key), Times.Once, $"{key} is no longer catalogued and must be pruned");
     }
 }

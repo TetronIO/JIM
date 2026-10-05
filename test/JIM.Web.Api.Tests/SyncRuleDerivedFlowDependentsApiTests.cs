@@ -31,8 +31,7 @@ namespace JIM.Web.Api.Tests;
 /// Metaverse-Derived Attribute Flows' REST surfaces (#1750, plan Phase 6): every response to a change that can take
 /// away an attribute's last contributor names the derived flows it leaves with a missing input
 /// (<c>dependentDerivedFlows</c>, FR 3; warn, never block), the mapping deletion answers 200 with a body rather than
-/// 204, a Synchronisation Rule update carries <c>warnings</c>, and mapping reads carry <c>derived</c> step facts. With
-/// the flag off every list is empty and every <c>derived</c> null.
+/// 204, a Synchronisation Rule update carries <c>warnings</c>, and mapping reads carry <c>derived</c> step facts.
 /// </summary>
 [TestFixture]
 public class SyncRuleDerivedFlowDependentsApiTests
@@ -91,11 +90,9 @@ public class SyncRuleDerivedFlowDependentsApiTests
         _mockConnectedSystemRepo.Setup(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
     }
 
-    private SynchronisationController BuildController(bool flagEnabled = true)
+    private SynchronisationController BuildController()
     {
-        _mockRepository.Setup(r => r.ServiceSettings).Returns(flagEnabled
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         var application = new JimApplication(_mockRepository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
         var controller = new SynchronisationController(
             new Mock<ILogger<SynchronisationController>>().Object,
@@ -201,16 +198,6 @@ public class SyncRuleDerivedFlowDependentsApiTests
         _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()), Times.Once);
     }
 
-    [Test]
-    public async Task DeleteSyncRuleMappingAsync_FlagOff_Returns200WithNoDependantsAsync()
-    {
-        var result = await BuildController(flagEnabled: false).DeleteSyncRuleMappingAsync(AdRuleId, MailNicknameMappingId);
-
-        var body = (SyncRuleMappingDeletionResponse)((OkObjectResult)result).Value!;
-        Assert.That(body.DependentDerivedFlows, Is.Not.Null.And.Empty);
-        Assert.That(body.ContributedValuesKept, Is.False);
-    }
-
     // ---- PATCH mapping ----
 
     [Test]
@@ -259,16 +246,6 @@ public class SyncRuleDerivedFlowDependentsApiTests
         Assert.That(dtos.Single().Derived?.Step, Is.EqualTo(2));
     }
 
-    [Test]
-    public async Task GetSyncRuleMappingAsync_FlagOff_CarriesNoDerivedInfoAndReadsNoRulesAsync()
-    {
-        var result = await BuildController(flagEnabled: false).GetSyncRuleMappingAsync(HrRuleId, DisplayNameMappingId);
-
-        var dto = (SyncRuleMappingDto)((OkObjectResult)result).Value!;
-        Assert.That(dto.Derived, Is.Null);
-        _mockConnectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
-    }
-
     // ---- PUT Synchronisation Rule ----
 
     [Test]
@@ -311,15 +288,6 @@ public class SyncRuleDerivedFlowDependentsApiTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var body = (SyncRuleDeletionResponse)((OkObjectResult)result).Value!;
         AssertDisplayNameDependant(body.DependentDerivedFlows);
-    }
-
-    [Test]
-    public async Task DeleteSyncRuleAsync_FlagOff_Returns200WithNoDependantsAsync()
-    {
-        var result = await BuildController(flagEnabled: false).DeleteSyncRuleAsync(AdRuleId, keepContributedValues: true);
-
-        var body = (SyncRuleDeletionResponse)((OkObjectResult)result).Value!;
-        Assert.That(body.DependentDerivedFlows, Is.Not.Null.And.Empty);
     }
 
     // ---- The response shape ----

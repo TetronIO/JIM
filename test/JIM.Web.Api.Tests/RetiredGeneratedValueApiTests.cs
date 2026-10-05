@@ -64,7 +64,7 @@ public class RetiredGeneratedValueApiTests
         mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         mockRepository.Setup(r => r.ApiKeys).Returns(mockApiKeyRepo.Object);
         mockRepository.Setup(r => r.Sync).Returns(_syncRepository);
-        mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
