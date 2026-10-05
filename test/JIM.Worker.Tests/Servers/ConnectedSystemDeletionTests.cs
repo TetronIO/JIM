@@ -151,6 +151,34 @@ public class ConnectedSystemDeletionTests
     }
 
     [Test]
+    public async Task GetDeletionPreviewAsync_WithJoinedMvos_PopulatesOtherConnectorAndGracePeriodCountsAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
+        _mockMvRepo.Setup(r => r.GetMvosJoinedToOtherConnectedSystemsCountAsync(1)).ReturnsAsync(340);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(1)).ReturnsAsync(12);
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        // Assert - both were part of the REST response from the start and always read zero
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.MvosWithOtherConnectorsCount, Is.EqualTo(340));
+            Assert.That(result.MvosWithGracePeriodCount, Is.EqualTo(12));
+        }
+    }
+
+    [Test]
     public async Task GetDeletionPreviewAsync_WithNoContributedValues_ReportsZeroImpactCountsAsync()
     {
         // Arrange

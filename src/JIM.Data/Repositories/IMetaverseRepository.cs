@@ -407,6 +407,24 @@ public interface IMetaverseRepository
     public Task<int> GetMvosOrphanedByConnectedSystemDeletionCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// Counts the MVOs <see cref="GetMvosOrphanedByConnectedSystemDeletionAsync"/> would return whose type has a
+    /// grace period, so marking schedules their deletion for later rather than making them eligible at once. Shares
+    /// the same predicate, so it is always a subset of <see cref="GetMvosOrphanedByConnectedSystemDeletionCountAsync"/>.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    /// <returns>The number of MVOs whose deletion would be scheduled after a grace period.</returns>
+    public Task<int> GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Counts the MVOs joined to the specified Connected System that also hold a connector in another Connected
+    /// System, so deleting the system leaves them joined elsewhere. A second connector in the same system does not
+    /// count.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    /// <returns>The number of MVOs joined both to this system and to another.</returns>
+    public Task<int> GetMvosJoinedToOtherConnectedSystemsCountAsync(int connectedSystemId);
+
+    /// <summary>
     /// Marks MVOs as disconnected by setting their LastConnectorDisconnectedDate, recording the deleted
     /// Connected System as the deletion trigger and persisting the decision-time policy snapshot (#119).
     /// Used when a Connected System is deleted to prepare orphaned MVOs for housekeeping deletion.

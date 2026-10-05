@@ -3282,6 +3282,19 @@ public class MetaverseRepository : IMetaverseRepository
         return await QueryMvosOrphanedByConnectedSystemDeletion(connectedSystemId).CountAsync();
     }
 
+    public async Task<int> GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(int connectedSystemId)
+    {
+        return await QueryMvosOrphanedByConnectedSystemDeletion(connectedSystemId)
+            .CountAsync(mvo => mvo.Type!.DeletionGracePeriod != null && mvo.Type.DeletionGracePeriod > TimeSpan.Zero);
+    }
+
+    public async Task<int> GetMvosJoinedToOtherConnectedSystemsCountAsync(int connectedSystemId)
+    {
+        return await Repository.Database.MetaverseObjects
+            .CountAsync(mvo => mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId == connectedSystemId) &&
+                               mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId));
+    }
+
     public async Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds, int deletionTriggeredBySystemId, string deletionTriggeredBySystemName, string? deletionPolicySnapshotJson)
     {
         var mvoIdList = mvoIds.ToList();

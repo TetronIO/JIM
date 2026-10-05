@@ -502,8 +502,9 @@ public interface IActivityRepository
 
     /// <summary>
     /// What has happened since <paramref name="since"/> that could change a configuration change preview's answer
-    /// (#134): the latest data-moving Activity (a run, an object edit, housekeeping) and the latest configuration change
-    /// that can change synchronisation outcomes, each null when there has been none. Previews and reads are neither.
+    /// (#134): the latest data-moving Activity (a run, housekeeping, a connector space cleared, a system deleted) and
+    /// the latest configuration change that can change synchronisation outcomes, each null when there has been none.
+    /// Previews and reads are neither.
     /// </summary>
     public Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessSinceAsync(DateTime since);
 }

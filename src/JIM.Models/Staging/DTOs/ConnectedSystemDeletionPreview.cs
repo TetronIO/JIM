@@ -25,7 +25,9 @@ public class ConnectedSystemDeletionPreview
     public int JoinedMvoCount { get; set; }
 
     /// <summary>
-    /// MVOs that have other CSO connections and won't be affected by deletion.
+    /// Joined MVOs that also hold a connector in another Connected System, so the deletion leaves them joined
+    /// elsewhere. They can still lose the values this system contributed, and under an authoritative-source deletion
+    /// rule some can still be marked for deletion (counted in <see cref="MvosWithDeletionRuleCount"/>).
     /// </summary>
     public int MvosWithOtherConnectorsCount { get; set; }
 
@@ -38,7 +40,8 @@ public class ConnectedSystemDeletionPreview
     public int MvosWithDeletionRuleCount { get; set; }
 
     /// <summary>
-    /// MVOs that will be scheduled for deletion with a grace period.
+    /// Of <see cref="MvosWithDeletionRuleCount"/>, the MVOs whose type has a grace period, so their deletion is
+    /// scheduled for when it ends rather than immediate.
     /// </summary>
     public int MvosWithGracePeriodCount { get; set; }
 

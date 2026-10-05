@@ -115,9 +115,17 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
         Assert.That(staleness.IsStale, Is.False);
     }
 
+    // Each case is the target and operation JIM records for that work, so a case here that no longer matches what JIM
+    // writes would pass while the real Activity went unnoticed.
     [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, TestName = "GetPreviewStalenessSinceAsync_ARunSince_DataChangedAsync")]
-    [TestCase(ActivityTargetType.MetaverseObject, ActivityTargetOperationType.Update, TestName = "GetPreviewStalenessSinceAsync_AMetaverseObjectEditedSince_DataChangedAsync")]
-    [TestCase(ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetOperationType.Delete, TestName = "GetPreviewStalenessSinceAsync_HousekeepingSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetOperationType.Execute, TestName = "GetPreviewStalenessSinceAsync_HousekeepingSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.TemporalScopeReconciliation, ActivityTargetOperationType.Execute, TestName = "GetPreviewStalenessSinceAsync_TemporalScopeReconciliationSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.DataGeneration, ActivityTargetOperationType.Execute, TestName = "GetPreviewStalenessSinceAsync_ExampleDataGeneratedSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.Clear, TestName = "GetPreviewStalenessSinceAsync_AConnectorSpaceClearedSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.SchemaRefreshRemoval, TestName = "GetPreviewStalenessSinceAsync_ASchemaRefreshRemovalSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.Deprovision, TestName = "GetPreviewStalenessSinceAsync_AnotherSystemDeprovisionedSince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.Delete, TestName = "GetPreviewStalenessSinceAsync_AnotherSystemDeletedImmediatelySince_DataChangedAsync")]
+    [TestCase(ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.RecallAttributeValues, TestName = "GetPreviewStalenessSinceAsync_ARulesValuesRecalledSince_DataChangedAsync")]
     public async Task GetPreviewStalenessSinceAsync_DataMovedSince_DataChangedAsync(ActivityTargetType targetType, ActivityTargetOperationType operation)
     {
         var when = PreviewStarted.AddMinutes(10);
@@ -158,6 +166,24 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
         var staleness = await GetStalenessAsync();
 
         Assert.That(staleness.ConfigurationChangedAt, Is.Not.Null);
+    }
+
+    // Activities that move no identity data a preview reasoned about. The first two are what an administrator's first-ever
+    // sign-in records (their own Metaverse Object, created just in time and given the Administrator role); counting them
+    // marked every preview stale the moment a new administrator signed in.
+    [TestCase(ActivityTargetType.MetaverseObject, ActivityTargetOperationType.Create, TestName = "GetPreviewStalenessSinceAsync_AnAdministratorsFirstSignInSince_IsCurrentAsync")]
+    [TestCase(ActivityTargetType.MetaverseObject, ActivityTargetOperationType.Update, TestName = "GetPreviewStalenessSinceAsync_TheInitialAdministratorGivenTheirRoleSince_IsCurrentAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Create, TestName = "GetPreviewStalenessSinceAsync_ARunProfileCreatedSince_IsCurrentAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Update, TestName = "GetPreviewStalenessSinceAsync_ARunProfileEditedSince_IsCurrentAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Delete, TestName = "GetPreviewStalenessSinceAsync_ARunProfileDeletedSince_IsCurrentAsync")]
+    [TestCase(ActivityTargetType.ConnectedSystemObject, ActivityTargetOperationType.SetPassword, TestName = "GetPreviewStalenessSinceAsync_APasswordSetSince_IsCurrentAsync")]
+    public async Task GetPreviewStalenessSinceAsync_NoDataMovedSince_IsCurrentAsync(ActivityTargetType targetType, ActivityTargetOperationType operation)
+    {
+        await SeedActivityAsync(targetType, operation, PreviewStarted.AddMinutes(10));
+
+        var staleness = await GetStalenessAsync();
+
+        Assert.That(staleness.IsStale, Is.False);
     }
 
     [Test]

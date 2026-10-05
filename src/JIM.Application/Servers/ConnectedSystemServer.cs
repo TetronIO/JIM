@@ -1135,6 +1135,8 @@ public partial class ConnectedSystemServer
         // predicate ExecuteDeletionAsync's marking uses, so the preview always agrees with what
         // execution does (#119).
         preview.MvosWithDeletionRuleCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
+        preview.MvosWithGracePeriodCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionWithGracePeriodCountAsync(connectedSystemId);
+        preview.MvosWithOtherConnectorsCount = await Application.Metaverse.GetMvosJoinedToOtherConnectedSystemsCountAsync(connectedSystemId);
 
         // Deprovisioning impact (#809): the attribute values this system's Synchronisation Rules
         // contribute (by provenance) and the distinct Metaverse Objects holding them; what a
