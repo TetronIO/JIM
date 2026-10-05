@@ -34,6 +34,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Projected));
+            Assert.That(cso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.Projection));
             Assert.That(cso.JoinSyncRuleId, Is.EqualTo(importRule.Id));
             Assert.That(cso.JoinSyncRuleName, Is.EqualTo("HR Import"));
         }
@@ -47,6 +48,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
         using (Assert.EnterMultipleScope())
         {
             Assert.That(hrCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+            Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.EqualTo(hrImportRule!.Id));
             Assert.That(hrCso.JoinSyncRuleName, Is.EqualTo("HR Import"));
         }
@@ -54,10 +56,11 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
 
     /// <summary>
     /// A Connected System with no import Synchronisation Rule for the object type joins on its own Object Matching
-    /// Rules alone, so no Synchronisation Rule is responsible and none is recorded.
+    /// Rules alone, so no Synchronisation Rule is responsible and none is named; the join is still recorded as an
+    /// inbound match, which is what tells it apart from a join made before joins were recorded.
     /// </summary>
     [Test]
-    public async Task FullSync_CsoJoinedByConnectedSystemMatchingWithNoImportRule_RecordsNoRuleAsync()
+    public async Task FullSync_CsoJoinedByConnectedSystemMatchingWithNoImportRule_RecordsInboundMatchWithNoRuleAsync()
     {
         var (_, _, _, hrImportRule, hrCso) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: true);
 
@@ -65,6 +68,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
         {
             Assert.That(hrImportRule, Is.Null);
             Assert.That(hrCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+            Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.Null);
             Assert.That(hrCso.JoinSyncRuleName, Is.Null);
         }
@@ -105,6 +109,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
         {
             Assert.That(cso.MetaverseObjectId, Is.Null, "the object should have been disconnected");
             Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(cso.JoinMethod, Is.Null);
             Assert.That(cso.JoinSyncRuleId, Is.Null);
             Assert.That(cso.JoinSyncRuleName, Is.Null);
         }

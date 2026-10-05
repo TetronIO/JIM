@@ -255,6 +255,45 @@ public class ScopingExplanationSummariserTests
             "Connected System, so this rule cannot connect it."));
     }
 
+    [TestCase(ConnectedSystemObjectJoinMethod.Projection, 7, "HR Users Import", ExpectedResult = "Projected by the Synchronisation Rule \"HR Users Import\"")]
+    [TestCase(ConnectedSystemObjectJoinMethod.Provisioning, 7, "Finance App Users Export", ExpectedResult = "Provisioned by the Synchronisation Rule \"Finance App Users Export\"")]
+    [TestCase(ConnectedSystemObjectJoinMethod.InboundMatching, 7, "Payroll Import", ExpectedResult = "Joined by matching, under the Synchronisation Rule \"Payroll Import\"")]
+    [TestCase(ConnectedSystemObjectJoinMethod.InboundMatching, null, null, ExpectedResult = "Joined by matching on the Connected System's Object Matching Rules")]
+    [TestCase(ConnectedSystemObjectJoinMethod.ExportMatching, 7, "Finance App Users Export", ExpectedResult = "Joined by the Synchronisation Rule \"Finance App Users Export\", which matched an existing object instead of provisioning a new one")]
+    [TestCase(ConnectedSystemObjectJoinMethod.Projection, null, "HR Users Import", ExpectedResult = "Projected by the Synchronisation Rule \"HR Users Import\" (since deleted)")]
+    public string DescribeJoin_Recorded_SaysHowAndByWhichRule(ConnectedSystemObjectJoinMethod method, int? ruleId, string? ruleName) =>
+        ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            Method = method, SyncRuleId = ruleId, SyncRuleName = ruleName, Source = JoinRecordSource.Recorded,
+            JoinType = method switch
+            {
+                ConnectedSystemObjectJoinMethod.Projection => ConnectedSystemObjectJoinType.Projected,
+                ConnectedSystemObjectJoinMethod.Provisioning => ConnectedSystemObjectJoinType.Provisioned,
+                _ => ConnectedSystemObjectJoinType.Joined
+            }
+        });
+
+    [TestCase(ConnectedSystemObjectJoinType.Projected, ExpectedResult = "Projected; the Synchronisation Rule was not recorded")]
+    [TestCase(ConnectedSystemObjectJoinType.Provisioned, ExpectedResult = "Provisioned; the Synchronisation Rule was not recorded")]
+    [TestCase(ConnectedSystemObjectJoinType.Joined, ExpectedResult = "Joined; how was not recorded")]
+    public string DescribeJoin_NotRecorded_SaysSoRatherThanGuessing(ConnectedSystemObjectJoinType joinType) =>
+        ScopingExplanationSummariser.DescribeJoin(new JoinRecord { JoinType = joinType, Source = JoinRecordSource.NotRecorded });
+
+    /// <summary>
+    /// A rule found in history may since have been deleted, and history cannot say; the name is shown as it was.
+    /// </summary>
+    [Test]
+    public void DescribeJoin_Derived_NamesTheRuleHistoryRecorded()
+    {
+        var text = ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            JoinType = ConnectedSystemObjectJoinType.Projected, Method = ConnectedSystemObjectJoinMethod.Projection,
+            SyncRuleId = 7, SyncRuleName = "HR Users Import", Source = JoinRecordSource.Derived
+        });
+
+        Assert.That(text, Is.EqualTo("Projected by the Synchronisation Rule \"HR Users Import\""));
+    }
+
     #endregion
 
     #region Bullets

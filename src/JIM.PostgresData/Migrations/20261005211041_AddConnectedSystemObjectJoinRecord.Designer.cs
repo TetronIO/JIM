@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261005185759_AddConnectedSystemObjectJoinRecord")]
+    [Migration("20261005211041_AddConnectedSystemObjectJoinRecord")]
     partial class AddConnectedSystemObjectJoinRecord
     {
         /// <inheritdoc />
@@ -3062,6 +3062,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("ImportStateHash")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("JoinMethod")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("JoinSyncRuleId")
                         .HasColumnType("integer");

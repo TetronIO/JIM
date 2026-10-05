@@ -5532,7 +5532,7 @@ public abstract class SyncTaskProcessorBase
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
-        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinType.Joined, joiningSyncRule, DateTime.UtcNow);
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow);
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
@@ -5596,7 +5596,7 @@ public abstract class SyncTaskProcessorBase
         mvo.Type = decision.MetaverseObjectType!;
         connectedSystemObject.MetaverseObject = mvo;
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinType.Projected, decision.ProjectionSyncRule, DateTime.UtcNow);
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.Projection, decision.ProjectionSyncRule, DateTime.UtcNow);
 
         return true;
     }

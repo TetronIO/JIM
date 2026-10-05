@@ -29,7 +29,7 @@ internal static class CsoBulkColumns
         "Status", "MetaverseObjectId", "JoinType", "DateJoined",
         "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt",
         "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending",
-        "JoinSyncRuleId", "JoinSyncRuleName"
+        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
     ];
 
     /// <summary>
@@ -57,7 +57,7 @@ internal static class CsoBulkColumns
     [
         "LastUpdated", "Status", "MetaverseObjectId", "JoinType", "DateJoined",
         "ExternalIdAttributeId", "SecondaryExternalIdAttributeId", "PartitionId",
-        "JoinSyncRuleId", "JoinSyncRuleName"
+        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
     ];
 
     /// <summary>
@@ -68,7 +68,7 @@ internal static class CsoBulkColumns
     /// </summary>
     internal static readonly string[] ConnectedSystemObjectsJoinStateUpdate =
     [
-        "MetaverseObjectId", "JoinType", "DateJoined", "JoinSyncRuleId", "JoinSyncRuleName"
+        "MetaverseObjectId", "JoinType", "DateJoined", "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
     ];
 
     /// <summary>

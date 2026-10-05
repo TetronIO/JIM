@@ -139,6 +139,7 @@ public class ExportMatchingClaimDatabaseTests
         Assert.That(row.DateJoined, Is.Not.Null);
         Assert.That(row.DateJoined!.Value, Is.EqualTo(dateJoined).Within(TimeSpan.FromSeconds(1)),
             "Npgsql round-trips DateTime as UTC; allow a small tolerance for timestamp precision");
+        Assert.That(row.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching), "the claim must record how it joined (#348)");
         Assert.That(row.JoinSyncRuleId, Is.EqualTo(_exportRuleId), "the claim must record the matching rule (#348)");
         Assert.That(row.JoinSyncRuleName, Is.EqualTo(ExportRuleName));
     }

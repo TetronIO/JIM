@@ -125,6 +125,36 @@ internal static class ScopingExplanationSummariser
         $"Metaverse Object is already represented there by a \"{existingObjectTypeName}\" object. A Metaverse Object can have only one " +
         "Connected System Object per Connected System, so this rule cannot connect it.";
 
+    /// <summary>
+    /// How a connection was joined, in one sentence: by which method and which Synchronisation Rule, or that it was
+    /// not recorded. A recorded rule since deleted is named as it was, and says so.
+    /// </summary>
+    internal static string DescribeJoin(JoinRecord record)
+    {
+        var rule = record.SyncRuleName == null
+            ? null
+            : record.Source == JoinRecordSource.Recorded && record.SyncRuleId == null
+                ? $"the Synchronisation Rule \"{record.SyncRuleName}\" (since deleted)"
+                : $"the Synchronisation Rule \"{record.SyncRuleName}\"";
+
+        return (record.Method, rule) switch
+        {
+            (ConnectedSystemObjectJoinMethod.Projection, not null) => $"Projected by {rule}",
+            (ConnectedSystemObjectJoinMethod.Provisioning, not null) => $"Provisioned by {rule}",
+            (ConnectedSystemObjectJoinMethod.InboundMatching, not null) => $"Joined by matching, under {rule}",
+            (ConnectedSystemObjectJoinMethod.InboundMatching, null) when record.Source == JoinRecordSource.Recorded =>
+                "Joined by matching on the Connected System's Object Matching Rules",
+            (ConnectedSystemObjectJoinMethod.ExportMatching, not null) =>
+                $"Joined by {rule}, which matched an existing object instead of provisioning a new one",
+            _ => record.JoinType switch
+            {
+                ConnectedSystemObjectJoinType.Projected => "Projected; the Synchronisation Rule was not recorded",
+                ConnectedSystemObjectJoinType.Provisioned => "Provisioned; the Synchronisation Rule was not recorded",
+                _ => "Joined; how was not recorded"
+            }
+        };
+    }
+
     #endregion
 
     #region Hint

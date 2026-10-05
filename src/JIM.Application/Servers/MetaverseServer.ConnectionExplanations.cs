@@ -207,8 +207,9 @@ public partial class MetaverseServer
             RunProfileExecutionItemId = evidence?.RunProfileExecutionItemId
         };
 
-        if (cso.JoinSyncRuleId.HasValue || cso.JoinSyncRuleName != null)
+        if (cso.JoinMethod.HasValue || cso.JoinSyncRuleName != null)
         {
+            record.Method = cso.JoinMethod;
             record.SyncRuleId = cso.JoinSyncRuleId;
             record.SyncRuleName = cso.JoinSyncRuleName;
             record.Source = JoinRecordSource.Recorded;
@@ -216,21 +217,28 @@ public partial class MetaverseServer
         else if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning && pendingExport?.ProvisioningSyncRuleId is { } provisioningRuleId)
         {
             // Still pending: the Pending Export names the rule that is provisioning it.
+            record.Method = ConnectedSystemObjectJoinMethod.Provisioning;
             record.SyncRuleId = provisioningRuleId;
             record.SyncRuleName = rules.FirstOrDefault(r => r.Id == provisioningRuleId)?.Name ?? evidence?.SyncRuleName;
             record.Source = record.SyncRuleName != null ? JoinRecordSource.Derived : JoinRecordSource.NotRecorded;
         }
-        else if (evidence?.SyncRuleName != null)
-        {
-            record.SyncRuleId = evidence.SyncRuleId;
-            record.SyncRuleName = evidence.SyncRuleName;
-            record.Source = JoinRecordSource.Derived;
-        }
         else
         {
-            record.Source = JoinRecordSource.NotRecorded;
+            // History says how the object joined; only a projection's or a provisioning's names the rule (export
+            // matching leaves no history at all, so a join in history was an inbound match).
+            record.Method = evidence?.JoinType switch
+            {
+                ConnectedSystemObjectJoinType.Projected => ConnectedSystemObjectJoinMethod.Projection,
+                ConnectedSystemObjectJoinType.Provisioned => ConnectedSystemObjectJoinMethod.Provisioning,
+                ConnectedSystemObjectJoinType.Joined => ConnectedSystemObjectJoinMethod.InboundMatching,
+                _ => null
+            };
+            record.SyncRuleId = evidence?.SyncRuleId;
+            record.SyncRuleName = evidence?.SyncRuleName;
+            record.Source = record.SyncRuleName != null ? JoinRecordSource.Derived : JoinRecordSource.NotRecorded;
         }
 
+        record.Description = ScopingExplanationSummariser.DescribeJoin(record);
         return record;
     }
 

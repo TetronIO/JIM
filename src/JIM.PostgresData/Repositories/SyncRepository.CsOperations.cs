@@ -239,6 +239,10 @@ public partial class SyncRepository
             await writer.WriteNullAsync();
             await writer.WriteNullAsync();
             await writer.WriteAsync(cso.DerivedInputChangePending, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (cso.JoinMethod.HasValue)
+                await writer.WriteAsync((int)cso.JoinMethod.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
             if (cso.JoinSyncRuleId.HasValue)
                 await writer.WriteAsync(cso.JoinSyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
             else
@@ -1566,7 +1570,7 @@ public partial class SyncRepository
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ConnectedSystemObjects""
               SET ""MetaverseObjectId"" = NULL, ""JoinType"" = {1}, ""DateJoined"" = NULL,
-                  ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL
+                  ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL
               WHERE ""Id"" = ANY({0})",
             csoIds, (int)ConnectedSystemObjectJoinType.NotJoined);
 

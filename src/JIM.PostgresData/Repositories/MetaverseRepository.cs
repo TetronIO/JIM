@@ -3164,13 +3164,14 @@ public class MetaverseRepository : IMetaverseRepository
         // otherwise SaveChangesAsync will try to write the stale FK value.
         // The join record (#348) goes with the join; JoinType and DateJoined are left as they always have been here.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = {0}",
             metaverseObject.Id);
         foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
             .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinMethod = null;
             trackedCso.Entity.JoinSyncRuleId = null;
             trackedCso.Entity.JoinSyncRuleName = null;
         }

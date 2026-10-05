@@ -257,6 +257,7 @@ public class MetaverseObjectConnectionExplanationsTests
     public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinRecordedOnObject_ReportsItAsRecordedWithItsActivityAsync()
     {
         var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Joined);
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.ExportMatching;
         cso.JoinSyncRuleId = 7;
         cso.JoinSyncRuleName = "Finance App Users Export";
         var activityId = Guid.NewGuid();
@@ -271,6 +272,8 @@ public class MetaverseObjectConnectionExplanationsTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(join.Source, Is.EqualTo(JoinRecordSource.Recorded));
+            Assert.That(join.Method, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching));
+            Assert.That(join.Description, Does.StartWith("Joined by the Synchronisation Rule \"Finance App Users Export\""));
             Assert.That(join.SyncRuleId, Is.EqualTo(7));
             Assert.That(join.SyncRuleName, Is.EqualTo("Finance App Users Export"));
             Assert.That(join.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
@@ -283,6 +286,7 @@ public class MetaverseObjectConnectionExplanationsTests
     public async Task GetMetaverseObjectConnectionExplanationsAsync_RuleDeletedSinceJoining_KeepsTheRecordedNameAsync()
     {
         var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Projected);
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.Projection;
         cso.JoinSyncRuleName = "HR Users Import";
 
         var join = (await ExplainAsync())!.Connections.Single().Join;
@@ -292,6 +296,26 @@ public class MetaverseObjectConnectionExplanationsTests
             Assert.That(join.Source, Is.EqualTo(JoinRecordSource.Recorded));
             Assert.That(join.SyncRuleId, Is.Null);
             Assert.That(join.SyncRuleName, Is.EqualTo("HR Users Import"));
+        }
+    }
+
+    /// <summary>
+    /// A Connected System with no import rule joins on its own Object Matching Rules: recorded, with no rule to name,
+    /// and worded as such rather than as "not recorded".
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinedByConnectedSystemMatching_IsRecordedWithNoRuleAsync()
+    {
+        var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Joined);
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.InboundMatching;
+
+        var join = (await ExplainAsync())!.Connections.Single().Join;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(join.Source, Is.EqualTo(JoinRecordSource.Recorded));
+            Assert.That(join.SyncRuleName, Is.Null);
+            Assert.That(join.Description, Is.EqualTo("Joined by matching on the Connected System's Object Matching Rules"));
         }
     }
 
@@ -311,6 +335,7 @@ public class MetaverseObjectConnectionExplanationsTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(join.Source, Is.EqualTo(JoinRecordSource.Derived));
+            Assert.That(join.Method, Is.EqualTo(ConnectedSystemObjectJoinMethod.Projection), "history of a projection evidences a projection");
             Assert.That(join.SyncRuleId, Is.EqualTo(9));
             Assert.That(join.SyncRuleName, Is.EqualTo("Payroll Import"));
         }
@@ -336,6 +361,8 @@ public class MetaverseObjectConnectionExplanationsTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(join.Source, Is.EqualTo(JoinRecordSource.NotRecorded));
+            Assert.That(join.Method, Is.Null);
+            Assert.That(join.Description, Is.EqualTo("Projected; the Synchronisation Rule was not recorded"));
             Assert.That(join.SyncRuleName, Is.Null);
             Assert.That(join.ActivityId, Is.Null);
         }
@@ -356,7 +383,8 @@ public class MetaverseObjectConnectionExplanationsTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(join.Source, Is.EqualTo(JoinRecordSource.NotRecorded));
+            Assert.That(join.Source, Is.EqualTo(JoinRecordSource.NotRecorded), "an inbound join's history names no rule");
+            Assert.That(join.Method, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching), "but it does say how the object joined");
             Assert.That(join.ActivityId, Is.EqualTo(activityId));
         }
     }
@@ -380,6 +408,7 @@ public class MetaverseObjectConnectionExplanationsTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(join.Source, Is.EqualTo(JoinRecordSource.Derived));
+            Assert.That(join.Method, Is.EqualTo(ConnectedSystemObjectJoinMethod.Provisioning));
             Assert.That(join.SyncRuleName, Is.EqualTo("Finance App Users Export"));
             Assert.That(result.NotConnected, Is.Empty, "provisioning under way is a joined row, never not connected");
         }

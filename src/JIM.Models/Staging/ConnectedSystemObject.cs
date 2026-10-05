@@ -130,9 +130,15 @@ public class ConnectedSystemObject
     public DateTime? DateJoined { get; set; }
 
     /// <summary>
+    /// How this object was joined (#348); null when it is not joined or the join predates recording.
+    /// </summary>
+    public ConnectedSystemObjectJoinMethod? JoinMethod { get; set; }
+
+    /// <summary>
     /// The Synchronisation Rule that projected, provisioned or joined this object (#348). Null when the object is not
-    /// joined, when the join predates recording, or when the rule has since been deleted, in which case
-    /// <see cref="JoinSyncRuleName"/> still names it.
+    /// joined, when the join predates recording, when no rule made the join (see
+    /// <see cref="ConnectedSystemObjectJoinMethod.InboundMatching"/>), or when the rule has since been deleted, in which
+    /// case <see cref="JoinSyncRuleName"/> still names it.
     /// </summary>
     public int? JoinSyncRuleId { get; set; }
 
@@ -142,12 +148,20 @@ public class ConnectedSystemObject
     public string? JoinSyncRuleName { get; set; }
 
     /// <summary>
-    /// Records the Synchronisation Rule responsible for this object's join (#348). Every join site calls this
-    /// alongside setting <see cref="JoinType"/>, so the record cannot describe a different join from the one made.
+    /// Records how this object was joined and the Synchronisation Rule responsible, if any (#348). Every join site calls
+    /// this, and <see cref="JoinType"/> follows from the method, so the record cannot describe a different join from
+    /// the one made.
     /// </summary>
-    public void RecordJoin(ConnectedSystemObjectJoinType joinType, SyncRule? syncRule, DateTime dateJoined)
+    public void RecordJoin(ConnectedSystemObjectJoinMethod method, SyncRule? syncRule, DateTime dateJoined)
     {
-        JoinType = joinType;
+        JoinType = method switch
+        {
+            ConnectedSystemObjectJoinMethod.Projection => ConnectedSystemObjectJoinType.Projected,
+            ConnectedSystemObjectJoinMethod.Provisioning => ConnectedSystemObjectJoinType.Provisioned,
+            ConnectedSystemObjectJoinMethod.InboundMatching or ConnectedSystemObjectJoinMethod.ExportMatching => ConnectedSystemObjectJoinType.Joined,
+            _ => throw new ArgumentOutOfRangeException(nameof(method), method, "Unknown join method.")
+        };
+        JoinMethod = method;
         DateJoined = dateJoined;
         JoinSyncRuleId = syncRule is { Id: > 0 } ? syncRule.Id : null;
         JoinSyncRuleName = syncRule?.Name;
@@ -160,6 +174,7 @@ public class ConnectedSystemObject
     {
         JoinType = ConnectedSystemObjectJoinType.NotJoined;
         DateJoined = null;
+        JoinMethod = null;
         JoinSyncRuleId = null;
         JoinSyncRuleName = null;
     }

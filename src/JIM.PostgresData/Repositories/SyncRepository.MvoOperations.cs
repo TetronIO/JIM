@@ -915,7 +915,7 @@ public partial class SyncRepository
         // SaveChangesAsync does not write the stale FK value back. The join record (#348) goes with the join;
         // JoinType and DateJoined are left as they always have been here.
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
             mvoIds);
         var mvoIdSet = mvoIds.ToHashSet();
         foreach (var trackedCso in _context.ChangeTracker.Entries<Models.Staging.ConnectedSystemObject>()
@@ -923,6 +923,7 @@ public partial class SyncRepository
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinMethod = null;
             trackedCso.Entity.JoinSyncRuleId = null;
             trackedCso.Entity.JoinSyncRuleName = null;
         }

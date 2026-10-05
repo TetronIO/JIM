@@ -100,7 +100,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         if (joined)
         {
             cso.MetaverseObjectId = mvo.Id;
-            cso.RecordJoin(ConnectedSystemObjectJoinType.Projected, rule, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.Projection, rule, DateTime.UtcNow);
         }
         seed.ConnectedSystemObjects.Add(cso);
         await seed.SaveChangesAsync();
@@ -122,7 +122,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         {
             var cso = await write.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == s.CsoId);
             cso.MetaverseObjectId = s.MvoId;
-            cso.RecordJoin(ConnectedSystemObjectJoinType.Joined, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
             await new PostgresDataRepository(write).Sync.UpdateConnectedSystemObjectJoinStatesAsync([cso]);
         }
 
@@ -131,6 +131,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         {
             Assert.That(stored.MetaverseObjectId, Is.EqualTo(s.MvoId));
             Assert.That(stored.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(stored.JoinSyncRuleId, Is.EqualTo(s.RuleId));
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
         }
@@ -152,6 +153,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.Null);
+            Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
         }
@@ -165,13 +167,14 @@ public class CsoJoinRecordPersistenceDatabaseTests
         {
             var cso = await write.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == s.CsoId);
             cso.MetaverseObjectId = s.MvoId;
-            cso.RecordJoin(ConnectedSystemObjectJoinType.Joined, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
+            cso.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, new SyncRule { Id = s.RuleId, Name = RuleName }, DateTime.UtcNow);
             await new PostgresDataRepository(write).ConnectedSystems.UpdateConnectedSystemObjectsAsync([cso]);
         }
 
         var stored = await ReadCsoAsync(s.CsoId);
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(stored.JoinSyncRuleId, Is.EqualTo(s.RuleId));
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
         }
@@ -194,6 +197,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.Null);
+            Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
         }
@@ -213,6 +217,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.Null);
+            Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
         }
@@ -232,6 +237,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.Null);
+            Assert.That(stored.JoinMethod, Is.Null);
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.Null);
         }
@@ -255,6 +261,7 @@ public class CsoJoinRecordPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.MetaverseObjectId, Is.EqualTo(s.MvoId), "the object stays joined");
+            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.Projection), "how it joined is still known");
             Assert.That(stored.JoinSyncRuleId, Is.Null);
             Assert.That(stored.JoinSyncRuleName, Is.EqualTo(RuleName));
         }

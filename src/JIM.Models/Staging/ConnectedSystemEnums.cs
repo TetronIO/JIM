@@ -376,11 +376,35 @@ public enum NotConnectedReason
 }
 
 /// <summary>
+/// How a Connected System Object came to be joined to its Metaverse Object (#348), recorded when the join is made.
+/// </summary>
+public enum ConnectedSystemObjectJoinMethod
+{
+    /// <summary>The object was projected: a new Metaverse Object was created from it.</summary>
+    Projection = 1,
+
+    /// <summary>The object was created by provisioning from the Metaverse Object.</summary>
+    Provisioning = 2,
+
+    /// <summary>
+    /// During inbound synchronisation, Object Matching Rules found the existing Metaverse Object: an import
+    /// Synchronisation Rule's, or, where the Connected System has no import rule for the object type, the Connected
+    /// System's own (then no rule is recorded).
+    /// </summary>
+    InboundMatching = 3,
+
+    /// <summary>
+    /// An export Synchronisation Rule about to provision found the object already present and joined it instead.
+    /// </summary>
+    ExportMatching = 4
+}
+
+/// <summary>
 /// Where the Synchronisation Rule named on a Connected System Object's join record came from (#348).
 /// </summary>
 public enum JoinRecordSource
 {
-    /// <summary>Recorded on the Connected System Object when it was joined.</summary>
+    /// <summary>Recorded on the Connected System Object when it was joined; the rule may be none, when no rule made the join.</summary>
     Recorded = 0,
 
     /// <summary>Recovered from Activity history, for an object joined before joins were recorded.</summary>

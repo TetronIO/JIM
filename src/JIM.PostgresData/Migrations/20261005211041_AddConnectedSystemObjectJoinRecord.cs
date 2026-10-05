@@ -11,6 +11,12 @@ namespace JIM.PostgresData.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<int>(
+                name: "JoinMethod",
+                table: "ConnectedSystemObjects",
+                type: "integer",
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
                 name: "JoinSyncRuleId",
                 table: "ConnectedSystemObjects",
                 type: "integer",
@@ -46,6 +52,10 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropIndex(
                 name: "IX_ConnectedSystemObjects_JoinSyncRuleId",
+                table: "ConnectedSystemObjects");
+
+            migrationBuilder.DropColumn(
+                name: "JoinMethod",
                 table: "ConnectedSystemObjects");
 
             migrationBuilder.DropColumn(

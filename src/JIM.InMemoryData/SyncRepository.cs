@@ -637,6 +637,7 @@ public class SyncRepository : ISyncRepository
         MetaverseObjectId = cso.MetaverseObjectId,
         JoinType = cso.JoinType,
         DateJoined = cso.DateJoined,
+        JoinMethod = cso.JoinMethod,
         JoinSyncRuleId = cso.JoinSyncRuleId,
         JoinSyncRuleName = cso.JoinSyncRuleName,
         ScopeReviewPending = cso.ScopeReviewPending,
@@ -969,6 +970,7 @@ public class SyncRepository : ISyncRepository
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
                 stored.DateJoined = cso.DateJoined;
+                stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
@@ -1040,6 +1042,7 @@ public class SyncRepository : ISyncRepository
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
                 stored.DateJoined = cso.DateJoined;
+                stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
                 stored.Status = cso.Status;
@@ -1567,6 +1570,7 @@ public class SyncRepository : ISyncRepository
         cso.MetaverseObjectId = metaverseObjectId;
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
         cso.DateJoined = dateJoined;
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.ExportMatching;
         cso.JoinSyncRuleId = joinSyncRuleId;
         cso.JoinSyncRuleName = joinSyncRuleName;
         cso.Status = ConnectedSystemObjectStatus.Normal;

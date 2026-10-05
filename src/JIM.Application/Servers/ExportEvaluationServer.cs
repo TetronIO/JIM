@@ -2447,7 +2447,7 @@ public class ExportEvaluationServer
                         // stale values back over the claimed row.
                         matchedCso.MetaverseObjectId = mvo.Id;
                         matchedCso.Status = ConnectedSystemObjectStatus.Normal;
-                        matchedCso.RecordJoin(ConnectedSystemObjectJoinType.Joined, exportRule, dateJoined);
+                        matchedCso.RecordJoin(ConnectedSystemObjectJoinMethod.ExportMatching, exportRule, dateJoined);
 
                         Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId}: joined instead of provisioning",
                             matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
@@ -2823,7 +2823,7 @@ public class ExportEvaluationServer
             ExternalIdAttributeId = externalIdAttribute?.Id ?? 0,
             SecondaryExternalIdAttributeId = secondaryExternalIdAttribute?.Id
         };
-        cso.RecordJoin(ConnectedSystemObjectJoinType.Provisioned, exportRule, cso.Created);
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, exportRule, cso.Created);
 
         // Note: We don't add the CSO to the MVO's collection here because:
         // 1. The MVO might be loaded with tracking, which could interfere with the save

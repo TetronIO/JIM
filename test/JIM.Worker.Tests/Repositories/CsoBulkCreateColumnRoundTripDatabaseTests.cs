@@ -203,6 +203,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             MetaverseObjectId = s.MvoId,
             JoinType = ConnectedSystemObjectJoinType.Joined,
             DateJoined = dateJoined,
+            JoinMethod = ConnectedSystemObjectJoinMethod.InboundMatching,
             JoinSyncRuleId = s.SyncRuleId,
             JoinSyncRuleName = JoinSyncRuleName,
             PartitionId = s.PartitionId,
@@ -244,6 +245,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.MetaverseObjectId, Is.EqualTo(s.MvoId));
             Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
             Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(storedCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching), "#348: the join record must round-trip");
             Assert.That(storedCso.JoinSyncRuleId, Is.EqualTo(s.SyncRuleId), "#348: the join record must round-trip");
             Assert.That(storedCso.JoinSyncRuleName, Is.EqualTo(JoinSyncRuleName), "#348: the join record must round-trip");
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));
@@ -358,6 +360,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             MetaverseObjectId = s.MvoId,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             DateJoined = dateJoined,
+            JoinMethod = ConnectedSystemObjectJoinMethod.Provisioning,
             JoinSyncRuleId = s.SyncRuleId,
             JoinSyncRuleName = JoinSyncRuleName,
             PartitionId = s.PartitionId,
@@ -390,6 +393,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.MetaverseObjectId, Is.EqualTo(s.MvoId));
             Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
             Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(storedCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.Provisioning), "#348: the join record must round-trip");
             Assert.That(storedCso.JoinSyncRuleId, Is.EqualTo(s.SyncRuleId), "#348: the join record must round-trip");
             Assert.That(storedCso.JoinSyncRuleName, Is.EqualTo(JoinSyncRuleName), "#348: the join record must round-trip");
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));

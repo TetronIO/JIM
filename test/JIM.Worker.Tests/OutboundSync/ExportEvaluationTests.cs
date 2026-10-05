@@ -3084,6 +3084,8 @@ public class ExportEvaluationTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "the unclaimed object should be joined");
+            Assert.That(cso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching));
+            Assert.That(stored.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching));
             Assert.That(cso.JoinSyncRuleId, Is.EqualTo(exportRule.Id));
             Assert.That(cso.JoinSyncRuleName, Is.EqualTo(exportRule.Name));
             Assert.That(stored.JoinSyncRuleId, Is.EqualTo(exportRule.Id));
@@ -3125,6 +3127,7 @@ public class ExportEvaluationTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provisioned.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
+            Assert.That(provisioned.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.Provisioning));
             Assert.That(provisioned.JoinSyncRuleId, Is.EqualTo(exportRule.Id));
             Assert.That(provisioned.JoinSyncRuleName, Is.EqualTo(exportRule.Name));
         }

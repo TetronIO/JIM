@@ -3060,6 +3060,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ImportStateHash")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("JoinMethod")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("JoinSyncRuleId")
                         .HasColumnType("integer");
 
