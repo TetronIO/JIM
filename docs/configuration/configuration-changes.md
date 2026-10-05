@@ -57,6 +57,8 @@ A preview answers in stages, and each appears as it completes:
 
 The stages are shown while the preview is working, and while any of them ended in something other than success. A preview whose every stage completed says so once, in the status beside its heading.
 
+A summary row names the old and new values where doing so makes the summary shorter: when every object in the row shares one pair of values ("Email changed from @contoso.com to @fabrikam.com"), or when a few pairs between them cover many objects, each pair gets a row of its own. Where most objects have values of their own (five people, five different Job Titles cleared), JIM shows one row for the attribute instead, and the drill-down behind it lists each object's values. Either way the row's count is exact.
+
 Where JIM recognises what kind of edit a summary row describes, it says so beside the row: "Email or UPN domain changed" rather than only "Email changed". The patterns it names are a domain change on an address or User Principal Name, a move to a different container, a change of letter case alone, and text added to or removed from the start or end of a value.
 
 A pattern only appears where **every** object in the row makes the same kind of edit. A row covering a mixture is left unnamed, and the objects behind it carry their own patterns in the drill-down. Nothing is shown where JIM does not recognise the change, which is the normal case for rows whose values are dates or identifiers.

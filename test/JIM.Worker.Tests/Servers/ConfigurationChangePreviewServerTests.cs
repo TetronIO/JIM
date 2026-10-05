@@ -320,7 +320,7 @@ public class ConfigurationChangePreviewServerTests
     #region Stages 3 and 4: grouping, capping and progress
 
     [Test]
-    public async Task RunPreviewAsync_DeltaStream_GroupsExactlyByTransitionAttributeAndValuePairAsync()
+    public async Task RunPreviewAsync_DeltaStream_GroupsExactlyByTransitionAndAttributeAsync()
     {
         _adapter.Deltas.AddRange(
         [
@@ -333,11 +333,12 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        // Three groups, not two: the two attribute-flow deltas carry different value pairs, and two pairs is well
-        // inside the cardinality guard, so each is named rather than merged into one "Email changed" row.
-        Assert.That(_persistedGroups, Has.Count.EqualTo(3));
+        // Two groups: one per transition. The two attribute-flow deltas carry a value pair each, and splitting by
+        // those would name one object per row, so they share one "Email changed" row whose drill-down names both
+        // values (#1935).
+        Assert.That(_persistedGroups, Has.Count.EqualTo(2));
         var scope = _persistedGroups.Single(g => g.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope);
-        var flow = _persistedGroups.Where(g => g.AttributeName == "Email").ToList();
+        var flow = _persistedGroups.Single(g => g.AttributeName == "Email");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(scope.ObjectCount, Is.EqualTo(3));
@@ -346,8 +347,9 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(scope.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
             Assert.That(scope.MetaverseObjectTypeName, Is.EqualTo("User"));
             Assert.That(scope.OldValue, Is.Null, "A transition with no attribute has no values to name.");
-            Assert.That(flow.Sum(g => g.ObjectCount), Is.EqualTo(2));
-            Assert.That(flow.Select(g => g.NewValue), Is.EquivalentTo(new[] { "Ada@new.example", "Grace@new.example" }));
+            Assert.That(flow.ObjectCount, Is.EqualTo(2));
+            Assert.That(flow.NewValue, Is.Null);
+            Assert.That(flow.Deltas.Select(d => d.NewValue), Is.EquivalentTo(new[] { "Ada@new.example", "Grace@new.example" }));
             Assert.That(_persistedGroups[0].ObjectCount, Is.GreaterThanOrEqualTo(_persistedGroups[1].ObjectCount),
                 "The landing view reads largest group first; ordering it at write time keeps every reader consistent.");
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));

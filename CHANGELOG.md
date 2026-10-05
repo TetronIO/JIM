@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
