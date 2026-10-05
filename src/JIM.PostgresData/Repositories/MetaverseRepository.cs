@@ -721,24 +721,19 @@ public class MetaverseRepository : IMetaverseRepository
                 : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
         }));
 
-        // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group graph; global lists
-        //    all. Nested groups are resolved one level deep, matching GetSyncRulesReferencingAttributeAsync.
+        // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group tree, at any depth
+        //    (a criterion missed here would be left pointing at nothing, and never match); global lists all.
         List<int> scopingCriterionIds;
         if (objectTypeId.HasValue)
         {
             var typeId = objectTypeId.Value;
-            var directCriteria = db.SyncRules
+            var typeRuleIds = await db.SyncRules
                 .Where(sr => sr.MetaverseObjectTypeId == typeId)
-                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
-                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            var childCriteria = db.SyncRules
-                .Where(sr => sr.MetaverseObjectTypeId == typeId)
-                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
-                .SelectMany(g => g.ChildGroups)
-                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            scopingCriterionIds = await directCriteria.Union(childCriteria).ToListAsync();
+                .Select(sr => sr.Id)
+                .ToListAsync();
+            scopingCriterionIds = (await SyncRuleScopingTreeLoader.GetCriterionOwnershipAsync(db, typeRuleIds, attributeId))
+                .Select(c => c.CriterionId)
+                .ToList();
         }
         else
         {

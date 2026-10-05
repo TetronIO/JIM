@@ -34,6 +34,17 @@ public class PresentedServerCertificate
     public byte[] Data { get; init; } = [];
 
     /// <summary>
+    /// Where JIM found it while assembling the chain.
+    /// </summary>
+    public ServerCertificateChainElementSource Source { get; init; }
+
+    /// <summary>
+    /// The address it was downloaded from, where <see cref="Source"/> is
+    /// <see cref="ServerCertificateChainElementSource.Downloaded"/>.
+    /// </summary>
+    public string? DownloadedFrom { get; init; }
+
+    /// <summary>
     /// The common name, which is what an administrator recognises the certificate by, and what JIM names it in the
     /// certificate store. Falls back to the whole subject where there is no common name to take.
     /// </summary>

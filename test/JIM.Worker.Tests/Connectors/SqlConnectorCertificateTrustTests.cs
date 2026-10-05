@@ -64,6 +64,28 @@ public class SqlConnectorCertificateTrustTests
         }
     }
 
+    [TestCase("intermediate")]
+    [TestCase("server")]
+    public void ValidateSettingValues_RefusedCertificateWhoseChainHoldsACertificateInTheJimStore_RetriesWithIt(string trustedTier)
+    {
+        // #1914: the retry demanded a root in the store, so an administrator who trusted the issuing CA, or the
+        // server's own certificate (both offered by the trust prompt), was told "trusted" and still refused.
+        using var root = TestPki.CreateRoot("Corp Root CA");
+        using var intermediate = TestPki.CreateIntermediate("Corp Issuing CA 2", root);
+        using var leaf = TestPki.CreateServer("db.example.com", intermediate);
+        var provider = new FakeSqlProvider { SucceedsOnlyWithAPinnedCertificate = true };
+        using var connector = CreateConnector(provider, SoundCertificateReading(leaf, sentIntermediate: intermediate),
+            trustedCertificate: TestPki.PublicOnly(trustedTier == "server" ? leaf : intermediate));
+
+        var results = connector.ValidateSettingValues(CreateSettingValues(), _logger);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Is.Empty);
+            Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(2));
+        }
+    }
+
     [Test]
     public void ValidateSettingValues_RefusedCertificateNothingVouchesFor_ReportsTheCertificateItself()
     {
@@ -250,6 +272,45 @@ public class SqlConnectorCertificateTrustTests
     /// What the probe reports for a certificate that passes every check JIM makes of it.
     /// </summary>
     private ServerCertificateReading SoundCertificateReading() => CreateReading(ServerCertificateFailureReason.None);
+
+    /// <summary>
+    /// What the probe reports for a CA-issued certificate that passes every check JIM makes of it, where the server
+    /// sent its issuing CA alongside.
+    /// </summary>
+    private static ServerCertificateReading SoundCertificateReading(X509Certificate2 leaf, X509Certificate2 sentIntermediate)
+    {
+        return new ServerCertificateReading
+        {
+            Diagnostic = new ServerCertificateDiagnostic
+            {
+                Host = "db.example.com",
+                Port = 1433,
+                Subject = leaf.Subject,
+                Issuer = leaf.Issuer,
+                Thumbprint = leaf.Thumbprint,
+                FailureReason = ServerCertificateFailureReason.None
+            },
+            Chain = new PresentedServerCertificateChain
+            {
+                Host = "db.example.com",
+                Port = 1433,
+                ReadAt = DateTime.UtcNow,
+                Leaf = Presented(leaf, ServerCertificateChainElementSource.SentByServer),
+                Intermediates = [Presented(sentIntermediate, ServerCertificateChainElementSource.SentByServer)]
+            }
+        };
+    }
+
+    private static PresentedServerCertificate Presented(X509Certificate2 certificate, ServerCertificateChainElementSource source) => new()
+    {
+        Thumbprint = certificate.Thumbprint,
+        Subject = certificate.Subject,
+        Issuer = certificate.Issuer,
+        ValidFrom = certificate.NotBefore.ToUniversalTime(),
+        ValidTo = certificate.NotAfter.ToUniversalTime(),
+        Data = certificate.Export(X509ContentType.Cert),
+        Source = source
+    };
 
     /// <summary>
     /// What the probe reports for a certificate neither the operating system nor JIM vouches for.

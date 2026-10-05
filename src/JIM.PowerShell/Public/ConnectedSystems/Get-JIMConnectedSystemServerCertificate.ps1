@@ -32,6 +32,12 @@ function Get-JIMConnectedSystemServerCertificate {
         for, validity dates, thumbprint, whether it is self-signed, which check it fails and what to do
         about it) and when it was read.
 
+        certificate.chain lists the certificate chain JIM found, the server's own certificate first and the
+        root last where JIM reached one. Each entry carries subject, issuer, thumbprint, validity dates,
+        isCertificateAuthority, isSelfSigned, source (SentByServer, Downloaded, JimCertificateStore or
+        OperatingSystem) and downloadedFrom. certificate.rootThumbprint names the root, the most durable
+        certificate to trust; isChainComplete and missingIssuer say whether JIM reached it.
+
     .EXAMPLE
         Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
 
