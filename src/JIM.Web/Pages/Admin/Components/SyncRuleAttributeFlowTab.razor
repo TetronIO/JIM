@@ -231,6 +231,15 @@
                                     </MudTooltip>
                                 }
                             }
+                            @* Unique Value Generation (#242, Phase 6): the retired values register's size, only
+                               when there is something in it. *@
+                            @if (RetiredValueCountFor(context.Item) is var rowRetiredCount && rowRetiredCount > 0)
+                            {
+                                <MudTooltip Text="@RetiredChipTooltip(rowRetiredCount, TargetName(context.Item))" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" data-testid="jim-retired-count"
+                                             OnClick="@(() => HandleViewRetiredValuesClickAsync(context.Item))">@($"{rowRetiredCount:N0} retired")</MudChip>
+                                </MudTooltip>
+                            }
                             @if (MappingIsMvaToSva(context.Item))
                             {
                                 <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
@@ -274,6 +283,14 @@
                         <div class="d-flex justify-end gap-2">
                             @* Unique Value Generation (#242, Phase 3, Work Package D2): "Start again…" is offered
                                only for a saved generated Sequence mapping, next to the existing row actions. *@
+                            @if (ShowViewRetiredValuesAction(context.Item))
+                            {
+                                <MudTooltip Text="@ViewRetiredValuesTooltip(RetiredValueCountFor(context.Item))" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Archive" Variant="Variant.Filled" Color="Color.Default"
+                                        Size="Size.Small" aria-label="view retired values"
+                                        OnClick="@(() => HandleViewRetiredValuesClickAsync(context.Item))" />
+                                </MudTooltip>
+                            }
                             @if (GeneratedValuePreviewHelpers.ShowStartAgainAction(context.Item))
                             {
                                 <MudTooltip Text="Start again…" Arrow="true" Placement="Placement.Top">
@@ -335,6 +352,14 @@
                             }
                         </MudStack>
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
+                            @if (ShowViewRetiredValuesAction(attributeFlowRule))
+                            {
+                                <MudTooltip Text="@ViewRetiredValuesTooltip(RetiredValueCountFor(attributeFlowRule))" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Archive" Variant="Variant.Filled" Color="Color.Default"
+                                        Size="Size.Small" aria-label="view retired values"
+                                        OnClick="@(() => HandleViewRetiredValuesClickAsync(attributeFlowRule))" />
+                                </MudTooltip>
+                            }
                             @if (GeneratedValuePreviewHelpers.ShowStartAgainAction(attributeFlowRule))
                             {
                                 <MudTooltip Text="Start again…" Arrow="true" Placement="Placement.Top">
@@ -389,6 +414,13 @@
                             {
                                 <DerivedFlowChip StepInfo="cardStepInfo" />
                             }
+                            @if (RetiredValueCountFor(attributeFlowRule) is var importCardRetiredCount && importCardRetiredCount > 0)
+                            {
+                                <MudTooltip Text="@RetiredChipTooltip(importCardRetiredCount, TargetName(attributeFlowRule))" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" data-testid="jim-retired-count"
+                                             OnClick="@(() => HandleViewRetiredValuesClickAsync(attributeFlowRule))">@($"{importCardRetiredCount:N0} retired")</MudChip>
+                                </MudTooltip>
+                            }
                         </div>
                     }
                     else if (SyncRule.Direction == SyncRuleDirection.Export)
@@ -423,6 +455,13 @@
                             <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
                                            Name="@attributeFlowRule.TargetConnectedSystemAttribute?.Name"
                                            Tooltip="@DescribeConnectedSystemAttribute(attributeFlowRule.TargetConnectedSystemAttribute)" />
+                            @if (RetiredValueCountFor(attributeFlowRule) is var exportCardRetiredCount && exportCardRetiredCount > 0)
+                            {
+                                <MudTooltip Text="@RetiredChipTooltip(exportCardRetiredCount, TargetName(attributeFlowRule))" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" data-testid="jim-retired-count"
+                                             OnClick="@(() => HandleViewRetiredValuesClickAsync(attributeFlowRule))">@($"{exportCardRetiredCount:N0} retired")</MudChip>
+                                </MudTooltip>
+                            }
 
                             @if (!attributeFlowRule.Enabled)
                             {
@@ -1083,16 +1122,90 @@
         }
 
         await LoadDerivedFlowStepsAsync();
+        await LoadRetiredValueCountsAsync();
     }
 
     /// <summary>
-    /// Reloads the Derived chips' step facts, for the page to call after it saves the rule: a flow added in this edit
-    /// session has no id, and so no chip, until then.
+    /// Reloads the per-row facts read from the database (the Derived chips' step facts and the retired values
+    /// counts), for the page to call after it saves the rule: a flow added in this edit session has no id, and so no
+    /// chip, until then, and removing a generated flow retires its values.
     /// </summary>
     public async Task RefreshDerivedFlowStepsAsync()
     {
         await LoadDerivedFlowStepsAsync();
+        await LoadRetiredValueCountsAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    // ─── Retired values register (Unique Value Generation, #242, Phase 6) ───
+
+    /// <summary>
+    /// The retired values register's size per generated row's target attribute, keyed by (is Metaverse, attribute
+    /// id). Read once for every generated row together, and again after a save or a Start again; never per row.
+    /// </summary>
+    private Dictionary<(bool IsMetaverse, int AttributeId), int> _retiredValueCounts = new();
+
+    private async Task LoadRetiredValueCountsAsync()
+    {
+        var generated = SyncRule.AttributeFlowRules.Where(m => m.Generation != null).ToList();
+        var metaverseAttributeIds = generated
+            .Where(m => m.TargetMetaverseAttributeId.HasValue)
+            .Select(m => m.TargetMetaverseAttributeId!.Value)
+            .Distinct()
+            .ToList();
+        var connectedSystemAttributeIds = generated
+            .Where(m => m.TargetConnectedSystemAttributeId.HasValue)
+            .Select(m => m.TargetConnectedSystemAttributeId!.Value)
+            .Distinct()
+            .ToList();
+
+        // A rule with no generated flows has nothing to count, so it reads nothing.
+        if (metaverseAttributeIds.Count == 0 && connectedSystemAttributeIds.Count == 0)
+        {
+            _retiredValueCounts = new();
+            return;
+        }
+
+        using var jim = JimFactory.Create();
+        var counts = await jim.UniqueValues.GetRetiredValueCountsAsync(metaverseAttributeIds, connectedSystemAttributeIds);
+        _retiredValueCounts = counts.ToDictionary(
+            c => (c.MetaverseAttributeId.HasValue, c.MetaverseAttributeId ?? c.ConnectedSystemObjectTypeAttributeId ?? 0),
+            c => c.Count);
+    }
+
+    /// <summary>How many retired values the register holds for a generated row's target attribute; zero otherwise.</summary>
+    private int RetiredValueCountFor(SyncRuleMapping mapping)
+    {
+        if (mapping.Generation == null)
+            return 0;
+
+        if (mapping.TargetMetaverseAttributeId is { } metaverseAttributeId)
+            return _retiredValueCounts.GetValueOrDefault((true, metaverseAttributeId));
+
+        return mapping.TargetConnectedSystemAttributeId is { } connectedSystemAttributeId
+            ? _retiredValueCounts.GetValueOrDefault((false, connectedSystemAttributeId))
+            : 0;
+    }
+
+    /// <summary>"View retired values" is on every generated row with a target, whether or not any are retired yet.</summary>
+    private static bool ShowViewRetiredValuesAction(SyncRuleMapping mapping) =>
+        mapping.Generation != null && (mapping.TargetMetaverseAttributeId.HasValue || mapping.TargetConnectedSystemAttributeId.HasValue);
+
+    private static string ViewRetiredValuesTooltip(int count) =>
+        count > 0 ? $"View retired values ({count:N0})" : "View retired values";
+
+    private static string RetiredChipTooltip(int count, string attributeName) =>
+        $"{count:N0} {(count == 1 ? "value" : "values")} of {attributeName} will never be issued again.";
+
+    private static string TargetName(SyncRuleMapping mapping) =>
+        mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
+
+    private async Task HandleViewRetiredValuesClickAsync(SyncRuleMapping mapping)
+    {
+        await RetiredGeneratedValuesDialog.ShowAsync(
+            DialogService, TargetName(mapping), mapping.TargetMetaverseAttributeId,
+            mapping.TargetMetaverseAttributeId.HasValue ? null : mapping.TargetConnectedSystemAttributeId,
+            RetiredValueCountFor(mapping));
     }
 
     private async Task LoadDerivedFlowStepsAsync()
@@ -1838,8 +1951,14 @@
         var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
             ?? attributeFlowRule.TargetConnectedSystemAttribute?.Name ?? "this attribute";
         var configuredStart = attributeFlowRule.Generation!.SequenceStart;
-        await GeneratedValueStartAgainDialog.ShowAsync(
-            DialogService, attributeFlowRule.Id, attributeName, configuredStart, attributeFlowRule.Generation.FixedWidth);
+        var restarted = await GeneratedValueStartAgainDialog.ShowAsync(
+            DialogService, attributeFlowRule.Id, attributeName, configuredStart, attributeFlowRule.Generation.FixedWidth,
+            attributeFlowRule.TargetMetaverseAttributeId,
+            attributeFlowRule.TargetMetaverseAttributeId.HasValue ? null : attributeFlowRule.TargetConnectedSystemAttributeId);
+
+        // Starting again forgets the attribute's retired values, so the row's chip has to go with them.
+        if (restarted)
+            await LoadRetiredValueCountsAsync();
     }
 
     private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)

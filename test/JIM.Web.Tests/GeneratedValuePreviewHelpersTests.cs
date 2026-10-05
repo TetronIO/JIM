@@ -277,6 +277,36 @@ public class GeneratedValuePreviewHelpersTests
         Assert.That(text, Does.Contain("nothing moved"));
     }
 
+    [Test]
+    public void DescribeRestartResult_RetiredValuesForgotten_SaysHowMany()
+    {
+        var result = new GeneratedValueRestartResult { CounterFrom = 101701, CounterTo = 100456, RetiredValuesForgotten = 4 };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: null);
+
+        Assert.That(text, Does.Contain("4 retired values"));
+    }
+
+    [Test]
+    public void DescribeRestartResult_NeverSeededButRetiredValuesForgotten_SaysWhatWasForgotten()
+    {
+        var result = new GeneratedValueRestartResult { CounterFrom = null, CounterTo = null, RetiredValuesForgotten = 1 };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: null);
+
+        Assert.That(text, Does.Contain("1 retired value "));
+    }
+
+    [Test]
+    public void DescribeRestartResult_NoRetiredValuesForgotten_SaysNothingAboutThem()
+    {
+        var result = new GeneratedValueRestartResult { CounterFrom = 101701, CounterTo = 100456, RetiredValuesForgotten = 0 };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: null);
+
+        Assert.That(text, Does.Not.Contain("retired"));
+    }
+
     // ─── Sequence identifier formatting (QA fix, #242 Phase 3 D2) ───
 
     [Test]
@@ -302,13 +332,20 @@ public class GeneratedValuePreviewHelpersTests
     [Test]
     public void IsStartAgainNoOp_CounterAlreadyAtStartAt_ReturnsTrue()
     {
-        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(300000, 300000), Is.True);
+        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(300000, 300000, retiredValueCount: 0), Is.True);
+    }
+
+    [Test]
+    public void IsStartAgainNoOp_CounterAtStartAtButRetiredValuesToForget_ReturnsFalse()
+    {
+        // #242 Phase 6: forgetting the retired values is a change in its own right, so the restart is not a no-op.
+        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(300000, 300000, retiredValueCount: 4), Is.False);
     }
 
     [Test]
     public void IsStartAgainNoOp_CounterAheadOfStartAt_ReturnsFalse()
     {
-        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(101701, 100456), Is.False);
+        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(101701, 100456, retiredValueCount: 0), Is.False);
     }
 
     [Test]

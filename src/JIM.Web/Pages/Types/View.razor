@@ -97,13 +97,15 @@
                         <MudProgressCircular Indeterminate="true" />
                     </div>
                 }
-                else if (_changeCount == 0)
+                else if (_changeCount == 0 && _retirements.Count == 0)
                 {
                     <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
                 }
                 else
                 {
-                    <ChangeHistoryTimeline Changes="@_changeHistoryRows" />
+                    <ChangeHistoryTimeline Changes="@_changeHistoryRows"
+                                           Retirements="@_retirements"
+                                           HistoryComplete="@(_changeHistoryRows.Count >= _changeHistoryTotal)" />
                     @if (_changeHistoryRows.Count < _changeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
@@ -574,6 +576,11 @@
     private bool _changeHistoryLoading;
     private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
 
+    // The generated values retired from this object (Unique Value Generation, #242, Phase 6): events on the
+    // Changes timeline. Read whole with the object, since an object retires few values, so the badge counts them
+    // from the first render.
+    private List<RetiredGeneratedValueHeader> _retirements = new();
+
     // Inspect view state (#399): the object's attribute provenance, its Group by choice, the active source
     // filter (from the contribution bar's legend) and the currently opened attribute's own provenance. Loaded
     // by this page (the Inspect table's host) rather than by MvoDetailsTable itself, so that component stays a
@@ -659,6 +666,7 @@
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
         _connectorCount = detailResult.ConnectorCount;
+        _retirements = await jim.UniqueValues.GetRetiredValuesForObjectAsync(IdParam);
 
         // A navigation from one person to another reuses this component (#399): the Inspect view's provenance
         // and open attribute belong to the previous object and must not be shown against this one.
@@ -869,7 +877,7 @@
 
     private string GetChangeBadge()
     {
-        return _changeCount.ToString("N0");
+        return (_changeCount + _retirements.Count).ToString("N0");
     }
 
     private async Task OnActiveTabIndexChangedAsync(int newIndex)

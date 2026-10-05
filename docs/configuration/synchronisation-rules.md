@@ -505,7 +505,32 @@ The base expression is an ordinary [expression](#expression-mappings), for examp
 
 **Sequences.** The counter belongs to the target attribute, not to the mapping, so removing and re-creating the mapping continues where it left off, and it only moves forward. On first use it starts above the highest numeric value already present for the attribute. The next number is the higher of the counter and **Start at**; raising Start at is how you reserve a range or continue a sequence issued elsewhere, and the editor asks you to confirm the numbers it skips. Lowering it has no effect. With **Pad to a fixed width** on, choose whether a number that outgrows the width stops with an error or is allowed to grow longer. A sequence number is never reused.
 
-**Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It changes no existing value and exports nothing; numbers still held by a Metaverse Object are skipped when the counter reaches them. The action is recorded as an Activity.
+**Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It also forgets the attribute's [retired values](#retired-values), so those numbers can be issued again; the confirmation says how many, and links to the list, before you commit. It changes no existing value and exports nothing; numbers still held by a Metaverse Object are skipped when the counter reaches them. The action is recorded as an Activity, whose message includes how many retired values were forgotten.
+
+#### Retired values
+
+A generated value is often an identifier: an account name, an email address, an employee number. Issuing one to a second person is a security problem as much as a data one, because mail, group memberships and permissions keyed on that identifier quietly follow it to the new holder. So when JIM stops holding a generated value, it **retires** it: the value goes into the attribute's **retired values** list, and JIM never issues it again, whichever Attribute Flow generates the attribute.
+
+A value is retired when:
+
+| Why (as the portal shows it) | Stored reason | What happened |
+|---|---|---|
+| **Object deleted** | `ObjectDeleted` | The object that held the value was deleted: a leaver's Metaverse Object, or for an export flow the Connected System Object. |
+| **No longer generated** | `Superseded` | Another Attribute Flow now supplies the attribute for that object (see [Existing accounts](#generated-values) above), so JIM stopped managing the generated value. |
+| **Flow removed** | `Recalled` | The Attribute Flow that generated the value was removed. |
+
+The REST API and PowerShell report the stored reason. A fourth stored reason, `Regenerated`, is reserved for a later release and is never written today.
+
+**Never reuse a value.** Retiring is controlled by the mapping's **Never reuse a value** switch, which is on by default for "only if taken" and random tokens. With it on, a retired value is skipped when JIM generates: if `marisol.fenwick` left and was retired, the next Marisol Fenwick gets `marisol.fenwick1`. Turn it off only where a value may safely pass to a different person; with it off, nothing is retired, and a leaver's value is free for the next person who needs it. A sequence always behaves as though the switch is on, because its counter only moves forward, so the editor shows a locked line rather than a switch.
+
+**Is anything lost?** No. Retiring removes nothing from any Connected System and changes no value an object still holds; it only stops JIM issuing the value again. Retired values are kept permanently, and nothing but **Start again** on a sequence clears them: there is deliberately no way to release one value, because that is how an identifier passes to a new person by accident.
+
+**Where you see them.**
+
+- On the Synchronisation Rule's **Attribute Flow** tab, a generated row shows an **N retired** chip once its attribute has any, and every generated row has a **View retired values** action. The list is per attribute, not per flow: two flows generating Account Name share one list, because neither may reissue the other's values. It is read-only and searchable by value or by the name of the object that held it; **Held by** links to the Metaverse Object while it still exists, and shows its last name, greyed, once it has been deleted.
+- On a Metaverse Object's **Changes** tab, a retirement is an event in the timeline: the attribute, the retired value struck through, why, and the synchronisation that caused it. A deleted object's retirements are only in the list, since the object and its timeline are gone.
+- A synchronisation that retires values records it on the object's summary in the Activity, under the change that caused it.
+- In PowerShell, `Get-JIMRetiredGeneratedValue` (see [Metaverse cmdlets](../powershell/metaverse.md#get-jimretiredgeneratedvalue)); on the REST API, `GET /metaverse/attributes/{id}/retired-generated-values` for an import flow's attribute and `GET /synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}/retired-generated-values` for an export flow's, both with search and paging. A generated mapping's `generation` object on the mapping endpoints carries `retiredValueCount`.
 
 **Number attributes.** A generated value can target a Text or a Number attribute. A Number attribute accepts only a sequence or a Digits random token, with no base expression, no separator and no padding, because a prefix or leading zeros would make the value text. The editor disables the incompatible choices and says why; the REST API and PowerShell refuse the same configurations with the same reasons.
 

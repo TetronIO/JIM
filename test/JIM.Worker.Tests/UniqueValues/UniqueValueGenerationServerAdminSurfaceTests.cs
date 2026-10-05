@@ -251,7 +251,7 @@ public class UniqueValueGenerationServerAdminSurfaceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.RetiredValuesForgotten, Is.Zero, "the retired values register does not exist until release 2");
+            Assert.That(result.RetiredValuesForgotten, Is.Zero, "nothing was retired for this attribute, so there is nothing to forget");
             Assert.That(result.CounterFrom, Is.EqualTo(150));
             Assert.That(result.CounterTo, Is.EqualTo(1));
         }

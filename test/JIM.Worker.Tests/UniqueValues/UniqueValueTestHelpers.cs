@@ -36,7 +36,8 @@ internal static class UniqueValueTestHelpers
         GeneratedValueRandomFormat randomFormat = GeneratedValueRandomFormat.Guid,
         int? randomLength = null,
         string? separator = null,
-        int attemptLimit = 1000) => new()
+        int attemptLimit = 1000,
+        bool neverReuse = true) => new()
     {
         Id = Interlocked.Increment(ref _nextGenerationId),
         TokenKind = tokenKind,
@@ -49,7 +50,8 @@ internal static class UniqueValueTestHelpers
         RandomFormat = randomFormat,
         RandomLength = randomLength,
         Separator = separator,
-        AttemptLimit = attemptLimit
+        AttemptLimit = attemptLimit,
+        NeverReuse = neverReuse
     };
 
     public static GenerationRequest ImportRequest(

@@ -148,9 +148,18 @@ public static class GeneratedValuePreviewHelpers
     /// never stand *behind* Start at when read via <c>GetGeneratedValueSequenceStateAsync</c>, whose
     /// <see cref="GeneratedValueSequenceState.NextNumber"/> is always the higher of the counter's own position
     /// and Start at (see that type's doc comment), so equality is the only "nothing to do" case reachable here;
-    /// there is no separate "behind" branch to handle.
+    /// there is no separate "behind" branch to handle. Forgetting retired values (#242, Phase 6) is a change in its
+    /// own right, so with any to forget the restart is never a no-op, even with the counter already at Start at.
     /// </summary>
-    public static bool IsStartAgainNoOp(long currentNext, long configuredStart) => currentNext == configuredStart;
+    public static bool IsStartAgainNoOp(long currentNext, long configuredStart, int retiredValueCount) =>
+        currentNext == configuredStart && retiredValueCount == 0;
+
+    /// <summary>
+    /// The "Start again" confirmation's count of what it forgets (#242, Phase 6, mockup section C): "4 retired
+    /// values" or "1 retired value".
+    /// </summary>
+    public static string DescribeRetiredValueCount(int count) =>
+        $"{count:N0} retired {(count == 1 ? "value" : "values")}";
 
     /// <summary>
     /// The mockup's "nothing will change" message for <see cref="IsStartAgainNoOp"/>, shown in place of the
@@ -202,8 +211,15 @@ public static class GeneratedValuePreviewHelpers
     /// is the mapping's configured fixed width (QA fix, #242 Phase 3 D2): the counter values are identifiers, not
     /// quantities, so they render zero-padded and without a thousands separator via <see cref="FormatSequenceIdentifier"/>.
     /// </summary>
-    public static string DescribeRestartResult(string attributeName, GeneratedValueRestartResult result, int? fixedWidth) =>
-        result.CounterFrom.HasValue
+    public static string DescribeRestartResult(string attributeName, GeneratedValueRestartResult result, int? fixedWidth)
+    {
+        var counter = result.CounterFrom.HasValue
             ? $"Started {attributeName} again: the counter moved from {FormatSequenceIdentifier(result.CounterFrom.Value, fixedWidth)} to {FormatSequenceIdentifier(result.CounterTo!.Value, fixedWidth)}."
             : $"\"Start again\" was requested for {attributeName}, but its counter had not issued any numbers yet, so nothing moved.";
+
+        // #242, Phase 6: what was forgotten is part of the outcome, and the counter sentence alone would hide it.
+        return result.RetiredValuesForgotten > 0
+            ? $"{counter} {DescribeRetiredValueCount(result.RetiredValuesForgotten)} {(result.RetiredValuesForgotten == 1 ? "was" : "were")} forgotten and can be issued again."
+            : counter;
+    }
 }
