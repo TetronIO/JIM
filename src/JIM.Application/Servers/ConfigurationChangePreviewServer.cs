@@ -126,6 +126,22 @@ public class ConfigurationChangePreviewServer
         await _application.Repository.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(surface, connectedSystemId);
 
     /// <summary>
+    /// Whether <paramref name="activityId"/> is a preview of <paramref name="surface"/> for the given Connected System.
+    /// How a change citing a preview is checked at the boundary (#134): a deletion recording another system's preview,
+    /// or a preview of a different kind of change, as the one that informed it would make its audit trail say
+    /// something untrue.
+    /// </summary>
+    public async Task<bool> IsConnectedSystemPreviewAsync(Guid activityId, ConfigurationChangePreviewSurface surface, int connectedSystemId)
+    {
+        var preview = await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
+        if (preview?.Surface != surface)
+            return false;
+
+        var activity = await _application.Repository.Activity.GetActivityAsync(activityId);
+        return activity is { TargetOperationType: ActivityTargetOperationType.Preview } && activity.ConnectedSystemId == connectedSystemId;
+    }
+
+    /// <summary>
     /// Whether anything has happened since the preview started that could change its answer: a run or object edit
     /// (the data it read has moved), or a configuration change that can change synchronisation outcomes (#134).
     /// Measured from the start, not the finish, because a run during the preview moved data it may already have read.
