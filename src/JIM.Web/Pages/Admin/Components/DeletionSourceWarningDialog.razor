@@ -1,0 +1,75 @@
+@using JIM.Models.Core.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The confirmation shown before saving a Synchronisation Rule that newly projects into a Metaverse Object Type deleted
+   When Authoritative Source Disconnected, from a Connected System that is not one of the type's authoritative sources
+   (#1256). This is where that mistake is made, so it is said here and not only on the Deletion Rules panel. Advisory:
+   the administrator can always save. The link opens in a new tab so the unsaved rule is not lost. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Class="mr-2" />
+            Review before saving
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" data-testid="jim-deletion-source-save-warning">
+            <MudText Typo="Typo.body1"><strong>@Warning.Headline</strong></MudText>
+            <MudText Typo="Typo.body2" Class="mt-2">@Warning.Explanation</MudText>
+            <ul class="mt-1 mb-0 pl-5">
+                <li><MudText Typo="Typo.body2">@Warning.NeverDeletedConsequence;</MudText></li>
+                <li><MudText Typo="Typo.body2">@Warning.DeletedWhileHeldConsequence.</MudText></li>
+            </ul>
+            <MudLink Href="@($"/admin/schema/object-types/{MetaverseObjectTypeId}")" Target="_blank" Class="mt-2 d-inline-block">
+                Open @Warning.ObjectTypeName's Deletion Rules
+            </MudLink>
+        </MudAlert>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+            Join-only Synchronisation Rules (projection off) never show this; leaving those out of the authoritative
+            sources is the normal way to add a system that only contributes attributes.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" data-testid="jim-deletion-source-save-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
+                   data-testid="jim-deletion-source-save-confirm">Save Synchronisation Rule</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>What the save would do to the Metaverse Object Type's deletion behaviour.</summary>
+    [Parameter]
+    public SyncRuleDeletionSourceWarning Warning { get; set; } = null!;
+
+    /// <summary>The Metaverse Object Type the rule projects into, for the link to its Deletion Rules.</summary>
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// Shows <paramref name="warning"/> and asks whether to save anyway.
+    /// </summary>
+    /// <returns>True to save, false when the administrator cancelled.</returns>
+    public static async Task<bool> ConfirmAsync(IDialogService dialogService, SyncRuleDeletionSourceWarning warning,
+        int metaverseObjectTypeId)
+    {
+        var parameters = new DialogParameters<DeletionSourceWarningDialog>
+        {
+            { x => x.Warning, warning },
+            { x => x.MetaverseObjectTypeId, metaverseObjectTypeId }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<DeletionSourceWarningDialog>("Review before saving", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+}

@@ -26,7 +26,10 @@ function Get-JIMMetaverseObjectType {
         Number of items per page. Defaults to 100.
 
     .OUTPUTS
-        PSCustomObject representing Object Type(s).
+        PSCustomObject representing Object Type(s). With -Id or -Name, the full Object Type, which includes
+        DeletionRuleAdvisory and DeletionSourceWarnings: the Connected Systems that project into the type without being
+        one of its authoritative sources under WhenAuthoritativeSourceDisconnected (each with ConnectedSystemId and
+        ConnectedSystemName; empty when there are none). The list form returns summaries without either.
 
     .EXAMPLE
         Get-JIMMetaverseObjectType
@@ -37,6 +40,12 @@ function Get-JIMMetaverseObjectType {
         Get-JIMMetaverseObjectType -Id 1
 
         Gets the Object Type with ID 1.
+
+    .EXAMPLE
+        if ((Get-JIMMetaverseObjectType -Name 'User').DeletionSourceWarnings) { throw 'A projecting system is not an authoritative source for User' }
+
+        Fails a health-check script when a Connected System projects into the User type without being one of its
+        authoritative sources.
 
     .EXAMPLE
         Get-JIMMetaverseObjectType -Name 'Person'

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 
@@ -28,12 +29,23 @@ public class SyncRuleSaveResponse : SyncRuleHeader
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
+    /// Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
+    /// Disconnected, from a Connected System that is not one of the type's authoritative sources (#1256): objects it
+    /// projects that no selected source also holds will never be deleted, and those it shares with a selected source are
+    /// deleted when that source disconnects. The save went ahead regardless. Null when there is nothing to warn about,
+    /// including for a rule that already projected before the save.
+    /// </summary>
+    public string? DeletionSourceWarning { get; set; }
+
+    /// <summary>
     /// Builds the response from the rule as saved (reloaded) and the instance the save was performed on, which carries
     /// the save's transient warnings and dependants.
     /// </summary>
     /// <param name="saved">The rule as stored after the save.</param>
     /// <param name="savedInstance">The instance handed to the save.</param>
-    public static SyncRuleSaveResponse FromSave(SyncRule saved, SyncRule savedInstance)
+    /// <param name="deletionSourceWarning">The deletion source warning for the save, if any (#1256).</param>
+    public static SyncRuleSaveResponse FromSave(SyncRule saved, SyncRule savedInstance,
+        SyncRuleDeletionSourceWarning? deletionSourceWarning = null)
     {
         ArgumentNullException.ThrowIfNull(saved);
         ArgumentNullException.ThrowIfNull(savedInstance);
@@ -42,7 +54,8 @@ public class SyncRuleSaveResponse : SyncRuleHeader
         var response = new SyncRuleSaveResponse
         {
             Warnings = savedInstance.AttributeFlowRules.SelectMany(mapping => mapping.SaveWarnings).ToList(),
-            DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList()
+            DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList(),
+            DeletionSourceWarning = deletionSourceWarning?.Message
         };
 
         // Copy every header property, so a field added to the header later reaches this response without anyone
