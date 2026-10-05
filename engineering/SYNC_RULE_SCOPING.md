@@ -169,6 +169,8 @@ The evaluator reads objects through a struct value source (`MvoScopingValueSourc
 
 An explanation (`ScopingExplanation`, `src/JIM.Models/Logic/Scoping/`) records each group's outcome, met count and child count, and each criterion's attribute, comparison, expected value (a relative date's resolved boundary too), the value compared, how many further values went uncompared, and an outcome (Met, Not met, No value, Attribute missing, Invalid). Nodes carry a one-based dot path (`1.3.2`), criteria counted before child groups as the evaluator takes them. Values are rendered culture-invariantly (dates in UTC, `4 Oct 2026` at midnight, `4 Oct 2026 10:41 UTC` otherwise). Values of credential attributes are withheld: names on `CredentialAttributes`' denylist always, and credential-like names on text or binary attributes (a date such as `pwdLastSet` cannot hold a credential, and its value is often why a rule scopes someone out). `ScopingExplanationTests` compares the two modes across every operator, data type and value state, relative dates, trees to depth four, and a few thousand seeded random trees, on both sides.
 
+`ScopingExplanationSummariser` turns an explanation into words, once, on the server: the one-line hint ("Fails on Department; Cost Centre or Job Title"), the "To come into scope" bullets, a copyable plain-text summary and the tree's line descriptions. It words comparisons with the criteria editors' labels (`SearchComparisonOperators.LabelFor`), so the editor and the explanation never disagree on how a comparison reads.
+
 ## What scoping does not do today
 
 The following behaviours are out of scope for the current implementation. They are captured here for administrators planning deployments and for future design work.

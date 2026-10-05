@@ -48,3 +48,28 @@ public enum ScopingRuleOutcome
     /// </summary>
     Undetermined = 2
 }
+
+/// <summary>
+/// What one piece of an explanation's text is (#348), so a surface can style values and attribute names while the
+/// plain text stays identical everywhere.
+/// </summary>
+public enum ExplanationSegmentKind
+{
+    /// <summary>Connecting words.</summary>
+    Text = 0,
+
+    /// <summary>An attribute's name.</summary>
+    Attribute = 1,
+
+    /// <summary>The value a criterion requires.</summary>
+    ExpectedValue = 2,
+
+    /// <summary>The value the object holds.</summary>
+    CurrentValue = 3,
+
+    /// <summary>The object holds no value.</summary>
+    NoValue = 4,
+
+    /// <summary>A value withheld because the attribute may hold a credential.</summary>
+    Hidden = 5
+}

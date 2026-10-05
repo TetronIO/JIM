@@ -1,11 +1,11 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Doing (Phases 0-1 and layers 1-2 complete)
+- **Status:** Doing (Phases 0-2 and layers 1-2 complete)
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../prd/doing/PRD_METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
 - **UI mockups:** [MVO Connections Mocks](https://claude.ai/artifact/4Tj5DYpEMR7c8g9pSoAqD9) (board 1B chosen)
 - **Related:** [#1519](https://github.com/TetronIO/JIM/issues/1519) Connections tab and Sync Preview, [#399](https://github.com/TetronIO/JIM/issues/399) value provenance, [#204](https://github.com/TetronIO/JIM/issues/204) scope management enhancements, [#1463](https://github.com/TetronIO/JIM/issues/1463) group-based scoping, [`../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md`](../../prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)
-- **Last Updated:** 2026-10-05 (Phase 1: shared evaluator); 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
+- **Last Updated:** 2026-10-05 (Phase 2: summariser); 2026-10-05 (Phase 1: shared evaluator); 2026-10-05 (Layer 2 landed as [#1932](https://github.com/TetronIO/JIM/pull/1932)); 2026-10-05 (decisions: join record stored durably (D4 option B); interim Inspect / Changes restriction dropped, deferred with Activity page access to RBAC; multi-valued semantics filed as [#1923](https://github.com/TetronIO/JIM/issues/1923)); 2026-10-05 (initial plan)
 
 ## Overview
 
@@ -196,10 +196,12 @@ Results (2026-10-05):
 
 Results: `ScopingEvaluator` (`src/JIM.Application/Servers/Scoping/`) is now the only evaluation code; both boolean methods and both explain methods wrap it. `ScopingExplanationTests` (47 tests) compares the two modes across every operator, data type and value state on both sides, every relative date unit and direction, trees to depth four, and 2,500 seeded random trees per side including invalid and attribute-less criteria; the existing `ScopingEvaluationTests` pass unchanged. The boolean path now allocates nothing per evaluation (it was 392 bytes for a two-group, three-criterion rule), guarded by a test. Two refinements, recorded in the PRD's Resolved Decisions 7 and 8: an invalid criterion in a top-level group after a met one leaves the outcome In scope, as synchronisation decides it; and credential-like names are masked only on text or binary attributes. Comparison of a criterion's ordered types now goes through one generic `CompareOrdered<T>` rather than four copies; behaviour is identical (null handling, scale-insensitive decimals and tick-based date comparison included), proven by the agreement sweep.
 
-### Phase 2: Summariser
+### Phase 2: Summariser ✅
 
 1. `ScopingExplanationSummariser` with the operator wording table, hint, bullets, plain text and UTC timestamp formatting.
 2. Tests: one per PRD rule (All branches, Any branch, multiple top-level groups, missing value on positive and negated operators, relative dates, booleans, decimals, masked values), plus golden-text tests for the PRD's Scenario 1 summary.
+
+Results: `ScopingExplanationSummariser` (`src/JIM.Application/Servers/Scoping/`, internal) produces the hint, the bullets (typed `ExplanationSegment`s for the portal plus quoted `PlainText`), the not-connected summary for every `NotConnectedReason` (`NotConnectedSummary`, `src/JIM.Models/Staging/DTOs/`), the tree's line descriptions and the UTC evaluation time. Comparisons are worded from the criteria editors' own labels, now `SearchComparisonOperators.LabelFor` in JIM.Utilities (moved from `CriterionOperatorOptions`, which delegates), so the editor and the explanation cannot word a comparison differently: a requirement form ("must equal", "must be before") for a bullet of its own and a condition form ("equals", "is before") inside a choice. Beyond the PRD's rules: a case-sensitive text criterion failing only on case says "(case-sensitive; currently ...)"; further uncompared values are counted in the bullet; nested choices and requirements are parenthesised; generated text always uses "\n" line breaks. `ScopingExplanationSummariserTests` (33) pins the PRD's Scenario 1 summary, hint, bullets and tree lines word for word, and each wording rule.
 
 ### Phase 3: Connection explanations on the server
 

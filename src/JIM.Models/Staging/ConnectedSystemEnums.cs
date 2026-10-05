@@ -351,3 +351,26 @@ public enum ContainerScopeStatementKind
     /// </summary>
     Exclude = 1
 }
+
+/// <summary>
+/// Why a Metaverse Object has no Connected System Object in a Connected System an enabled export Synchronisation
+/// Rule targets (#348). One reason per rule; provisioning already under way and Object Type conflicts always involve
+/// a joined object, so they are reported on the joined connection instead.
+/// </summary>
+public enum NotConnectedReason
+{
+    /// <summary>The object fails the rule's scoping criteria.</summary>
+    NotInScope = 0,
+
+    /// <summary>The object is in scope, but the rule does not provision new objects and none exists to join.</summary>
+    ProvisioningDisabled = 1,
+
+    /// <summary>The rule's scoping cannot be evaluated: synchronisation would reach an invalid criterion.</summary>
+    RuleMisconfigured = 2,
+
+    /// <summary>
+    /// The object is in scope and the rule provisions, but nothing has been staged: synchronisation stages provisioning
+    /// only when the object's attribute values change.
+    /// </summary>
+    NotYetProvisioned = 3
+}

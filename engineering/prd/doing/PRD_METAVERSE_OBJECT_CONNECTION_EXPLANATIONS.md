@@ -1,6 +1,6 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Doing (Phases 0-1 and layers 1-2 complete)
+- **Status:** Doing (Phases 0-2 and layers 1-2 complete)
 - **Created:** 2026-10-05
 - **Author:** Jay
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
