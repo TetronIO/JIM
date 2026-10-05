@@ -171,4 +171,49 @@ public class SynchronisationControllerCreateSyncRuleTests
         _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleAsync(
             It.Is<SyncRule>(sr => sr.OutboundDeprovisionAction == OutboundDeprovisionAction.Disconnect)), Times.Once);
     }
+    [Test]
+    public async Task CreateSyncRuleAsync_ProjectingRuleFromUnlistedSystem_ReturnsDeletionSourceWarningAsync()
+    {
+        // #1256: a new projecting rule into a type deleted When Authoritative Source Disconnected, from a system that is
+        // not one of its authoritative sources, is reported on the create response.
+        var mvObjectType = new MetaverseObjectType
+        {
+            Id = 300,
+            Name = "User",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerConnectedSystemIds = [1]
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(300, It.IsAny<bool>())).ReturnsAsync(mvObjectType);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [1] = "HR", [100] = "Test CS" });
+        var request = BuildCreateRequest();
+        request.ProjectToMetaverse = true;
+
+        var result = await _controller.CreateSyncRuleAsync(request) as CreatedAtRouteResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null, "the create response carries the save's warnings, as the update response does");
+        Assert.That(response!.DeletionSourceWarning, Does.Contain("Test CS").And.Contain("HR"));
+    }
+
+    [Test]
+    public async Task CreateSyncRuleAsync_JoinOnlyRule_ReturnsNoDeletionSourceWarningAsync()
+    {
+        var mvObjectType = new MetaverseObjectType
+        {
+            Id = 300,
+            Name = "User",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerConnectedSystemIds = [1]
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(300, It.IsAny<bool>())).ReturnsAsync(mvObjectType);
+        var request = BuildCreateRequest();
+        request.ProjectToMetaverse = false;
+
+        var result = await _controller.CreateSyncRuleAsync(request) as CreatedAtRouteResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.DeletionSourceWarning, Is.Null, "a join-only contributor is the normal pattern and is never flagged");
+    }
 }

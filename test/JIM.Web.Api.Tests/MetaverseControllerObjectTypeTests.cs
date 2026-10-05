@@ -14,6 +14,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -916,6 +917,68 @@ public class MetaverseControllerObjectTypeTests
         Assert.That(dto!.DeletionRuleAdvisory, Is.Not.Null.And.Contain("When Authoritative Source Disconnected"),
             "the object type response must carry the deletion rule advisory when the combination applies");
     }
+
+    [Test]
+    public async Task GetObjectTypeAsync_ProjectingSystemNotAnAuthoritativeSource_AttachesDeletionSourceWarningsAsync()
+    {
+        // #1256: the response lists systems that project into the type without being selected authoritative sources,
+        // so automation can fail a pipeline on it. Join-only contributors are never listed.
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Person",
+            PluralName = "People",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerConnectedSystemIds = [10],
+            Attributes = new List<MetaverseAttribute>()
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(objectType);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(1, SyncRuleDirection.Import))
+            .ReturnsAsync(new List<SyncRuleHeader>
+            {
+                ImportHeader(10, "HR", projects: true),
+                ImportHeader(20, "Contractors DB", projects: false),
+                ImportHeader(30, "Partner Portal", projects: true)
+            });
+
+        var result = await _controller.GetObjectTypeAsync(1) as OkObjectResult;
+
+        var dto = result?.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.DeletionSourceWarnings, Is.EqualTo(new[] { new DeletionSourceGap(30, "Partner Portal") }));
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_NoDeletionSourceGap_ReturnsEmptyDeletionSourceWarningsAsync()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Person",
+            PluralName = "People",
+            DeletionRule = MetaverseObjectDeletionRule.Manual,
+            Attributes = new List<MetaverseAttribute>()
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(objectType);
+
+        var result = await _controller.GetObjectTypeAsync(1) as OkObjectResult;
+
+        var dto = result?.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.DeletionSourceWarnings, Is.Not.Null.And.Empty, "always present, so a script can test it without a null check");
+    }
+
+    private static SyncRuleHeader ImportHeader(int connectedSystemId, string connectedSystemName, bool projects) => new()
+    {
+        Id = connectedSystemId * 100,
+        Name = $"{connectedSystemName} import",
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemName = connectedSystemName,
+        MetaverseObjectTypeId = 1,
+        Direction = SyncRuleDirection.Import,
+        Enabled = true,
+        ProjectToMetaverse = projects
+    };
 
     [Test]
     public async Task GetObjectTypeAsync_WithNullIcon_ReturnsNullIconInDto()
