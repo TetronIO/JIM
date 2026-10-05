@@ -375,7 +375,29 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// it existed the engine recorded an <see cref="AttributeFlow"/> root for it, reporting a flow that never
     /// happened and inflating the Activity's Attribute Flow count.
     /// </summary>
-    OutOfScopeRetainJoin
+    OutOfScopeRetainJoin,
+
+    /// <summary>
+    /// Preview only (#134): a value this Connected System contributes would be withdrawn and another Connected System
+    /// would take the attribute over with a different value. The delta's Connected System is the new contributor;
+    /// its old value is the withdrawn one and its new value the one taking over. The change-of-value sibling of
+    /// <see cref="NoContributor"/>, which reports an attribute with no contributor left at all.
+    /// </summary>
+    WouldTakeOverContributedValue,
+
+    /// <summary>
+    /// Preview only (#134): as <see cref="WouldTakeOverContributedValue"/>, but the new contributor already holds the
+    /// same value, so nothing about the attribute changes except where it comes from, and nothing is exported. Its
+    /// own value so a migration's thousands of identical hand-overs never sit among, or swell, the changes that matter.
+    /// </summary>
+    WouldTakeOverSameValue,
+
+    /// <summary>
+    /// Preview only (#134): an attribute of an object in a target Connected System would be updated, because the value
+    /// it is exported from changes or is cleared. One delta per exported attribute, so the summary can say which
+    /// attributes change downstream and for how many objects.
+    /// </summary>
+    WouldStageUpdateExport
 }
 
 /// <summary>

@@ -1739,32 +1739,7 @@ public class SyncPreviewServer
     /// Renders an attribute value for display, without the attribute-name prefix the entity's own
     /// ToString carries.
     /// </summary>
-    private static string? RenderValue(MetaverseObjectAttributeValue value)
-    {
-        if (value.NullValue)
-            return null;
-        if (value.StringValue != null)
-            return value.StringValue;
-        if (value.IntValue.HasValue)
-            return value.IntValue.Value.ToString();
-        if (value.LongValue.HasValue)
-            return value.LongValue.Value.ToString();
-        if (value.DecimalValue.HasValue)
-            return value.DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (value.DateTimeValue.HasValue)
-            return value.DateTimeValue.Value.ToString("O");
-        if (value.BoolValue.HasValue)
-            return value.BoolValue.Value.ToString();
-        if (value.GuidValue.HasValue)
-            return value.GuidValue.Value.ToString();
-        if (value.ReferenceValueId.HasValue || value.ReferenceValue != null)
-            return (value.ReferenceValueId ?? value.ReferenceValue!.Id).ToString();
-        if (value.UnresolvedReferenceValueId.HasValue || value.UnresolvedReferenceValue != null)
-            return (value.UnresolvedReferenceValueId ?? value.UnresolvedReferenceValue!.Id).ToString();
-        if (value.ByteValue != null)
-            return $"{value.ByteValue.Length} bytes";
-        return null;
-    }
+    private static string? RenderValue(MetaverseObjectAttributeValue value) => PreviewValueRenderer.Render(value);
 
     #endregion
 }

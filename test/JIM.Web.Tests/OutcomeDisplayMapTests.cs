@@ -77,7 +77,10 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired", CausalityTone.Warning, Icons.Material.Filled.Archive),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, "Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue, "New contributor, value changes", CausalityTone.Warning, Icons.Material.Filled.ChangeCircle),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue, "New contributor, same value", CausalityTone.Secondary, Icons.Material.Filled.CompareArrows),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport, "Updated in the target system", CausalityTone.Info, Icons.Material.Filled.CloudUpload)
     ];
 
     /// <summary>
@@ -110,7 +113,10 @@ public class OutcomeDisplayMapTests
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldWithdrawContributedValues,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope,
-        ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport
     ];
 
     [Test]

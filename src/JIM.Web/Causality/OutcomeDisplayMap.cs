@@ -109,6 +109,7 @@ public static class OutcomeDisplayMap
             new OutcomeDisplay("Blank asserted", CausalityTone.Warning, Icons.Material.Filled.DoNotDisturbOn),
         [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] =
             new OutcomeDisplay("Value cleared", CausalityTone.Warning, Icons.Material.Filled.HighlightOff,
+                "have a value cleared",
                 SpeculativeLabel: "Value would be cleared"),
 
         // #1570: values kept as last known state because no import source remains to assert the object;
@@ -225,6 +226,22 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] =
             new OutcomeDisplay("Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
                 "enter export scope"),
+
+        // The Connected System deletion impact preview (#134). Warning on a takeover that changes the value, matching
+        // NoContributor beside it: the attribute stays populated but now says something different, and that is what an
+        // administrator migrating between sources needs to read. Secondary, the lowest weight, on a takeover with an
+        // identical value: only the source changes, nothing is exported, and in a migration these outnumber every other
+        // row, so they must sort below what matters. Info on the corrective update: the consequence downstream of the
+        // two rows above, already accounted for by them.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] =
+            new OutcomeDisplay("New contributor, value changes", CausalityTone.Warning, Icons.Material.Filled.ChangeCircle,
+                "have a value replaced by another contributor's"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] =
+            new OutcomeDisplay("New contributor, same value", CausalityTone.Secondary, Icons.Material.Filled.CompareArrows,
+                "keep the same value from another contributor"),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] =
+            new OutcomeDisplay("Updated in the target system", CausalityTone.Info, Icons.Material.Filled.CloudUpload,
+                "be updated in their target Connected System"),
 
         // Unique Value Generation (#242). Primary on Assigned: a positive act JIM took, matching the tone
         // Projected and Provisioned use for their own "JIM did this" outcomes. Fingerprint reads as

@@ -3149,10 +3149,21 @@ public class ExportEvaluationServer
     /// <see cref="ReadOnlySyncRepositoryGuard"/>; it stages nothing and persists nothing, but that guard is
     /// what turns a future regression into a loud failure rather than a write.
     /// </summary>
+    /// <param name="recall">
+    /// The change a recall made to the one Metaverse Object passed (#134): its changed values (re-elected additions
+    /// first, then the removals) and the removals themselves. When given, the evaluation answers as the recall
+    /// executors' own staging does rather than as a synchronisation asserting the object's whole state: only the
+    /// changed values are considered, a removal clears its target attribute, and recall semantics apply (existing
+    /// target objects are updated; none is provisioned). Null asks the state-assertion question.
+    /// </param>
     internal async Task<OutboundPreviewResult> EvaluateOutboundPreviewForMaterialisedMvosAsync(
         IReadOnlyCollection<MetaverseObject> mvos,
-        ExportEvaluationCache cache)
+        ExportEvaluationCache cache,
+        (List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue> RemovedAttributes)? recall = null)
     {
+        if (recall != null && mvos.Count != 1)
+            throw new ArgumentException("A recall change describes one Metaverse Object, so exactly one must be passed with it.", nameof(recall));
+
         var result = new OutboundPreviewResult();
 
         foreach (var mvo in mvos)
@@ -3168,8 +3179,8 @@ public class ExportEvaluationServer
                 continue;
 
             // What a synchronisation of this object now would consider: its current values (asserted-null
-            // markers excluded, exactly as evaluation sources them).
-            var changedAttributes = mvo.AttributeValues.Where(av => !av.NullValue).ToList();
+            // markers excluded, exactly as evaluation sources them). A recall considers only what it changed.
+            var changedAttributes = recall?.ChangedAttributes ?? mvo.AttributeValues.Where(av => !av.NullValue).ToList();
 
             foreach (var exportRule in exportRules)
             {
@@ -3178,7 +3189,7 @@ public class ExportEvaluationServer
                 if (IsMvoInScopeForExportRule(mvo, exportRule))
                 {
                     result.Entries.Add(await BuildStagingPreviewEntryAsync(
-                        this, cache, mvo, exportRule, existingCso, changedAttributes));
+                        this, cache, mvo, exportRule, existingCso, changedAttributes, recall?.RemovedAttributes));
                     continue;
                 }
 
@@ -3236,12 +3247,14 @@ public class ExportEvaluationServer
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
-        List<MetaverseObjectAttributeValue> changedAttributes)
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        HashSet<MetaverseObjectAttributeValue>? recallRemovedAttributes = null)
     {
         // Read-only lookup (the preview never writes): needed for the same reason as the real staging
         // path - telling a never-sent Create apart from one already sent and awaiting confirmation.
         var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes,
+            recallSemantics: recallRemovedAttributes != null, existingPendingExport);
 
         Guid? wouldJoinCsoId = null;
         var effectiveChangeType = decision.ChangeType;
@@ -3270,6 +3283,7 @@ public class ExportEvaluationServer
                 mvo, exportRule, changedAttributes, effectiveChangeType.Value,
                 existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
                 out noNetChangeSkipped, ExpressionEvaluator,
+                removedAttributes: recallRemovedAttributes,
                 noNetChangeSkipped: noNetChangeSkippedChanges);
 
             // Unique Value Generation (#242, Phase 2 work package H): a generated export mapping stages a
