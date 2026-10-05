@@ -151,6 +151,79 @@ public class ConnectedSystemDeletionConfigurationChangeCaptureTests
             "the reason entered at request time is carried on the queued Activity so it survives to when the worker runs");
     }
 
+    // -- the preview that informed the deletion (#134) ------------------------------------------------------------------
+
+    [Test]
+    public async Task DeleteAsync_SynchronisedDeprovisioning_RecordsTheInformingPreviewOnTheQueuedActivityAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupCore(BuildCore());
+        var previewActivityId = Guid.CreateVersion7();
+
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), synchronisedDeprovisioning: true,
+            previewActivityId: previewActivityId);
+
+        Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.QueuedAsBackgroundJob));
+        var queuedActivity = _createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision);
+        Assert.That(queuedActivity.PreviewActivityId, Is.EqualTo(previewActivityId),
+            "the audit trail must say what the administrator was told the deletion would do");
+    }
+
+    [Test]
+    public async Task DeleteAsync_SmallSystemImmediately_RecordsTheInformingPreviewAsync()
+    {
+        SetupTrackingSetting(enabled: false);
+        SetupCore(BuildCore());
+        SetupFull(BuildFull());
+        _csRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(10);
+        var previewActivityId = Guid.CreateVersion7();
+
+        await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), previewActivityId: previewActivityId);
+
+        Assert.That(_updatedActivity!.PreviewActivityId, Is.EqualTo(previewActivityId));
+    }
+
+    [Test]
+    public async Task DeleteAsync_WhileASyncRuns_RecordsTheInformingPreviewOnTheQueuedActivityAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupCore(BuildCore());
+        _csRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync(new SynchronisationWorkerTask());
+        var previewActivityId = Guid.CreateVersion7();
+
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), synchronisedDeprovisioning: true,
+            previewActivityId: previewActivityId);
+
+        Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.QueuedAfterSync));
+        Assert.That(_createdActivities.Single(a => a.TargetType == ActivityTargetType.ConnectedSystem).PreviewActivityId,
+            Is.EqualTo(previewActivityId));
+    }
+
+    [Test]
+    public async Task DeleteAsync_ByApiKey_RecordsTheInformingPreviewOnTheQueuedActivityAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupCore(BuildCore());
+        var previewActivityId = Guid.CreateVersion7();
+        var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "Automation" };
+
+        await _jim.ConnectedSystems.DeleteAsync(1, apiKey, synchronisedDeprovisioning: true, previewActivityId: previewActivityId);
+
+        Assert.That(_createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision).PreviewActivityId,
+            Is.EqualTo(previewActivityId));
+    }
+
+    [Test]
+    public async Task DeleteAsync_WithoutAPreview_RecordsThatNoneInformedItAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupCore(BuildCore());
+
+        await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), synchronisedDeprovisioning: true);
+
+        Assert.That(_createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision).PreviewActivityId, Is.Null);
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private void SetupCore(ConnectedSystem core) =>

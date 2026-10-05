@@ -118,6 +118,27 @@ public class ConfigurationChangePreviewServer
         await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
 
     /// <summary>
+    /// The most recently started preview of <paramref name="surface"/> for a Connected System, with its Activity, or
+    /// null when there has been none. How a host finds the preview it started again after the administrator has
+    /// navigated away and come back, so a running preview is reattached rather than started twice (#134).
+    /// </summary>
+    public async Task<ConfigurationChangePreview?> GetLatestConnectedSystemPreviewAsync(ConfigurationChangePreviewSurface surface, int connectedSystemId) =>
+        await _application.Repository.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(surface, connectedSystemId);
+
+    /// <summary>
+    /// Whether anything has happened since the preview started that could change its answer: a run or object edit
+    /// (the data it read has moved), or a configuration change that can change synchronisation outcomes (#134).
+    /// Measured from the start, not the finish, because a run during the preview moved data it may already have read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No preview Activity has this id.</exception>
+    public async Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessAsync(Guid activityId)
+    {
+        var activity = await _application.Repository.Activity.GetActivityAsync(activityId)
+            ?? throw new InvalidOperationException($"No preview Activity {activityId} exists to judge the staleness of.");
+        return await _application.Repository.Activity.GetPreviewStalenessSinceAsync(activity.Created);
+    }
+
+    /// <summary>
     /// A preview's summary groups, largest first: the landing view.
     /// </summary>
     public async Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId) =>

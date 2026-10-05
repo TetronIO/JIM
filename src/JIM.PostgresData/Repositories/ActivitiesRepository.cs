@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Preview;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -2194,6 +2195,40 @@ public class ActivityRepository : IActivityRepository
                 ServiceSettingKey = a.ServiceSettingKey
             })
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The Activity kinds that move the data a preview evaluated: runs, edits to individual objects, and the sweeps
+    /// that delete or rescope objects on a schedule.
+    /// </summary>
+    private static readonly ActivityTargetType[] DataMovingTargetTypes =
+    [
+        ActivityTargetType.ConnectedSystemRunProfile,
+        ActivityTargetType.MetaverseObject,
+        ActivityTargetType.ConnectedSystemObject,
+        ActivityTargetType.MetaverseObjectHousekeeping,
+        ActivityTargetType.TemporalScopeReconciliation
+    ];
+
+    public async Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessSinceAsync(DateTime since)
+    {
+        var dataChangedAt = await Repository.Database.Activities
+            .Where(a => a.Created > since
+                        && DataMovingTargetTypes.Contains(a.TargetType)
+                        && a.TargetOperationType != ActivityTargetOperationType.Read
+                        && a.TargetOperationType != ActivityTargetOperationType.Preview)
+            .MaxAsync(a => (DateTime?)a.Created);
+
+        // A new Synchronisation Rule carries no class (a create has nothing to diff), but it can contribute exactly
+        // what a preview reported as cleared, so it counts as surely as an edit to an existing rule does.
+        var configurationChangedAt = await Repository.Database.Activities
+            .Where(a => a.Created > since
+                        && (a.ConfigurationChangeClass >= ConfigurationChangeClass.SyncAffecting
+                            || (a.TargetType == ActivityTargetType.SynchronisationRule
+                                && a.TargetOperationType == ActivityTargetOperationType.Create)))
+            .MaxAsync(a => (DateTime?)a.Created);
+
+        return new ConfigurationChangePreviewStaleness(dataChangedAt, configurationChangedAt);
     }
     #endregion
 

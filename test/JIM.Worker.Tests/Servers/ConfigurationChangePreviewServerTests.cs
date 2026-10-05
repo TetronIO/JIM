@@ -189,6 +189,29 @@ public class ConfigurationChangePreviewServerTests
     }
 
     [Test]
+    public async Task GetPreviewStalenessAsync_MeasuresFromWhenThePreviewStartedAsync()
+    {
+        // Anything recorded after the preview began could have moved what it read, including while it was running.
+        var started = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+        var previewActivity = new Activity { Id = Guid.CreateVersion7(), Created = started, TargetType = ActivityTargetType.ConnectedSystem };
+        _activityRepo.Setup(r => r.GetActivityAsync(previewActivity.Id)).ReturnsAsync(previewActivity);
+        var changedAt = started.AddMinutes(3);
+        _activityRepo.Setup(r => r.GetPreviewStalenessSinceAsync(started))
+            .ReturnsAsync(new ConfigurationChangePreviewStaleness(changedAt, null));
+
+        var staleness = await NewServer().GetPreviewStalenessAsync(previewActivity.Id);
+
+        Assert.That(staleness, Is.EqualTo(new ConfigurationChangePreviewStaleness(changedAt, null)));
+    }
+
+    [Test]
+    public void GetPreviewStalenessAsync_UnknownPreview_ThrowsAsync()
+    {
+        Assert.That(async () => await NewServer().GetPreviewStalenessAsync(Guid.CreateVersion7()),
+            Throws.InstanceOf<InvalidOperationException>());
+    }
+
+    [Test]
     public async Task StartPreviewAsync_Findings_ArePersistedForThePanelToReadAsync()
     {
         _adapter.Findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning, "No trigger systems are selected."));

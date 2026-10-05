@@ -48,6 +48,13 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
     public async Task<ConfigurationChangePreview?> GetPreviewAsync(Guid activityId) =>
         await _database.ConfigurationChangePreviews.SingleOrDefaultAsync(p => p.ActivityId == activityId);
 
+    public async Task<ConfigurationChangePreview?> GetLatestConnectedSystemPreviewAsync(ConfigurationChangePreviewSurface surface, int connectedSystemId) =>
+        await _database.ConfigurationChangePreviews
+            .Include(p => p.Activity)
+            .Where(p => p.Surface == surface && p.Activity.ConnectedSystemId == connectedSystemId)
+            .OrderByDescending(p => p.Activity.Created)
+            .FirstOrDefaultAsync();
+
     public async Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId) =>
         await _database.ConfigurationChangePreviewGroups
             .Where(g => g.ActivityId == activityId)
