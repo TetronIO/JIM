@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
+### Fixed
+
+- 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
+
 ## [0.16.0] - 2026-09-29
 
 ### Added

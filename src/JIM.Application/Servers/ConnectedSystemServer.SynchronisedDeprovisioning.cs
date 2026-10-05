@@ -40,7 +40,8 @@ public partial class ConnectedSystemServer
     /// <item><b>Residue pass</b>: per import Synchronisation Rule, remaining contributed values are
     /// recalled by provenance (values stranded with no backing Connected System Object, #1549's scenario),
     /// strictly BEFORE any rule is deleted: deletion's ON DELETE SET NULL severs the provenance the recall
-    /// selects on.</item>
+    /// selects on. A rule whose Connected System Object Type has RemoveContributedAttributesOnObsoletion
+    /// switched off is skipped: the values it contributed are kept by policy, not residue.</item>
     /// <item><b>Final step</b>: the existing <see cref="ExecuteDeletionAsync"/> (tombstone snapshot,
     /// orphan marking, bulk delete), then the Activity message is set with summary statistics (the worker's
     /// dispatch boundary owns the completion call itself).</item>
@@ -152,6 +153,11 @@ public partial class ConnectedSystemServer
         // provenance.
         if (task.CheckpointPhase is not SynchronisedDeprovisioningPhase.FinalDeletion)
         {
+            // Fetched once: the rules from GetAllSyncRulesAsync carry their Connected System Object Type
+            // navigation already, so this is the defensive fallback, not the ordinary path.
+            var objectTypesById = (await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystem.Id))
+                .ToDictionary(t => t.Id);
+
             var importRules = systemSyncRules
                 .Where(sr => sr.Direction == SyncRuleDirection.Import)
                 .OrderBy(sr => sr.Id)
@@ -162,6 +168,22 @@ public partial class ConnectedSystemServer
 
             foreach (var importRule in importRules)
             {
+                // An Object Type with RemoveContributedAttributesOnObsoletion switched off keeps the values it
+                // contributed: the per-object pass honoured that and left them in place, provenance intact, which
+                // is exactly what this pass selects on. Recalling them here would override the policy, so the rule
+                // is skipped, as the stranded-value sweep skips it for the same reason. An unresolvable type is a
+                // hard failure rather than a guess: recalling values the policy may protect cannot be undone.
+                var objectType = importRule.ConnectedSystemObjectType
+                    ?? (objectTypesById.TryGetValue(importRule.ConnectedSystemObjectTypeId, out var resolvedType) ? resolvedType : null)
+                    ?? throw new InvalidDataException($"ExecuteSynchronisedDeprovisioningAsync: Synchronisation Rule {importRule.Id} names Connected System Object Type {importRule.ConnectedSystemObjectTypeId}, which Connected System {connectedSystem.Id} does not have; refusing to recall by provenance without knowing its recall policy.");
+                if (!objectType.RemoveContributedAttributesOnObsoletion)
+                {
+                    Log.Information(
+                        "ExecuteSynchronisedDeprovisioningAsync: residue pass skipped Synchronisation Rule {SyncRuleId}: recall is switched off for Object Type {ObjectTypeName}, so its contributed values are kept.",
+                        importRule.Id, objectType.Name);
+                    continue;
+                }
+
                 var residueResult = await RecallSyncRuleContributedValuesAsync(
                     importRule.Id,
                     recallScope,

@@ -1,9 +1,9 @@
 # Connected System Deletion Impact Preview - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 complete)
 - **Issue:** [#134](https://github.com/TetronIO/JIM/issues/134)
-- **PRD:** [`engineering/prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (FR 6-11; decisions 2-5 of 2026-08-29)
-- **Framework:** [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](done/CONFIGURATION_CHANGE_PREVIEW.md) (#827); execution side [`engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (#809)
+- **PRD:** [`engineering/prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../../prd/done/PRD_CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (FR 6-11; decisions 2-5 of 2026-08-29)
+- **Framework:** [`engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md`](../done/CONFIGURATION_CHANGE_PREVIEW.md) (#827); execution side [`engineering/plans/done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md`](../done/CONNECTED_SYSTEM_SYNCHRONISED_DEPROVISIONING.md) (#809)
 - **UX artefact:** [Deletion Impact Preview](https://claude.ai/artifact/D36Chj1ZxUKHn6sE2C9vHQ) (the scenario walkthrough this plan's BDD section is drawn from)
 
 ## Overview
@@ -232,13 +232,13 @@ Panel changes, each small and each benefiting every surface where it applies:
 
 ## Implementation Phases
 
-### Phase 0: residue pass honours the recall setting (bottom stack layer, discovered work)
+### Phase 0: residue pass honours the recall setting (bottom stack layer, discovered work) ✅
 
 The #809 residue pass recalls by provenance with **no** `RemoveContributedAttributesOnObsoletion` filter. For an Object Type with recall switched off, the per-object pass keeps the values (provenance intact) and the residue pass then recalls them anyway. That contradicts PRD decision 3 ("honour the per-Object Type setting unchanged") and the stranded-value sweep, which skips such rules for exactly this reason. No test pins it.
 
-- [ ] Failing test: deprovision a system whose Object Type has recall off; assert its contributed values survive with provenance cleared, as the per-object pass intends.
-- [ ] Fix: skip residue recall for rules whose Connected System Object Type has recall off, mirroring `StrandedValueSweep`.
-- [ ] Changelog `🐛` entry (user-facing data integrity fix).
+- [x] Failing test: deprovision a system whose Object Type has recall off; assert its contributed values survive and nothing is staged downstream (`ExecuteSynchronisedDeprovisioningAsync_RecallDisabledObjectType_ResiduePassKeepsContributedValuesAsync`).
+- [x] Fix: skip residue recall for rules whose Connected System Object Type has recall off, mirroring `StrandedValueSweep`. Unlike the sweep, an unresolvable Object Type fails the run hard (system stays fenced) rather than recalling regardless, since a wrong recall cannot be undone (`..._ResidueRuleWithUnresolvableObjectType_FailsHardAndStaysFencedAsync`).
+- [x] Changelog `🐛` entry (user-facing data integrity fix), and the public "Removing a Connected System" docs now state the exception.
 
 Lands first so the preview mirrors correct behaviour rather than encoding the defect. Fixed as part of this work (decision 2).
 

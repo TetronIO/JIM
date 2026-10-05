@@ -327,6 +327,72 @@ public class SynchronisedDeprovisioningWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_RecallDisabledObjectType_ResiduePassKeepsContributedValuesAsync()
+    {
+        // The Object Type's "Remove contributed attributes on obsoletion" is off, so deprovisioning must leave
+        // the values it contributed in place, exactly as disconnecting the object through a synchronisation
+        // would (PRD decision 3: honour the setting unchanged). The per-object pass keeps them with their
+        // provenance intact, which is precisely what the residue pass selects on; it must not then recall
+        // them by provenance, overriding the policy the per-object pass just honoured.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        var hrType = SyncRepo.ConnectedSystemObjects.Values.First(c => c.ConnectedSystemId == ctx.Hr.Id).Type;
+        hrType.RemoveContributedAttributesOnObsoletion = false;
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription),
+                "recall is off for the Object Type, so the contributed Description must be kept");
+            Assert.That(GetAttributeValue(mvo, ctx.MvDisplayNameAttributeId)?.StringValue, Is.EqualTo("John Smith"),
+                "recall is off for the Object Type, so the contributed DisplayName must be kept");
+            Assert.That(result.ResidueValuesRecalled, Is.Zero,
+                "the residue pass must not recall values the Object Type's policy keeps");
+            Assert.That(result.AttributesCleared, Is.Zero,
+                "no value may be cleared when recall is off");
+            Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.False,
+                "kept values change nothing downstream, so no Pending Export may be staged to the target");
+            Assert.That(await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id), Is.Null,
+                "the Connected System must be deleted as the run's final step");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ResidueRuleWithUnresolvableObjectType_FailsHardAndStaysFencedAsync()
+    {
+        // The residue pass must know an import rule's Object Type to know whether its values are protected by
+        // policy. A rule naming a type the system does not have is corrupt configuration; recalling by
+        // provenance regardless could withdraw values the policy protects, which cannot be undone, so the run
+        // must stop and leave the system fenced for investigation rather than guess.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+
+        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        // Corrupt the rule only now, after the per-object pass's inputs are settled, so the failure can only come
+        // from the residue pass's policy lookup.
+        task.CheckpointPhase = SynchronisedDeprovisioningPhase.ResiduePass;
+        ctx.HrImportRule.ConnectedSystemObjectType = null!;
+        ctx.HrImportRule.ConnectedSystemObjectTypeId = int.MaxValue;
+
+        var ex = Assert.ThrowsAsync<InvalidDataException>(() => Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task));
+
+        var system = await DbContext.ConnectedSystems.FindAsync(ctx.Hr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("refusing to recall by provenance"));
+            Assert.That(system, Is.Not.Null, "the system must survive a failed run");
+            Assert.That(system!.Status, Is.EqualTo(ConnectedSystemStatus.Deleting), "and stay fenced");
+            Assert.That(GetAttributeValue(SyncRepo.MetaverseObjects.Values.Single(), ctx.MvDescriptionAttributeId), Is.Not.Null,
+                "nothing may be recalled when the policy cannot be read");
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Executor: failure and resumability
     // -----------------------------------------------------------------------------------------------------------------
