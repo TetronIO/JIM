@@ -7,6 +7,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
@@ -1971,13 +1972,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (evaluatedIds.Count == 0)
             return;
 
-        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
-        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
-        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is set
+        // for flagged ids and an existing flag is kept: another import rule on the same Connected System may have
+        // raised it earlier in the sweep, and this rule finding the object in agreement with its own scope says
+        // nothing about the other's. The synchronisation that re-evaluates the object clears it.
+        // LastScopeEvaluatedAt advances for every evaluated object.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ConnectedSystemObjects""
               SET ""LastScopeEvaluatedAt"" = {2},
-                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+                  ""ScopeReviewPending"" = ""ScopeReviewPending"" OR (""Id"" = ANY({1}))
               WHERE ""Id"" = ANY({0})",
             evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
     }
@@ -6777,6 +6780,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.SyncRuleInitialPasswords
             .AsNoTracking()
             .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
+    }
+
+    public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)
+    {
+        var row = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(sr => sr.Id == syncRuleId)
+            .Select(sr => new { sr.Enabled, sr.ProvisionToConnectedSystem })
+            .SingleOrDefaultAsync();
+        if (row == null)
+            return null;
+
+        // A stand-in rule to hang the tree on, loaded untracked whatever the context's default: a tracked load would
+        // resolve to the caller's edited instances and re-parent them onto the stand-in.
+        var storedRule = new SyncRule { Id = syncRuleId };
+        await SyncRuleScopingTreeLoader.LoadUntrackedAsync(Repository.Database, [storedRule]);
+
+        return new SyncRuleScopeState(row.Enabled, row.ProvisionToConnectedSystem == true, SyncRuleScopingProposal.FromCurrentScope(storedRule));
     }
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)

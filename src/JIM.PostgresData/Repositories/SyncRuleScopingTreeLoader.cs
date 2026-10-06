@@ -37,12 +37,23 @@ internal static class SyncRuleScopingTreeLoader
     /// otherwise. Tracked groups are what lets the editor's load, mutate, save pattern persist edits anywhere in the
     /// tree; untracked groups hung off a tracked rule would look like new rows to EF, and collide with the tracked
     /// attributes their criteria point at.</param>
-    internal static async Task LoadAsync(JimDbContext db, IReadOnlyCollection<SyncRule> rules, bool asTrackingRequested)
+    internal static Task LoadAsync(JimDbContext db, IReadOnlyCollection<SyncRule> rules, bool asTrackingRequested) =>
+        LoadCoreAsync(db, rules, tracked: asTrackingRequested || db.ChangeTracker.QueryTrackingBehavior == QueryTrackingBehavior.TrackAll);
+
+    /// <summary>
+    /// As <see cref="LoadAsync"/>, but always untracked, whatever the context's default: for reading the tree as stored
+    /// while the caller may hold its own tracked, edited copy (#1925). A tracked load would resolve to those edited
+    /// instances and re-parent them onto <paramref name="rules"/>.
+    /// </summary>
+    /// <param name="db">The context to query.</param>
+    /// <param name="rules">Stand-in rules carrying only their ids; the groups are attached to these.</param>
+    internal static Task LoadUntrackedAsync(JimDbContext db, IReadOnlyCollection<SyncRule> rules) =>
+        LoadCoreAsync(db, rules, tracked: false);
+
+    private static async Task LoadCoreAsync(JimDbContext db, IReadOnlyCollection<SyncRule> rules, bool tracked)
     {
         if (rules.Count == 0)
             return;
-
-        var tracked = asTrackingRequested || db.ChangeTracker.QueryTrackingBehavior == QueryTrackingBehavior.TrackAll;
 
         var placements = await GetGroupPlacementsAsync(db, rules.Select(r => r.Id).ToList());
         if (placements.Count == 0)

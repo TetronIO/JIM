@@ -4274,18 +4274,23 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Outbound Temporal Scope Reconciler apply step (issue #892). Re-evaluates export scope for Metaverse
-    /// Objects the reconciler flagged (<c>ScopeReviewPending</c>): their export-rule scope drifted with the clock
-    /// (a Metaverse Attribute relative-date criterion crossed) while their data stayed static, so the
-    /// change-driven export path never revisits them. Runs once after the CSO page loop, draining flagged
-    /// Metaverse Objects in batches through the same export evaluation the per-page flow uses: provision when
-    /// newly in scope, deprovision when out. Only meaningful in a sync run (the export evaluation cache is
-    /// present); a no-op otherwise.
+    /// Export scope review (issues #892 and #1925). Re-evaluates export scope for Metaverse Objects flagged
+    /// <c>ScopeReviewPending</c>, whose data stayed static while their export scope may have moved: the Temporal
+    /// Scope Reconciler flags those a relative-date criterion's boundary crossed, and a configuration change to an
+    /// export Synchronisation Rule (created, re-enabled, provisioning switched on, Scoping Criteria changed) flags
+    /// every object of the rule's type. The change-driven export path never revisits such objects. Runs once after
+    /// the CSO page loop, draining flagged Metaverse Objects in batches through the same export evaluation the
+    /// per-page flow uses: provision when newly in scope, deprovision when out. Only meaningful in a sync run (the
+    /// export evaluation cache is present); a no-op otherwise.
     ///
     /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
     /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
-    /// and deprovision is scope-driven. Whichever system's sync runs first handles its own export rules; a
-    /// still-mismatched object is re-flagged by the next reconciler sweep (eventually consistent).
+    /// and deprovision is scope-driven. The export evaluation cache holds every export rule, whatever its target, so
+    /// whichever system's synchronisation runs next reviews the objects for every target.
+    ///
+    /// The run evaluates against the rules it read at its start. When an export rule has been created or updated
+    /// since, the clear keeps the batch's flags and the drain stops: the change flagged the objects for review
+    /// against the configuration as it now stands, which the next run applies.
     /// </summary>
     protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
     {
@@ -4331,19 +4336,42 @@ public abstract class SyncTaskProcessorBase
             // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
             // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
             // clears _mvoIdToRpei and the RPEI collection).
-            await EvaluatePendingExportsAsync();
-            await FlushPendingExportOperationsAsync();
-            await ResolvePendingExportReferenceSnapshotsAsync();
-            await FlushRpeisAsync();
+            //
+            // With automatic change detection off, as the page flush runs it, and for the same reason: deprovisioning
+            // saves through EF one object at a time (a Delete Pending Export, a disconnected CSO), and with detection
+            // on that save would also insert every RPEI queued above on the tracked Activity, so FlushRpeisAsync's
+            // bulk insert then failed the run on a duplicate key.
+            _syncRepo.SetAutoDetectChangesEnabled(false);
+            try
+            {
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+                await ResolvePendingExportReferenceSnapshotsAsync();
+                await FlushRpeisAsync();
+            }
+            finally
+            {
+                _syncRepo.SetAutoDetectChangesEnabled(true);
+            }
 
             // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
             // the batch's writes have persisted; if a write throws, the flag stays set and the object is
-            // reconsidered next sweep (fail-safe).
-            await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(flaggedIds);
+            // reconsidered next sweep (fail-safe). Kept, too, when an export rule changed since this run read its
+            // rules (#1925); see the summary.
+            var cleared = await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(
+                flaggedIds, _exportEvaluationCache.ExportRulesReadWatermark);
 
             ClearPageTrackingState();
             totalProcessed += mvos.Count;
             _activity.ObjectsProcessed = totalProcessed;
+
+            if (!cleared)
+            {
+                Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: an export Synchronisation Rule was created or " +
+                    "updated after this run read its rules, so the remaining flagged Metaverse Objects are left for the next " +
+                    "synchronisation to review against the rules as they now stand (#1925)");
+                break;
+            }
 
             // Fewer than a full batch means the flagged set is drained.
             if (flaggedIds.Count < batchSize)
@@ -4351,7 +4379,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         if (totalProcessed > 0)
-            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} reconciler-flagged Metaverse Object(s) (#892)", totalProcessed);
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} flagged Metaverse Object(s) (#892, #1925)", totalProcessed);
     }
 
     /// <summary>

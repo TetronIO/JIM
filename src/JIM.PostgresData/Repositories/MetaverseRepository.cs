@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
 using Serilog;
@@ -1271,16 +1272,82 @@ public class MetaverseRepository : IMetaverseRepository
         return summariesById.Values.ToList();
     }
 
-    public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    public async Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
+    {
+        // One statement over the type's objects (#1925), on a configuration change rather than on any synchronisation
+        // path. Rows already flagged are left untouched: the flag is a boolean and nothing reads its row version, so
+        // rewriting them would cost a tuple each and say nothing new.
+        var newlyFlagged = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = true
+              WHERE ""TypeId"" = {0} AND NOT ""ScopeReviewPending""",
+            metaverseObjectTypeId);
+
+        // Bring tracked instances into line, as persisted rather than as a pending change, so a later whole-entity
+        // save cannot write the old value back. Change detection is suppressed while enumerating: it would attach any
+        // untracked graph hanging off a tracked navigation (see src/CLAUDE.md, "Tracker surgery").
+        var context = Repository.Database;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var flags = context.ChangeTracker.Entries<MetaverseObject>()
+                .Where(e => e.State is EntityState.Unchanged or EntityState.Modified &&
+                            Equals(e.Property("TypeId").CurrentValue, metaverseObjectTypeId))
+                .Select(e => e.Property(mvo => mvo.ScopeReviewPending))
+                .ToList();
+            foreach (var flag in flags)
+            {
+                flag.CurrentValue = true;
+                flag.OriginalValue = true;
+                flag.IsModified = false;
+            }
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+
+        return newlyFlagged;
+    }
+
+    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
     {
         if (ids.Count == 0)
-            return;
+            return true;
 
-        // Clear the reconciler flag once the sync engine has re-evaluated these Metaverse Objects' export scope
-        // (#892). A single bulk UPDATE over the O(flagged) rows processed keeps this off the per-object write path.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
-            ids.ToArray());
+        // Clear once the sync engine has re-evaluated these objects' export scope (#892), unless an export rule was
+        // created or updated after the run read its rules (#1925): the run evaluated against rules that no longer
+        // stand, and the save that replaced them flagged these objects for review against the new ones. The check and
+        // the clear are one statement, so a rule saved at any moment is either seen here (nothing is cleared) or
+        // commits after it, and its own flagging then sets the flags again. A data-modifying CTE always runs, whether
+        // or not the outer query reads it.
+        const string sql = """
+            WITH changed AS (
+                SELECT EXISTS (
+                    SELECT 1 FROM "SyncRules"
+                    WHERE "Direction" = @export
+                      AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
+                ) AS "Changed"
+            ),
+            cleared AS (
+                UPDATE "MetaverseObjects" SET "ScopeReviewPending" = false
+                WHERE "Id" = ANY(@ids) AND NOT (SELECT "Changed" FROM changed)
+            )
+            SELECT "Changed" FROM changed
+            """;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection,
+            (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
+        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
+        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
+            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
+
+        var changed = (bool)(await command.ExecuteScalarAsync() ?? false);
+        return !changed;
     }
 
     public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
@@ -1288,13 +1355,15 @@ public class MetaverseRepository : IMetaverseRepository
         if (evaluatedIds.Count == 0)
             return;
 
-        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
-        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
-        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is set
+        // for flagged ids and an existing flag is kept: another rule's sweep, or a configuration change (#1925), may
+        // have raised it, and this rule finding the object in agreement with its own scope says nothing about theirs.
+        // The synchronisation that re-evaluates the object clears it. LastScopeEvaluatedAt advances for every
+        // evaluated object.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjects""
               SET ""LastScopeEvaluatedAt"" = {2},
-                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+                  ""ScopeReviewPending"" = ""ScopeReviewPending"" OR (""Id"" = ANY({1}))
               WHERE ""Id"" = ANY({0})",
             evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
     }
