@@ -134,13 +134,20 @@ docker exec jim.database pg_dump -U ${DB_USERNAME} ${DB_NAME} > jim_backup_$(dat
 
 ### Restoring from Backup
 
+Restore into an empty database, with JIM's services stopped: drop the database, create it again, then restore.
+
 ```bash
+docker exec jim.database dropdb -U ${DB_USERNAME} ${DB_NAME}
+docker exec jim.database createdb -U ${DB_USERNAME} ${DB_NAME}
+
 # Restore from custom format (.dump)
-docker exec -i jim.database pg_restore -U ${DB_USERNAME} -d ${DB_NAME} --clean < jim_backup.dump
+docker exec -i jim.database pg_restore -U ${DB_USERNAME} -d ${DB_NAME} --single-transaction < jim_backup.dump
 
 # Restore from SQL format
-docker exec -i jim.database psql -U ${DB_USERNAME} -d ${DB_NAME} < jim_backup.sql
+docker exec -i jim.database psql -U ${DB_USERNAME} -d ${DB_NAME} -v ON_ERROR_STOP=1 --single-transaction < jim_backup.sql
 ```
+
+Do not restore over an existing database with `pg_restore --clean`: it drops only the objects in the dump, so a table added since the backup that references one of the dump's tables blocks those tables from being dropped and reloaded, and the restore fails part-way, leaving a mixture (#1951). The customer-facing procedure, and the deployment-boot check that runs it as written, are in `docs/administration/backup-recovery.md`.
 
 ### Scheduled Backups (Production)
 
