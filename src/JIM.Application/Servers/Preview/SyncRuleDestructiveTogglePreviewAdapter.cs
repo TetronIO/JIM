@@ -221,12 +221,13 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         // answer from the same code. The proposed rule is a minimal stand-in carrying only what the decision
         // reads, never a mutation of the loaded rule.
         var currentAction = _syncEngine.DecideOutOfScopeDeprovisioning(rule, existingPendingExport: null).Action;
-        var proposedAction = _syncEngine.DecideOutOfScopeDeprovisioning(new SyncRule
+        var proposedRule = new SyncRule
         {
             Name = rule.Name,
             Direction = SyncRuleDirection.Export,
             OutboundDeprovisionAction = proposal.OutboundDeprovisionAction
-        }, existingPendingExport: null).Action;
+        };
+        var proposedAction = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, existingPendingExport: null).Action;
 
         if (currentAction == proposedAction)
             yield break;
@@ -249,12 +250,12 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             if (batch.Count < MetaverseObjectBatchSize)
                 continue;
 
-            foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedAction, oldValue, newValue, asAt))
+            foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
                 yield return delta;
             batch.Clear();
         }
 
-        foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedAction, oldValue, newValue, asAt))
+        foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
             yield return delta;
     }
 
@@ -262,8 +263,10 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     /// Loads one batch's Metaverse Objects and yields the imminent or exposure delta for each joined object the
     /// rule actually governs.
     /// </summary>
+    /// <param name="proposedRule">A stand-in carrying the proposed action, for the engine to decide each scope exit's
+    /// fate against.</param>
     private async Task<List<PreviewDelta>> ClassifyOutboundBatchAsync(SyncRule rule,
-        List<ConnectedSystemObject> batch, OutOfScopeDeprovisioningAction proposedAction,
+        List<ConnectedSystemObject> batch, SyncRule proposedRule,
         string oldValue, string newValue, DateTime asAt)
     {
         var deltas = new List<PreviewDelta>();
@@ -279,26 +282,46 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
 
         // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
         // apply per Metaverse Object Type, so its scope exits are decided elsewhere. Null-state does not flow
-        // through Where, hence the ! dereferences below.
+        // through Where, hence the ! dereference after it.
         var governed = batch
             .Select(cso => (Cso: cso, Mvo: cso.MetaverseObjectId is { } metaverseObjectId &&
                 metaverseObjectsById.TryGetValue(metaverseObjectId, out var mvo) ? mvo : null))
-            .Where(pair => pair.Mvo != null && pair.Mvo.Type?.Id == rule.MetaverseObjectTypeId);
+            .Where(pair => pair.Mvo != null && pair.Mvo.Type?.Id == rule.MetaverseObjectTypeId)
+            .Select(pair => (pair.Cso, Mvo: pair.Mvo!, InScope: _application.ScopingEvaluation.IsMvoInScopeForExportRule(pair.Mvo!, rule, asAt)))
+            .ToList();
 
-        foreach (var (cso, mvo) in governed)
+        // A scope exit's fate also turns on a Delete already queued for the object (#1970), so the engine decides each
+        // one with it, exactly as the run will.
+        var leavingIds = governed.Where(g => !g.InScope).Select(g => g.Cso.Id).ToList();
+        var queuedByCsoId = leavingIds.Count == 0
+            ? []
+            : await _application.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(leavingIds);
+
+        foreach (var (cso, mvo, inScope) in governed)
         {
-            var inScope = _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo!, rule, asAt);
-            var transition = inScope
-                ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction
-                : proposedAction == OutOfScopeDeprovisioningAction.StageDeleteExport
+            ActivityRunProfileExecutionItemSyncOutcomeType transition;
+            if (inScope)
+            {
+                transition = ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction;
+            }
+            else
+            {
+                var fate = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id)).Action;
+
+                // A Delete already sent goes ahead whichever action the rule carries, so the proposal changes nothing.
+                if (fate == OutOfScopeDeprovisioningAction.DeleteAlreadySent)
+                    continue;
+
+                transition = fate == OutOfScopeDeprovisioningAction.StageDeleteExport
                     ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                     : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
+            }
 
             deltas.Add(new PreviewDelta(
                 transition,
                 ObjectDisplayName: cso.NameOrId,
                 ObjectTypeName: cso.Type?.Name,
-                MetaverseObjectTypeId: mvo!.Type?.Id,
+                MetaverseObjectTypeId: mvo.Type?.Id,
                 MetaverseObjectId: mvo.Id,
                 ConnectedSystemObjectId: cso.Id,
                 ConnectedSystemId: rule.ConnectedSystemId,

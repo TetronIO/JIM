@@ -135,10 +135,11 @@ public partial class ConnectedSystemServer
     }
 
     // Flags every Metaverse Object of the rule's type for export scope review when the save can have moved objects into
-    // or out of the rule's scope, so the next synchronisation of any Connected System provisions and deprovisions them
-    // against the rule as it now stands (#1925). Disabling a rule or switching provisioning off flags nothing: neither
-    // destroys what already exists. A save that leaves scope alone (a rename, an Attribute Flow edit) flags nothing
-    // either; a changed Attribute Flow reaches existing objects through the target's drift detection instead.
+    // or out of the rule's scope, or changed its Deprovisioning Action, so the next synchronisation of any Connected
+    // System provisions and deprovisions them against the rule as it now stands (#1925, #1970). Disabling a rule or
+    // switching provisioning off flags nothing: neither destroys what already exists. A save that leaves scope and the
+    // Deprovisioning Action alone (a rename, an Attribute Flow edit) flags nothing either; a changed Attribute Flow
+    // reaches existing objects through the target's drift detection instead.
     private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
     {
         if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
@@ -146,13 +147,15 @@ public partial class ConnectedSystemServer
 
         // A stored state that cannot be read (the rule vanished between the read and the save) is treated as a
         // change: a needless review costs time, a missed one leaves objects wrongly provisioned.
-        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule))
+        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule) &&
+            !storedState.DeprovisioningActionChangedBy(syncRule))
             return;
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
         var newlyFlagged = await Application.SyncRepo.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
-        Log.Information("FlagExportScopeReviewAsync: export Synchronisation Rule {RuleId} ({RuleName}) changed which objects it covers; " +
-            "flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review at the next synchronisation (#1925)",
+        Log.Information("FlagExportScopeReviewAsync: export Synchronisation Rule {RuleId} ({RuleName}) changed which objects it covers, " +
+            "or what it does to those leaving its scope; flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review " +
+            "at the next synchronisation (#1925, #1970)",
             syncRule.Id, LogSanitiser.Sanitise(syncRule.Name), newlyFlagged, metaverseObjectTypeId);
     }
 
@@ -8467,6 +8470,18 @@ public partial class ConnectedSystemServer
     public async Task<PendingExport?> GetPendingExportAsync(Guid id)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportAsync(id);
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Export queued for each of the supplied Connected System Objects that has one, without its
+    /// related data: enough to tell its change type and status, which is what decides whether a queued Delete has
+    /// already been sent.
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The Connected System Objects to look up.</param>
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+        IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
     }
 
     /// <summary>

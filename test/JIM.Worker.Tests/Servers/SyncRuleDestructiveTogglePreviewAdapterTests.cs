@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Moq;
 using NUnit.Framework;
@@ -50,6 +51,7 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     private List<ConnectedSystemObject> _csos = null!;
     private List<MetaverseObject> _mvos = null!;
     private List<MetaverseObjectDisconnectionCandidate> _disconnectionCandidates = null!;
+    private Dictionary<Guid, PendingExport> _pendingExports = null!;
 
     private ConnectedSystemObjectType _csoType = null!;
     private ConnectedSystemObjectTypeAttribute _csoDeptAttribute = null!;
@@ -99,6 +101,7 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
         _csos = [];
         _mvos = [];
         _disconnectionCandidates = [];
+        _pendingExports = [];
 
         _connectedSystemRepo.Setup(r => r.GetSyncRuleAsync(RuleId)).ReturnsAsync(() => _rule);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(SystemId, false, It.IsAny<bool>()))
@@ -111,6 +114,9 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
             .ReturnsAsync((IEnumerable<Guid> ids) => _mvos.Where(m => ids.Contains(m.Id)).ToList());
         _metaverseRepo.Setup(r => r.GetMetaverseObjectDisconnectionCandidatesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
             .ReturnsAsync((IReadOnlyCollection<Guid> ids) => _disconnectionCandidates.Where(c => ids.Contains(c.Id)).ToList());
+
+        _connectedSystemRepo.Setup(r => r.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync((IEnumerable<Guid> ids) => _pendingExports.Where(pe => ids.Contains(pe.Key)).ToDictionary(pe => pe.Key, pe => pe.Value));
 
         _jim = new JimApplication(_repo.Object);
     }
@@ -423,6 +429,28 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
             Assert.That(imminent.OldValue, Does.Contain("Delete"));
             Assert.That(imminent.NewValue, Does.Contain("Disconnect"));
         }
+    }
+
+    [TestCase(PendingExportStatus.Pending, true)]
+    [TestCase(PendingExportStatus.Exported, false)]
+    public async Task EvaluateDeltasAsync_OutboundDeleteToDisconnectWithADeleteQueued_ReportsTheDisconnectionOnlyUntilTheDeleteIsSentAsync(
+        PendingExportStatus deleteStatus, bool expectDisconnection)
+    {
+        // An object outside scope under a Delete rule is one whose Delete is queued. Switching to Disconnect withdraws
+        // that Delete while it waits; once sent, the account is going anyway and nothing changes for it (#1970).
+        GivenExportRule();
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        GivenRuleScopedToSales(_rule);
+        var leaving = GivenJoinedCso("Engineering");
+        _pendingExports[leaving.Id] = new PendingExport
+        {
+            Id = Guid.CreateVersion7(), ConnectedSystemObjectId = leaving.Id, ChangeType = PendingExportChangeType.Delete, Status = deleteStatus
+        };
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect });
+
+        Assert.That(deltas.Any(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject &&
+            d.ConnectedSystemObjectId == leaving.Id), Is.EqualTo(expectDisconnection));
     }
 
     [Test]

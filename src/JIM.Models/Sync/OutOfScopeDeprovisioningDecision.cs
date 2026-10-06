@@ -34,11 +34,19 @@ public readonly struct OutOfScopeDeprovisioningDecision : IEquatable<OutOfScopeD
     /// </summary>
     public bool MustReplaceExistingPendingExport { get; init; }
 
+    /// <summary>
+    /// A Delete Pending Export queued for the CSO while the rule said Delete, and not yet sent, which a Disconnect
+    /// must withdraw: the account stays in the Connected System, so exporting the Delete would remove an account the
+    /// run reports keeping (#1970). Null when there is nothing to withdraw.
+    /// </summary>
+    public PendingExport? ExistingDeleteToWithdraw { get; init; }
+
     /// <inheritdoc />
     public bool Equals(OutOfScopeDeprovisioningDecision other) =>
         Action == other.Action &&
         ReferenceEquals(ExistingPendingExportToReuse, other.ExistingPendingExportToReuse) &&
-        MustReplaceExistingPendingExport == other.MustReplaceExistingPendingExport;
+        MustReplaceExistingPendingExport == other.MustReplaceExistingPendingExport &&
+        ReferenceEquals(ExistingDeleteToWithdraw, other.ExistingDeleteToWithdraw);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => obj is OutOfScopeDeprovisioningDecision other && Equals(other);
