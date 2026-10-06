@@ -70,7 +70,7 @@ For export rules, criteria evaluate MVO attributes:
 mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 
-Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning.
+Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning. Changing an export rule's criteria moves objects too, at the next synchronisation; see [When a change to an export rule takes effect](#when-a-change-to-an-export-rule-takes-effect).
 
 An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activities.md#execution-items).
 
@@ -247,6 +247,24 @@ The action applies regardless of how the object came to be joined: it makes no d
 One case sits outside the action altogether: provisioning that was **never exported**. If JIM has staged a new object for the Connected System (a Connected System Object in **Pending Provisioning** status, carrying a Create Pending Export) and the Metaverse Object leaves scope or is deleted before any export has run, there is nothing in the Connected System for either action to apply to. JIM cancels the provisioning instead: the unsent Create Pending Export and the Connected System Object are removed together, and nothing is exported. Once a Create has been sent, confirmed or not, the object may exist in the Connected System and the Deprovisioning Action applies as described above. The cancellation is reported on the Activity as a [**Provisioning cancelled**](activities.md#execution-items) outcome, so it is visible in the causality tree and Table view rather than only in logs.
 
 Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
+
+### When a change to an export rule takes effect
+
+JIM evaluates a Metaverse Object against the export rules whenever its own values change. A change to the rule is different: it can move objects whose values have not changed at all into or out of the rule's scope. So when you save an export rule in a way that can do that, JIM marks every Metaverse Object of the rule's object type for review:
+
+- creating an enabled export rule
+- enabling a disabled export rule
+- switching **Provision to Connected System** on
+- changing the rule's Scoping Criteria, whether widening or narrowing them
+
+The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing export scope** step, with an execution item for each object reviewed. It covers every object of the type once, so on a large population expect that run to take longer than usual.
+
+Some changes deliberately mark nothing:
+
+- **Disabling a rule, or switching provisioning off**<br /> The rule stops acting from then on; nothing it already created is deprovisioned.
+- **Renaming a rule, or editing its Attribute Flow**<br /> Neither can move an object into or out of scope. A changed export Attribute Flow reaches existing objects at the target system's next Full Synchronisation, which corrects every object to the new configuration while the rule [enforces state](#export-outbound) (the default). With Enforce State off, each object picks the change up the next time one of its values changes.
+
+A change saved while a synchronisation is already running is not lost: that run carries on with the rules as they were when it started, and leaves the review for the next one.
 
 ### Seeing what a run has deprovisioned
 
@@ -592,7 +610,7 @@ An expression that reads its own target (`mv["Email"]` in the flow to Email) is 
 
 ### Previewing an Attribute Flow change
 
-Changing a mapping rewrites an attribute on every object the rule manages, on the next synchronisation, and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+Changing a mapping rewrites an attribute on every object the rule manages at the next Full Synchronisation (for an export mapping, the target system's, while the rule [enforces state](#export-outbound)), and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
 
 The **Preview Attribute Flow Impact** button, which appears beside the editor's save button once you have edited a mapping, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
 

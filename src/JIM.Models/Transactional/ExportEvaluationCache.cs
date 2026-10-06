@@ -60,6 +60,14 @@ public class ExportEvaluationCache
     public ExportMatchCandidates? ExportMatchCandidates { get; set; }
 
     /// <summary>
+    /// The newest Created or Last Updated stamp among the export Synchronisation Rules as this run read them, enabled
+    /// or not; null when there were none. The run evaluates against the rules as they stood then, so the scope review
+    /// drain hands this to its clear, which keeps the flags when an export rule has been created or updated since
+    /// (#1925): that change flagged the objects for review against the configuration as it now stands.
+    /// </summary>
+    public DateTime? ExportRulesReadWatermark { get; init; }
+
+    /// <summary>
     /// Creates a new export evaluation cache.
     /// </summary>
     /// <param name="exportRulesByMvoTypeId">Export rules grouped by MVO type ID.</param>
