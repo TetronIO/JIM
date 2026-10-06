@@ -144,13 +144,28 @@ public class OptimisticExportApplyCalculatorTests
     }
 
     [Test]
-    public void CalculateDelta_UpdateChangeType_EmptyPayload_Skipped()
+    public void CalculateDelta_UpdateChangeType_EmptyPayload_RemovesTheRecordedValue()
     {
-        // D4: an Update with no value payload at all (clearing a single-valued attribute) is a
-        // no-op for apply purposes, mirroring the reconciliation empty-change case. The confirming
-        // import still reconciles the actual clear.
+        // #1936: an Update with no value payload clears a single-valued attribute, so the export that sent it has
+        // cleared it in the target, and the Connected System Object must stop recording the old value. Left in place,
+        // an auto-confirmed target that is never imported from (the File Connector's Export Only mode) would hold it
+        // for ever, and every later evaluation would see a difference and stage the clear again. Reconciliation agrees:
+        // it confirms an empty Update when the attribute holds no values.
         var cso = CreateCso();
-        AddCsoValue(cso, 1, AttributeDataType.Text, stringValue: "not cleared");
+        var existing = AddCsoValue(cso, 1, AttributeDataType.Text, stringValue: "cleared");
+        var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update);
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
+
+        Assert.That(delta.Additions, Is.Empty);
+        Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { existing.Id }));
+    }
+
+    [Test]
+    public void CalculateDelta_UpdateChangeType_EmptyPayloadWithNothingRecorded_Skipped()
+    {
+        var cso = CreateCso();
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update);
         var pe = CreatePendingExport(cso, change);
 

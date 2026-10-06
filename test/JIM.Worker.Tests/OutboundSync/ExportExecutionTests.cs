@@ -2791,6 +2791,223 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// Issue #1936: an auto-confirmed file export is the only confirmation a target written in Export Only mode ever
+    /// gets, since nothing imports from it. The values it wrote must therefore be recorded on the Connected System
+    /// Object, or JIM's view of the target stays empty and every later removal is lost: a value cleared in the
+    /// Metaverse matches the "nothing" JIM thinks the target holds, so no change is ever staged to clear it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AutoConfirmingFileExport_RecordsExportedValuesOnTheConnectedSystemObjectAsync()
+    {
+        var (targetSystem, cso, displayNameAttr) = SeedFileUpdateExport(SyncRepo, "Recorded Name");
+        var connector = CreateSucceedingFileConnector(autoConfirm: true);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(cso.AttributeValues.Any(av => av.AttributeId == displayNameAttr.Id && av.StringValue == "Recorded Name"), Is.True,
+                "the value the export wrote must be recorded on the Connected System Object");
+            Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null,
+                "a recorded, auto-confirmed export is complete");
+            Assert.That(result.UnrecordedExportCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Issue #1936: a file export still awaiting its confirming import records its values too, as a calls-based
+    /// export does (#1079), so the import's diff finds them already present.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileExportAwaitingConfirmation_RecordsExportedValuesAndKeepsTheExportAsync()
+    {
+        var (targetSystem, cso, displayNameAttr) = SeedFileUpdateExport(SyncRepo, "Awaiting Confirmation");
+        var connector = CreateSucceedingFileConnector(autoConfirm: false);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        var kept = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.AttributeValues.Any(av => av.AttributeId == displayNameAttr.Id && av.StringValue == "Awaiting Confirmation"), Is.True);
+            Assert.That(kept?.Status, Is.EqualTo(PendingExportStatus.Exported), "the confirming import still owns confirmation here");
+        }
+    }
+
+    /// <summary>
+    /// Issue #1936: where an auto-confirmed export's values cannot be recorded, the export is not confirmed. It is
+    /// left to be sent again on the next export run, which writes the same row again and retries the recording,
+    /// and the run reports it. Confirming it regardless would leave JIM's view of the target empty with nothing
+    /// left to repair it, because no import ever runs against an Export Only target.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AutoConfirmingFileExportWhoseValuesCannotBeRecorded_SendsItAgainNextRunAsync()
+    {
+        var throwingRepo = new ThrowingOnApplySyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: throwingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var (targetSystem, cso, _) = SeedFileUpdateExport(syncRepo, "Unrecorded Name");
+        var received = new List<PendingExport>();
+        var connector = CreateSucceedingFileConnector(autoConfirm: true, received);
+
+        var result = await jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        var retained = await syncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the file was written; the export did not fail");
+            Assert.That(result.UnrecordedExportCount, Is.EqualTo(1), "the run must report what it could not record");
+            Assert.That(retained, Is.Not.Null, "an export whose values were not recorded must not be confirmed away");
+            Assert.That(retained!.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
+            Assert.That(retained!.AttributeValueChanges.Select(c => c.Status),
+                Is.All.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+            Assert.That(cso.AttributeValues, Is.Empty);
+        }
+
+        await jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        Assert.That(received.Count(pe => pe.Id == retained!.Id), Is.EqualTo(2), "the next run must send it again");
+    }
+
+    /// <summary>
+    /// Issue #1936: an auto-confirmed Delete is the only confirmation its object will ever get on a target that is
+    /// never imported from, whatever the object's status. A Pending Provisioning object was already removed at that
+    /// point (see <c>IsUnconfirmedProvisioningDeleteSuccess</c>), but one an import had once confirmed (a system that
+    /// ran in Bidirectional mode before Export Only) was left behind for ever, its row gone from the file.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AutoConfirmedDeleteOfAConfirmedObject_RemovesTheConnectedSystemObjectAsync()
+    {
+        var cso = SeedFileDeleteExport(SyncRepo, ConnectedSystemObjectStatus.Normal, out var targetSystem);
+        var connector = CreateSucceedingFileConnector(autoConfirm: true);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.False, "the deleted object must not outlive its confirmed Delete");
+            Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null);
+            Assert.That(result.ProcessedExportItems.Single().ConnectedSystemObjectRemoved, Is.True);
+        }
+    }
+
+    /// <summary>Where a confirming import owns confirmation, a Delete still waits for it to see the object gone.</summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteOfAConfirmedObjectAwaitingConfirmation_KeepsTheConnectedSystemObjectAsync()
+    {
+        var cso = SeedFileDeleteExport(SyncRepo, ConnectedSystemObjectStatus.Normal, out var targetSystem);
+        var connector = CreateSucceedingFileConnector(autoConfirm: false);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True);
+            Assert.That((await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id))?.Status, Is.EqualTo(PendingExportStatus.Exported));
+        }
+    }
+
+    /// <summary>A file-style Delete export for a Connected System Object with the given status.</summary>
+    private ConnectedSystemObject SeedFileDeleteExport(SyncRepository syncRepo, ConnectedSystemObjectStatus status, out ConnectedSystem targetSystem)
+    {
+        targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = status,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        syncRepo.SeedConnectedSystemObject(cso);
+
+        syncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        });
+
+        return cso;
+    }
+
+    /// <summary>A file-style Update export of DisplayName for a Connected System Object holding no values yet.</summary>
+    private (ConnectedSystem TargetSystem, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute DisplayNameAttr) SeedFileUpdateExport(
+        SyncRepository syncRepo, string displayName)
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        syncRepo.SeedConnectedSystemObject(cso);
+
+        syncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = displayName,
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        });
+
+        return (targetSystem, cso, displayNameAttr);
+    }
+
+    /// <summary>A file-based connector that writes every export successfully, auto-confirming or not.</summary>
+    private static Mock<IConnector> CreateSucceedingFileConnector(bool autoConfirm, List<PendingExport>? received = null)
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockFileConnector = mockConnector.As<IConnectorExportUsingFiles>();
+        mockConnector.As<IConnectorCapabilities>().Setup(c => c.SupportsAutoConfirmExport).Returns(autoConfirm);
+        mockConnector.Setup(c => c.Name).Returns("Test File Connector");
+        mockFileConnector.Setup(c => c.ExportAsync(
+                It.IsAny<IList<ConnectedSystemSettingValue>>(),
+                It.IsAny<IList<PendingExport>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                received?.AddRange(exports);
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+        return mockConnector;
+    }
+
+    /// <summary>
     /// Issue #1079 (D6): Delete-ChangeType Pending Exports are skipped entirely by optimistic
     /// apply; the CSO obsolete/delete lifecycle owns that path.
     /// </summary>

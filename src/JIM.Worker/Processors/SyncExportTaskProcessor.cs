@@ -514,6 +514,10 @@ public class SyncExportTaskProcessor
         if (result.QueuedChangesWithdrawnCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForWithdrawn(result.QueuedChangesWithdrawnCount, result.PendingExportsWithdrawnCount));
 
+        // #1936: auto-confirmed exports whose values could not be recorded were left unconfirmed to be sent again.
+        if (result.UnrecordedExportCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForUnrecorded(result.UnrecordedExportCount));
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
