@@ -6058,6 +6058,12 @@ td.jim-connection-detail-cell {
     border-bottom: 1px solid var(--mud-palette-table-lines);
 }
 
+/* An expansion on the last row would otherwise draw its line against the container's outline, doubling the bottom
+   edge into what reads as a drop shadow. MudTable drops its own last row's line the same way. */
+.mud-table-root tr:last-child > td.jim-connection-detail-cell {
+    border-bottom: 0;
+}
+
 .jim-connection-detail {
     display: flex;
     flex-direction: column;
