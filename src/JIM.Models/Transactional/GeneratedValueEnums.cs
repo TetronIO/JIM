@@ -28,7 +28,8 @@ public enum GeneratedValueAssignmentState
 
     /// <summary>
     /// The value was revised after an attributable, unanchored export rejection (Collision Remediation, release 4).
-    /// The object is flagged for review; the next synchronisation re-stages the export.
+    /// In import mode a <see cref="GeneratedValueRevisionPending"/> record carries the revision to the queued exports at
+    /// the next synchronisation; in export mode the queued export was rewritten directly.
     /// </summary>
     Remediated = 2,
 
