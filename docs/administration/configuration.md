@@ -22,7 +22,7 @@ data:
   JIM_DB_LOG_MIN_DURATION: "1000"
 ```
 
-Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`.
+Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootless installation, `jim-systemctl restart jim.service` (see [Rootless commands](podman.md#rootless-commands)).
 
 These settings differ on Podman:
 
@@ -114,6 +114,12 @@ separate port variable: where your server listens elsewhere, give the port as pa
 ```bash
 JIM_DB_HOSTNAME=db.example.org:5433
 ```
+
+### Dropping Lost Connections {#lost-connections}
+
+The bundled PostgreSQL drops a connection whose client has gone within two minutes. After 60 seconds without traffic it checks the connection, and it gives up after six unanswered checks 10 seconds apart (`tcp_keepalives_idle=60`, `tcp_keepalives_interval=10`, `tcp_keepalives_count=6`). A connection whose client is still there is unaffected, since the client answers each check.
+
+Without these settings, PostgreSQL holds such a connection open for about two hours, Linux's default. On Podman that happens at every stop of JIM, because the pod's network goes before JIM's services close their connections. With your own PostgreSQL server, set the same three settings in its `postgresql.conf` to have it do the same.
 
 ---
 
@@ -240,6 +246,8 @@ Generate a key with:
 ```bash
 openssl rand -hex 32 | sed 's/^/jim_ak_/'
 ```
+
+To have the installer set it, give it in the installer's environment: it writes the key to `.env` on Docker, and to the Podman secret `jim-secrets` on Podman. It stops before installing anything when the key does not start with `jim_ak_` or is shorter than 32 characters, since JIM would not create it.
 
 ---
 

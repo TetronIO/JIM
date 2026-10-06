@@ -29,6 +29,11 @@ function Connect-JIM {
         under Admin > API Keys. When specified, skips interactive authentication. API key
         connections never read or write the credential store.
 
+        Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has
+        no record of, or one that is disabled or has expired. An infrastructure key, set in
+        JIM_INFRASTRUCTURE_API_KEY, exists only once JIM has started with it set, and expires
+        24 hours later.
+
     .PARAMETER Force
         Forces re-authentication even if a valid session exists. Ignores any persisted
         refresh token and overwrites it with the newly obtained one.
@@ -155,6 +160,12 @@ function Connect-JIMWithApiKey {
         Write-Verbose "Testing connection to JIM..."
         $health = Invoke-JIMApi -Endpoint '/api/v1/health'
 
+        # Health and the server version answer without authentication, so neither shows that JIM accepts the key.
+        # userinfo needs it and no particular role, so a key JIM rejects fails here, not at the caller's first real
+        # call (#1950). Its answer is not used: it looks for a Metaverse Object, which only an interactive (SSO) user
+        # has. A key JIM accepts is authorised by its roles, which it always has at least one of.
+        Invoke-JIMApi -Endpoint '/api/v1/userinfo' | Out-Null
+
         $script:JIMConnection.Connected = $true
 
         # Fetch server version
@@ -163,10 +174,6 @@ function Connect-JIMWithApiKey {
         Write-Verbose "Successfully connected to JIM using API key"
 
         Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
-
-        # Note: Skip authorisation check for API keys - they are authorised by definition
-        # (they have explicit roles assigned at creation time). The userinfo endpoint checks
-        # for a MetaverseObject which only applies to interactive (SSO) users.
 
         # Return connection info (without exposing full API key)
         $keyPreview = if ($ApiKey.Length -gt 12) {
