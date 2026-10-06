@@ -50,15 +50,16 @@ public class BulkInsertColumnCompletenessTests
 
     /// <summary>
     /// The raw-SQL update path (<c>SyncRepository.UpdateMetaverseObjectsBulkAsync</c>) writes the mutable subset
-    /// of the insert columns: everything except the immutable primary key (Id) and the create-only Created
-    /// timestamp. A migration that adds a mutable Metaverse Object column must extend both lists (and the update
-    /// writer) or the raw update would silently never persist it.
+    /// of the insert columns. The exclusions are an explicit list (the immutable Id and create-only Created, plus
+    /// the scope review columns other writers own; see MvoBulkInsertColumns for the rationale), so a migration
+    /// that adds a mutable Metaverse Object column must consciously place it in either the update list or the
+    /// exclusion list; silence fails this test.
     /// </summary>
     [Test]
     public void MetaverseObjectBulkUpdateColumns_AreTheMutableSubsetOfInsertColumns()
     {
         var expected = MvoBulkInsertColumns.MetaverseObjects
-            .Where(c => c is not "Id" and not "Created")
+            .Except(MvoBulkInsertColumns.MetaverseObjectsUpdateExclusions)
             .ToHashSet();
         var actual = MvoBulkInsertColumns.MetaverseObjectsUpdate.ToHashSet();
 
@@ -68,11 +69,12 @@ public class BulkInsertColumnCompletenessTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(missing, Is.Empty,
-                "Mutable column(s) in the insert list are missing from MetaverseObjectsUpdate; the raw-SQL update " +
-                "would never persist them. Extend MvoBulkInsertColumns.MetaverseObjectsUpdate AND the SET clause / " +
-                "VALUES writer in BulkUpdateMvoRowsViaEfAsync (in list order): " + string.Join(", ", missing));
+                "Mutable column(s) in the insert list are in neither MetaverseObjectsUpdate nor the documented " +
+                "exclusion list; the raw-SQL update would never persist them. Add each to one of the two lists (and, " +
+                "if updatable, the SET clause / VALUES writer in BulkUpdateMvoRowsViaEfAsync, in list order): " +
+                string.Join(", ", missing));
             Assert.That(unknown, Is.Empty,
-                "MetaverseObjectsUpdate contains column(s) not in the insert list (or the immutable Id/Created): " +
+                "MetaverseObjectsUpdate contains column(s) not in the insert list (or listed as excluded): " +
                 string.Join(", ", unknown));
         }
     }

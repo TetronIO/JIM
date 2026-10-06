@@ -269,7 +269,7 @@ JIM evaluates a Metaverse Object against the export rules whenever its own value
 - switching **Provision to Connected System** on
 - changing the rule's Scoping Criteria, whether widening or narrowing them
 
-The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing export scope** step, with an execution item for each object reviewed. It covers every object of the type once, so on a large population expect that run to take longer than usual.
+The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing export scope** step. It records an execution item, named after the Metaverse Object, for each object it provisioned, deprovisioned or queued an export for; an object it found already as the rule wants it gets none, so the few objects a change actually moved are not lost among the whole type. It reviews every object of the type once, so on a large population expect that run to take longer than usual.
 
 Some changes deliberately mark nothing:
 
@@ -278,11 +278,15 @@ Some changes deliberately mark nothing:
 
 A change saved while a synchronisation is already running is not lost: that run carries on with the rules as they were when it started, and leaves the review for the next one.
 
+**Changes saved before this release.** Only changes saved from this release onwards are reviewed. If an export rule was created, re-enabled, switched to provisioning or re-scoped on an earlier release, objects it should have provisioned or deprovisioned may still be waiting for a change of their own. On a rule that provisions, switch **Provision to Connected System** off and save, then switch it on and save again: the next synchronisation reviews every object of the rule's type. On a rule that does not provision, the next change saved to its Scoping Criteria reviews them.
+
 ### Seeing what a run has deprovisioned
 
 Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted Metaverse Object's execution item as a **Pending Export** outcome nested beneath the **Metaverse Object deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, Metaverse Object deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
 
 This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the Metaverse Object is deleted inline), and in the background [Scheduled Metaverse Object Deletion](activities.md#scheduled-metaverse-object-deletion) batch that deletes Metaverse Objects once their grace period expires.
+
+A delete queued because an object left an export rule's scope, whether its own values changed or a [change to the rule](#when-a-change-to-an-export-rule-takes-effect) moved it, is reported the same way: as a **Deprovision queued** outcome on that object's execution item, naming the Connected System the account is being removed from, and counted in the Activity's Pending Exports total.
 
 ### Previewing a destructive toggle change
 

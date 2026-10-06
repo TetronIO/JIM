@@ -36,11 +36,18 @@ internal static class MvoBulkInsertColumns
     /// <summary>
     /// Update columns for the MetaverseObjects table: the mutable subset written by the raw-SQL
     /// synchronisation update path (<see cref="SyncRepository.UpdateMetaverseObjectsBulkAsync"/>).
-    /// This is <see cref="MetaverseObjects"/> minus the immutable primary key (Id) and the create-only
-    /// Created timestamp (and, as with the insert list, the store-generated xmin concurrency token).
-    /// BulkInsertColumnCompletenessTests keeps it in lockstep with <see cref="MetaverseObjects"/> so a
-    /// migration that adds a mutable column fails the build's test run rather than silently dropping it
-    /// from every bulk update.
+    /// This is <see cref="MetaverseObjects"/> minus <see cref="MetaverseObjectsUpdateExclusions"/> (and, as
+    /// with the insert list, the store-generated xmin concurrency token). Excluded beyond the immutable
+    /// primary key (Id) and the create-only Created timestamp are ScopeReviewPending and
+    /// LastScopeEvaluatedAt: other writers set them through dedicated statements while a synchronisation
+    /// holds the object as it loaded it (an export Synchronisation Rule's configuration change flags every
+    /// object of its type, #1925; the Temporal Scope Reconciler flags and stamps on its own schedule, #892),
+    /// and the synchronisation's own drain clears the flag through a dedicated statement too. Writing them
+    /// here from the loaded entity would put back the value it was loaded with, silently losing a review the
+    /// change asked for. The Connected System Object update list excludes its scope columns for the same reason.
+    /// BulkInsertColumnCompletenessTests keeps the two lists in lockstep with <see cref="MetaverseObjects"/>
+    /// so a migration that adds a mutable column must be placed in one of them consciously, rather than
+    /// being silently dropped from every bulk update.
     /// </summary>
     internal static readonly string[] MetaverseObjectsUpdate =
     [
@@ -48,8 +55,16 @@ internal static class MvoBulkInsertColumns
         "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
         "DeletionInitiatedById", "DeletionInitiatedByName",
         "DeletionTriggeredBySystemId", "DeletionTriggeredBySystemName",
-        "DeletionPolicySnapshotJson", "CachedDisplayName",
-        "ScopeReviewPending", "LastScopeEvaluatedAt"
+        "DeletionPolicySnapshotJson", "CachedDisplayName"
+    ];
+
+    /// <summary>
+    /// Columns deliberately excluded from <see cref="MetaverseObjectsUpdate"/>; see its documentation for the
+    /// rationale per column.
+    /// </summary>
+    internal static readonly string[] MetaverseObjectsUpdateExclusions =
+    [
+        "Id", "Created", "ScopeReviewPending", "LastScopeEvaluatedAt"
     ];
 
     /// <summary>
