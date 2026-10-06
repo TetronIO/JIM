@@ -278,6 +278,208 @@ public sealed class UniqueValueGenerationServer
         EvictDeletedAssignments(options.KnownConnectedSystemAssignments, idSet);
     }
 
+    // ---- Collision Remediation (release 4) ----
+
+    /// <summary>
+    /// How many times Collision Remediation may revise one assignment's value over its lifetime (plan decision 15):
+    /// past this, a rejection enters Needs Decision rather than drawing yet another value, because a target that keeps
+    /// refusing every value JIM issues is telling an administrator something a further rename will not fix. An
+    /// administrator's authorised rename is not held back by it.
+    /// </summary>
+    public const int MaximumRemediations = 5;
+
+    /// <summary>
+    /// Draws the next value for an object whose generated value a Connected System has rejected as already in use
+    /// (Collision Remediation, release 4; plan decision 8). Unlike <see cref="ResolveAsync"/>, never returns the
+    /// object's existing assignment as sticky (that is the value being replaced): it goes straight to candidate
+    /// generation, through the same gates, with <see cref="GenerationRequest.RejectedValues"/> taken whatever JIM's
+    /// records say. Only the local gates apply in an export run, which has no probe session. A value issued here is
+    /// claimed in <paramref name="options"/>'s reservation set under its owner id, exactly as a synchronisation's is.
+    /// </summary>
+    /// <returns>A <see cref="GenerationOutcomeKind.Generated"/> outcome carrying the new value and an unsaved
+    /// assignment for it, or a failure kind when no value could be drawn.</returns>
+    public async Task<GenerationOutcome> RegenerateAsync(GenerationRequest request, UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (request.StickyOnly)
+            return new GenerationOutcome(request, GenerationOutcomeKind.Waiting, null, null, null, null);
+
+        var outcomes = new GenerationOutcome?[1];
+        var ownerId = options.DryRun ? Guid.NewGuid() : options.ReservationOwnerId;
+        try
+        {
+            await ResolveGenerationRoundsAsync([request], [0], outcomes, options, ownerId, []);
+            return outcomes[0]!;
+        }
+        finally
+        {
+            if (options.DryRun)
+                options.Reservations.ReleaseAll(ownerId);
+        }
+    }
+
+    /// <summary>
+    /// Whether a generated value a Connected System rejected is anchored (plan decision 10): another participating
+    /// Connected System has accepted it for the same object, so revising it would rename an account already in use.
+    /// A participating system's Connected System Object joined to <paramref name="metaverseObjectId"/> holding the value
+    /// (case-insensitively) in its connector space for the attribute an export mapping flows it to anchors it; an
+    /// export accepted by a target is optimistically applied to its Connected System Object (#1079), so a successful
+    /// export counts as soon as it happens. A participating system that has not completed a Full Import since its
+    /// connector space was cleared cannot say, and missing knowledge never permits a rename. The rejecting system itself
+    /// is never asked. Export-mode values are never anchored, so callers only ask for import mode.
+    /// </summary>
+    /// <param name="metaverseObjectId">The object the value belongs to.</param>
+    /// <param name="value">The rejected value.</param>
+    /// <param name="numericValue">Its numeric form, for a Number or Long Number attribute; null for Text.</param>
+    /// <param name="participatingTargets">The generated mapping's participating targets
+    /// (<see cref="GeneratedValueParticipation.ComputeParticipatingTargets"/>: exclusions already removed).</param>
+    /// <param name="rejectingConnectedSystemId">The Connected System that rejected the value.</param>
+    /// <param name="connectedSystems">The participating Connected Systems, for whether each can tell; one missing
+    /// from the map cannot tell.</param>
+    public async Task<GeneratedValueAnchoringVerdict> IsAnchoredAsync(
+        Guid metaverseObjectId,
+        string value,
+        long? numericValue,
+        IReadOnlyCollection<(int ConnectedSystemId, int AttributeId)> participatingTargets,
+        int rejectingConnectedSystemId,
+        IReadOnlyDictionary<int, ConnectedSystem> connectedSystems)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(participatingTargets);
+        ArgumentNullException.ThrowIfNull(connectedSystems);
+
+        int? cannotTellSystemId = null;
+        foreach (var (connectedSystemId, attributeId) in participatingTargets.Where(t => t.ConnectedSystemId != rejectingConnectedSystemId))
+        {
+            var holders = numericValue.HasValue
+                ? await _repository.GetConnectedSystemAttributeNumberHoldersAsync(attributeId, [numericValue.Value])
+                : await _repository.GetConnectedSystemAttributeValueHoldersAsync(attributeId, [value.ToLowerInvariant()]);
+
+            // Anchored is definitive, so it is answered before any "cannot tell": a system that does hold the value has
+            // told JIM all it needs to know.
+            if (holders.Any(h => h.MetaverseObjectId == metaverseObjectId))
+                return new GeneratedValueAnchoringVerdict(GeneratedValueAnchoring.Anchored, connectedSystemId);
+
+            if (cannotTellSystemId == null && !CanTell(connectedSystems.GetValueOrDefault(connectedSystemId)))
+                cannotTellSystemId = connectedSystemId;
+        }
+
+        return cannotTellSystemId.HasValue
+            ? new GeneratedValueAnchoringVerdict(GeneratedValueAnchoring.CannotTell, cannotTellSystemId)
+            : GeneratedValueAnchoringVerdict.Unanchored;
+    }
+
+    /// <summary>
+    /// Whether a Connected System's connector space can say if it holds a value: it can unless its connector space was
+    /// cleared (which arms the stranded-value sweep, #1605) and no Full Import has completed successfully since.
+    /// </summary>
+    internal static bool CanTell(ConnectedSystem? connectedSystem)
+    {
+        if (connectedSystem == null)
+            return false;
+
+        if (!connectedSystem.StrandedValueSweepArmedAt.HasValue)
+            return true;
+
+        return connectedSystem.LastSuccessfulFullImportCompletedAt.HasValue
+               && connectedSystem.LastSuccessfulFullImportCompletedAt.Value > connectedSystem.StrandedValueSweepArmedAt.Value;
+    }
+
+    /// <summary>
+    /// Puts an assignment into Needs Decision (plan decisions 11 and 12): a rejected value that could not safely be
+    /// revised (anchored, anchoring unknown, or remediation exhausted) waits on an administrator, recording which system
+    /// rejected it, which anchors it, and the execution item that reported it. The caller parks the export.
+    /// </summary>
+    public async Task EnterNeedsDecisionAsync(
+        GeneratedValueAssignment assignment, int rejectedByConnectedSystemId, int? anchoredByConnectedSystemId, Guid executionItemId)
+    {
+        ArgumentNullException.ThrowIfNull(assignment);
+
+        assignment.State = GeneratedValueAssignmentState.NeedsDecision;
+        assignment.RejectedByConnectedSystemId = rejectedByConnectedSystemId;
+        assignment.AnchoredByConnectedSystemId = anchoredByConnectedSystemId;
+        assignment.NeedsDecisionEnteredAt = DateTime.UtcNow;
+        assignment.NeedsDecisionActivityRunProfileExecutionItemId = executionItemId;
+        await _repository.UpdateGeneratedValueAssignmentAsync(assignment);
+    }
+
+    /// <summary>
+    /// "Allow the rename" (plan decision 11): records that an administrator has authorised JIM to rename every system
+    /// holding the value, and releases the Needs Decision so the next export run reaches the rejection again, where the
+    /// worker performs the rename instead of stopping (the portal cannot probe, so the new value is decided there).
+    /// Returns false when the assignment no longer exists or does not need a decision.
+    /// </summary>
+    public async Task<bool> AuthoriseRenameAsync(Guid assignmentId, string authorisedByName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(authorisedByName);
+
+        var assignment = await _repository.GetGeneratedValueAssignmentByIdAsync(assignmentId);
+        if (assignment is not { State: GeneratedValueAssignmentState.NeedsDecision })
+            return false;
+
+        assignment.RenameAuthorised = true;
+        assignment.RenameAuthorisedAt = DateTime.UtcNow;
+        assignment.RenameAuthorisedByName = authorisedByName;
+        await ReleaseNeedsDecisionAsync(assignment);
+        return true;
+    }
+
+    /// <summary>
+    /// "Retry" (plan decision 11): releases a Needs Decision so the next export run tries the same value again, for
+    /// when the conflict has been fixed where it arose. The assignment returns to Committed and its Parked export to
+    /// Pending, with its error count untouched. Returns false when the assignment no longer exists or does not need a
+    /// decision.
+    /// </summary>
+    public async Task<bool> RetryAsync(Guid assignmentId)
+    {
+        var assignment = await _repository.GetGeneratedValueAssignmentByIdAsync(assignmentId);
+        if (assignment is not { State: GeneratedValueAssignmentState.NeedsDecision })
+            return false;
+
+        await ReleaseNeedsDecisionAsync(assignment);
+        return true;
+    }
+
+    /// <summary>
+    /// Releases every Needs Decision a generated mapping's assignments are waiting on, for when the mapping's
+    /// generation configuration has changed (FR 16), mirroring how a changed initial password configuration releases
+    /// its parked accounts (#1121): the change is the administrator's answer, so the next export run tries again under
+    /// it. Returns how many assignments were released.
+    /// </summary>
+    public async Task<int> ReleaseNeedsDecisionForMappingAsync(int syncRuleMappingGenerationId)
+    {
+        var waiting = (await _repository.GetGeneratedValueAssignmentsForGenerationAsync(syncRuleMappingGenerationId))
+            .Where(a => a.State == GeneratedValueAssignmentState.NeedsDecision)
+            .ToList();
+
+        foreach (var assignment in waiting)
+            await ReleaseNeedsDecisionAsync(assignment);
+
+        return waiting.Count;
+    }
+
+    private async Task ReleaseNeedsDecisionAsync(GeneratedValueAssignment assignment)
+    {
+        var rejectedBy = assignment.RejectedByConnectedSystemId;
+
+        assignment.State = GeneratedValueAssignmentState.Committed;
+        assignment.NeedsDecisionEnteredAt = null;
+        assignment.NeedsDecisionActivityRunProfileExecutionItemId = null;
+        assignment.AnchoredByConnectedSystemId = null;
+        await _repository.UpdateGeneratedValueAssignmentAsync(assignment);
+
+        // The Parked export is the rejecting system's: export mode, the object's own Connected System Object; import
+        // mode, the Metaverse Object's account in the system that rejected the value.
+        var connectedSystemObjectId = assignment.ConnectedSystemObjectId;
+        if (!connectedSystemObjectId.HasValue && assignment.MetaverseObjectId.HasValue && rejectedBy.HasValue)
+            connectedSystemObjectId = (await _repository.GetConnectedSystemObjectByMetaverseObjectIdAsync(assignment.MetaverseObjectId.Value, rejectedBy.Value))?.Id;
+
+        if (connectedSystemObjectId.HasValue)
+            await _repository.ReleaseParkedPendingExportsAsync([connectedSystemObjectId.Value]);
+    }
+
     /// <summary>
     /// Deletes the given assignments and, in the same statement, retires each value whose generated mapping never
     /// reuses values (Unique Value Generation, #242, Phase 6; plan decision 4, "Assignment lifecycle" row 3): the
@@ -534,6 +736,14 @@ public sealed class UniqueValueGenerationServer
         {
             var (attributeId, scope) = AttributeAndScope(requests[i]);
             var normalisedValue = candidates[i].Text.ToLowerInvariant();
+
+            // Collision Remediation (release 4): a value a target has just refused is taken, whatever JIM's own records
+            // say; that is the whole of what the rejection told JIM.
+            if (requests[i].RejectedValues.Contains(candidates[i].Text, StringComparer.OrdinalIgnoreCase))
+            {
+                lastRejectionGate[i] = "the Connected System that rejected it";
+                continue;
+            }
 
             if (options.Reservations.IsReservedByAnotherOwner(ownerId, scope, attributeId, normalisedValue)
                 || claimedThisCall.Contains((scope, attributeId, normalisedValue)))
