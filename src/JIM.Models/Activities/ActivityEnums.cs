@@ -397,7 +397,17 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// it is exported from changes or is cleared. One delta per exported attribute, so the summary can say which
     /// attributes change downstream and for how many objects.
     /// </summary>
-    WouldStageUpdateExport
+    WouldStageUpdateExport,
+
+    /// <summary>
+    /// A Metaverse Object left an export Synchronisation Rule's scope under a Disconnect Deprovisioning Action, so the
+    /// join to its object in the target Connected System was broken and that object left in place (#1966). The
+    /// Disconnect sibling of <see cref="DeprovisionQueued"/>, recorded on the same item in the same place, and like
+    /// <see cref="ProvisioningCancelled"/> it queues nothing, so it is not counted as a Pending Export.
+    /// Its target is the disconnected object in the target system, never the item's own object, which is why it is not
+    /// <see cref="Disconnected"/>: that describes the item's own Connected System Object leaving its Metaverse Object.
+    /// </summary>
+    TargetDisconnected
 }
 
 /// <summary>

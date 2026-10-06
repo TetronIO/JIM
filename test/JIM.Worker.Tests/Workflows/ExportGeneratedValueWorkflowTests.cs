@@ -25,7 +25,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// export-mode generation keys on the Connected System Object and never touches the Metaverse.
 /// </summary>
 [TestFixture]
-public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
+public partial class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 {
     #region Provisioning, stability, reassertion
 

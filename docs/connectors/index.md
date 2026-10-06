@@ -28,14 +28,16 @@ For more detail on these concepts, see [Connected Systems](../configuration/conn
 
 ## 🛠️ Available Connectors
 
-JIM ships with the following built-in connectors. **Passwords** means the connector can set passwords, so it can receive initial passwords, on-demand password changes and Password Synchronisation.
+JIM ships with the following built-in connectors. **Passwords** means the connector can set passwords, so it can receive initial passwords, on-demand password changes and Password Synchronisation. **Probe** means that when a synchronisation generates a value, such as an account name, the connector can ask its Connected System directly whether the value is already in use, which catches accounts JIM does not import (see [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems)).
 
-| Connector | Description | Capabilities |
-|-----------|-------------|--------------|
-| [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export |
-| [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, Samba AD, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export, [Passwords](../concepts/passwords.md) |
-| [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export |
-| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export |
+| Connector | Description | Capabilities | Probe |
+|-----------|-------------|--------------|-------|
+| [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export | ❌ |
+| [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, Samba AD, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export, [Passwords](../concepts/passwords.md) | ✅ |
+| [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export | ❌ |
+| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export | ❌ |
+
+Probing for the SCIM 2.0 Client and SQL Connectors is planned ([#1941](https://github.com/TetronIO/JIM/issues/1941)), as is probing an Active Directory forest through a Global Catalog ([#1940](https://github.com/TetronIO/JIM/issues/1940)). A Connected System whose connector cannot probe is still checked against JIM's own records of it.
 
 ## 🗺️ Upcoming Connectors
 

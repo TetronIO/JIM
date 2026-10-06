@@ -91,6 +91,9 @@ public class RetiredGeneratedValueApiTests
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(ImportRuleId)).ReturnsAsync(importRule);
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingsAsync(ImportRuleId)).ReturnsAsync([_generatedMapping, plainMapping]);
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(_generatedMapping.Id)).ReturnsAsync(_generatedMapping);
+        // The generated-value participants every generated mapping's response carries (release 3): no export rules here.
+        _mockConnectedSystemRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() => []);
 
         var application = new JimApplication(mockRepository.Object, syncRepository: _syncRepository);
         _controller = new SynchronisationController(

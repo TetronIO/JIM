@@ -13,6 +13,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
+using JIM.Worker.UniqueValues;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -34,8 +35,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
-        UniqueValueReservationSet? uniqueValueReservations = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations)
+        UniqueValueReservationSet? uniqueValueReservations = null,
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost)
     {
     }
 
@@ -50,6 +52,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // Unique Value Generation (#242, Phase 2 work package G): release this run's claims whatever
             // happened (success, failure or cancellation); see SyncFullSyncTaskProcessor for the full rationale.
             _uniqueValueReservations.ReleaseAll(_activity.Id);
+
+            // Unique Value Generation (#242, release 3): report each Connected System that could not be probed for a
+            // value this run issued, as an Activity warning, and close every probe connection the run opened.
+            await CloseUniquenessProbeSessionAsync();
         }
     }
 

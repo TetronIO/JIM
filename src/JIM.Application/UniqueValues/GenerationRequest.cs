@@ -94,6 +94,23 @@ public sealed record GenerationRequest
     public Guid? DisconnectingConnectedSystemObjectId { get; init; }
 
     /// <summary>
+    /// The Connected System attributes this request's candidates are probed against by the ProbeGate (release 3),
+    /// when <see cref="UniqueValueResolveOptions.ProbeSession"/> is set: import mode, the participating targets the
+    /// value flows to directly (<see cref="GeneratedValueParticipation.ComputeProbeTargets"/>); export mode, the
+    /// generated attribute itself (<see cref="GeneratedValueParticipation.IsDirectProbeTarget"/>). Empty means
+    /// nothing is probed.
+    /// </summary>
+    public IReadOnlyList<UniquenessProbeTarget> ProbeTargets { get; init; } = [];
+
+    /// <summary>
+    /// Values the ProbeGate accepts without probing, compared case-insensitively: import mode, the values the
+    /// object's own joined accounts already hold for a probed attribute (the same person, not a collision, so a
+    /// directory that finds that very account must not reject them); export mode, the object's current value for the
+    /// target attribute.
+    /// </summary>
+    public IReadOnlyCollection<string> ProbeExemptValues { get; init; } = [];
+
+    /// <summary>
     /// When true, the mapping's base expression could not be evaluated for this object (a required input is
     /// missing and the mapping's Missing Input Behaviour is "contribute no value", the default for a generated
     /// mapping per FR 29). <see cref="UniqueValueGenerationServer.ResolveAsync"/> then only checks for an

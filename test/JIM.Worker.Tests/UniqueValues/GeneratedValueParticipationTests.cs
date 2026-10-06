@@ -5,6 +5,7 @@ using JIM.Application.UniqueValues;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Staging;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.UniqueValues;
@@ -166,6 +167,165 @@ public class GeneratedValueParticipationTests
         var targets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, [rule]);
 
         Assert.That(targets, Is.Empty);
+    }
+
+    #endregion
+
+    #region ComputeProbeTargets
+
+    private static ConnectedSystemObjectTypeAttribute TargetAttribute(int id, string name = "sAMAccountName", AttributeDataType type = AttributeDataType.Text,
+        bool isExternalId = false, bool isSecondaryExternalId = false) => new()
+    {
+        Id = id,
+        Name = name,
+        Type = type,
+        IsExternalId = isExternalId,
+        IsSecondaryExternalId = isSecondaryExternalId
+    };
+
+    private static SyncRuleMapping ProbeableExportMapping(MetaverseAttribute source, ConnectedSystemObjectTypeAttribute target, bool enabled = true)
+    {
+        var mapping = SingleSourceExportMapping(source, target.Id, enabled);
+        mapping.TargetConnectedSystemAttribute = target;
+        return mapping;
+    }
+
+    [Test]
+    public void ComputeProbeTargets_DirectSingleSourceTextFlow_IsAProbeTarget()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true, ProbeableExportMapping(attribute, TargetAttribute(500)));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.EqualTo(new[] { new UniquenessProbeTarget(3, 500) }));
+    }
+
+    [Test]
+    public void ComputeProbeTargets_SameTargetFromTwoRules_IsProbedOnce()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var target = TargetAttribute(500);
+        var first = ExportRule(connectedSystemId: 3, enabled: true, ProbeableExportMapping(attribute, target));
+        var second = ExportRule(connectedSystemId: 3, enabled: true, ProbeableExportMapping(attribute, target));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [first, second]);
+
+        Assert.That(targets, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Plan Phase 7 item 3: a value reaching the target through an export expression is not probed (Collision
+    /// Remediation covers it); the participation filter already drops anything but a direct single-source flow.
+    /// </summary>
+    [Test]
+    public void ComputeProbeTargets_ExpressionExportMapping_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var expressionMapping = new SyncRuleMapping
+        {
+            Id = 501,
+            Enabled = true,
+            TargetConnectedSystemAttributeId = 500,
+            TargetConnectedSystemAttribute = TargetAttribute(500, "userPrincipalName"),
+            Sources = { new SyncRuleMappingSource { Order = 1, Expression = "mv[\"AccountName\"] + \"@corp.local\"" } }
+        };
+        var rule = ExportRule(connectedSystemId: 3, enabled: true, expressionMapping);
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public void ComputeProbeTargets_DistinguishedNameTarget_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true,
+            ProbeableExportMapping(attribute, TargetAttribute(500, "distinguishedName", isSecondaryExternalId: true)));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty, "the DN is unique per container, so a partition-wide search would report false collisions");
+    }
+
+    [Test]
+    public void ComputeProbeTargets_ExternalIdTarget_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true,
+            ProbeableExportMapping(attribute, TargetAttribute(500, "objectGUID", isExternalId: true)));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public void ComputeProbeTargets_NonTextTarget_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true,
+            ProbeableExportMapping(attribute, TargetAttribute(500, "employeeNumber", AttributeDataType.Number)));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public void ComputeProbeTargets_TargetAttributeNotLoaded_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true, SingleSourceExportMapping(attribute, targetAttributeId: 500));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty, "without the attribute JIM cannot tell what it is, so it does not guess");
+    }
+
+    [Test]
+    public void ComputeProbeTargets_ExcludedConnectedSystem_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute, excludedSystemIds: 3);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true, ProbeableExportMapping(attribute, TargetAttribute(500)));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public void ComputeProbeTargets_DisabledExportMapping_IsNotProbed()
+    {
+        var attribute = GeneratedAttribute();
+        var mapping = GeneratedMapping(attribute);
+        var rule = ExportRule(connectedSystemId: 3, enabled: true, ProbeableExportMapping(attribute, TargetAttribute(500), enabled: false));
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, [rule]);
+
+        Assert.That(targets, Is.Empty);
+    }
+
+    [Test]
+    public void IsDirectProbeTarget_ReturnsWhetherAnExportModeTargetIsProbed()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValueParticipation.IsDirectProbeTarget(TargetAttribute(1)), Is.True);
+            Assert.That(GeneratedValueParticipation.IsDirectProbeTarget(TargetAttribute(2, "distinguishedName", isSecondaryExternalId: true)), Is.False);
+            Assert.That(GeneratedValueParticipation.IsDirectProbeTarget(TargetAttribute(3, "objectGUID", isExternalId: true)), Is.False);
+            Assert.That(GeneratedValueParticipation.IsDirectProbeTarget(TargetAttribute(4, "uidNumber", AttributeDataType.Number)), Is.False);
+            Assert.That(GeneratedValueParticipation.IsDirectProbeTarget(null), Is.False);
+        }
     }
 
     #endregion

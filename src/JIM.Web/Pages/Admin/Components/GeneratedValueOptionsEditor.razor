@@ -2,6 +2,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Expressions
 @using JIM.Models.Logic
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -256,6 +257,9 @@
         </MudRadioGroup>
     }
 
+    @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
+    <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" />
+
     @* ─── Advanced: attempt limit ─── *@
     <MudExpansionPanels Elevation="0" Class="mt-5">
         <MudExpansionPanel Text="Advanced">
@@ -333,6 +337,68 @@
     public RenderFragment<Func<string, Task>>? BaseExpressionTools { get; set; }
 
     private ExpressionEditor? _baseExpressionEditor;
+
+    /// <summary>The "Checked for availability in" rows, for the target as it now stands; null while loading.</summary>
+    private IReadOnlyList<GeneratedValueParticipant>? _participants;
+
+    /// <summary>The target the rows were loaded for, so they reload when the target changes and not on every render.</summary>
+    private (int? MetaverseAttributeId, int? ConnectedSystemAttributeId)? _participantsTarget;
+
+    /// <summary>Discards a load overtaken by a newer one.</summary>
+    private int _participantsLoad;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var target = (Mapping.ResolveTargetMetaverseAttributeId(), Mapping.ResolveTargetConnectedSystemAttributeId());
+        if (_participantsTarget == target)
+            return;
+
+        _participantsTarget = target;
+        await LoadParticipantsAsync();
+    }
+
+    /// <summary>
+    /// Reads where the value is exported and how each target is checked, describing the mapping as it is being edited
+    /// (target and exclusions) against the export Synchronisation Rules as saved. The mapping is copied first, because
+    /// the read awaits the database while the administrator may still be changing the form.
+    /// </summary>
+    private async Task LoadParticipantsAsync()
+    {
+        var load = ++_participantsLoad;
+        var snapshot = SnapshotForParticipants(Mapping);
+        IReadOnlyList<GeneratedValueParticipant> participants;
+        using (var jim = JimFactory.Create())
+            participants = await jim.ConnectedSystems.GetGeneratedValueParticipantsAsync(snapshot, ConnectedSystemId);
+
+        if (load != _participantsLoad)
+            return;
+
+        _participants = participants;
+        StateHasChanged();
+    }
+
+    private static SyncRuleMapping SnapshotForParticipants(SyncRuleMapping mapping)
+    {
+        var generation = new SyncRuleMappingGeneration { Id = mapping.Generation?.Id ?? 0 };
+        generation.Exclusions.AddRange((mapping.Generation?.Exclusions ?? [])
+            .Select(exclusion => new SyncRuleMappingGenerationExclusion { ConnectedSystemId = exclusion.ConnectedSystemId }));
+
+        return new SyncRuleMapping
+        {
+            Id = mapping.Id,
+            TargetMetaverseAttribute = mapping.TargetMetaverseAttribute,
+            TargetMetaverseAttributeId = mapping.ResolveTargetMetaverseAttributeId(),
+            TargetConnectedSystemAttribute = mapping.TargetConnectedSystemAttribute,
+            TargetConnectedSystemAttributeId = mapping.ResolveTargetConnectedSystemAttributeId(),
+            Generation = generation
+        };
+    }
+
+    private async Task OnExclusionsChangedAsync()
+    {
+        await NotifyChangedAsync();
+        await LoadParticipantsAsync();
+    }
 
     /// <summary>
     /// Inserts <paramref name="text"/> at the base expression's caret; the editor raises its change, which adds the

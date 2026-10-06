@@ -178,6 +178,74 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// An export scope exit caused by the object's own data: a joined source object's value changes so its Metaverse
+    /// Object leaves the export rule's scope, and the rule deprovisions its live target object. The real run records a
+    /// Deprovision Queued node for a Delete (#1964) and a Target Disconnected node for a Disconnect (#1966), beneath
+    /// the Attribute Flow that caused it; the preview must propose the same tree.
+    /// </summary>
+    [TestCase(OutboundDeprovisionAction.Delete, "DeprovisionQueued")]
+    [TestCase(OutboundDeprovisionAction.Disconnect, "TargetDisconnected")]
+    public async Task PreviewSyncForCsoAsync_ExportScopeExit_TreeMatchesTheRealSyncOutcomeTreeAsync(
+        OutboundDeprovisionAction action, string expectedNode)
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var targetSystem = await CreateConnectedSystemAsync("AD Target");
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "user");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        mvType.Attributes.First(a => a.Name == "DisplayName").Name = Constants.BuiltInAttributes.DisplayName;
+        await DbContext.SaveChangesAsync();
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.DisplayName);
+
+        await CreateImportSyncRuleWithDisplayNameFlowAsync(sourceSystem, sourceType, mvType);
+        var exportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export", deprovisionAction: action);
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new() { MetaverseAttribute = mvDisplayNameAttr, MetaverseAttributeId = mvDisplayNameAttr.Id, ComparisonType = SearchComparisonType.NotEquals, StringValue = "Leaver", CaseSensitive = true }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        // Full Sync 1 projects the source object and provisions the target; the target is then made a live account,
+        // its provisioning exported and confirmed, so leaving scope deprovisions it rather than cancelling it.
+        var firstProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync 1", ConnectedSystemRunType.FullSynchronisation);
+        var firstActivity = await CreateActivityAsync(sourceSystem.Id, firstProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, firstProfile, firstActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId ?? throw new InvalidOperationException("arrange: the first sync joins the source object");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.MetaverseObjectId == mvoId && c.Id != cso.Id);
+        targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        SyncRepo.ClearAllPendingExports();
+
+        // The source value changes, taking the Metaverse Object out of the export rule's scope.
+        cso.AttributeValues.Single(av => av.Attribute?.Name == "DisplayName").StringValue = "Leaver";
+        cso.LastUpdated = DateTime.UtcNow;
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+
+        var secondProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var secondActivity = await CreateActivityAsync(sourceSystem.Id, secondProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, secondProfile, secondActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var describedReal = DescribeTree(MapRealOutcomeTree(secondActivity));
+        var describedPreview = DescribeTree(preview.OutcomeTree);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(describedReal, Does.Contain(expectedNode), "Report: real tree shape -> " + describedReal);
+            Assert.That(describedPreview, Is.EqualTo(describedReal),
+                $"The preview's outcome tree must have the same shape as the real one. Preview: {describedPreview} | Real: {describedReal}");
+        }
+    }
+
     #region Destructive Cascade (#288 Phase 1 of the Sync Preview Surface plan)
 
     /// <summary>
