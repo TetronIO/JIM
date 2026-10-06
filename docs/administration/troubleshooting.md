@@ -87,6 +87,14 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 **How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
 
+### On Ubuntu, JIM's services keep crashing and restarting
+
+JIM becomes ready, but `jim-web`, `jim-worker` or `jim-scheduler` restart now and then, most often while JIM first prepares its database and after the server starts; a page or a PowerShell command can fail with `The response ended prematurely`.
+
+**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop the processes in a rootful JIM's containers signalling one another. The .NET runtime signals its own threads to reclaim memory, so a service aborts and Podman restarts it. `sudo podman inspect --format '{{.Name}} {{.RestartCount}}' jim-web jim-worker jim-scheduler` counts the restarts, and `sudo journalctl -k | grep DENIED` shows `operation="signal"` with a `peer` ending `//&crun`. A synchronisation running when the worker crashes stops there; the worker fails its Activity when it starts again, and the next run carries on from where JIM's data stands (see [Pausing work first](upgrading.md#pausing-work)).
+
+**How to fix.** Add the signal rule [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor) shows, then restart the server, which Podman needs to load its profile with the rule. The installer adds the rule; an installation made by the installer of v0.16.0 or earlier needs it adding by hand.
+
 ### Other machines cannot reach JIM, but it answers on the server itself
 
 **What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
