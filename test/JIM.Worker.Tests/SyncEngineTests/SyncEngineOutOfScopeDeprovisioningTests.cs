@@ -90,6 +90,60 @@ public class SyncEngineOutOfScopeDeprovisioningTests
         }
     }
 
+    [TestCase(PendingExportStatus.Pending)]
+    [TestCase(PendingExportStatus.ExportNotConfirmed)]
+    [TestCase(PendingExportStatus.Failed)]
+    [TestCase(PendingExportStatus.Parked)]
+    public void DecideOutOfScopeDeprovisioning_RuleSaysDisconnectWithAnUnsentDeleteQueued_DisconnectsAndWithdrawsTheDelete(PendingExportStatus status)
+    {
+        // A Delete queued while the rule said Delete, and not yet carried out. The rule now says Disconnect, so the
+        // account stays; exporting the Delete anyway would remove an account JIM has just reported keeping (#1970).
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Delete, Status = status };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(
+            ExportRule(OutboundDeprovisionAction.Disconnect), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.Disconnect));
+            Assert.That(decision.ExistingDeleteToWithdraw, Is.SameAs(existing));
+        }
+    }
+
+    [TestCase(PendingExportStatus.Executing)]
+    [TestCase(PendingExportStatus.Exported)]
+    public void DecideOutOfScopeDeprovisioning_RuleSaysDisconnectWithTheDeleteAlreadySent_LeavesTheDeleteToFinish(PendingExportStatus status)
+    {
+        // The Delete has gone to the Connected System (or is going now): the account is gone or going, so there is
+        // nothing left to disconnect, and reporting it as kept would be false. The confirming import finishes it.
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Delete, Status = status };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(
+            ExportRule(OutboundDeprovisionAction.Disconnect), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.DeleteAlreadySent));
+            Assert.That(decision.ExistingDeleteToWithdraw, Is.Null);
+        }
+    }
+
+    [Test]
+    public void DecideOutOfScopeDeprovisioning_RuleSaysDisconnectWithAnUpdateQueued_DisconnectsAndLeavesTheUpdate()
+    {
+        // A queued Update needs nothing here: the export withdraws the changes of an account no longer joined.
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Update };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(
+            ExportRule(OutboundDeprovisionAction.Disconnect), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.Disconnect));
+            Assert.That(decision.ExistingDeleteToWithdraw, Is.Null);
+        }
+    }
+
     [Test]
     public void DecideOutOfScopeDeprovisioning_AnUnrecognisedAction_DoesNothingAndSaysSo()
     {

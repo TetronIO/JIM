@@ -46,7 +46,11 @@ public enum OutOfScopeDeprovisioningAction
     /// <summary>Stage a Delete export for the CSO (and break the join), per the rule's Delete action.</summary>
     StageDeleteExport,
     /// <summary>The rule carries an OutboundDeprovisionAction this engine does not recognise; do nothing, visibly.</summary>
-    UnknownAction
+    UnknownAction,
+    /// <summary>The rule says Disconnect, but a Delete queued for the CSO while the rule said Delete has already been
+    /// sent (or is being sent): the object is gone or going from the Connected System, so there is nothing left to
+    /// disconnect and the confirming import finishes the Delete. Nothing is done here (#1970).</summary>
+    DeleteAlreadySent
 }
 
 /// <summary>

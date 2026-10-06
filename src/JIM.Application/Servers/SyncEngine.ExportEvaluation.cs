@@ -83,8 +83,9 @@ public partial class SyncEngine
 
     /// <summary>
     /// Decides what an export Synchronisation Rule's OutboundDeprovisionAction means for a CSO that has fallen
-    /// out of the rule's scope: disconnect, stage a Delete export (with the one-Pending-Export-per-CSO collision
-    /// policy choosing reuse, replace or create), or nothing at all for an action this engine does not recognise.
+    /// out of the rule's scope: disconnect (withdrawing a Delete queued under an earlier Delete action, unless it has
+    /// already been sent), stage a Delete export (with the one-Pending-Export-per-CSO collision policy choosing reuse,
+    /// replace or create), or nothing at all for an action this engine does not recognise.
     /// An unrecognised action is deliberately not defaulted to disconnect: deprovisioning semantics are never
     /// guessed at, and the orchestrator surfaces the non-action as a warning.
     /// </summary>
@@ -98,6 +99,21 @@ public partial class SyncEngine
         switch (exportRule.OutboundDeprovisionAction)
         {
             case OutboundDeprovisionAction.Disconnect:
+                // A Delete queued while the rule said Delete (#1970). Once sent, the object is gone or going from the
+                // Connected System, so there is nothing left to disconnect and the confirming import finishes it. Until
+                // then it is withdrawn: the account stays, so exporting the Delete would remove an account the run
+                // reports keeping. A queued Update needs nothing here; the export withdraws an unjoined account's changes.
+                if (existingPendingExport?.ChangeType == PendingExportChangeType.Delete)
+                {
+                    return existingPendingExport.Status is PendingExportStatus.Executing or PendingExportStatus.Exported
+                        ? new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.DeleteAlreadySent }
+                        : new OutOfScopeDeprovisioningDecision
+                        {
+                            Action = OutOfScopeDeprovisioningAction.Disconnect,
+                            ExistingDeleteToWithdraw = existingPendingExport
+                        };
+                }
+
                 return new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.Disconnect };
 
             case OutboundDeprovisionAction.Delete:
