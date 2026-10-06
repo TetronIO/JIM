@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
 using Serilog;
@@ -787,23 +788,17 @@ public class MetaverseRepository : IMetaverseRepository
         }));
 
         // 9. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
-        //     search's criteria-group graph (one level of nesting, as elsewhere).
+        //     search's criteria-group tree, at any depth (a criterion missed here is left filtering on an attribute the
+        //     type no longer has); global lists all.
         List<int> predefinedSearchCriterionIds;
         if (objectTypeId.HasValue)
         {
             var typeId = objectTypeId.Value;
-            var directSearchCriteria = db.PredefinedSearches
+            var typeSearchIds = await db.PredefinedSearches
                 .Where(s => s.MetaverseObjectType.Id == typeId)
-                .SelectMany(s => s.CriteriaGroups)
-                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            var childSearchCriteria = db.PredefinedSearches
-                .Where(s => s.MetaverseObjectType.Id == typeId)
-                .SelectMany(s => s.CriteriaGroups)
-                .SelectMany(g => g.ChildGroups)
-                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            predefinedSearchCriterionIds = await directSearchCriteria.Union(childSearchCriteria).ToListAsync();
+                .Select(s => s.Id)
+                .ToListAsync();
+            predefinedSearchCriterionIds = await PredefinedSearchCriteriaTreeLoader.GetCriterionIdsAsync(db, typeSearchIds, attributeId);
         }
         else
         {
@@ -1271,16 +1266,82 @@ public class MetaverseRepository : IMetaverseRepository
         return summariesById.Values.ToList();
     }
 
-    public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    public async Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
+    {
+        // One statement over the type's objects (#1925), on a configuration change rather than on any synchronisation
+        // path. Rows already flagged are left untouched: the flag is a boolean and nothing reads its row version, so
+        // rewriting them would cost a tuple each and say nothing new.
+        var newlyFlagged = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = true
+              WHERE ""TypeId"" = {0} AND NOT ""ScopeReviewPending""",
+            metaverseObjectTypeId);
+
+        // Bring tracked instances into line, as persisted rather than as a pending change, so a later whole-entity
+        // save cannot write the old value back. Change detection is suppressed while enumerating: it would attach any
+        // untracked graph hanging off a tracked navigation (see src/CLAUDE.md, "Tracker surgery").
+        var context = Repository.Database;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var flags = context.ChangeTracker.Entries<MetaverseObject>()
+                .Where(e => e.State is EntityState.Unchanged or EntityState.Modified &&
+                            Equals(e.Property("TypeId").CurrentValue, metaverseObjectTypeId))
+                .Select(e => e.Property(mvo => mvo.ScopeReviewPending))
+                .ToList();
+            foreach (var flag in flags)
+            {
+                flag.CurrentValue = true;
+                flag.OriginalValue = true;
+                flag.IsModified = false;
+            }
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+
+        return newlyFlagged;
+    }
+
+    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
     {
         if (ids.Count == 0)
-            return;
+            return true;
 
-        // Clear the reconciler flag once the sync engine has re-evaluated these Metaverse Objects' export scope
-        // (#892). A single bulk UPDATE over the O(flagged) rows processed keeps this off the per-object write path.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
-            ids.ToArray());
+        // Clear once the sync engine has re-evaluated these objects' export scope (#892), unless an export rule was
+        // created or updated after the run read its rules (#1925): the run evaluated against rules that no longer
+        // stand, and the save that replaced them flagged these objects for review against the new ones. The check and
+        // the clear are one statement, so a rule saved at any moment is either seen here (nothing is cleared) or
+        // commits after it, and its own flagging then sets the flags again. A data-modifying CTE always runs, whether
+        // or not the outer query reads it.
+        const string sql = """
+            WITH changed AS (
+                SELECT EXISTS (
+                    SELECT 1 FROM "SyncRules"
+                    WHERE "Direction" = @export
+                      AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
+                ) AS "Changed"
+            ),
+            cleared AS (
+                UPDATE "MetaverseObjects" SET "ScopeReviewPending" = false
+                WHERE "Id" = ANY(@ids) AND NOT (SELECT "Changed" FROM changed)
+            )
+            SELECT "Changed" FROM changed
+            """;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection,
+            (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
+        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
+        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
+            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
+
+        var changed = (bool)(await command.ExecuteScalarAsync() ?? false);
+        return !changed;
     }
 
     public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
@@ -1288,13 +1349,15 @@ public class MetaverseRepository : IMetaverseRepository
         if (evaluatedIds.Count == 0)
             return;
 
-        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
-        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
-        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is set
+        // for flagged ids and an existing flag is kept: another rule's sweep, or a configuration change (#1925), may
+        // have raised it, and this rule finding the object in agreement with its own scope says nothing about theirs.
+        // The synchronisation that re-evaluates the object clears it. LastScopeEvaluatedAt advances for every
+        // evaluated object.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjects""
               SET ""LastScopeEvaluatedAt"" = {2},
-                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+                  ""ScopeReviewPending"" = ""ScopeReviewPending"" OR (""Id"" = ANY({1}))
               WHERE ""Id"" = ANY({0})",
             evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
     }
@@ -1413,6 +1476,48 @@ public class MetaverseRepository : IMetaverseRepository
 
     private const int CappedMvaLimit = 10;
 
+    /// <inheritdoc />
+    public async Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid metaverseObjectId)
+    {
+        var changeQuery = Repository.Database.Set<MetaverseObjectChange>()
+            .AsNoTracking()
+            .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == metaverseObjectId);
+        return await LoadChangeInitiatorsAsync(changeQuery);
+    }
+
+    /// <summary>
+    /// The initiators of the earliest and latest of the given changes: Created By and Last Updated By, wherever they
+    /// are shown, so the portal and the REST API cannot disagree.
+    /// </summary>
+    private static async Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> LoadChangeInitiatorsAsync(
+        IQueryable<MetaverseObjectChange> changeQuery)
+    {
+        var earliest = await changeQuery
+            .OrderBy(c => c.ChangeTime)
+            .Select(c => new MvoChangeInitiatorSummary
+            {
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName
+            })
+            .FirstOrDefaultAsync();
+        if (earliest == null)
+            return (null, null);
+
+        var latest = await changeQuery
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(c => new MvoChangeInitiatorSummary
+            {
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName
+            })
+            .FirstOrDefaultAsync();
+        return (earliest, latest);
+    }
+
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
         if (loadStrategy == MvoAttributeLoadStrategy.All)
@@ -1448,29 +1553,7 @@ public class MetaverseRepository : IMetaverseRepository
 
             changeCount = await changeQuery.CountAsync();
             if (changeCount > 0)
-            {
-                earliestInitiator = await changeQuery
-                    .OrderBy(c => c.ChangeTime)
-                    .Select(c => new MvoChangeInitiatorSummary
-                    {
-                        ChangeTime = c.ChangeTime,
-                        InitiatedByType = c.InitiatedByType,
-                        InitiatedById = c.InitiatedById,
-                        InitiatedByName = c.InitiatedByName
-                    })
-                    .FirstOrDefaultAsync();
-
-                latestInitiator = await changeQuery
-                    .OrderByDescending(c => c.ChangeTime)
-                    .Select(c => new MvoChangeInitiatorSummary
-                    {
-                        ChangeTime = c.ChangeTime,
-                        InitiatedByType = c.InitiatedByType,
-                        InitiatedById = c.InitiatedById,
-                        InitiatedByName = c.InitiatedByName
-                    })
-                    .FirstOrDefaultAsync();
-            }
+                (earliestInitiator, latestInitiator) = await LoadChangeInitiatorsAsync(changeQuery);
         }
 
         // Joined Connected System Object count, for the Connections tab's badge (#1519): a count only,
@@ -1708,6 +1791,49 @@ public class MetaverseRepository : IMetaverseRepository
         }
     }
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectAttributeValue>> GetMetaverseObjectAttributeValuesAsync(Guid metaverseObjectId, IReadOnlyCollection<int> attributeIds)
+    {
+        if (attributeIds.Count == 0)
+            return [];
+
+        var attributeIdList = attributeIds.ToList();
+
+        // Unordered, as synchronisation's own loads are: scoping compares an attribute's first value as the database
+        // returns it (#1923).
+        var rows = await Repository.Database.MetaverseObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId && attributeIdList.Contains(av.AttributeId))
+            .Select(av => new
+            {
+                av.Id,
+                av.AttributeId,
+                av.StringValue,
+                av.IntValue,
+                av.LongValue,
+                av.DecimalValue,
+                av.DateTimeValue,
+                av.BoolValue,
+                av.GuidValue,
+                av.NullValue
+            })
+            .ToListAsync();
+
+        return rows.Select(r => new MetaverseObjectAttributeValue
+        {
+            Id = r.Id,
+            AttributeId = r.AttributeId,
+            StringValue = r.StringValue,
+            IntValue = r.IntValue,
+            LongValue = r.LongValue,
+            DecimalValue = r.DecimalValue,
+            DateTimeValue = r.DateTimeValue,
+            BoolValue = r.BoolValue,
+            GuidValue = r.GuidValue,
+            NullValue = r.NullValue
+        }).ToList();
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         // Materialise the full entity so Include chains are honoured (Include is ignored
@@ -1731,6 +1857,7 @@ public class MetaverseRepository : IMetaverseRepository
             Id = entity.Id,
             Created = entity.Created,
             Status = entity.Status,
+            ScopeReviewPending = entity.ScopeReviewPending,
             TypeId = entity.Type.Id,
             TypeName = entity.Type.Name,
             TypePluralName = entity.Type.PluralName,
@@ -2300,7 +2427,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
+    /// Builds a parameterised EXISTS-based SQL fragment for a single predefined-search criterion.
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
     /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
@@ -2317,12 +2444,14 @@ public class MetaverseRepository : IMetaverseRepository
         var dataType = criteria.GetAttributeDataType()
             ?? throw new NotSupportedException("Predefined search criterion has no resolvable attribute data type.");
 
-        // EXISTS: at least one of the object's values for this attribute satisfies the predicate.
+        // Operators mean exactly what they mean in Synchronisation Rule scoping (ScopingEvaluationServer, #1923, #1962):
+        // a positive operator is met when ANY of the object's values satisfies it; a negated operator is given the
+        // predicate of the operator it negates and is met when the object holds at least one value (asserted-null
+        // markers excluded, #91) and NO value satisfies that predicate. An object with no value meets neither.
         string Exists(string predicate) =>
             $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
-        // NOT EXISTS: none of the object's values for this attribute satisfies the predicate (negative text operators).
-        string NotExists(string predicate) =>
-            $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
+        string NoValueMatches(string matchPredicate) =>
+            $"""({Exists("NOT cav.\"NullValue\"")} AND NOT {Exists(matchPredicate)})""";
 
         NotSupportedException Unsupported() =>
             new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
@@ -2334,45 +2463,41 @@ public class MetaverseRepository : IMetaverseRepository
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
                 const string col = "cav.\"StringValue\"";
                 // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
+                var equalsPredicate = criteria.CaseSensitive
+                    ? $"{col} = {valParam}"
+                    : $"lower({col}) = lower({valParam})";
+                var startsWithPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                    : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'";
+                var endsWithPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                    : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}";
+                var containsPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                    : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'";
                 return criteria.ComparisonType switch
                 {
-                    SearchComparisonType.Equals => criteria.CaseSensitive
-                        ? Exists($"{col} = {valParam}")
-                        : Exists($"lower({col}) = lower({valParam})"),
-                    SearchComparisonType.NotEquals => criteria.CaseSensitive
-                        ? Exists($"{col} <> {valParam}")
-                        : Exists($"lower({col}) <> lower({valParam})"),
-                    SearchComparisonType.StartsWith => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
-                    SearchComparisonType.NotStartsWith => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
-                    SearchComparisonType.EndsWith => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
-                    SearchComparisonType.NotEndsWith => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
-                    SearchComparisonType.Contains => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
-                    SearchComparisonType.NotContains => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    SearchComparisonType.Equals => Exists(equalsPredicate),
+                    SearchComparisonType.NotEquals => NoValueMatches(equalsPredicate),
+                    SearchComparisonType.StartsWith => Exists(startsWithPredicate),
+                    SearchComparisonType.NotStartsWith => NoValueMatches(startsWithPredicate),
+                    SearchComparisonType.EndsWith => Exists(endsWithPredicate),
+                    SearchComparisonType.NotEndsWith => NoValueMatches(endsWithPredicate),
+                    SearchComparisonType.Contains => Exists(containsPredicate),
+                    SearchComparisonType.NotContains => NoValueMatches(containsPredicate),
                     _ => throw Unsupported()
                 };
             }
             case AttributeDataType.Number:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Integer) { Value = (object?)criteria.IntValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.LongNumber:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.Decimal:
                 // PostgreSQL numeric comparison is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Numeric) { Value = (object?)criteria.DecimalValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.DateTime:
                 // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
                 // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
@@ -2380,13 +2505,13 @@ public class MetaverseRepository : IMetaverseRepository
                     ? RelativeDateResolver.Resolve(criteria.RelativeCount.Value, criteria.RelativeUnit.Value, criteria.RelativeDirection.Value, nowUtc)
                     : NormaliseToUtc(criteria.DateTimeValue);
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)dateBoundary ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.Boolean:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Boolean) { Value = (object?)criteria.BoolValue ?? DBNull.Value });
                 return criteria.ComparisonType switch
                 {
                     SearchComparisonType.Equals => Exists($"cav.\"BoolValue\" = {valParam}"),
-                    SearchComparisonType.NotEquals => Exists($"cav.\"BoolValue\" <> {valParam}"),
+                    SearchComparisonType.NotEquals => NoValueMatches($"cav.\"BoolValue\" = {valParam}"),
                     _ => throw Unsupported()
                 };
             case AttributeDataType.Guid:
@@ -2394,7 +2519,7 @@ public class MetaverseRepository : IMetaverseRepository
                 return criteria.ComparisonType switch
                 {
                     SearchComparisonType.Equals => Exists($"cav.\"GuidValue\" = {valParam}"),
-                    SearchComparisonType.NotEquals => Exists($"cav.\"GuidValue\" <> {valParam}"),
+                    SearchComparisonType.NotEquals => NoValueMatches($"cav.\"GuidValue\" = {valParam}"),
                     _ => throw Unsupported()
                 };
             default:
@@ -2404,14 +2529,16 @@ public class MetaverseRepository : IMetaverseRepository
 
     /// <summary>
     /// Builds the SQL predicate for an ordered (Number / LongNumber / Decimal / DateTime) comparison, supporting
-    /// equality and the four ordering operators. Throws for any operator that does not apply.
+    /// equality and the four ordering operators. <paramref name="exists"/> applies a positive operator's predicate and
+    /// <paramref name="noValueMatches"/> a negated operator's (given the predicate of the operator it negates). Throws
+    /// for any operator that does not apply.
     /// </summary>
-    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
+    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<string, string> noValueMatches, Func<NotSupportedException> unsupported)
     {
         return comparisonType switch
         {
             SearchComparisonType.Equals => exists($"{column} = {valParam}"),
-            SearchComparisonType.NotEquals => exists($"{column} <> {valParam}"),
+            SearchComparisonType.NotEquals => noValueMatches($"{column} = {valParam}"),
             SearchComparisonType.LessThan => exists($"{column} < {valParam}"),
             SearchComparisonType.LessThanOrEquals => exists($"{column} <= {valParam}"),
             SearchComparisonType.GreaterThan => exists($"{column} > {valParam}"),
@@ -3119,14 +3246,18 @@ public class MetaverseRepository : IMetaverseRepository
         // MVOs are deleted in the same batch.
         // Also update tracked entities in EF Core's change tracker to match the DB state,
         // otherwise SaveChangesAsync will try to write the stale FK value.
+        // The join record (#348) goes with the join; JoinType and DateJoined are left as they always have been here.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = {0}",
             metaverseObject.Id);
         foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
             .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinMethod = null;
+            trackedCso.Entity.JoinSyncRuleId = null;
+            trackedCso.Entity.JoinSyncRuleName = null;
         }
 
         // Reference attribute values on other MVOs that point to this MVO: valueless rows are

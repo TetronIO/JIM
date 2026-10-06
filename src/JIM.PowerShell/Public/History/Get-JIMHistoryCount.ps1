@@ -64,21 +64,13 @@ function Get-JIMHistoryCount {
 
         # If using name, resolve to ID first
         if ($PSCmdlet.ParameterSetName -eq 'ByName') {
-            Write-Verbose "Looking up Connected System by name: $ConnectedSystemName"
-            $systems = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems"
-            $matchingSystem = $systems | Where-Object { $_.name -eq $ConnectedSystemName }
-
-            if ($matchingSystem.Count -eq 0) {
-                Write-Error "Connected System '$ConnectedSystemName' not found."
+            try {
+                $ConnectedSystemId = (Resolve-JIMConnectedSystem -Name $ConnectedSystemName).id
+            }
+            catch {
+                Write-Error $_
                 return
             }
-
-            if ($matchingSystem.Count -gt 1) {
-                Write-Error "Multiple Connected Systems found with name '$ConnectedSystemName'. Use -ConnectedSystemId to specify the exact system."
-                return
-            }
-
-            $ConnectedSystemId = $matchingSystem[0].id
         }
 
         Write-Verbose "Getting history count for Connected System ID: $ConnectedSystemId"

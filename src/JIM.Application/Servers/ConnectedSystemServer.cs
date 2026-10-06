@@ -119,6 +119,43 @@ public partial class ConnectedSystemServer
             await WithdrawQueuedExportChangesAsync(rule);
     }
 
+    // Export evaluation is driven by an object's own values changing, so a change to which objects an export rule
+    // covers (created, re-enabled, provisioning switched on, Scoping Criteria changed) would otherwise reach none of a
+    // stable population (#1925). The rule as stored is read before the save, untracked: the portal editor and the REST
+    // controllers load the rule tracked and edit it in memory before calling the save, and the first flush below
+    // would write those edits, leaving nothing to compare against. Import rules are not read at all.
+    private async Task<(bool IsNewRule, SyncRuleScopeState? StoredState)> ReadExportScopeStateBeforeSaveAsync(SyncRule syncRule)
+    {
+        if (syncRule.Id == 0)
+            return (true, null);
+
+        return syncRule.Direction == SyncRuleDirection.Export
+            ? (false, await Application.Repository.ConnectedSystems.GetSyncRuleScopeStateAsync(syncRule.Id))
+            : (false, null);
+    }
+
+    // Flags every Metaverse Object of the rule's type for export scope review when the save can have moved objects into
+    // or out of the rule's scope, so the next synchronisation of any Connected System provisions and deprovisions them
+    // against the rule as it now stands (#1925). Disabling a rule or switching provisioning off flags nothing: neither
+    // destroys what already exists. A save that leaves scope alone (a rename, an Attribute Flow edit) flags nothing
+    // either; a changed Attribute Flow reaches existing objects through the target's drift detection instead.
+    private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
+            return;
+
+        // A stored state that cannot be read (the rule vanished between the read and the save) is treated as a
+        // change: a needless review costs time, a missed one leaves objects wrongly provisioned.
+        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule))
+            return;
+
+        var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
+        var newlyFlagged = await Application.SyncRepo.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
+        Log.Information("FlagExportScopeReviewAsync: export Synchronisation Rule {RuleId} ({RuleName}) changed which objects it covers; " +
+            "flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review at the next synchronisation (#1925)",
+            syncRule.Id, LogSanitiser.Sanitise(syncRule.Name), newlyFlagged, metaverseObjectTypeId);
+    }
+
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
@@ -8809,6 +8846,9 @@ public partial class ConnectedSystemServer
         if (!syncRule.IsValid())
             return false;
 
+        // Read before anything below flushes; see ReadExportScopeStateBeforeSaveAsync.
+        var (isNewRule, storedScopeState) = await ReadExportScopeStateBeforeSaveAsync(syncRule);
+
         // reject removal choices that cannot describe a real staged removal (#1537); see the validator for why
         // each is refused rather than ignored.
         ValidateMappingRemovalChoices(syncRule, mappingRemovalChoices);
@@ -8974,6 +9014,7 @@ public partial class ConnectedSystemServer
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
+        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -9037,6 +9078,9 @@ public partial class ConnectedSystemServer
 
         if (!syncRule.IsValid())
             return false;
+
+        // Read before anything below flushes; see ReadExportScopeStateBeforeSaveAsync.
+        var (isNewRule, storedScopeState) = await ReadExportScopeStateBeforeSaveAsync(syncRule);
 
         // reject removal choices that cannot describe a real staged removal (#1537); see the validator for why
         // each is refused rather than ignored.
@@ -9170,6 +9214,7 @@ public partial class ConnectedSystemServer
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
+        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }

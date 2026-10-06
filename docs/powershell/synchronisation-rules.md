@@ -1093,6 +1093,7 @@ With `-PassThru`, returns the created scoping criterion object. Without it, retu
 - Export rules only support metaverse attributes. Import rules only support Connected System attributes.
 - Exactly one comparison value parameter should be provided; the correct parameter depends on the attribute's data type.
 - For a Date/Time attribute, set `-ValueMode Relative` with `-RelativeCount`/`-RelativeUnit`/`-RelativeDirection` to compare against a date resolved relative to now (re-evaluated each run); this is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters).
+- On a multi-valued attribute the criterion tests every value: a positive operator is met when any value matches, a `Not...` operator when none does. See [multi-valued attributes](../configuration/synchronisation-rules.md#multi-valued-attributes-in-scope).
 
 ### Examples
 

@@ -503,9 +503,30 @@ public interface ISyncRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
-    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// scope (issues #892 and #1925), unless an export Synchronisation Rule has been created or updated since the run
+    /// read its rules: the run evaluated these objects against rules that no longer stand, and the change that
+    /// replaced them flagged the objects for review against the new configuration. Clearing then would lose that
+    /// review, so nothing is cleared and the next run evaluates them again. The check and the clear are one
+    /// statement, so a rule saved at any moment either is seen by it or flags the objects again after it.
     /// </summary>
-    Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+    /// <param name="ids">The objects the run has re-evaluated.</param>
+    /// <param name="exportRulesReadWatermark">The newest Created or Last Updated stamp among the export
+    /// Synchronisation Rules as the run read them (<c>ExportEvaluationCache.ExportRulesReadWatermark</c>); null when
+    /// the run read none, in which case any export rule existing now counts as a change.</param>
+    /// <returns>False when the flags were kept because the export rules changed; true otherwise (including when
+    /// <paramref name="ids"/> is empty).</returns>
+    Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c>, so the next synchronisation of any
+    /// Connected System re-evaluates each one's export scope (issue #1925). Set when an export Synchronisation Rule's
+    /// configuration changes in a way that can move objects into or out of its scope (created, re-enabled,
+    /// provisioning switched on, Scoping Criteria changed): export evaluation is otherwise driven only by an object's
+    /// own values changing, so a stable population would never meet the new configuration.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the changed rule covers.</param>
+    /// <returns>How many objects were not already flagged.</returns>
+    Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId);
 
     /// <summary>
     /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
@@ -1288,11 +1309,11 @@ public interface ISyncRepository
     /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
-    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
-    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
-    /// change tracker).
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
+    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
+    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
 
     #endregion
 

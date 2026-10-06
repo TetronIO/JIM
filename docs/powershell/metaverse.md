@@ -829,6 +829,8 @@ The object type is returned as a nested `Type` object with `Id` and `Name` prope
 
 When retrieved by ID, `ConnectedSystemObjects` lists every Connected System Object joined to the Metaverse Object, carrying the same data the portal's Connections tab shows: `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. `IsSource` and `IsTarget` say whether an enabled Import or Export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` is derived from the object's status and any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is populated only for `UpdatePending`; it is `$null` for every other state, including a pending Create or Delete. The list form does not carry these rows; only the `-Id` form does.
 
+When retrieved by ID, `CreatedByType`, `CreatedById` and `CreatedByName` name who made the Metaverse Object's earliest recorded change, and `LastUpdatedByType`, `LastUpdatedById` and `LastUpdatedByName` who made its latest, as the portal's Properties tab shows them. The type is `User`, `ApiKey` or `System`, and the name is as it was at the time. All six are `$null` when no change history is recorded (change tracking off, or the history purged).
+
 When retrieved by ID, each attribute value also carries its provenance: `ContributedBySystemId`/`ContributedBySystemName` identify the Connected System, and `ContributedBySyncRuleId`/`ContributedBySyncRuleName` identify the exact Synchronisation Rule that won [attribute priority resolution](../concepts/attribute-priority.md) and contributed the value. A value row with `NullValue` set to `true` is an asserted null: a deliberate, authoritative "no value" assertion carrying provenance only; treat it as no value present, distinct from the attribute having no row at all.
 
 #### Examples
@@ -967,6 +969,84 @@ Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Att
 ```powershell title="Pipe a Metaverse Object into the cmdlet"
 Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
     Get-JIMMetaverseObjectProvenance
+```
+
+---
+
+### Get-JIMMetaverseObjectConnection
+
+Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
+
+For each Connected System Object joined to the Metaverse Object, it returns how the object was joined (the method, the Synchronisation Rule responsible, the date and the Activity) and the scoping of every relevant enabled Synchronisation Rule, evaluated now against current values. With `-IncludeNotConnected`, it also returns one entry per enabled export Synchronisation Rule whose Connected System holds no object joined to this one, with the reason, a one-line hint, what would change it, and a plain-text summary to paste into a ticket.
+
+#### Syntax
+
+```powershell
+Get-JIMMetaverseObjectConnection -Id <guid> [-ConnectedSystemName <string>] [-IncludeNotConnected]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name, so a Metaverse Object from `Get-JIMMetaverseObject` can be piped in. |
+| `ConnectedSystemName` | `string` | No | | Return only the entries for the Connected System with this name (an exact, case-insensitive match). Errors when nothing matches. |
+| `IncludeNotConnected` | `switch` | No | `$false` | Also explain the enabled export Synchronisation Rules whose Connected System holds no object joined to this Metaverse Object. |
+
+#### Output
+
+One `PSCustomObject` per entry. Joined connections and not-connected entries share the same properties, so they can be listed, filtered and sorted together:
+
+| Property | Description |
+|----------|-------------|
+| `MetaverseObjectId`, `MetaverseObjectName` | The Metaverse Object explained. |
+| `ConnectedSystem`, `ConnectedSystemId` | The Connected System's name and identifier. |
+| `Connected` | `$true` for a joined connection, `$false` for a not-connected entry. |
+| `Object`, `ConnectedSystemObjectId` | The joined Connected System Object's external id and identifier; empty when not connected. |
+| `ObjectType` | The Connected System Object Type. |
+| `Role` | `Source`, `Target`, `Source and Target` or `None`: whether enabled import or export Synchronisation Rules use the object. A not-connected entry is always `Target`. |
+| `State` | For a joined connection, its state (`InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`). For a not-connected entry, the reason: `NotInScope`, `ProvisioningDisabled`, `RuleMisconfigured` or `NotYetProvisioned`. |
+| `SyncRule` | The export Synchronisation Rule a not-connected entry is about; empty for a joined connection. |
+| `Join` | How a joined connection was joined: `JoinType`, `Method` (`Projection`, `Provisioning`, `InboundMatching` or `ExportMatching`), `DateJoined`, `SyncRuleId`, `SyncRuleName`, `Source` (`Recorded`, `Derived` from Activity history, or `NotRecorded`), `Description` (one sentence, for example *Projected by the Synchronisation Rule "HR Users Import"*), `ActivityId` and `RunProfileExecutionItemId`. Empty for a not-connected entry. |
+| `Hint` | A not-connected entry's one-line qualifier, for example *Fails on Department; Cost Centre or Job Title*. |
+| `BulletsTitle`, `Bullets` | What a not-connected entry needs, or what happens next, as plain-text lines. |
+| `Summary` | A not-connected entry as plain text to paste into a ticket, ending with the evaluation time in UTC. |
+| `Scoping` | One explanation per Synchronisation Rule: `SyncRuleId`, `SyncRuleName`, `Direction`, `Outcome` (`InScope`, `OutOfScope` or `Undetermined`), `HasCriteria`, `EvaluatedAt`, `Hint`, `Groups` (the criteria tree) and `Criteria`, a flat list of every criterion with `Path`, `Met`, `Outcome`, `AttributeName`, `AttributeType`, `ComparisonType`, `Expected`, `Actual` (the value the outcome turned on; empty when several values all went the same way), `ValueCount`, `Masked`, `Description` and `ActualDescription`. |
+| `Conflicts` | Enabled export Synchronisation Rules that cannot connect because this connection holds the Metaverse Object's one slot in the Connected System with an object of another type: `SyncRuleId`, `SyncRuleName`, `TargetObjectTypeName`, `ExistingObjectTypeName`, `Description` and `Scoping`. |
+| `EvaluatedAt` | When every scoping evaluation was made, in UTC. |
+
+A criterion's `Path` locates it in the tree: the top-level group's position, then each child's position within its group, one-based and dot-separated, criteria counted before child groups (`1.3.2` is the second child of the third child of the first top-level group). Values of credential attributes are withheld: `Masked` is `$true` and `Expected` and `Actual` are empty.
+
+#### Examples
+
+```powershell title="See where a Metaverse Object is connected, and why it is not connected elsewhere"
+Get-JIMMetaverseObjectConnection -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -IncludeNotConnected |
+    Format-Table ConnectedSystem, Connected, State, Hint
+```
+
+```powershell title="Copy the explanation for one Connected System into a ticket"
+(Get-JIMMetaverseObjectConnection -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -IncludeNotConnected -ConnectedSystemName "Finance App").Summary
+```
+
+```powershell title="List every scoping criterion the Metaverse Object currently fails"
+Get-JIMMetaverseObjectConnection -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -IncludeNotConnected |
+    ForEach-Object { $_.Scoping } |
+    ForEach-Object { $_.Criteria } |
+    Where-Object { -not $_.Met } |
+    Format-Table Path, Description, ActualDescription
+```
+
+```powershell title="See how each connection was joined"
+Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
+    Get-JIMMetaverseObjectConnection |
+    Format-Table ConnectedSystem, Object, @{ Name = 'Joined'; Expression = { $_.Join.Description } }
+```
+
+```powershell title="Report everyone of a type who is out of scope of an export rule, and why"
+Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
+    Get-JIMMetaverseObjectConnection -IncludeNotConnected -ConnectedSystemName "Finance App" -ErrorAction SilentlyContinue |
+    Where-Object { $_.State -eq 'NotInScope' } |
+    Format-Table MetaverseObjectName, SyncRule, Hint
 ```
 
 ---

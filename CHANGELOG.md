@@ -20,29 +20,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
 - ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
 - ✨ Before choosing a generated value, JIM now asks the LDAP directories it is exported to whether it is in use, catching accounts JIM doesn't import. The Attribute Flow's **Checked for availability in** panel shows how each system is checked and lets you exclude one. (#242)
+- ✨ A Metaverse Object's Connections tab now explains each connection: expand a row to see how it joined, the Synchronisation Rule responsible, and whether each relevant rule's scoping still includes it. JIM records the joining rule from now on. (#348)
+- ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
+- ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 
 ### Changed
 
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
+- 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
+- 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
+- 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
 
 ### Fixed
 
+- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation, not when each next changes. Changes saved before upgrading need saving again. (#1925)
+- 🐛 Objects moved into or out of scope by a relative date are now provisioned or deprovisioned by the next Delta Synchronisation even when it has nothing new to import, and are no longer missed when two Synchronisation Rules with relative dates cover them. (#1925)
+- 🐛 A synchronisation no longer fails with a duplicate key error when it deprovisions objects a relative date has moved out of an export rule's scope. (#1925)
+- 🐛 An export scope change that lands while a synchronisation is running (a saved rule change, or a relative date being crossed) now reaches every object it affects; objects that run updated could miss it. (#1925)
+- 🐛 A delete queued because an object left an export rule's scope now shows on that object's execution item and in the run's Pending Exports total, as a provisioning does. (#1925)
 - 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
 - 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
 - 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it. It used to linger unseen and stop the Connected System it compared ever being deleted; systems already affected can be deleted again. (#134)
 - 🐛 REST: a Connected System's deletion preview now fills in `mvosWithOtherConnectorsCount` and `mvosWithGracePeriodCount`, which always read 0. (#134)
+- 🐛 Predefined Search criteria groups nested more than two deep are now applied; the deeper groups were ignored, so such searches returned objects their criteria excluded. The portal now shows and edits groups at any depth. (#1929)
+- 🐛 PowerShell: `-MetaverseAttributeName` on the Predefined Search and scoping criterion cmdlets, and `Get-JIMHistoryCount -ConnectedSystemName`, now find what they name; they always reported it not found. `Get-JIMConnectedSystem` now lists every system, not just 25. (#1967)
 - 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
 - 🐛 Trusting an intermediate certificate authority or a server's own certificate now works for SQL Server, as for LDAPS and SCIM; it used to report "Certificate trusted." and still be refused, and the card kept saying untrusted. (#1914)
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)
 - 🐛 Synchronisation Rule scoping criteria nested more than two groups deep are now evaluated; previously the deeper groups were ignored, so such rules could include objects their criteria excluded, and the editor dropped those groups from view after saving. (#348)
 - 🐛 Following a reference from one Metaverse Object to another now shows the new object's Changes, Connections, Password and Properties details; previously the first object's could stay on screen, and Load more could mix two objects' change history. (#348)
 - 🐛 When JIM is not ready after installing or upgrading, `setup.sh` now names each container that is not running properly, the bundled database included, with the end of its log, instead of pointing at the web and worker logs only. (#1944)
+- 🐛 `setup.sh` now stops before starting anything when given a `JIM_DB_SHARED_BUFFERS` the host cannot hold, which the bundled PostgreSQL could not start with, and warns above half the host's memory; its summary marks the sizes it was given. (#1948)
 - 🐛 The bundled PostgreSQL now starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum and 8 GB recommendation included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
 - 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; in every earlier release it failed on every line, because each file was listed under the build machine's folders. The bundle also no longer carries a development notes file. (#1942)
 

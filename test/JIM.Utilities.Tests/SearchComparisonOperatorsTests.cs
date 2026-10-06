@@ -112,4 +112,36 @@ public class SearchComparisonOperatorsTests
     {
         Assert.That(SearchComparisonOperators.IsValid(SearchComparisonType.Contains, AttributeDataType.Text), Is.True);
     }
+
+    [TestCase(SearchComparisonType.NotEquals)]
+    [TestCase(SearchComparisonType.NotStartsWith)]
+    [TestCase(SearchComparisonType.NotEndsWith)]
+    [TestCase(SearchComparisonType.NotContains)]
+    public void IsNegated_NegatedOperator_IsTrue(SearchComparisonType op)
+    {
+        Assert.That(SearchComparisonOperators.IsNegated(op), Is.True);
+    }
+
+    [TestCase(SearchComparisonType.NotSet)]
+    [TestCase(SearchComparisonType.Equals)]
+    [TestCase(SearchComparisonType.StartsWith)]
+    [TestCase(SearchComparisonType.EndsWith)]
+    [TestCase(SearchComparisonType.Contains)]
+    [TestCase(SearchComparisonType.LessThan)]
+    [TestCase(SearchComparisonType.LessThanOrEquals)]
+    [TestCase(SearchComparisonType.GreaterThan)]
+    [TestCase(SearchComparisonType.GreaterThanOrEquals)]
+    public void IsNegated_PositiveOperator_IsFalse(SearchComparisonType op)
+    {
+        Assert.That(SearchComparisonOperators.IsNegated(op), Is.False);
+    }
+
+    [Test]
+    public void IsNegated_EveryOperator_IsClassifiedByTheTestsAbove()
+    {
+        // Guards the two test lists above: a new operator must be classified deliberately, because the scoping
+        // evaluator decides "any value" versus "no value" semantics for multi-valued attributes from it (#1923).
+        Assert.That(Enum.GetValues<SearchComparisonType>(), Has.Length.EqualTo(13),
+            "A SearchComparisonType was added or removed; classify it in the IsNegated tests and in SearchComparisonOperators.IsNegated.");
+    }
 }

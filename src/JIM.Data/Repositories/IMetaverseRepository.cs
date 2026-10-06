@@ -97,9 +97,16 @@ public interface IMetaverseRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
-    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// scope, unless an export Synchronisation Rule changed since the run read its rules; see
+    /// <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
     /// </summary>
-    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c> (issue #1925); see
+    /// <c>ISyncRepository.FlagMetaverseObjectsOfTypeForScopeReviewAsync</c>.
+    /// </summary>
+    public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId);
 
     /// <summary>
     /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
@@ -121,9 +128,10 @@ public interface IMetaverseRepository
     /// <summary>
     /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
     /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
-    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
-    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
-    /// is empty.
+    /// <c>ScopeReviewPending</c> for those in <paramref name="flaggedIds"/>. A flag already set is left set: another
+    /// rule's sweep or a configuration change (#1925) may have raised it, and one rule finding the object in
+    /// agreement with its own scope says nothing about theirs. The synchronisation that re-evaluates the object
+    /// clears it. No-op when <paramref name="evaluatedIds"/> is empty.
     /// </summary>
     public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
 
@@ -139,6 +147,13 @@ public interface IMetaverseRepository
     public Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy);
 
     /// <summary>
+    /// Gets who made a Metaverse Object's earliest and latest changes: its Created By and Last Updated By, as the
+    /// portal's Properties tab shows them. Both null when the object has no change history (change tracking off, or
+    /// the history purged).
+    /// </summary>
+    public Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Returns a page of change-history records for a Metaverse Object, projected into a flat DTO
     /// so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
     /// </summary>
@@ -149,6 +164,13 @@ public interface IMetaverseRepository
     public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
+
+    /// <summary>
+    /// Gets every value a Metaverse Object holds for the given attributes (#348), uncapped, so scoping can be explained
+    /// against exactly the values synchronisation compares: a capped multi-valued load could change which value comes
+    /// first. Values carry their scalar fields, attribute id and asserted-null flag only.
+    /// </summary>
+    public Task<List<MetaverseObjectAttributeValue>> GetMetaverseObjectAttributeValuesAsync(Guid metaverseObjectId, IReadOnlyCollection<int> attributeIds);
 
     #region value provenance (#399)
 

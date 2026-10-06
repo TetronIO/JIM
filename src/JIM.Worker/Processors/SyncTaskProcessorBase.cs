@@ -268,6 +268,17 @@ public abstract class SyncTaskProcessorBase
     // Cleared per page alongside other batch collections.
     protected readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _mvoIdToRpei = [];
 
+    // Metaverse Objects whose export evaluation changed something this page: provisioned, staged a Pending
+    // Export, deprovisioned (a Delete staged, or a join broken) or cancelled a never-exported provisioning.
+    // Populated in EvaluateOutboundExportsAsync whatever the outcome tracking level, and cleared with
+    // _mvoIdToRpei. The export scope review reads it to keep an item only for an object it actually changed.
+    private readonly HashSet<Guid> _mvoIdsChangedByExportEvaluation = [];
+
+    // Queueing provenance (#1223) for Delete Pending Exports a scope exit staged or reused. Those are persisted
+    // as they are staged, ahead of the page flush, so their queueing item is written by a fix-up in
+    // FlushPendingExportOperationsAsync rather than with the row.
+    private readonly List<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> _scopeExitQueueingStamps = [];
+
     // Connected System id → display name map for decision-time deletion policy snapshots (#119).
     // Lazily fetched at most ONCE per run profile execution (a tiny table); source system names must
     // never cost per-object queries on the hot path. Null until first needed.
@@ -861,6 +872,7 @@ public abstract class SyncTaskProcessorBase
 
         // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
         _mvoIdToRpei.Clear();
+        _mvoIdsChangedByExportEvaluation.Clear();
         _deferredMvoRpeiMappings.Clear();
     }
 
@@ -2998,6 +3010,10 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
+        // Where a scope exit's Delete nests in Detailed mode, read before this evaluation adds any outcome of its own:
+        // a Provisioned root added below for one system must not become the parent of a Delete staged for another.
+        var exportOutcomeParent = _mvoIdToRpei.TryGetValue(mvo.Id, out var objectItem) ? FindExportOutcomeParent(objectItem) : null;
+
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection (against target CSO attributes in cache) to skip Pending Exports when CSO already has current values
         // Pending Exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
@@ -3100,6 +3116,9 @@ public abstract class SyncTaskProcessorBase
             // staged, so the page flush can cancel stale Delete Pending Exports (#1018).
             _inScopeEvaluatedCsoIds.UnionWith(result.InScopeJoinedCsoIds);
 
+            if (result.ProvisioningCsosToCreate.Count > 0 || result.PendingExports.Count > 0 || result.MergedExistingPendingExports.Count > 0)
+                _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
+
             // Attach export evaluation outcomes to the originating RPEI (Detailed mode only).
             // Causal tree structure:
             //   Root (Projected/Joined/AttributeFlow)
@@ -3112,15 +3131,9 @@ public abstract class SyncTaskProcessorBase
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && _mvoIdToRpei.TryGetValue(mvo.Id, out var originatingRpei))
             {
-                // Prefer the AttributeFlow child as parent (MVO is fully formed after Attribute Flow),
-                // fall back to root outcome, fall back to creating outcomes at root level.
-                // These outcomes were built in memory earlier in this page, so their parent link is the
-                // navigation property and not yet the FK; ask IsChildOutcome, which reads whichever is set.
-                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
-                var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
-                    o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    && o.IsChildOutcome);
-                var exportParent = attributeFlowChild ?? rootOutcome;
+                // Nest under the AttributeFlow child, else the root, else create outcomes at root level
+                // (see FindExportOutcomeParent).
+                var exportParent = FindExportOutcomeParent(originatingRpei);
 
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
                 var provisionedByCs = new Dictionary<int, ActivityRunProfileExecutionItemSyncOutcome>();
@@ -3296,6 +3309,15 @@ public abstract class SyncTaskProcessorBase
                 _deprovisionedCsoIdsThisPage.Add(deprovisionPendingExport.ConnectedSystemObjectId!.Value);
             }
 
+            if (deprovisionPendingExports.Count > 0 || outOfScopeWorkingSet.Disconnections.Count > 0 ||
+                outOfScopeWorkingSet.CancelledProvisionings.Count > 0)
+            {
+                _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
+            }
+
+            if (deprovisionPendingExports.Count > 0 && objectItem != null)
+                await ReportScopeExitDeletesAsync(objectItem, exportOutcomeParent, deprovisionPendingExports);
+
             // Provisioning cancellations: a never-exported Pending Provisioning CSO this
             // object fell out of scope for. There is no deletion outcome to nest under here (the Metaverse
             // Object itself is not being deleted), so each is a root outcome on the object's own item,
@@ -3325,6 +3347,79 @@ public abstract class SyncTaskProcessorBase
                         detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, cancelledCsoTypeName));
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The outcome an object's export consequences nest under in Detailed mode: its AttributeFlow child (the
+    /// Metaverse Object is fully formed after Attribute Flow), else its root outcome, else none, in which case they
+    /// are recorded at root level. The outcomes were built in memory earlier in the page, so their parent link is the
+    /// navigation property and not yet the foreign key; IsChildOutcome reads whichever is set.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemSyncOutcome? FindExportOutcomeParent(ActivityRunProfileExecutionItem item)
+    {
+        var rootOutcome = item.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
+        var attributeFlowChild = item.SyncOutcomes.FirstOrDefault(o =>
+            o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow && o.IsChildOutcome);
+        return attributeFlowChild ?? rootOutcome;
+    }
+
+    /// <summary>
+    /// Reports the Delete Pending Exports a scope exit staged (or reused) on the execution item of the object that
+    /// left scope, as Deprovision Queued outcomes beside the Provisioned and Pending Export outcomes its evaluation
+    /// records, and names that item as what queued each one (#1223). Deprovisioning is the most consequential thing
+    /// a run stages, so it must never be visible only in the service log; the Sync Preview and the recall executors
+    /// already report a scope exit this way, and the deletion cascade reports its Deletes likewise.
+    /// </summary>
+    /// <param name="item">The execution item of the object that left scope.</param>
+    /// <param name="detailedParent">The outcome to nest under in Detailed mode, read before the object's evaluation
+    /// added outcomes of its own; null records the Deletes at root level.</param>
+    /// <param name="deletes">The Delete Pending Exports the scope exit staged or reused, already persisted.</param>
+    private async Task ReportScopeExitDeletesAsync(
+        ActivityRunProfileExecutionItem item,
+        ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
+        List<PendingExport> deletes)
+    {
+        // Why an export exists is not a level of detail an administrator can turn off (#1223), so the queueing item
+        // is recorded whatever the tracking level. The rows are already persisted, so the page flush writes the stamp.
+        if (item.Id == Guid.Empty)
+            item.Id = Guid.NewGuid();
+        foreach (var delete in deletes)
+        {
+            delete.QueuedByRunProfileExecutionItemId = item.Id;
+            _scopeExitQueueingStamps.Add((delete.Id, item.Id));
+        }
+
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        // The first export rule per target system names it and its object type, as the provisioning outcomes do.
+        var exportRuleBySystem = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .GroupBy(rule => rule.ConnectedSystemId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var delete in deletes)
+        {
+            exportRuleBySystem.TryGetValue(delete.ConnectedSystemId, out var exportRule);
+            var targetSystemName = exportRule?.ConnectedSystem?.Name;
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+
+            var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
+                ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, SyncOutcomeTypes.ForPendingExport(delete),
+                    targetEntityId: delete.Id,
+                    targetEntityDescription: targetSystemName,
+                    detailCount: delete.AttributeValueChanges.Count,
+                    detailMessage: detailMessage,
+                    stagedChangeType: delete.ChangeType)
+                : SyncOutcomeBuilder.AddRootOutcome(item, SyncOutcomeTypes.ForPendingExport(delete),
+                    targetEntityId: delete.Id,
+                    targetEntityDescription: targetSystemName,
+                    detailCount: delete.AttributeValueChanges.Count,
+                    detailMessage: detailMessage,
+                    stagedChangeType: delete.ChangeType);
+
+            await SnapshotPendingExportChangesAsync(outcome, delete);
         }
     }
 
@@ -4320,7 +4415,8 @@ public abstract class SyncTaskProcessorBase
     {
         if (_provisioningCsosToCreate.Count == 0 && _pendingExportsToCreate.Count == 0 &&
             _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0 &&
-            _inScopeEvaluatedCsoIds.Count == 0 && _deprovisionedCsoIdsThisPage.Count == 0)
+            _inScopeEvaluatedCsoIds.Count == 0 && _deprovisionedCsoIdsThisPage.Count == 0 &&
+            _scopeExitQueueingStamps.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package H) integrity guard: every marked change
@@ -4435,22 +4531,34 @@ public abstract class SyncTaskProcessorBase
             _pendingExportsToUpdate.Clear();
         }
 
+        // Name the item that queued each Delete a scope exit staged (#1223); see ReportScopeExitDeletesAsync.
+        if (_scopeExitQueueingStamps.Count > 0)
+        {
+            await _syncRepo.SetPendingExportQueueingItemsAsync(_scopeExitQueueingStamps.ToList());
+            _scopeExitQueueingStamps.Clear();
+        }
+
         span.SetSuccess();
     }
 
     /// <summary>
-    /// Outbound Temporal Scope Reconciler apply step (issue #892). Re-evaluates export scope for Metaverse
-    /// Objects the reconciler flagged (<c>ScopeReviewPending</c>): their export-rule scope drifted with the clock
-    /// (a Metaverse Attribute relative-date criterion crossed) while their data stayed static, so the
-    /// change-driven export path never revisits them. Runs once after the CSO page loop, draining flagged
-    /// Metaverse Objects in batches through the same export evaluation the per-page flow uses: provision when
-    /// newly in scope, deprovision when out. Only meaningful in a sync run (the export evaluation cache is
-    /// present); a no-op otherwise.
+    /// Export scope review (issues #892 and #1925). Re-evaluates export scope for Metaverse Objects flagged
+    /// <c>ScopeReviewPending</c>, whose data stayed static while their export scope may have moved: the Temporal
+    /// Scope Reconciler flags those a relative-date criterion's boundary crossed, and a configuration change to an
+    /// export Synchronisation Rule (created, re-enabled, provisioning switched on, Scoping Criteria changed) flags
+    /// every object of the rule's type. The change-driven export path never revisits such objects. Runs once after
+    /// the CSO page loop, draining flagged Metaverse Objects in batches through the same export evaluation the
+    /// per-page flow uses: provision when newly in scope, deprovision when out. Only meaningful in a sync run (the
+    /// export evaluation cache is present); a no-op otherwise.
     ///
     /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
     /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
-    /// and deprovision is scope-driven. Whichever system's sync runs first handles its own export rules; a
-    /// still-mismatched object is re-flagged by the next reconciler sweep (eventually consistent).
+    /// and deprovision is scope-driven. The export evaluation cache holds every export rule, whatever its target, so
+    /// whichever system's synchronisation runs next reviews the objects for every target.
+    ///
+    /// The run evaluates against the rules it read at its start. When an export rule has been created or updated
+    /// since, the clear keeps the batch's flags and the drain stops: the change flagged the objects for review
+    /// against the configuration as it now stands, which the next run applies.
     /// </summary>
     protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
     {
@@ -4460,6 +4568,7 @@ public abstract class SyncTaskProcessorBase
 
         const int batchSize = 500;
         var totalProcessed = 0;
+        var totalChanged = 0;
 
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
@@ -4479,15 +4588,21 @@ public abstract class SyncTaskProcessorBase
             }
 
             var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(flaggedIds);
+            var reviewItems = new List<(Guid MvoId, ActivityRunProfileExecutionItem Item)>(mvos.Count);
             foreach (var mvo in mvos)
             {
-                // Give each flagged MVO an RPEI so the reconciler-driven exports are recorded on the sync
+                // Give each flagged MVO an RPEI so the exports the review stages are recorded on the sync
                 // Activity. The RPEI is linked to the MVO through _mvoIdToRpei (the same mechanism the per-page
                 // flow uses); provisioning-CSO change records and export outcomes resolve the originating RPEI
                 // via that map. The MVO is loaded no-tracking; provisioning CSOs reference it by FK scalar only.
+                // It is named here because, unlike a page item, it has no Connected System Object to take a
+                // name from, and the Activity would otherwise list it with none.
                 var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.DisplayNameSnapshot = mvo.NameOrId;
+                rpei.ObjectTypeSnapshot = mvo.Type?.Name;
                 _activity.RunProfileExecutionItems.Add(rpei);
                 _mvoIdToRpei[mvo.Id] = rpei;
+                reviewItems.Add((mvo.Id, rpei));
 
                 _pendingExportEvaluations.Add((mvo, [], null));
             }
@@ -4496,19 +4611,55 @@ public abstract class SyncTaskProcessorBase
             // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
             // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
             // clears _mvoIdToRpei and the RPEI collection).
-            await EvaluatePendingExportsAsync();
-            await FlushPendingExportOperationsAsync();
-            await ResolvePendingExportReferenceSnapshotsAsync();
-            await FlushRpeisAsync();
+            //
+            // With automatic change detection off, as the page flush runs it, and for the same reason: deprovisioning
+            // saves through EF one object at a time (a Delete Pending Export, a disconnected CSO), and with detection
+            // on that save would also insert every RPEI queued above on the tracked Activity, so FlushRpeisAsync's
+            // bulk insert then failed the run on a duplicate key.
+            _syncRepo.SetAutoDetectChangesEnabled(false);
+            try
+            {
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+                await ResolvePendingExportReferenceSnapshotsAsync();
+
+                // Keep an item only for an object the review changed (#1925). A configuration change flags every
+                // object of the rule's type, and an item for each one the review found already right would bury
+                // the few it provisioned or deprovisioned among the type's whole population. Decided by what
+                // export evaluation did, not by the outcomes recorded, so it holds at every outcome tracking
+                // level; an evaluation error is recorded on an item of its own and is unaffected.
+                var unchangedItems = reviewItems
+                    .Where(review => !_mvoIdsChangedByExportEvaluation.Contains(review.MvoId))
+                    .Select(review => review.Item)
+                    .ToHashSet();
+                _activity.RunProfileExecutionItems.RemoveAll(unchangedItems.Contains);
+                totalChanged += reviewItems.Count - unchangedItems.Count;
+
+                await FlushRpeisAsync();
+            }
+            finally
+            {
+                _syncRepo.SetAutoDetectChangesEnabled(true);
+            }
 
             // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
             // the batch's writes have persisted; if a write throws, the flag stays set and the object is
-            // reconsidered next sweep (fail-safe).
-            await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(flaggedIds);
+            // reconsidered next sweep (fail-safe). Kept, too, when an export rule changed since this run read its
+            // rules (#1925); see the summary.
+            var cleared = await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(
+                flaggedIds, _exportEvaluationCache.ExportRulesReadWatermark);
 
             ClearPageTrackingState();
             totalProcessed += mvos.Count;
             _activity.ObjectsProcessed = totalProcessed;
+
+            if (!cleared)
+            {
+                Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: an export Synchronisation Rule was created or " +
+                    "updated after this run read its rules, so the remaining flagged Metaverse Objects are left for the next " +
+                    "synchronisation to review against the rules as they now stand (#1925)");
+                break;
+            }
 
             // Fewer than a full batch means the flagged set is drained.
             if (flaggedIds.Count < batchSize)
@@ -4516,7 +4667,8 @@ public abstract class SyncTaskProcessorBase
         }
 
         if (totalProcessed > 0)
-            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} reconciler-flagged Metaverse Object(s) (#892)", totalProcessed);
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} flagged Metaverse Object(s), " +
+                "{Changed} of which were provisioned, deprovisioned or had an export staged (#892, #1925)", totalProcessed, totalChanged);
     }
 
     /// <summary>
@@ -5573,7 +5725,7 @@ public abstract class SyncTaskProcessorBase
             if (mvo == null)
                 continue;
 
-            return await EstablishJoinAsync(connectedSystemObject, mvo);
+            return await EstablishJoinAsync(connectedSystemObject, mvo, importSyncRule);
         }
 
         // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
@@ -5584,8 +5736,9 @@ public abstract class SyncTaskProcessorBase
             if (matchingRules.Count > 0)
             {
                 var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+                // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
                 if (mvo != null)
-                    return await EstablishJoinAsync(connectedSystemObject, mvo);
+                    return await EstablishJoinAsync(connectedSystemObject, mvo, joiningSyncRule: null);
             }
         }
 
@@ -5647,7 +5800,8 @@ public abstract class SyncTaskProcessorBase
     /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
     /// to whichever site builds the root.
     /// </returns>
-    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
+        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
@@ -5695,8 +5849,7 @@ public abstract class SyncTaskProcessorBase
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
-        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-        connectedSystemObject.DateJoined = DateTime.UtcNow;
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow);
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
@@ -5760,8 +5913,7 @@ public abstract class SyncTaskProcessorBase
         mvo.Type = decision.MetaverseObjectType!;
         connectedSystemObject.MetaverseObject = mvo;
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
-        connectedSystemObject.DateJoined = DateTime.UtcNow;
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.Projection, decision.ProjectionSyncRule, DateTime.UtcNow);
 
         return true;
     }
@@ -6345,8 +6497,7 @@ public abstract class SyncTaskProcessorBase
                 mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
                 connectedSystemObject.MetaverseObject = null;
                 connectedSystemObject.MetaverseObjectId = null;
-                connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                connectedSystemObject.DateJoined = null;
+                connectedSystemObject.ClearJoinRecord();
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
                 // Apply pending attribute changes and queue the MVO onto the page-flush batch update

@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-06, JIM v0.16.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -50,7 +50,7 @@ flowchart TD
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> DeferredRecall[FlushDeferredRecallRpeisAsync:<br/>one RPEI per referencing CSO whose<br/>reference-recall Pending Export was staged]
-    DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for MVOs the<br/>Temporal Scope Reconciler flagged #892]
+    DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for flagged MVOs:<br/>the Temporal Scope Reconciler's #892 and an<br/>export rule configuration change's #1925<br/>Batches of 500, change detection off as in the<br/>page flush; the clear keeps the flags and<br/>stops if an export rule changed since this run<br/>read its rules, for the next run to review<br/>Keeps an execution item, named after the MVO,<br/>only for an object export evaluation changed]
     ScopeReview --> Watermark[Record ConfigurationLastFullyAppliedAt<br/>Full Sync only<br/>Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
     Watermark --> Sweep{Full Sync, and armed by<br/>a Connector Space clear?}
     Sweep -->|No| End([Sync Complete])
@@ -78,7 +78,7 @@ flowchart TD
     RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>ReElectSurvivingContributorsAsync<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion is pending,<br/>or preserved if no import source remains #1570]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
-    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined<br/>Clear the joining rule]
     BreakJoin --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
     EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
@@ -115,10 +115,10 @@ flowchart TD
     AttemptJoin --> JoinResult{Match<br/>found?}
 
     JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Synchronisation Rule has<br/>ProjectToMetaverse = true?}
-    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Synchronisation Rule<br/>Link CSO to new MVO]
+    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Synchronisation Rule<br/>Link CSO to new MVO<br/>Record the projecting rule]
     AttemptProject -->|No| Done
 
-    JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined<br/>Cancels a scheduled MVO deletion when<br/>the rejoin falsifies its trigger:<br/>MvoDeletionCancelled outcome #1627]
+    JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined<br/>Record the matching import rule<br/>Cancels a scheduled MVO deletion when<br/>the rejoin falsifies its trigger:<br/>MvoDeletionCancelled outcome #1627]
     JoinResult -->|Multiple matches| AmbiguousError[AmbiguousMatch error<br/>RPEI with error]
     JoinResult -->|Match already joined| ExistingJoinError[CouldNotJoinDueToExistingJoin<br/>error RPEI]
 

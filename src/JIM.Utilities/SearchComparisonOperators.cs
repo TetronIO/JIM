@@ -13,8 +13,9 @@ namespace JIM.Utilities;
 /// Predefined Search and Synchronisation Rule scoping editors (operator dropdowns), the Synchronisation Rule write path
 /// (<c>CreateOrUpdateSyncRuleAsync</c>), and the scoping evaluator.
 ///
-/// The returned lists are in canonical display order; presentation concerns (friendly labels such as
-/// "on or before") stay in the UI layer, which maps each operator to its label.
+/// The returned lists are in canonical display order. <see cref="LabelFor"/> gives each operator its friendly,
+/// type-appropriate label (for example "on or before" for dates), shared by the criteria editors and by scoping
+/// explanations (#348) so the two never word a comparison differently.
 /// </summary>
 public static class SearchComparisonOperators
 {
@@ -84,4 +85,64 @@ public static class SearchComparisonOperators
     /// </summary>
     public static bool IsValid(SearchComparisonType op, AttributeDataType type) =>
         op != SearchComparisonType.NotSet && ValidOperatorsFor(type).Contains(op);
+
+    /// <summary>
+    /// The friendly label for an operator in the context of an attribute type. DateTime uses date-oriented
+    /// wording; numeric types spell out the magnitude comparison; everything else uses plain wording.
+    /// Falls back to the split enum name for any operator not explicitly mapped.
+    /// </summary>
+    public static string LabelFor(SearchComparisonType op, AttributeDataType type)
+    {
+        if (type == AttributeDataType.DateTime)
+        {
+            return op switch
+            {
+                SearchComparisonType.LessThan => "before",
+                SearchComparisonType.LessThanOrEquals => "on or before",
+                SearchComparisonType.GreaterThan => "after",
+                SearchComparisonType.GreaterThanOrEquals => "on or after",
+                SearchComparisonType.Equals => "equals",
+                SearchComparisonType.NotEquals => "does not equal",
+                _ => op.ToString().SplitOnCapitalLetters()
+            };
+        }
+
+        if (type is AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Decimal)
+        {
+            return op switch
+            {
+                SearchComparisonType.Equals => "equals",
+                SearchComparisonType.NotEquals => "does not equal",
+                SearchComparisonType.LessThan => "less than",
+                SearchComparisonType.LessThanOrEquals => "less than or equal to",
+                SearchComparisonType.GreaterThan => "greater than",
+                SearchComparisonType.GreaterThanOrEquals => "greater than or equal to",
+                _ => op.ToString().SplitOnCapitalLetters()
+            };
+        }
+
+        return op switch
+        {
+            SearchComparisonType.Equals => "equals",
+            SearchComparisonType.NotEquals => "does not equal",
+            SearchComparisonType.StartsWith => "starts with",
+            SearchComparisonType.NotStartsWith => "does not start with",
+            SearchComparisonType.EndsWith => "ends with",
+            SearchComparisonType.NotEndsWith => "does not end with",
+            SearchComparisonType.Contains => "contains",
+            SearchComparisonType.NotContains => "does not contain",
+            _ => op.ToString().SplitOnCapitalLetters()
+        };
+    }
+
+    /// <summary>
+    /// Returns true for the operators that negate another operator (does not equal, does not start with, does not end
+    /// with, does not contain). Over a multi-valued attribute a positive operator is met when any value matches, and a
+    /// negated operator when no value matches the operator it negates (#1923).
+    /// </summary>
+    public static bool IsNegated(SearchComparisonType op) => op is
+        SearchComparisonType.NotEquals or
+        SearchComparisonType.NotStartsWith or
+        SearchComparisonType.NotEndsWith or
+        SearchComparisonType.NotContains;
 }

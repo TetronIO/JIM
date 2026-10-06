@@ -3060,6 +3060,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ImportStateHash")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("JoinMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("JoinSyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("JoinSyncRuleName")
+                        .HasColumnType("text");
+
                     b.Property<int>("JoinType")
                         .HasColumnType("integer");
 
@@ -3097,6 +3106,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
                         .HasFilter("\"DerivedInputChangePending\"");
+
+                    b.HasIndex("JoinSyncRuleId")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
+                        .HasFilter("\"JoinSyncRuleId\" IS NOT NULL");
 
                     b.HasIndex("MetaverseObjectId");
 
@@ -5553,6 +5566,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", null)
+                        .WithMany()
+                        .HasForeignKey("JoinSyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
                         .WithMany("ConnectedSystemObjects")

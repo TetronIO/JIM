@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-06, JIM v0.16.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -9,7 +9,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
 | CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied) | Only CSOs created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
-| Early Exit | Never | Yes, if 0 modified CSOs |
+| Early Exit | Never | Yes, if 0 modified CSOs and no Metaverse Object awaits an export scope review (#892, #1925) |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
 | Configuration baseline (`ConfigurationLastFullyAppliedAt`) | Recorded at the end of the run | Never advanced |
@@ -25,7 +25,7 @@ flowchart TD
     Start([PerformDeltaSyncAsync]) --> Watermark[Determine watermark:<br/>LastSyncCompletedAt<br/>or DateTime.MinValue if first run]
 
     Watermark --> CountModified[Count CSOs modified<br/>since watermark]
-    CountModified --> HasChanges{Modified<br/>CSOs > 0?}
+    CountModified --> HasChanges{Modified CSOs > 0,<br/>or any MVO flagged<br/>ScopeReviewPending?}
 
     HasChanges -->|No| EarlyWatermark[Update watermark<br/>to UtcNow]
     EarlyWatermark --> EarlyDone([Return - no work needed])
@@ -48,7 +48,7 @@ flowchart TD
     PageFlush --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
-    CrossPage --> PostPasses[FlushDeferredRecallRpeisAsync<br/>ProcessScopeReviewPendingMetaverseObjectsAsync #892]
+    CrossPage --> PostPasses[FlushDeferredRecallRpeisAsync<br/>ProcessScopeReviewPendingMetaverseObjectsAsync #892 #1925<br/>See Full Sync for the export scope review]
     PostPasses --> UpdateWatermark[Update watermark<br/>LastSyncCompletedAt = UtcNow]
     UpdateWatermark --> Done([Sync Complete])
 ```

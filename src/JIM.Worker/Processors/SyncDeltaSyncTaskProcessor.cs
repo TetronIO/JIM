@@ -87,8 +87,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         Log.Information("PerformDeltaSyncAsync: Found {Count} CSOs modified since {Timestamp}",
             totalCsosToProcess, lastSyncTimestamp);
 
-        // If no CSOs have changed, we can complete quickly
-        if (totalCsosToProcess == 0)
+        // If no CSOs have changed, we can complete quickly, unless Metaverse Objects are waiting for an export scope
+        // review (#892, #1925). Those are flagged without any Connected System Object changing (a relative-date boundary
+        // crossed, an export rule's scope changed), and a Delta Synchronisation with nothing new to import is the run a
+        // schedule makes most often; completing here would leave the review waiting for a Full Synchronisation.
+        if (totalCsosToProcess == 0 && (await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(1)).Count == 0)
         {
             Log.Information("PerformDeltaSyncAsync: No CSOs modified since last sync. Completing immediately.");
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No changes to process");

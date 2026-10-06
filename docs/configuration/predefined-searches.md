@@ -81,6 +81,15 @@ A Date/Time criterion can compare against either a fixed date (**Absolute**) or 
 
 **Text comparisons are case-sensitive by default.** Switch a text criterion to case-insensitive when you want, for example, `Finance` and `finance` to match the same value.
 
+### Multi-valued attributes and missing values
+
+A criterion is tested against **every** value the object holds for the attribute:
+
+- **Positive operators** (*equals*, *starts with*, *contains*, *greater than* and the rest) match when **any** value matches.
+- **The *does not* operators** match when the object holds at least one value and **no** value matches. An object with no value for the attribute matches neither kind.
+
+So with `Groups` holding `All Staff` and `Finance Readers`, *contains* `Finance` matches the object and *does not equal* `Finance Readers` does not. These are the same rules [Synchronisation Rule scoping](synchronisation-rules.md#multi-valued-attributes-in-scope) uses, so a search with an export rule's criteria lists exactly the Metaverse Objects that rule covers.
+
 ### How criteria combine
 
 Each group has a **logic type**:
@@ -90,11 +99,11 @@ Each group has a **logic type**:
 
 **Top-level groups are combined with OR**: an object matches the search when it matches any one of the top-level groups. A search with no criteria returns every object of its Metaverse Object Type, and an empty group matches everything.
 
-**Nested groups** let you express mixed logic. For example, "in Finance or Sales, and active" is a top-level **All** group containing the `IsActive = true` criterion and a child **Any** group containing `Department = Finance` and `Department = Sales`, giving `(Department = Finance OR Department = Sales) AND IsActive = true`. (Nesting is supported one level deep, which covers these mixed-logic expressions.)
+**Nested groups** let you express mixed logic. For example, "in Finance or Sales, and active" is a top-level **All** group containing the `IsActive = true` criterion and a child **Any** group containing `Department = Finance` and `Department = Sales`, giving `(Department = Finance OR Department = Sales) AND IsActive = true`. A child group can hold child groups of its own, to any depth, for logic that needs more than one level of brackets.
 
 ### Editing criteria
 
-On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within a group you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
+On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within any group, at any depth, you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
 
 ## Change history
 

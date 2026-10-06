@@ -237,8 +237,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
         => _repo.Metaverse.GetMetaverseObjectDisplayNamesAsync(ids);
 
-    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
-        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(ids);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(ids, exportRulesReadWatermark);
+
+    public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
+        => _repo.Metaverse.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
 
     public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
@@ -561,8 +564,8 @@ public partial class SyncRepository : ISyncRepository
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
-        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined);
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
+        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined, joinSyncRuleId, joinSyncRuleName);
 
     #endregion
 

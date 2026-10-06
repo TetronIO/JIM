@@ -444,8 +444,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups)
         => throw new PreviewWriteAttemptedException(nameof(FixupMvoReferenceValueIdsAsync));
 
-    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
         => throw new PreviewWriteAttemptedException(nameof(ClearMetaverseObjectScopeReviewPendingAsync));
+
+    public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
+        => throw new PreviewWriteAttemptedException(nameof(FlagMetaverseObjectsOfTypeForScopeReviewAsync));
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(CreateMetaverseObjectsAsync));
@@ -575,7 +578,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
         => throw new PreviewWriteAttemptedException(nameof(TryClaimConnectedSystemObjectForJoinAsync));
 
     public Task CreatePendingExportAsync(PendingExport pendingExport)
