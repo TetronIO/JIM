@@ -151,7 +151,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// </summary>
     /// <remarks>
     /// Criteria filter the objects a search returns. A group combines its criteria and child groups with AND
-    /// (type All) or OR (type Any); top-level groups are combined with OR, and groups can nest one level deep.
+    /// (type All) or OR (type Any); top-level groups are combined with OR, and groups nest to any depth.
     /// </remarks>
     /// <param name="id">The unique identifier of the predefined search.</param>
     /// <returns>The criteria groups; 404 Not Found if no search has that ID.</returns>
