@@ -68,6 +68,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected in target system")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired")]
@@ -152,6 +153,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, Color.Primary)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, Color.Warning)]
@@ -221,7 +223,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = Icons.Material.Filled.ChangeCircle,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = Icons.Material.Filled.CompareArrows,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = Icons.Material.Filled.CloudUpload
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = Icons.Material.Filled.CloudUpload,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = Icons.Material.Filled.LinkOff
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

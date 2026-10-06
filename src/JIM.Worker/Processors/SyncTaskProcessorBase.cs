@@ -3150,8 +3150,8 @@ public abstract class SyncTaskProcessorBase
                 _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
             }
 
-            if (deprovisionPendingExports.Count > 0 && objectItem != null)
-                await ReportScopeExitDeletesAsync(objectItem, exportOutcomeParent, deprovisionPendingExports);
+            if ((deprovisionPendingExports.Count > 0 || outOfScopeWorkingSet.Disconnections.Count > 0) && objectItem != null)
+                await ReportScopeExitDeprovisioningAsync(objectItem, exportOutcomeParent, deprovisionPendingExports, outOfScopeWorkingSet.Disconnections);
 
             // Provisioning cancellations: a never-exported Pending Provisioning CSO this
             // object fell out of scope for. There is no deletion outcome to nest under here (the Metaverse
@@ -3200,20 +3200,24 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Reports the Delete Pending Exports a scope exit staged (or reused) on the execution item of the object that
-    /// left scope, as Deprovision Queued outcomes beside the Provisioned and Pending Export outcomes its evaluation
-    /// records, and names that item as what queued each one (#1223). Deprovisioning is the most consequential thing
-    /// a run stages, so it must never be visible only in the service log; the Sync Preview and the recall executors
-    /// already report a scope exit this way, and the deletion cascade reports its Deletes likewise.
+    /// Reports a scope exit's deprovisioning on the execution item of the object that left scope, beside the
+    /// Provisioned and Pending Export outcomes its evaluation records: each Delete Pending Export it staged (or
+    /// reused) as a Deprovision Queued outcome, naming the item as what queued it (#1223), and each object it
+    /// disconnected under a Disconnect Deprovisioning Action as a Target Disconnected outcome (#1966). Deprovisioning
+    /// is the most consequential thing a run does to a target system, so it must never be visible only in the service
+    /// log; the Sync Preview and the recall executors report a scope exit the same way, and the deletion cascade
+    /// reports its Deletes likewise.
     /// </summary>
     /// <param name="item">The execution item of the object that left scope.</param>
     /// <param name="detailedParent">The outcome to nest under in Detailed mode, read before the object's evaluation
-    /// added outcomes of its own; null records the Deletes at root level.</param>
+    /// added outcomes of its own; null records the outcomes at root level.</param>
     /// <param name="deletes">The Delete Pending Exports the scope exit staged or reused, already persisted.</param>
-    private async Task ReportScopeExitDeletesAsync(
+    /// <param name="disconnections">The objects the scope exit disconnected, the broken joins already persisted.</param>
+    private async Task ReportScopeExitDeprovisioningAsync(
         ActivityRunProfileExecutionItem item,
         ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
-        List<PendingExport> deletes)
+        List<PendingExport> deletes,
+        IReadOnlyList<OutboundDisconnection> disconnections)
     {
         // Why an export exists is not a level of detail an administrator can turn off (#1223), so the queueing item
         // is recorded whatever the tracking level. The rows are already persisted, so the page flush writes the stamp.
@@ -3255,6 +3259,28 @@ public abstract class SyncTaskProcessorBase
                     stagedChangeType: delete.ChangeType);
 
             await SnapshotPendingExportChangesAsync(outcome, delete);
+        }
+
+        foreach (var disconnection in disconnections)
+        {
+            exportRuleBySystem.TryGetValue(disconnection.ConnectedSystemId, out var exportRule);
+            var targetSystemName = exportRule?.ConnectedSystem?.Name;
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                    targetEntityId: disconnection.ConnectedSystemObjectId,
+                    targetEntityDescription: targetSystemName,
+                    detailMessage: detailMessage);
+            }
+            else
+            {
+                SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                    targetEntityId: disconnection.ConnectedSystemObjectId,
+                    targetEntityDescription: targetSystemName,
+                    detailMessage: detailMessage);
+            }
         }
     }
 
@@ -4366,7 +4392,7 @@ public abstract class SyncTaskProcessorBase
             _pendingExportsToUpdate.Clear();
         }
 
-        // Name the item that queued each Delete a scope exit staged (#1223); see ReportScopeExitDeletesAsync.
+        // Name the item that queued each Delete a scope exit staged (#1223); see ReportScopeExitDeprovisioningAsync.
         if (_scopeExitQueueingStamps.Count > 0)
         {
             await _syncRepo.SetPendingExportQueueingItemsAsync(_scopeExitQueueingStamps.ToList());

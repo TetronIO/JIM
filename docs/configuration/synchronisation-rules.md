@@ -288,6 +288,8 @@ This applies wherever the deletion happens: during a Synchronisation Run Profile
 
 A delete queued because an object left an export rule's scope, whether its own values changed or a [change to the rule](#when-a-change-to-an-export-rule-takes-effect) moved it, is reported the same way: as a **Deprovision queued** outcome on that object's execution item, naming the Connected System the account is being removed from, and counted in the Activity's Pending Exports total.
 
+Where the rule's Deprovisioning Action is **Disconnect**, the account stays in the Connected System and nothing is queued, so the run reports a **Disconnected in target system** outcome instead, on the same execution item, naming the Connected System and linking the account that JIM no longer manages. It is not counted as a Pending Export. [Sync Preview](sync-preview.md) predicts both outcomes in the same place.
+
 ### Previewing a destructive toggle change
 
 Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
