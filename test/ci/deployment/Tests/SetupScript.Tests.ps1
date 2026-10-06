@@ -857,6 +857,93 @@ docker() {
     }
 }
 
+Describe 'setup.sh launch_jim, when JIM is not to start now' -Skip:$script:NoBash {
+    BeforeAll {
+        # "Start JIM now?" answered no, on the given runtime, with JIM running or not. The fakes run nothing: the
+        # installer only prints the commands that start JIM later.
+        function Get-DeclinedArrangement {
+            param([ValidateSet('docker', 'podman')][string]$Runtime, [switch]$Systemd, [switch]$Running)
+            $status = if ($Running) { 0 } else { 1 }
+            @"
+RUNTIME=$Runtime
+PODMAN_SYSTEMD=$(if ($Systemd) { 'true' } else { 'false' })
+PODMAN_ACCOUNT=
+USE_BUNDLED_DB=true
+JIM_WEB_PORT=443
+prompt_yn() { return 1; }
+docker() { [ "`$1" = ps ] && [ $status -eq 0 ] && echo 0123456789ab; return 0; }
+jim_systemctl() { [ "`$1" = is-active ] && return $status; return 1; }
+as_jim_account() { [ "`$*" = 'podman pod exists jim' ] && return $status; return 1; }
+"@
+        }
+    }
+
+    It 'on Docker, gives the command that starts JIM when it is not running' {
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" (Get-DeclinedArrangement -Runtime docker)
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d*'
+        $result.Output | Should -Not -BeLike '*--force-recreate*'
+    }
+
+    It 'on Docker, gives a command that recreates JIM when it is running, so that jim.web loads the certificate just installed' {
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" (Get-DeclinedArrangement -Runtime docker -Running)
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d --force-recreate*'
+    }
+
+    It 'on Podman with systemd, gives the commands that start JIM when it is not running' {
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" (Get-DeclinedArrangement -Runtime podman -Systemd)
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*systemctl start jim-database.service*'
+        $result.Output | Should -BeLike '*systemctl start jim.service*'
+    }
+
+    It 'on Podman with systemd, gives the commands that restart JIM when it is running, as starting a running service does nothing' {
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" (Get-DeclinedArrangement -Runtime podman -Systemd -Running)
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*systemctl restart jim-database.service*'
+        $result.Output | Should -BeLike '*systemctl restart jim.service*'
+        $result.Output | Should -Not -BeLike '*systemctl start *'
+        $result.Output | Should -Not -BeLike '*next boot*'
+    }
+
+    It 'on Podman without systemd, gives the commands that replace JIM''s pods, running or not' {
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" (Get-DeclinedArrangement -Runtime podman -Running)
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*podman kube play --replace*jim-database.yaml*'
+        $result.Output | Should -BeLike '*podman kube play --replace*jim.yaml*'
+    }
+}
+
+Describe 'setup.sh install_podman_units' -Skip:$script:NoBash {
+    It 'reloads systemd once the units are installed, so that Quadlet generates jim.service before anything starts it' {
+        $source = Join-Path $TestDrive 'podman'
+        $units = Join-Path $TestDrive 'units'
+        New-Item -ItemType Directory -Path $source | Out-Null
+        foreach ($unit in 'jim.network', 'jim.kube', 'jim-database.kube') {
+            '[Unit]' | Set-Content (Join-Path $source $unit)
+        }
+        $arrange = @"
+PODMAN_SOURCE='$source'
+PODMAN_ACCOUNT=
+USE_BUNDLED_DB=true
+JIM_WEB_PORT=443
+podman_unit_dir() { printf '%s' '$units'; }
+jim_systemctl() { [ -f '$units/jim.kube' ] && echo "systemctl `$* with jim.kube installed"; }
+"@
+
+        $result = Invoke-SetupFunction "install_podman_units '$TestDrive'" $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*systemctl daemon-reload with jim.kube installed*'
+    }
+}
+
 Describe 'setup.sh pinned_database_image' -Skip:$script:NoBash {
     It 'reads the PostgreSQL image docker-compose.yml pins, without the JIM_DB_IMAGE syntax around it' {
         $compose = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..' 'docker-compose.yml')).Path
