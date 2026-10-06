@@ -191,11 +191,12 @@ function New-JIMScopingCriterion {
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'ByMvName') {
             Write-Verbose "Looking up Metaverse attribute: $MetaverseAttributeName"
-            $attributes = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes"
-            $attribute = $attributes | Where-Object { $_.name -eq $MetaverseAttributeName } | Select-Object -First 1
-
-            if (-not $attribute) {
-                Write-Error "Metaverse attribute '$MetaverseAttributeName' not found."
+            # The shared resolver reads every page of the attributes endpoint (#894, #1965).
+            try {
+                $attribute = Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName
+            }
+            catch {
+                Write-Error $_
                 return
             }
 
