@@ -10,7 +10,8 @@
 
       1. Installs JIM with the bundle's setup.sh, offline, with a certificate the installer generates.
       2. Waits until JIM answers ready over HTTPS, trusting only the installer's certificate authority.
-      3. Waits until every container's own health check passes (podman healthcheck run on Podman).
+      3. Waits until every container's own health check passes (podman healthcheck run on Podman), and checks
+         that JIM accepts the infrastructure API key the installer was given, and refuses a key it was not.
       4. Writes a marker to the database and to the File Connector volume, stops JIM and starts it again
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
@@ -186,6 +187,15 @@ function Wait-Until {
     Write-Step "$Description ($([int]((Get-Date) - $started).TotalSeconds)s)"
 }
 
+# The status JIM answers an API call that needs authentication with, made with the given API key.
+function Get-ApiKeyStatus {
+    param([string]$Key)
+    Invoke-Native -AllowFailure -Command @(
+        'curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '10', '--noproxy', $hostName,
+        '--cacert', $caPath, '--resolve', "${hostName}:443:127.0.0.1", '-H', "X-API-Key: $Key",
+        "https://${hostName}/api/v1/userinfo")
+}
+
 # Ready over HTTPS, at the certificate's name, trusting only the certificate authority the installer created.
 function Test-ReadyOverHttps {
     $code = Invoke-Native -AllowFailure -Command @(
@@ -238,6 +248,8 @@ function Save-Diagnostics {
 }
 
 $caPath = Join-Path $OutputPath "$leg-ca.crt"
+# An infrastructure API key for the installer to give JIM, which until #1950 it did only on Podman.
+$infrastructureKey = 'jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true)
 try {
     # 1. Install, as a customer does, answering every question in advance.
     Write-Step "installing from $BundlePath"
@@ -258,6 +270,7 @@ try {
         'JIM_SSO_INITIAL_ADMIN=00000000-0000-0000-0000-000000000001'
         'JIM_WEB_PORT=443'
         'JIM_SETUP_TLS_MODE=generate'
+        "JIM_INFRASTRUCTURE_API_KEY=$infrastructureKey"
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
         'JIM_SETUP_OPEN_FIREWALL=false'
@@ -279,9 +292,16 @@ try {
 
     Invoke-Native ($elevate + @('cat', "$installPath/tls/ca.crt")) | Set-Content $caPath
 
-    # 2 and 3. Ready over HTTPS, and every container's own health check passing.
+    # 2 and 3. Ready over HTTPS, every container's own health check passing, and the installer's API key working.
     Wait-Until -Description 'ready over HTTPS' -Condition { Test-ReadyOverHttps }
     Wait-AllHealthy
+    Wait-Until -TimeoutMinutes 2 -Description 'JIM accepts the API key the installer was given' -Condition {
+        (Get-ApiKeyStatus $infrastructureKey) -eq '200'
+    }
+    $unknownKeyStatus = Get-ApiKeyStatus ('jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true))
+    if ($unknownKeyStatus -ne '401') {
+        throw "JIM answered an API key it was never given with $unknownKeyStatus, not 401"
+    }
 
     # 4. Data survives JIM being stopped and started, as new containers.
     $marker = [Guid]::NewGuid().ToString('N')
@@ -395,7 +415,7 @@ try {
 
     if ($env:GITHUB_STEP_SUMMARY) {
         $keyBackup = if ($Runtime -eq 'docker') { ', the documented key backup and restore worked offline' } else { '' }
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host$keyBackup" |
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, the installer's API key accepted, data kept through a stop and start, PostgreSQL sized to the host$keyBackup" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }

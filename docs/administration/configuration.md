@@ -241,6 +241,8 @@ Generate a key with:
 openssl rand -hex 32 | sed 's/^/jim_ak_/'
 ```
 
+To have the installer set it, give it in the installer's environment: it writes the key to `.env` on Docker, and to the Podman secret `jim-secrets` on Podman. It stops before installing anything when the key does not start with `jim_ak_` or is shorter than 32 characters, since JIM would not create it.
+
 ---
 
 ## Performance Tuning
