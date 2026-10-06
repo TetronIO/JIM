@@ -108,6 +108,14 @@ public interface IConnectorCapabilities
     public bool SupportsPasswordPolicyDiscovery { get; }
 
     /// <summary>
+    /// Can the Connector search its Connected System for values already in use? When true, the Connector must also
+    /// implement IConnectorUniquenessProbe, and a synchronisation run that generates a unique value (Unique Value
+    /// Generation) asks the Connected System whether each candidate is taken, catching accounts JIM has never
+    /// imported. When false, generation checks against JIM's own records only.
+    /// </summary>
+    public bool SupportsUniquenessProbe { get; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the Connected System's schema follows, if any. Purely advisory:
     /// the portal uses it to show the right Standard Mapping hints in the Attribute Flow editor, so an
     /// administrator mapping an LDAP system's "givenName" can see which Metaverse Attribute the standard

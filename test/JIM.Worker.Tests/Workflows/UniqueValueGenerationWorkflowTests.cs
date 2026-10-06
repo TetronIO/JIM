@@ -24,7 +24,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// with an export Synchronisation Rule making it a participating target.
 /// </summary>
 [TestFixture]
-public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
+public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 {
     #region Basic generation, collisions, stability
 

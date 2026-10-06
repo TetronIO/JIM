@@ -345,6 +345,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
         => _inner.GetConnectedSystemAttributeValueHoldersAsync(connectedSystemObjectTypeAttributeId, normalisedValues);
 
+    public Task<IReadOnlyList<string>> GetConnectedSystemAttributeSampleValuesAsync(int connectedSystemObjectTypeAttributeId, int maximumCount)
+        => _inner.GetConnectedSystemAttributeSampleValuesAsync(connectedSystemObjectTypeAttributeId, maximumCount);
+
     /// <inheritdoc />
     public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values)
         => _inner.GetConnectedSystemAttributeNumberHoldersAsync(connectedSystemObjectTypeAttributeId, values);

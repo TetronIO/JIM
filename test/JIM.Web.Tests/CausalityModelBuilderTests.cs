@@ -134,6 +134,8 @@ public class CausalityModelBuilderTests
             // The same export-side event as DeprovisionQueued, minus the export: nothing was ever created in
             // the target system, so it shares DeprovisionQueued's Downstream lane rather than Identity's.
             [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream,
+            // The Disconnect sibling of DeprovisionQueued (#1966): the object it names is in the target system.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = CausalityLane.Downstream,
 
             // Unique Value Generation (#242): Assigned, Retired (and the retired Adopted outcome) happen on the
             // Metaverse Object's attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the
@@ -310,6 +312,31 @@ public class CausalityModelBuilderTests
         var peLink = pendingExport.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
 
         Assert.That(peLink!.Href, Is.EqualTo($"/admin/connected-systems/2/pending-exports/{CausalityTestData.PendingExportId}"));
+    }
+
+    [Test]
+    public void Build_TargetDisconnectedOutcome_LinksTheTargetSystemAndTheDisconnectedObjectNeverTheIdentity()
+    {
+        // The object disconnected is in the target system and still exists there, so it links to its connector space
+        // page; the item's own Metaverse Object is not what was disconnected, so it is not named as such (#1966).
+        var disconnectedCsoId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+            parent: null, ordinal: 0, targetEntityId: disconnectedCsoId, targetEntityDescription: "Glitterband EMEA",
+            detailMessage: "2|person");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var root = model.Roots[0];
+        var systemLink = root.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.ConnectedSystem);
+        var recordLink = root.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.Lane, Is.EqualTo(CausalityLane.Downstream));
+            Assert.That(systemLink?.Href, Is.EqualTo("/admin/connected-systems/2"));
+            Assert.That(recordLink?.Href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{disconnectedCsoId}"));
+            Assert.That(root.Links.Any(l => l.Kind == CausalityEntityKind.Identity), Is.False);
+        }
     }
 
     [Test]

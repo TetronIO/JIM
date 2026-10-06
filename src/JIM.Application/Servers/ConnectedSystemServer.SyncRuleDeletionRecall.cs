@@ -441,14 +441,15 @@ public partial class ConnectedSystemServer
     {
         var workingSet = new ExportEvaluationWorkingSet();
         var deprovisioningExports = await Application.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo, exportEvaluationCache, workingSet);
-        if (deprovisioningExports.Count == 0 && workingSet.CancelledProvisionings.Count == 0)
+        if (deprovisioningExports.Count == 0 && workingSet.CancelledProvisionings.Count == 0 && workingSet.Disconnections.Count == 0)
             return 0;
 
         Log.Information(
             "DeprovisionRecallScopeExitsAsync: Metaverse Object {MvoId} left the scope of {ExportRuleCount} export rule(s) when its values were recalled: " +
-            "{DeleteCount} deprovisioning Pending Export(s) staged, {CancelledCount} never-exported provisioning(s) cancelled.",
-            mvo.Id, deprovisioningExports.Count + workingSet.CancelledProvisionings.Count, deprovisioningExports.Count,
-            workingSet.CancelledProvisionings.Count);
+            "{DeleteCount} deprovisioning Pending Export(s) staged, {DisconnectedCount} target object(s) disconnected, " +
+            "{CancelledCount} never-exported provisioning(s) cancelled.",
+            mvo.Id, deprovisioningExports.Count + workingSet.Disconnections.Count + workingSet.CancelledProvisionings.Count,
+            deprovisioningExports.Count, workingSet.Disconnections.Count, workingSet.CancelledProvisionings.Count);
 
         if (recordOutcomes)
         {
@@ -475,6 +476,17 @@ public partial class ConnectedSystemServer
                     ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                     targetEntityDescription: SystemName(cancellation.ConnectedSystemId),
                     detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, ObjectTypeName(cancellation.ConnectedSystemId)));
+            }
+
+            // A Disconnect leaves the object in the target system and queues nothing, so this outcome is the only
+            // record that the recall deprovisioned it (#1966).
+            foreach (var disconnection in workingSet.Disconnections)
+            {
+                SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                    targetEntityId: disconnection.ConnectedSystemObjectId,
+                    targetEntityDescription: SystemName(disconnection.ConnectedSystemId),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, ObjectTypeName(disconnection.ConnectedSystemId)));
             }
 
             SyncOutcomeBuilder.BuildOutcomeSummary(executionItem);

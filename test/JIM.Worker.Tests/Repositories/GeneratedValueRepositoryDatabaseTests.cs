@@ -299,6 +299,62 @@ public class GeneratedValueRepositoryDatabaseTests
         }
     }
 
+    // ---- Probe control values (release 3) ----
+
+    [Test]
+    public async Task GetConnectedSystemAttributeSampleValuesAsync_ReturnsValuesHeldByNormalObjectsOnlyAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+
+        // The estate's own object is PendingProvisioning: a value JIM intends to write, not one the target holds.
+        await AddCsoTextValueAsync(estate.CsoId, estate.CsTextAttributeId, "not.yet.provisioned");
+        await AddCsoTextValueAsync(await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Normal), estate.CsTextAttributeId, "asmith");
+        await AddCsoTextValueAsync(await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Normal), estate.CsTextAttributeId, "bjones");
+        await AddCsoTextValueAsync(await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Normal), estate.CsTextAttributeId, "asmith");
+        await AddCsoTextValueAsync(await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Obsolete), estate.CsTextAttributeId, "obsolete.holder");
+
+        await using var ctx = NewContext();
+        var repo = NewSyncRepository(ctx);
+
+        var all = await repo.GetConnectedSystemAttributeSampleValuesAsync(estate.CsTextAttributeId, 10);
+        var capped = await repo.GetConnectedSystemAttributeSampleValuesAsync(estate.CsTextAttributeId, 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(all, Is.EquivalentTo(new[] { "asmith", "bjones" }));
+            Assert.That(capped, Has.Count.EqualTo(1));
+            Assert.That(await repo.GetConnectedSystemAttributeSampleValuesAsync(estate.CsNumberAttributeId, 10), Is.Empty);
+            Assert.That(await repo.GetConnectedSystemAttributeSampleValuesAsync(estate.CsTextAttributeId, 0), Is.Empty);
+        }
+    }
+
+    private async Task<Guid> CreateCsoAsync(Estate estate, ConnectedSystemObjectStatus status)
+    {
+        await using var ctx = NewContext();
+        var typeId = await ctx.ConnectedSystemObjects.Where(c => c.Id == estate.CsoId).Select(c => c.TypeId).SingleAsync();
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            TypeId = typeId,
+            ConnectedSystemId = estate.ConnectedSystemId,
+            Status = status,
+            JoinType = ConnectedSystemObjectJoinType.NotJoined,
+            ExternalIdAttributeId = estate.CsTextAttributeId
+        };
+        ctx.ConnectedSystemObjects.Add(cso);
+        await ctx.SaveChangesAsync();
+        return cso.Id;
+    }
+
+    private async Task AddCsoTextValueAsync(Guid csoId, int attributeId, string value)
+    {
+        await using var ctx = NewContext();
+        var attributeValue = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attributeId, StringValue = value };
+        ctx.ConnectedSystemObjectAttributeValues.Add(attributeValue);
+        ctx.Entry(attributeValue).Property("ConnectedSystemObjectId").CurrentValue = csoId;
+        await ctx.SaveChangesAsync();
+    }
+
     // ---- Numeric value gates ----
 
     [Test]

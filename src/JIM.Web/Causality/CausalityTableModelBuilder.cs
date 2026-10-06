@@ -218,6 +218,10 @@ public static class CausalityTableModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.ProvisioningCancelled, null, effectiveVia, effectiveSyncRuleId),
 
+            // A downstream target losing its join to a Disconnect Deprovisioning Action (#1966).
+            ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected => Row(
+                causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, null, effectiveVia, effectiveSyncRuleId),
+
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent), null, null),
 

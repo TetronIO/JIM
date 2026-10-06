@@ -153,6 +153,13 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsPasswordPolicyDiscovery { get; set; }
 
     /// <summary>
+    /// Can the Connector search its Connected System for values already in use? When true, the Connector also
+    /// implements IConnectorUniquenessProbe, and a synchronisation run that generates a unique value probes this
+    /// Connected System for each candidate.
+    /// </summary>
+    public bool SupportsUniquenessProbe { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary Connected Systems using this Connector follow, as declared by the
     /// Connector itself and reconciled on every startup. Advisory metadata: the portal uses it to decide
     /// which Standard Mapping hints to show in the Attribute Flow editor. Never read by the synchronisation

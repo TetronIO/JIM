@@ -223,15 +223,19 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
         await RunFullSyncAsync(ctx.Hr);
         var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
 
-        var (task, _) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
         await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
 
+        var rpei = DbContext.ActivityRunProfileExecutionItems.Single(item => item.ActivityId == activity.Id);
+        var disconnection = rpei.SyncOutcomes.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(targetCso.MetaverseObjectId, Is.Null, "the target left the export rule's scope, so its join must be broken");
             Assert.That(targetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
             Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == targetCso.Id), Is.False,
                 "a disconnected target is left as it is, with nothing exported to it");
+            Assert.That(disconnection, Is.Not.Null, "the disconnection must be recorded on the object's execution item (#1966)");
+            Assert.That(disconnection?.TargetEntityId, Is.EqualTo(targetCso.Id), "naming the object it disconnected");
         }
     }
 

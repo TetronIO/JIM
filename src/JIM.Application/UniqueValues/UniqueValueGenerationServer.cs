@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
@@ -409,6 +410,14 @@ public sealed class UniqueValueGenerationServer
         var lastCandidate = new string?[requests.Count];
         var lastRejectionGate = new string?[requests.Count];
 
+        // The ProbeGate's run of this call (release 3): never under a dry run, since Sync Preview checks the local
+        // gates only, and not at all without a session. Answers are cached per (request, target) so an only-if-taken
+        // window answers later rounds without another search; the systems that could not answer for each request's
+        // current candidate are held until the value is actually issued, when the session is told.
+        var probeSession = options.DryRun ? null : options.ProbeSession;
+        var probeAnswers = new Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>>();
+        var undeterminedSystems = new Dictionary<int, List<int>>();
+
         // 'active' is the set of requests still to try this round; a request leaves it for good either by
         // getting a terminal outcome (Exhausted, NoBaseValue, WidthExceeded, Generated) or, when a gate rejects
         // its candidate, by carrying forward into next round's 'active' to draw a fresh one.
@@ -448,6 +457,7 @@ public sealed class UniqueValueGenerationServer
 
                 lastCandidate[i] = candidate!.Value.Text;
                 candidates[i] = candidate.Value;
+                undeterminedSystems.Remove(i);
                 drawn.Add(i);
             }
 
@@ -468,6 +478,11 @@ public sealed class UniqueValueGenerationServer
 
             if (survivors.Count > 0)
                 survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, lastRejectionGate);
+
+            // The ProbeGate is last, after every local gate, so a candidate JIM already knows is taken never costs a
+            // search of a target system (plan Phase 7 item 4).
+            if (survivors.Count > 0 && probeSession != null)
+                survivors = await FilterProbeGateAsync(survivors, requests, candidates, attemptsMade, probeSession, probeAnswers, undeterminedSystems, lastRejectionGate);
 
             var rejectedThisRound = drawn.Except(survivors).ToList();
 
@@ -492,6 +507,13 @@ public sealed class UniqueValueGenerationServer
 
                 var assignment = BuildAssignment(request, candidate.Text, normalisedValue);
                 outcomes[i] = new GenerationOutcome(request, GenerationOutcomeKind.Generated, candidate.Text, candidate.Numeric, assignment, null);
+
+                // Only a value actually issued counts towards the run's "chosen using JIM's own records only" warning.
+                if (probeSession != null && undeterminedSystems.Remove(i, out var systemIds))
+                {
+                    foreach (var systemId in systemIds)
+                        probeSession.RecordValueChosenWithoutProbe(systemId);
+                }
             }
 
             active = rejectedThisRound;
@@ -727,6 +749,130 @@ public sealed class UniqueValueGenerationServer
 
         return active.Where(i => !taken.Contains(i)).ToList();
     }
+
+    /// <summary>
+    /// What a probe said about one candidate for one target: the outcome, whether the target was probed at all, and
+    /// the Connected System's name for rejection text.
+    /// </summary>
+    private readonly record struct ProbeAnswer(UniquenessProbeOutcome Outcome, bool IsProbed, string ConnectedSystemName);
+
+    /// <summary>
+    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each of a request's
+    /// <see cref="GenerationRequest.ProbeTargets"/>, in order, whether the target system already holds the candidate.
+    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System;
+    /// <see cref="UniquenessProbeOutcome.NotFound"/> and <see cref="UniquenessProbeOutcome.CouldNotDetermine"/> accept
+    /// it, the latter noted against the request so the session hears of it once the value is issued. A candidate in
+    /// <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
+    /// </summary>
+    private static async Task<List<int>> FilterProbeGateAsync(
+        List<int> active,
+        IReadOnlyList<GenerationRequest> requests,
+        Dictionary<int, (string Text, long? Numeric)> candidates,
+        int[] attemptsMade,
+        IUniquenessProbeSession session,
+        Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers,
+        Dictionary<int, List<int>> undeterminedSystems,
+        string?[] lastRejectionGate)
+    {
+        var survivors = new List<int>(active.Count);
+        foreach (var i in active)
+        {
+            var request = requests[i];
+            var candidate = candidates[i].Text;
+            string? foundIn = null;
+            List<int>? undeterminedHere = null;
+
+            var targets = IsProbeExempt(request, candidate) ? [] : request.ProbeTargets;
+            foreach (var target in targets)
+            {
+                // attemptsMade has already been advanced past this round's draw.
+                var answer = await GetProbeAnswerAsync(i, request, target, candidate, attemptsMade[i] - 1, session, answers);
+                if (answer.Outcome == UniquenessProbeOutcome.Found)
+                {
+                    foundIn = answer.ConnectedSystemName;
+                    break;
+                }
+
+                if (answer.Outcome == UniquenessProbeOutcome.CouldNotDetermine && answer.IsProbed)
+                    (undeterminedHere ??= []).Add(target.ConnectedSystemId);
+            }
+
+            if (foundIn != null)
+            {
+                lastRejectionGate[i] = $"an account in {foundIn}";
+                continue;
+            }
+
+            if (undeterminedHere != null)
+                undeterminedSystems[i] = undeterminedHere;
+
+            survivors.Add(i);
+        }
+
+        return survivors;
+    }
+
+    /// <summary>
+    /// The answer for one candidate against one target, from the request's cached window when an earlier round's
+    /// batch already covered it, otherwise from a new batch (<see cref="BuildProbeBatch"/>), whose every answer is
+    /// cached for later rounds.
+    /// </summary>
+    private static async Task<ProbeAnswer> GetProbeAnswerAsync(
+        int requestIndex,
+        GenerationRequest request,
+        UniquenessProbeTarget target,
+        string candidate,
+        int attemptIndex,
+        IUniquenessProbeSession session,
+        Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers)
+    {
+        if (!answers.TryGetValue((requestIndex, target), out var known))
+            answers[(requestIndex, target)] = known = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
+
+        if (known.TryGetValue(candidate, out var cached))
+            return cached;
+
+        var batch = BuildProbeBatch(request, candidate, attemptIndex);
+        var result = await session.ProbeAsync(target, batch);
+
+        // A session answers one outcome per candidate. Should one ever not, nothing it said can be matched to a
+        // candidate, so the whole batch is treated as unanswered rather than guessed at.
+        for (var k = 0; k < batch.Count; k++)
+        {
+            var outcome = result.Outcomes.Count == batch.Count ? result.Outcomes[k] : UniquenessProbeOutcome.CouldNotDetermine;
+            known[batch[k]] = new ProbeAnswer(outcome, result.IsProbed, result.ConnectedSystemName);
+        }
+
+        return known[candidate];
+    }
+
+    /// <summary>
+    /// The candidates one probe batch carries (plan decision 16, revised 2026-10-05): for an only-if-taken token, the
+    /// object's lazy window, the current candidate and the ones after it, up to
+    /// <see cref="UniquenessProbeRequest.MaximumCandidates"/> and never past the attempt limit, skipping exempt values;
+    /// for a sequence or random token, the drawn candidate alone, since drawing ahead would consume sequence numbers
+    /// the run then never issues.
+    /// </summary>
+    private static List<string> BuildProbeBatch(GenerationRequest request, string candidate, int attemptIndex)
+    {
+        var batch = new List<string> { candidate };
+        var generation = request.Generation;
+
+        if (generation.TokenKind != GeneratedValueTokenKind.OnlyIfTaken || string.IsNullOrWhiteSpace(request.BaseValue))
+            return batch;
+
+        for (var attempt = attemptIndex + 1; attempt < generation.AttemptLimit && batch.Count < UniquenessProbeRequest.MaximumCandidates; attempt++)
+        {
+            var next = UniqueValueCandidates.OnlyIfTakenCandidate(request.BaseValue, attempt, generation.SuffixStyle, generation.SuffixStart, generation.Separator);
+            if (!IsProbeExempt(request, next) && !batch.Contains(next, StringComparer.OrdinalIgnoreCase))
+                batch.Add(next);
+        }
+
+        return batch;
+    }
+
+    private static bool IsProbeExempt(GenerationRequest request, string candidate) =>
+        request.ProbeExemptValues.Contains(candidate, StringComparer.OrdinalIgnoreCase);
 
     // ---- Candidate generation ----
 

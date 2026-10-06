@@ -123,9 +123,9 @@ public class SyncRuleMappingDto
 }
 
 /// <summary>
-/// API representation of a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3).
-/// Exclusions and Collision Remediation are deliberately absent: exclusions are a release 4 surface and Collision
-/// Remediation is a release 4 feature, so neither is exposed by any surface yet.
+/// API representation of a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3), its
+/// exclusions and the Connected Systems its value is checked for availability in (release 3). Collision Remediation is
+/// deliberately absent: it is a release 4 feature, so no surface exposes it yet.
 /// </summary>
 public class SyncRuleMappingGenerationDto
 {
@@ -156,8 +156,22 @@ public class SyncRuleMappingGenerationDto
     /// </summary>
     public int? RetiredValueCount { get; set; }
 
+    /// <summary>
+    /// The ids of the Connected Systems excluded from the value's availability checks (release 3): values already in
+    /// use there do not stop JIM choosing them. Ascending; empty when none is excluded.
+    /// </summary>
+    public List<int> Exclusions { get; set; } = new();
+
+    /// <summary>
+    /// Every Connected System attribute the value is exported to, and how its availability is checked there (release
+    /// 3), ordered by Connected System name then attribute name. Present on the list, get, create and update
+    /// responses.
+    /// </summary>
+    public List<GeneratedValueParticipantDto>? Participants { get; set; }
+
     public static SyncRuleMappingGenerationDto FromEntity(SyncRuleMappingGeneration entity) => new()
     {
+        Exclusions = entity.Exclusions.Select(e => e.ConnectedSystemId).Order().ToList(),
         TokenKind = entity.TokenKind,
         SuffixStyle = entity.SuffixStyle,
         SuffixStart = entity.SuffixStart,
@@ -206,7 +220,24 @@ public class CreateSyncRuleMappingGenerationRequest
     public int AttemptLimit { get; set; } = 1000;
     public bool NeverReuse { get; set; } = true;
 
-    public SyncRuleMappingGeneration ToEntity() => new()
+    /// <summary>
+    /// The ids of the Connected Systems to exclude from the value's availability checks (release 3). Each must be a
+    /// Connected System the value is exported to unchanged, by an export Attribute Flow taking the generated Metaverse
+    /// attribute as its only source; otherwise the request is refused naming the Connected System. Not accepted for a
+    /// generated value on an export Synchronisation Rule, which is checked only in its own Connected System. Omit or
+    /// leave empty to check every Connected System.
+    /// </summary>
+    public List<int>? Exclusions { get; set; }
+
+    public SyncRuleMappingGeneration ToEntity()
+    {
+        var generation = ToEntityWithoutExclusions();
+        generation.Exclusions.AddRange((Exclusions ?? [])
+            .Select(connectedSystemId => new SyncRuleMappingGenerationExclusion { ConnectedSystemId = connectedSystemId }));
+        return generation;
+    }
+
+    private SyncRuleMappingGeneration ToEntityWithoutExclusions() => new()
     {
         TokenKind = TokenKind,
         SuffixStyle = SuffixStyle,
@@ -257,8 +288,17 @@ public class UpdateSyncRuleMappingGenerationRequest
     public int? AttemptLimit { get; set; }
     public bool? NeverReuse { get; set; }
 
+    /// <summary>
+    /// The ids of the Connected Systems excluded from the value's availability checks (release 3). Omitted (null)
+    /// leaves the exclusions unchanged; an empty list clears them; a list replaces them. Each must be a Connected System
+    /// the value is exported to unchanged, otherwise the request is refused naming the Connected System; refused
+    /// outright for a generated value on an export Synchronisation Rule.
+    /// </summary>
+    public List<int>? Exclusions { get; set; }
+
     public SyncRuleMappingGenerationSettingsUpdate ToSettingsUpdate() => new()
     {
+        Exclusions = Exclusions,
         TokenKind = TokenKind,
         SuffixStyle = SuffixStyle,
         SuffixStart = SuffixStart,

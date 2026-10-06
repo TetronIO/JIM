@@ -44,6 +44,31 @@ public class SyncPreviewResponseDtoTests
     }
 
     [Test]
+    public void FromModel_GeneratedValueProbes_AreCarriedWithTheSystemsTheRunWouldProbe()
+    {
+        var model = new SyncPreviewResult
+        {
+            GeneratedValueProbes = [new SyncPreviewGeneratedValueProbe { AttributeName = "Account Name", Value = "jbloggs", ConnectedSystemNames = ["Corp AD", "OpenLDAP"] }]
+        };
+
+        var dto = SyncPreviewResponse.FromModel(model);
+
+        var probe = dto.GeneratedValueProbes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(probe.AttributeName, Is.EqualTo("Account Name"));
+            Assert.That(probe.Value, Is.EqualTo("jbloggs"));
+            Assert.That(probe.ConnectedSystemNames, Is.EqualTo(new[] { "Corp AD", "OpenLDAP" }));
+        }
+    }
+
+    [Test]
+    public void FromModel_NoGeneratedValueProbes_IsAnEmptyList()
+    {
+        Assert.That(SyncPreviewResponse.FromModel(new SyncPreviewResult()).GeneratedValueProbes, Is.Empty);
+    }
+
+    [Test]
     public void FromModel_NullInbound_MapsToNull()
     {
         var dto = SyncPreviewResponse.FromModel(new SyncPreviewResult { Inbound = null });
