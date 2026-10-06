@@ -118,6 +118,20 @@ tar tzf keys.tar.gz | grep key-
     podman run image
     ```
 
+## Rootless helpers
+
+Define these first:
+
+```bash
+helper() { echo "$@"; }
+```
+
+Then:
+
+```bash
+helper status
+```
+
 ## Docker later
 
 === "Docker"
@@ -155,6 +169,12 @@ Describe 'Get-DocumentedCommand' {
     It 'stops at the next heading of the same level, rather than taking a later section''s block' {
         { & $script:ScriptPath -Path $script:Page -Heading 'Only Podman here' -Tab 'Docker' } |
             Should -Throw '*Only Podman here*Docker*'
+    }
+
+    It 'returns the section''s first block when no tab is named, for a section that gives one command for all' {
+        $command = & $script:ScriptPath -Path $script:Page -Heading 'Rootless helpers'
+
+        $command | Should -BeExactly 'helper() { echo "$@"; }'
     }
 
     It 'stops when the page has no such heading' {
@@ -197,6 +217,14 @@ Describe 'Get-DocumentedCommand' {
         $commands = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
 
         $commands | Should -Match '(?m)^jim-podman\(\) \{.*\}$'
+    }
+
+    It 'finds the jim-systemctl function in Running on Podman, which the rootless deployment-boot leg stops and starts JIM with' {
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'podman.md'
+
+        $commands = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
+
+        $commands | Should -Match '(?m)^jim-systemctl\(\) \{.*\}$'
     }
 
     It 'finds the database backup and restore in Backup & Disaster Recovery, for Docker and Podman, which the deployment-boot check runs' {
