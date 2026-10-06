@@ -1667,8 +1667,8 @@ public class SyncPreviewServer
     /// <summary>
     /// Builds the outbound outcome nodes in the real tree's shape: a Provisioned node (with the staged
     /// Pending Export nested beneath) where the preview would create a target object, a Pending Export
-    /// node where it would update one, and a Deprovision Queued node where an out-of-scope object would
-    /// have a Delete staged.
+    /// node where it would update one, a Deprovision Queued node where an out-of-scope object would
+    /// have a Delete staged, and a Target Disconnected node where it would be disconnected instead.
     /// </summary>
     private static void BuildOutboundOutcomeNodes(
         List<SyncOutcomeNode> siblings,
@@ -1716,6 +1716,22 @@ public class SyncPreviewServer
                     });
                     break;
 
+                // A Disconnect stages nothing, but the real run still records the disconnection on the object's item
+                // (#1966), so the preview proposes the same node and no export.
+                case OutboundPreviewEntryKind.Deprovisioning
+                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.Disconnect:
+                    siblings.Add(new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                        TargetEntityId = entry.ExistingTargetCsoId,
+                        TargetEntityDescription = systemName,
+                        SyncRuleId = entry.SyncRuleId,
+                        SyncRuleName = entry.SyncRuleName,
+                        DetailMessage = entry.ConnectedSystemId.ToString(),
+                        Ordinal = siblings.Count
+                    });
+                    break;
+
                 case OutboundPreviewEntryKind.Deprovisioning
                     when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeleteExport:
                     siblings.Add(new SyncOutcomeNode
@@ -1724,6 +1740,9 @@ public class SyncPreviewServer
                         TargetEntityDescription = systemName,
                         SyncRuleId = entry.SyncRuleId,
                         SyncRuleName = entry.SyncRuleName,
+                        // A scope exit's Delete carries no attribute changes (unlike a deletion cascade's, which
+                        // carries the target's secondary external id), and the real run records that count (#1964).
+                        DetailCount = 0,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
                         StagedChangeType = PendingExportChangeType.Delete,
                         Ordinal = siblings.Count
