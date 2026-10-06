@@ -115,6 +115,12 @@ separate port variable: where your server listens elsewhere, give the port as pa
 JIM_DB_HOSTNAME=db.example.org:5433
 ```
 
+### Dropping Lost Connections {#lost-connections}
+
+The bundled PostgreSQL drops a connection whose client has gone within two minutes. After 60 seconds without traffic it checks the connection, and it gives up after six unanswered checks 10 seconds apart (`tcp_keepalives_idle=60`, `tcp_keepalives_interval=10`, `tcp_keepalives_count=6`). A connection whose client is still there is unaffected, since the client answers each check.
+
+Without these settings, PostgreSQL holds such a connection open for about two hours, Linux's default. On Podman that happens at every stop of JIM, because the pod's network goes before JIM's services close their connections. With your own PostgreSQL server, set the same three settings in its `postgresql.conf` to have it do the same.
+
 ---
 
 ## SSO / Authentication
