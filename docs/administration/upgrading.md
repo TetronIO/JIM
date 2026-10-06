@@ -289,7 +289,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
     docker compose stop jim.web jim.worker jim.scheduler
     ```
 
-2. **Restore your pre-upgrade backup**, database and encryption keys together from the same backup set, following the restore procedure in [Backup & Disaster Recovery](backup-recovery.md#restoring).
+2. **Restore your pre-upgrade backup**, database and encryption keys together from the same backup set, following the restore procedure in [Backup & Disaster Recovery](backup-recovery.md#restoring). It restores the database into an empty one, which takes away everything the newer release added as well as everything JIM has written since the upgrade. Go on only once `pg_restore` has finished without reporting an error.
 
 3. **Point `JIM_VERSION` back** at the previous release in `.env`:
 
@@ -321,7 +321,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 5. **Verify** as you would after an upgrade, per [Verifying the upgrade](#verifying), and re-enable your Schedules.
 
 !!! danger "Do not run an older JIM against an upgraded database"
-    Starting the previous version without restoring the database leaves the older application reading a schema built for the newer one. Always restore the backup first. If you have no usable pre-upgrade backup, do not roll back at all: stay on the new version and resolve the problem there, because an older JIM against a newer schema fails in subtle ways rather than refusing to start.
+    Starting the previous version without restoring the database leaves the older application reading a schema built for the newer one. Always restore the backup first, and only by the restore procedure: restoring over the upgraded database (`pg_restore --clean`) leaves part of what the newer release added in place, and the older JIM starts on that mixture without complaint. If `pg_restore` reported an error, do not start the previous version; resolve the error and restore again. If you have no usable pre-upgrade backup, do not roll back at all: stay on the new version and resolve the problem there, because an older JIM against a newer schema fails in subtle ways rather than refusing to start.
 
 !!! tip "Roll back promptly, or not at all"
     A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring the pre-upgrade backup rolls the connector space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
