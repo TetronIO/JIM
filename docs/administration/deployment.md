@@ -115,13 +115,14 @@ Have these ready, whichever way you install:
 - **A DNS name for the JIM server**, such as `jim.example.com`, with a DNS record pointing at the server. JIM's address is `https://jim.example.com`, on the standard HTTPS port, 443.
 - **A client registration for JIM at your identity provider**, with these redirect URIs: `https://jim.example.com/signin-oidc` and `https://jim.example.com/signout-callback-oidc`. You need its authority URL, client ID and secret, API scope, and the claim value of the first administrator; the [SSO Setup Guide](sso-setup.md) covers each provider.
 - **A certificate for JIM's name**, from your organisation's certificate authority, or let the installer create one (see [TLS and Reverse Proxy](#tls-and-reverse-proxy)).
-- **PostgreSQL 18**: the bundled container needs nothing. For your own server, create JIM's database and user first:
+- **PostgreSQL 18**: the bundled container needs nothing. For your own server, connected as a superuser such as `postgres`, create JIM's user, then its database, owned by that user:
 
     ```sql
-    CREATE DATABASE jim;
     CREATE USER jim WITH ENCRYPTED PASSWORD 'your_secure_password';
-    GRANT ALL PRIVILEGES ON DATABASE jim TO jim;
+    CREATE DATABASE jim OWNER jim;
     ```
+
+    JIM's user must own the database: since PostgreSQL 15, only a database's owner can create tables in its `public` schema, and `GRANT ALL PRIVILEGES ON DATABASE` does not allow it. A database JIM's user does not own stops JIM on its first start; [Troubleshooting](troubleshooting.md#the-worker-stops-with-permission-denied-for-schema-public) shows how to correct one.
 
 ---
 

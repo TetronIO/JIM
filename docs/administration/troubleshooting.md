@@ -43,6 +43,22 @@ Size the database's memory for the host, as [Bundled PostgreSQL Memory](configur
 
 Waiting cannot fix rejected credentials, so the service does not wait for them: it stops straight away, with exit code 1 and PostgreSQL's own error, for example `28P01: password authentication failed for user "jim"`. Check `JIM_DB_USERNAME` and `JIM_DB_PASSWORD` in `.env` against the database server, then start JIM again.
 
+### The worker stops with `permission denied for schema public`
+
+On its first start against your own PostgreSQL server, JIM never becomes ready. On Docker, the installer stops with `dependency failed to start: container jim.worker is unhealthy`. The worker's log (`docker logs jim.worker`, or on Podman `sudo podman logs jim-worker`) shows PostgreSQL's error each time the worker starts:
+
+```text
+42501: permission denied for schema public
+```
+
+**What it means.** JIM's user cannot create JIM's tables in its database. Since PostgreSQL 15, only a database's owner can create tables in its `public` schema, and `GRANT ALL PRIVILEGES ON DATABASE`, which is all that earlier versions of [Before You Install](deployment.md#before-you-install) gave JIM's user, does not allow it. JIM stops before creating anything, so there is nothing to clean up.
+
+**How to fix.** Connected to the server as a superuser such as `postgres`, make JIM's user the database's owner, then start JIM again:
+
+```sql
+ALTER DATABASE jim OWNER TO jim;
+```
+
 ## Podman
 
 The commands here are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).

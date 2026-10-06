@@ -139,7 +139,7 @@ Restore both artefacts from the **same backup set**, then start the services.
 
     Restore into an empty database every time, rather than over the existing one with `pg_restore --clean`. `--clean` removes only what the dump holds, so whatever was added since the backup stays: rolling back after an upgrade, what the newer release added stops parts of the backup restoring, and leaves a mixture of the two releases that the older JIM starts on without complaint.
 
-    External PostgreSQL: restore into an empty database likewise, with your existing database tooling.
+    External PostgreSQL: restore likewise, with your existing database tooling, into an empty database owned by JIM's user, as [Before You Install](deployment.md#before-you-install) creates it.
 
 3. **Start the stack** and verify:
 
