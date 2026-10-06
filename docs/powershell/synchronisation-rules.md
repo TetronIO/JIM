@@ -416,6 +416,28 @@ Returns one or more mapping objects representing Attribute Flow Rules. Each mapp
 | `Derived.StepCount` | `int` | How many steps the Metaverse Object Type's evaluation has |
 | `Derived.MetaverseInputs` | `string[]` | The Metaverse attributes the Expression reads, as written |
 
+`Generation` is present on a [generated mapping](../configuration/synchronisation-rules.md#generated-values), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/synchronisation-rules.md#checking-availability-in-target-systems):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
+| `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
+| `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
+
+Each entry in `Generation.Participants` has:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ConnectedSystemId` | `int` | The Connected System the value is exported to |
+| `ConnectedSystemName` | `string` | Its name |
+| `ConnectorName` | `string` | Its Connector's name |
+| `ConnectedSystemObjectTypeAttributeId` | `int` | The attribute the value is exported as |
+| `AttributeName` | `string` | That attribute's name |
+| `IsExcluded` | `bool` | Whether the Connected System is excluded |
+| `CanBeExcluded` | `bool` | Whether it can be: only where the value is exported to it unchanged from an import generated mapping |
+| `Check` | `string` | `JimRecordsAndProbe` (JIM's records of the system, and a probe of the system itself), `JimRecordsOnly` or `NotChecked` |
+| `Reason` | `string` | Why the check is less than `JimRecordsAndProbe`: `ConnectorCannotProbe`, `AttributeNotProbed`, `NotTextValue`, `ExportedThroughExpression`, `CombinedWithOtherSources` or `Excluded`; `None` when it is not |
+
 `Warnings` and `DependentDerivedFlows` are always empty on a read; they describe a save.
 
 ### Examples
@@ -430,6 +452,11 @@ Get-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12
 
 ```powershell title="Pipeline from Get-JIMSyncRule"
 Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
+```
+
+```powershell title="See where a generated value is checked for availability, and how"
+(Get-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12).Generation.Participants |
+    Select-Object ConnectedSystemName, AttributeName, Check, Reason
 ```
 
 ---
@@ -470,6 +497,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
+    [-ExcludeConnectedSystemId <int[]>]
 
 # Export: generated (Unique Value Generation, #242)
 New-JIMSyncRuleMapping -SyncRuleId <int>
@@ -507,10 +535,11 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
 | `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. |
 | `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
+| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
 
 ### Output
 
-Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is also written with `Write-Warning`.
+Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings, `Generation.Exclusions` and `Generation.Participants` (see [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping)); `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is also written with `Write-Warning`.
 
 **ShouldProcess impact level:** Medium.
 
@@ -519,7 +548,7 @@ Returns the created mapping object. A generated mapping's `Generation` property 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242).** `-Generate` applies to import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
+- **Unique Value Generation (#242).** `-Generate` applies to import and export mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only. Collision Remediation is not configurable from any surface yet.
 - Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples
@@ -596,6 +625,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
+    [-ExcludeConnectedSystemId <int[]>]
     [-PassThru]
 
 # From the pipeline
@@ -628,11 +658,12 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `Separator` | `string` | No | | The characters between the base value and the token. Supply `''` or `$null` to clear it; omit to leave it unchanged |
 | `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object |
 | `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
+| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
 
-Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied. `Derived` is as for `Get-JIMSyncRuleMapping`. `DependentDerivedFlows` names the Attribute Flows deriving Metaverse attributes that the update left with a missing input (for example by disabling the mapping), written as [derived flow warnings](#derived-attribute-flow-warnings).
+Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings, `Generation.Exclusions` and `Generation.Participants` (see [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping)); `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied. `Derived` is as for `Get-JIMSyncRuleMapping`. `DependentDerivedFlows` names the Attribute Flows deriving Metaverse attributes that the update left with a missing input (for example by disabling the mapping), written as [derived flow warnings](#derived-attribute-flow-warnings).
 
 **ShouldProcess impact level:** Medium.
 
@@ -669,6 +700,14 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -SequenceStart 500000
 
 ```powershell title="Clear a generated Sequence mapping's fixed width"
 Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
+```
+
+```powershell title="Leave two Connected Systems out of a generated value's availability checks"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4, 7
+```
+
+```powershell title="Check every Connected System again (clear the exclusions)"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @()
 ```
 
 ---
