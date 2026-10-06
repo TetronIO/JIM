@@ -154,6 +154,56 @@ Describe 'Connect-JIM' {
     }
 }
 
+Describe 'Connect-JIM with an API key' {
+
+    BeforeAll {
+        # Global, so that it is visible inside InModuleScope JIM: an HttpResponseException as Invoke-RestMethod
+        # throws it in PowerShell 7.
+        function global:New-JIMHttpException {
+            param([System.Net.HttpStatusCode]$Status)
+            [Microsoft.PowerShell.Commands.HttpResponseException]::new("$Status", [System.Net.Http.HttpResponseMessage]::new($Status))
+        }
+    }
+
+    AfterAll {
+        Remove-Item function:global:New-JIMHttpException -ErrorAction SilentlyContinue
+    }
+
+    # Health and the server version answer without authentication, so connecting has to make a call that needs the
+    # key before it can say the key works (#1950).
+    It 'stops, saying JIM rejected the key, and keeps no connection, when the key does not authenticate' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Show-JIMBanner { }
+            Mock Get-JIMServerVersion { '1.0.0' }
+            Mock Invoke-RestMethod { [PSCustomObject]@{ status = 'Healthy' } } -ParameterFilter { $Uri -like '*/api/v1/health' }
+            Mock Invoke-RestMethod { throw (New-JIMHttpException -Status Unauthorized) } -ParameterFilter { $Uri -like '*/api/v1/userinfo' }
+
+            { Connect-JIM -Url 'https://jim.example.com' -ApiKey 'jim_ak_not_a_key_jim_knows_0123456789' } |
+                Should -Throw '*rejected the API key*'
+            $script:JIMConnection | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'connects, authorised, when JIM accepts the key, though userinfo finds no Metaverse Object for a key' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Show-JIMBanner { }
+            Mock Get-JIMServerVersion { '1.0.0' }
+            Mock Invoke-RestMethod { [PSCustomObject]@{ status = 'Healthy' } } -ParameterFilter { $Uri -like '*/api/v1/health' }
+            Mock Invoke-RestMethod { [PSCustomObject]@{ authorised = $false; authMethod = 'api_key' } } -ParameterFilter { $Uri -like '*/api/v1/userinfo' }
+
+            $connection = Connect-JIM -Url 'https://jim.example.com' -ApiKey 'jim_ak_a_key_jim_knows_0123456789ab'
+
+            $connection.Connected | Should -BeTrue
+            $connection.Authorised | Should -BeTrue
+            Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+                $Uri -like '*/api/v1/userinfo' -and $Headers['X-API-Key'] -eq 'jim_ak_a_key_jim_knows_0123456789ab'
+            }
+        }
+    }
+}
+
 Describe 'Disconnect-JIM' {
 
     Context 'Functionality' {

@@ -12,8 +12,9 @@
     indentation the tab gives it; with no tab named, the first one outside every tab, as a command for either
     runtime is given. A check that runs the page's own text, rather than a copy of it, fails when the page goes
     wrong, as the Docker key backup did when it relied on an image an air-gapped host does not have (#1949), the
-    rootless Podman one did when it wrote an empty archive (#1954), and the database restore did when it
-    restored over the existing database (#1951).
+    rootless Podman one did when it wrote an empty archive (#1954), the database restore did when it restored
+    over the existing database (#1951), and the rootless systemctl command did on a host without
+    systemd-container (#1955).
 
 .PARAMETER Path
     The documentation page.

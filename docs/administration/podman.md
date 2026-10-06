@@ -79,19 +79,25 @@ Restarting `jim.service` restarts the web, worker and scheduler together; `jim-d
 
 ### Rootless commands {#rootless-commands}
 
-A rootless JIM belongs to the `jim` account: its systemd manager runs JIM, and its Podman holds JIM's containers, images, secrets and volumes, which root's Podman does not see. As root, reach them like this:
+A rootless JIM belongs to the `jim` account: its systemd manager runs JIM, and its Podman holds JIM's containers, images, secrets and volumes, which root's Podman does not see. As root, reach them through two functions, which save typing out the account's settings each time. Define them in each shell you operate JIM from:
 
 ```bash
+# systemctl for the jim account's systemd manager, through the account's own bus.
+jim-systemctl() { sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u jim)/bus systemctl --user "$@"; }
 # Podman as the jim account, from the root folder: rootless Podman fails in a folder the account cannot read,
-# such as your home folder. This function saves typing that out each time.
+# such as your home folder.
 jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+```
 
-sudo systemctl --user -M jim@ status jim.service
+Then, for example:
+
+```bash
+jim-systemctl status jim.service
 jim-podman ps
 jim-podman logs -f jim-web
 ```
 
-Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `systemctl --user -M jim@`.
+Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `jim-systemctl`. Use `jim-systemctl` rather than `systemctl --user -M jim@`, which fails on a minimal RHEL-family host that lacks the `systemd-container` package (see [Troubleshooting](troubleshooting.md#rootless-systemctl-fails)).
 
 As the `jim` account, Podman cannot open your files by name, so give it its input and output through your shell's redirections (`<`, `>` and `|`), as this documentation does, rather than as a path. Podman 4's `podman volume export` is the trap: it opens `/dev/stdout` by name even when given no path, so piped or redirected to a file of yours, its archive comes out empty.
 
@@ -109,15 +115,24 @@ None of these checks starts until its service has finished starting, however lon
 
 - **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port).
 - **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
-- **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, and the combination allows it no network at all, so JIM cannot reach its database or identity provider. The installer offers to add a network rule to each profile's local override, Ubuntu's place for site changes; JIM's containers keep their own AppArmor profile. By hand, as root:
+- **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
+
+    - It allows the container no network at all, so JIM cannot reach its database or identity provider.
+    - It stops the processes in a container signalling one another. The .NET runtime signals its own threads to reclaim memory, so JIM's services crash, and Podman restarts them, over and over.
+
+    The installer offers to fix both, in AppArmor's places for site changes: a network rule in each profile's local override, and a rule in `/etc/apparmor.d/abstractions/base.d/jim-podman` that lets each profile signal itself when combined with `crun`'s or `podman`'s. Ubuntu already lets every profile signal itself (`signal peer=@{profile_name}` in its base abstraction); the rule extends that to the combined profile, and allows nothing between different profiles. JIM's containers keep their own AppArmor profile. By hand, as root:
 
     ```bash
     echo 'network,' >> /etc/apparmor.d/local/crun
     echo 'network,' >> /etc/apparmor.d/local/podman
     apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman
+    mkdir -p /etc/apparmor.d/abstractions/base.d
+    echo 'signal peer=@{profile_name}//&{crun,podman},' > /etc/apparmor.d/abstractions/base.d/jim-podman
     ```
 
-    A rootless JIM does not need it.
+    Podman loads its profile for containers when the first container starts after boot, and keeps it until the server restarts, so the signal rule reaches it only then. If a rootful container has run since the server started, as it has wherever JIM already runs, restart the server once you have added the rule. The installer does this part for you where no container is running: it unloads Podman's profile, and the next container to start loads it with the rule.
+
+    A rootless JIM needs neither rule: Podman gives rootless containers no AppArmor profile.
 
 !!! note "With Docker on the same server"
     Docker's firewall rules drop traffic forwarded to other container engines, so other machines cannot reach a rootful Podman JIM, the default, on a server that also runs Docker. Run JIM on one engine per server.
@@ -155,7 +170,7 @@ If your organisation's policy requires every step by hand, these steps do what t
       "$(base64 -w0 /opt/jim/tls/tls.crt)" "$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
     ```
 
-5. **Open the port** in firewalld, and on Ubuntu 24.04 allow JIM's containers the network under AppArmor (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
+5. **Open the port** in firewalld, and on Ubuntu 24.04 add the AppArmor rules JIM's containers need (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
 
     ```bash
     firewall-cmd --permanent --add-service=https && firewall-cmd --reload
@@ -177,10 +192,9 @@ useradd --create-home --comment "JIM (Junctional Identity Manager)" --shell /sbi
 grep '^jim:' /etc/subuid /etc/subgid
 loginctl enable-linger jim
 echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system
-jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
 ```
 
-Then follow the steps above, with three differences:
+Define the `jim-systemctl` and `jim-podman` functions from [Rootless commands](#rootless-commands) in the same shell, then follow the steps above, with three differences:
 
 - In step 1, put the units in the account's folder instead of `/etc/containers/systemd/`:
 
@@ -191,7 +205,7 @@ Then follow the steps above, with three differences:
     ```
 
 - Run each `podman` command as `jim-podman`.
-- Run each `systemctl` command as `systemctl --user -M jim@`.
+- Run each `systemctl` command as `jim-systemctl`.
 
 ## Without systemd {#without-systemd}
 

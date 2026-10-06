@@ -122,6 +122,231 @@ jim_systemctl() { echo "asked systemd"; return 1; }
     }
 }
 
+Describe 'setup.sh jim_systemctl_command' -Skip:$script:NoBash {
+    It 'as root, for a rootless installation, reaches the account''s systemd manager through its own bus, which needs no systemd-container (#1955)' {
+        # Root, with the account jim as uid 1002. sudo stands in for the command the administrator would run, and
+        # writes what it was given, one argument a line.
+        $arrange = @'
+PODMAN_ACCOUNT=jim
+id() { if [ "$1" = "-u" ] && [ -z "${2:-}" ]; then echo 0; elif [ "$1" = "-u" ]; then echo 1002; else command id "$@"; fi; }
+sudo() { printf '%s\n' "$@"; }
+'@
+
+        $result = Invoke-SetupFunction 'eval "$(jim_systemctl_command) status jim.service"' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $arguments = @($result.Output -split "`r?`n" | Where-Object { $_ })
+        # systemctl -M jim@ fails on a minimal RHEL-family host, which lacks the systemd-container package.
+        $arguments | Should -Not -Contain '-M'
+        $arguments[0..1] | Should -Be @('-u', 'jim')
+        $arguments | Should -Contain 'XDG_RUNTIME_DIR=/run/user/1002'
+        $arguments | Should -Contain 'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus'
+        $arguments[-4..-1] | Should -Be @('systemctl', '--user', 'status', 'jim.service')
+    }
+}
+
+Describe 'setup.sh configure_apparmor' -Skip:$script:NoBash {
+    BeforeAll {
+        # A host with AppArmor's policy folder and the kernel's interface to it under the test's own folder: Ubuntu
+        # 24.04's profiles for crun and podman, unless -NoRuntimeProfiles, with empty local overrides; the profiles the
+        # kernel has loaded, -Loaded, of which -InUse are what some process runs under; and an apparmor_parser that
+        # records what it was asked, and fails to compile with -PolicyBroken.
+        function New-AppArmorHost {
+            param(
+                [switch]$NoRuntimeProfiles,
+                [switch]$NetworkAllowed,
+                [string]$SignalRuleFile = '',
+                [string[]]$Loaded = @(),
+                [string[]]$InUse = @(),
+                [string]$Fix = 'true',
+                [string]$Account = '',
+                [string]$Enabled = 'Y',
+                [switch]$PolicyBroken
+            )
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            $policy = Join-Path $root 'apparmor.d'
+            $kernel = Join-Path $root 'securityfs'
+            New-Item -ItemType Directory -Path (Join-Path $policy 'local'), (Join-Path $policy 'abstractions'), $kernel | Out-Null
+            if (-not $NoRuntimeProfiles) {
+                foreach ($profile in 'crun', 'podman') {
+                    $text = "abi <abi/4.0>,`ninclude <tunables/global>`n`nprofile $profile /usr/bin/$profile flags=(unconfined) {`n" +
+                        "  userns,`n`n  include if exists <local/$profile>`n}`n"
+                    Set-Content -Path (Join-Path $policy $profile) -Value $text -NoNewline
+                    Set-Content -Path (Join-Path $policy 'local' $profile) -Value $(if ($NetworkAllowed) { "network,`n" } else { '' }) -NoNewline
+                }
+            }
+            if ($SignalRuleFile) {
+                New-Item -ItemType Directory -Path (Join-Path $policy 'abstractions' 'base.d') | Out-Null
+                Set-Content -Path (Join-Path $policy 'abstractions' 'base.d' $SignalRuleFile) -NoNewline `
+                    -Value "  signal peer=@{profile_name}//&{crun,podman},`n"
+            }
+            $listed = @($Loaded | ForEach-Object { "$_ (enforce)" }) + 'crun (unconfined)', 'podman (unconfined)'
+            Set-Content -Path (Join-Path $kernel 'profiles') -Value ($listed -join "`n")
+
+            $failCompile = if ($PolicyBroken) { 'return 1' } else { 'return 0' }
+            $arrange = @"
+APPARMOR_DIR='$policy'
+APPARMOR_FS='$kernel'
+PODMAN_ACCOUNT='$Account'
+JIM_SETUP_FIX_APPARMOR='$Fix'
+apparmor_enabled() { [ '$Enabled' = Y ]; }
+apparmor_profile_in_use() { case ' $($InUse -join ' ') ' in *" `$1 "*) return 0 ;; esac; return 1; }
+apparmor_parser() {
+    echo "`$*" >> '$root/parser.log'
+    case "`$1" in -Q*) cat > /dev/null; $failCompile ;; esac
+}
+"@
+            [pscustomobject]@{
+                Arrange = $arrange
+                Policy = $policy
+                SignalRules = Join-Path $policy 'abstractions' 'base.d' 'jim-podman'
+                Removed = Join-Path $kernel '.remove'
+                ParserLog = Join-Path $root 'parser.log'
+            }
+        }
+
+        # The rules of a policy file, without comments or blank lines.
+        function Get-Rule {
+            param([string]$Path)
+            @(Get-Content -Path $Path | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+        }
+    }
+
+    It 'allows the network in the local overrides of crun and podman, and reloads both' {
+        $apparmor = New-AppArmorHost
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Rule (Join-Path $apparmor.Policy 'local' 'crun') | Should -Be @('network,')
+        Get-Rule (Join-Path $apparmor.Policy 'local' 'podman') | Should -Be @('network,')
+        $reloads = Get-Content $apparmor.ParserLog | Where-Object { $_ -like '-r *' }
+        $reloads | Should -Contain "-r $(Join-Path $apparmor.Policy 'crun')"
+        $reloads | Should -Contain "-r $(Join-Path $apparmor.Policy 'podman')"
+    }
+
+    It 'lets a profile signal itself stacked with crun''s or podman''s, in the base abstraction''s folder for site additions, and nothing more' {
+        $apparmor = New-AppArmorHost
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Rule $apparmor.SignalRules | Should -Be @('signal peer=@{profile_name}//&{crun,podman},')
+    }
+
+    It 'checks the host''s policy still compiles with the rule, since every profile includes the base abstraction' {
+        $apparmor = New-AppArmorHost
+
+        Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange | Out-Null
+
+        Get-Content $apparmor.ParserLog | Where-Object { $_ -like '-Q*' } | Should -Not -BeNullOrEmpty
+    }
+
+    It 'takes the rule back out and stops when the host''s policy no longer compiles with it' {
+        $apparmor = New-AppArmorHost -PolicyBroken
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $apparmor.SignalRules | Should -Not -Exist
+        $result.Output | Should -BeLike '*abstractions/base.d/jim-podman*'
+    }
+
+    It 'adds only the signal rule to a host that has the network rule, as an installation of v0.16.0 or earlier does' {
+        $apparmor = New-AppArmorHost -NetworkAllowed
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Rule (Join-Path $apparmor.Policy 'local' 'crun') | Should -Be @('network,')
+        Get-Rule $apparmor.SignalRules | Should -Be @('signal peer=@{profile_name}//&{crun,podman},')
+    }
+
+    It 'changes nothing on a host that has both rules, the signal rule in a file of its own included' {
+        $apparmor = New-AppArmorHost -NetworkAllowed -SignalRuleFile 'site' -Loaded 'containers-default-0.57.4-apparmor1'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output.Trim() | Should -BeNullOrEmpty
+        $apparmor.ParserLog | Should -Not -Exist
+        $apparmor.SignalRules | Should -Not -Exist
+        $apparmor.Removed | Should -Not -Exist
+    }
+
+    It 'changes nothing for a rootless installation, which Podman confines with no profile' {
+        $apparmor = New-AppArmorHost -Account 'jim'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $apparmor.ParserLog | Should -Not -Exist
+        $apparmor.SignalRules | Should -Not -Exist
+    }
+
+    It 'changes nothing where AppArmor is off' {
+        $apparmor = New-AppArmorHost -Enabled 'N'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $apparmor.ParserLog | Should -Not -Exist
+        $apparmor.SignalRules | Should -Not -Exist
+    }
+
+    It 'changes nothing where Podman''s runtimes have no profiles of their own, so nothing is stacked' {
+        $apparmor = New-AppArmorHost -NoRuntimeProfiles
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $apparmor.ParserLog | Should -Not -Exist
+        $apparmor.SignalRules | Should -Not -Exist
+    }
+
+    It 'stops, changing nothing, and says what to do by hand when the rules are declined' {
+        $apparmor = New-AppArmorHost -Fix 'false'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        Get-Rule (Join-Path $apparmor.Policy 'local' 'crun') | Should -BeNullOrEmpty
+        $apparmor.SignalRules | Should -Not -Exist
+        $result.Output | Should -BeLike '*abstractions/base.d/jim-podman*'
+        $result.Output | Should -BeLike '*--rootless*'
+        $result.Output | Should -BeLike '*/administration/podman/#firewall-selinux-and-apparmor*'
+    }
+
+    It 'unloads Podman''s profile for containers when no process runs under it, so that the next container loads it with the rule' {
+        $apparmor = New-AppArmorHost -Loaded 'containers-default-0.57.4-apparmor1'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $apparmor.Removed -Raw | Should -Be 'containers-default-0.57.4-apparmor1'
+    }
+
+    It 'leaves a profile a process runs under loaded, which would leave the process unconfined, and says to restart the server' {
+        $apparmor = New-AppArmorHost -Loaded 'containers-default-0.57.4-apparmor1' -InUse 'containers-default-0.57.4-apparmor1'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $apparmor.Removed | Should -Not -Exist
+        $result.Output | Should -BeLike '*restart*server*'
+    }
+
+    It 'unloads nothing when it adds only the network rule' {
+        $apparmor = New-AppArmorHost -SignalRuleFile 'site' -Loaded 'containers-default-0.57.4-apparmor1'
+
+        $result = Invoke-SetupFunction 'configure_apparmor' $apparmor.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Rule (Join-Path $apparmor.Policy 'local' 'crun') | Should -Be @('network,')
+        $apparmor.Removed | Should -Not -Exist
+    }
+}
+
 Describe 'setup.sh size_database' -Skip:$script:NoBash {
     BeforeAll {
         $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
@@ -328,6 +553,86 @@ Describe 'setup.sh size_database' -Skip:$script:NoBash {
         $result.ExitCode | Should -Be 0 -Because $result.Output
         (Get-Settings $arrangement.Config).ContainsKey('JIM_DB_SHARED_BUFFERS') | Should -BeFalse
         $result.Output | Should -BeLike '*Could not read this host''s memory*'
+    }
+}
+
+Describe 'setup.sh infrastructure API key' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+        $script:Key = 'jim_ak_0123456789abcdef0123456789abcdef'
+
+        # A settings file made from the release's template for the runtime, with the given environment.
+        function New-KeyArrangement {
+            param([string]$Runtime = 'docker', [string]$Environment = '')
+            $dir = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $dir | Out-Null
+            $config = if ($Runtime -eq 'podman') { Join-Path $dir 'jim-config.yaml' } else { Join-Path $dir '.env' }
+            $template = if ($Runtime -eq 'podman') { Join-Path $script:RepositoryRoot 'deploy' 'podman' 'jim-config.yaml' } else { Join-Path $script:RepositoryRoot '.env.example' }
+            Copy-Item $template $config
+            [pscustomobject]@{
+                Dir = $dir
+                Config = $config
+                Arrange = "RUNTIME=$Runtime`nCONFIG_FILE='$config'`n$Environment"
+            }
+        }
+    }
+
+    # Until #1950 only Podman stored the key, so an automated Docker install that set it had no key to use.
+    It 'on Docker, writes a given key to .env, which compose passes to JIM' {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=$script:Key"
+
+        $result = Invoke-SetupFunction 'configure_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Config | Should -Contain "JIM_INFRASTRUCTURE_API_KEY=$script:Key"
+    }
+
+    It 'on Podman, stores a given key in the jim-secrets secret, and not in jim-config.yaml' {
+        # What the installer gives Podman's secret store, which it reads from standard input.
+        $secret = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).yaml"
+        $arrangement = New-KeyArrangement -Runtime podman -Environment @"
+JIM_INFRASTRUCTURE_API_KEY=$script:Key
+JIM_DB_PASSWORD=db-password
+JIM_SSO_SECRET=sso-secret
+as_jim_account() { cat > '$secret'; }
+"@
+
+        $result = Invoke-SetupFunction "configure_infrastructure_api_key`nstore_podman_secrets" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $secret | Should -Contain "  JIM_INFRASTRUCTURE_API_KEY: `"$script:Key`""
+        Get-Content $arrangement.Config | Where-Object { $_ -match '^\s*JIM_INFRASTRUCTURE_API_KEY:' } | Should -BeNullOrEmpty
+    }
+
+    It 'writes nothing when no key is given' {
+        $arrangement = New-KeyArrangement
+        $before = Get-Content -Raw $arrangement.Config
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key; configure_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -Raw $arrangement.Config | Should -BeExactly $before
+    }
+
+    # JIM ignores a key it would not accept, logging only a warning, so automation would find out at its first call.
+    It 'stops, naming the rule, when a given key is <Reason>' -TestCases @(
+        @{ Reason = 'missing the jim_ak_ prefix'; Value = 'abc_0123456789abcdef0123456789abcdef' }
+        @{ Reason = 'shorter than 32 characters'; Value = 'jim_ak_0123456789' }
+    ) {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=$Value"
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM_INFRASTRUCTURE_API_KEY*jim_ak_*32*'
+    }
+
+    It 'accepts a key of exactly 32 characters, as JIM does' {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=jim_ak_$('a' * 25)"
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
     }
 }
 
