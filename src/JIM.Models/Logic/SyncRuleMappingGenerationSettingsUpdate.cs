@@ -11,9 +11,8 @@ namespace JIM.Models.Logic;
 /// other direction-scoped setting on the parent type.
 /// </summary>
 /// <remarks>
-/// Deliberately excludes <see cref="SyncRuleMappingGeneration.Exclusions"/> and
-/// <see cref="SyncRuleMappingGeneration.CollisionRemediation"/>: exclusions are release 4 surfaces and Collision
-/// Remediation is a release 4 feature, so neither is settable from any surface yet (plan releases 1 and 4).
+/// Deliberately excludes <see cref="SyncRuleMappingGeneration.CollisionRemediation"/>: Collision Remediation is a
+/// release 4 feature, so it is not settable from any surface yet.
 /// </remarks>
 public class SyncRuleMappingGenerationSettingsUpdate
 {
@@ -68,6 +67,13 @@ public class SyncRuleMappingGenerationSettingsUpdate
     public bool? NeverReuse { get; set; }
 
     /// <summary>
+    /// The Connected Systems excluded from the value's availability checks (release 3), by id. Null leaves the
+    /// exclusions unchanged; an empty list clears them; a list replaces them. Each must be a Connected System the
+    /// generated value is exported to unchanged, which the application layer validates.
+    /// </summary>
+    public List<int>? Exclusions { get; set; }
+
+    /// <summary>
     /// True when the update names at least one generation setting.
     /// </summary>
     public bool HasChanges =>
@@ -82,5 +88,6 @@ public class SyncRuleMappingGenerationSettingsUpdate
         RandomLength.HasValue ||
         Separator != null ||
         AttemptLimit.HasValue ||
-        NeverReuse.HasValue;
+        NeverReuse.HasValue ||
+        Exclusions != null;
 }

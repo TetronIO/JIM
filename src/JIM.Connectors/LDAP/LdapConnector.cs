@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -127,6 +127,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public bool SupportsPasswordSet => true;
 
     public bool SupportsPasswordPolicyDiscovery => true;
+
+    public bool SupportsUniquenessProbe => true;
 
     // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
     // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
@@ -1445,6 +1447,78 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         LdapConnectorUtilities.GetContainerDisplayNameFromDn(containerExternalId);
     #endregion
 
+    #region IConnectorUniquenessProbe members
+    /// <summary>
+    /// The probe's own bound connection (Unique Value Generation, #242, release 3), kept apart from the import,
+    /// export and password connections so a probe session never disturbs one of them.
+    /// </summary>
+    private LdapConnection? _probeConnection;
+
+    /// <summary>
+    /// The searcher over <see cref="_probeConnection"/>; null until <see cref="OpenUniquenessProbeConnection"/> succeeds.
+    /// </summary>
+    private LdapConnectorUniquenessProbe? _uniquenessProbe;
+
+    /// <summary>
+    /// The selected partitions' roots, searched from the root down (see <see cref="LdapConnectorUniquenessProbe"/>
+    /// for why the partition root rather than the selected containers).
+    /// </summary>
+    private IReadOnlyList<string> _probeSearchBases = [];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Opens exactly as the import path does (the same connection plan: credentials decrypted through the credential
+    /// protection service, the JIM certificate store as additional LDAPS trust anchors, the effective server resolved
+    /// from the Preferred Domain Controller setting or the persisted pin), so a probe reaches the same directory server
+    /// with the same identity an import would.
+    /// </remarks>
+    public void OpenUniquenessProbeConnection(ConnectedSystem connectedSystem, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        CloseUniquenessProbeConnection();
+
+        // Consulted by the connection plan to resolve a pinned domain controller, as on import.
+        _persistedConnectorData = connectedSystem.PersistedConnectorData;
+
+        var plan = BuildConnectionPlan(connectedSystem.SettingValues, logger);
+        var connection = OpenConnection(plan, logger);
+
+        _probeConnection = connection;
+        _probeSearchBases = connectedSystem.Partitions?
+            .Where(p => p.Selected && !string.IsNullOrWhiteSpace(p.ExternalId))
+            .Select(p => p.ExternalId)
+            .ToList() ?? [];
+        _uniquenessProbe = new LdapConnectorUniquenessProbe(new LdapOperationExecutor(connection), logger);
+
+        logger.Debug("OpenUniquenessProbeConnection: Probe connection open; {PartitionCount} partition root(s) to search.", _probeSearchBases.Count);
+    }
+
+    /// <inheritdoc />
+    public bool CanProbeAttribute(string attributeName) => LdapConnectorUniquenessProbe.CanProbeAttribute(attributeName);
+
+    /// <inheritdoc />
+    public Task<UniquenessProbeResult> ProbeAsync(UniquenessProbeRequest request, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_uniquenessProbe == null)
+            throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAsync()!");
+
+        return _uniquenessProbe.ProbeAsync(request, _probeSearchBases, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void CloseUniquenessProbeConnection()
+    {
+        _uniquenessProbe = null;
+        _probeSearchBases = [];
+        _probeConnection?.Dispose();
+        _probeConnection = null;
+    }
+    #endregion
+
     #region IConnectorCertificateAware members
     /// <summary>
     /// Sets the certificate provider for JIM Store certificate validation.
@@ -1572,6 +1646,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             _passwordConnection?.Dispose();
             _passwordConnection = null;
             _passwordChannel = null;
+
+            CloseUniquenessProbeConnection();
 
             _trustDirectory?.Dispose();
             _trustDirectory = null;

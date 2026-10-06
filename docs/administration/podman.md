@@ -99,6 +99,8 @@ jim-podman logs -f jim-web
 
 Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `jim-systemctl`. Use `jim-systemctl` rather than `systemctl --user -M jim@`, which fails on a minimal RHEL-family host that lacks the `systemd-container` package (see [Troubleshooting](troubleshooting.md#rootless-systemctl-fails)).
 
+As the `jim` account, Podman cannot open your files by name, so give it its input and output through your shell's redirections (`<`, `>` and `|`), as this documentation does, rather than as a path. Podman 4's `podman volume export` is the trap: it opens `/dev/stdout` by name even when given no path, so piped or redirected to a file of yours, its archive comes out empty.
+
 ### Health checks and restarts
 
 Each container has a health check, which `podman ps` shows. Podman 5 restarts a container whose health check keeps failing, where Docker only reports it, so the checks ask only whether a service has stopped responding:

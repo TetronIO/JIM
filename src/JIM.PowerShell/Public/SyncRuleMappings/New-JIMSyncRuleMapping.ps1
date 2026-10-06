@@ -85,7 +85,7 @@ function New-JIMSyncRuleMapping {
         Makes this a "Generated Value" mapping (Unique Value Generation, #242): the mapping's value is its base
         expression (optional; supply with -Expression) plus a uniqueness token. Requires either
         -TargetMetaverseAttributeId (an import mapping) or -TargetConnectedSystemAttributeId (an export
-        mapping). Exclusions and Collision Remediation are not configurable from any surface in this release.
+        mapping). Collision Remediation is not configurable from any surface in this release.
 
     .PARAMETER TokenKind
         Which uniqueness token the mapping appends. Omit for OnlyIfTaken (the server default): the base value
@@ -138,10 +138,20 @@ function New-JIMSyncRuleMapping {
         $true (the server default and recommended setting). Always treated as true for a Sequence token,
         regardless of what is supplied, because its forward-only counter makes reuse impossible.
 
+    .PARAMETER ExcludeConnectedSystemId
+        Import generated mappings only: the IDs of Connected Systems to leave out of the value's availability
+        checks. Values already in use in an excluded Connected System do not stop JIM choosing them; JIM neither
+        checks its own records of that system nor probes it. Each must be a Connected System the value is
+        exported to unchanged (an export Attribute Flow taking the generated Metaverse attribute as its only
+        source); otherwise the request is refused naming the Connected System. Omit to check every Connected
+        System the value is exported to. Get-JIMSyncRuleMapping's Generation.Participants lists them.
+
     .OUTPUTS
         PSCustomObject representing the created Synchronisation Rule Mapping. A generated mapping's Generation
-        property carries its uniqueness token settings; Generation.SequenceSkippedAhead is present only when
-        -SequenceStart raised the target attribute's counter on this save. Warnings lists any non-blocking
+        property carries its uniqueness token settings, Generation.Exclusions (the excluded Connected System
+        IDs) and Generation.Participants (each Connected System the value is exported to, and how it is checked
+        there; see Get-JIMSyncRuleMapping); Generation.SequenceSkippedAhead is present only when -SequenceStart
+        raised the target attribute's counter on this save. Warnings lists any non-blocking
         warnings the save raised (empty when there were none); each is also written with Write-Warning.
 
     .EXAMPLE
@@ -213,6 +223,13 @@ function New-JIMSyncRuleMapping {
 
         Creates a generated export mapping whose value is a twelve-character random hexadecimal token, with no
         base expression.
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 `
+            -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -Generate -ExcludeConnectedSystemId 4
+
+        Creates a generated Account Name that is not checked for availability in Connected System 4, for example
+        a system known to keep its own accounts unique some other way.
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -323,6 +340,11 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ImportGenerated')]
         [Parameter(ParameterSetName = 'ExportGenerated')]
         [bool]$NeverReuse,
+
+        # Exclusions (release 3), import generated mappings only: an export-mode generated value is checked
+        # only in its own Connected System, so it has nothing to exclude.
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [int[]]$ExcludeConnectedSystemId,
 
         # Inbound value processing (import mappings only). Whitespace-only/empty text values are treated as
         # no value by default; use -PreserveWhitespace to keep them as literal values instead.
@@ -498,6 +520,9 @@ function New-JIMSyncRuleMapping {
             if ($PSBoundParameters.ContainsKey('Separator')) { $generation.separator = $Separator }
             if ($PSBoundParameters.ContainsKey('AttemptLimit')) { $generation.attemptLimit = $AttemptLimit }
             if ($PSBoundParameters.ContainsKey('NeverReuse')) { $generation.neverReuse = $NeverReuse }
+            # Always sent as a JSON array, even for a single ID: the @() keeps one value from serialising as a
+            # bare number.
+            if ($PSBoundParameters.ContainsKey('ExcludeConnectedSystemId')) { $generation.exclusions = @($ExcludeConnectedSystemId) }
             $body.generation = $generation
         }
 

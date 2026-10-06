@@ -4336,6 +4336,7 @@ public class SynchronisationController(
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity).ToList();
         AttachDerivedFlowInfo(dtos, await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
         await AttachRetiredValueCountsAsync(dtos);
+        await AttachGeneratedValueParticipantsAsync(dtos, mappings, syncRule.ConnectedSystemId);
         return Ok(dtos);
     }
 
@@ -4364,7 +4365,22 @@ public class SynchronisationController(
         var dto = SyncRuleMappingDto.FromEntity(mapping);
         AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
         await AttachRetiredValueCountsAsync([dto]);
+        await AttachGeneratedValueParticipantsAsync([dto], [mapping], syncRule.ConnectedSystemId);
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// Fills each generated mapping's <see cref="SyncRuleMappingGenerationDto.Participants"/> (#242, release 3): the
+    /// Connected Systems its value is exported to and how each is checked, read once for all of them.
+    /// </summary>
+    private async Task AttachGeneratedValueParticipantsAsync(IReadOnlyList<SyncRuleMappingDto> dtos, IReadOnlyCollection<SyncRuleMapping> mappings, int hostConnectedSystemId)
+    {
+        if (dtos.All(d => d.Generation == null))
+            return;
+
+        var participants = await _application.ConnectedSystems.GetGeneratedValueParticipantsAsync(mappings, hostConnectedSystemId);
+        foreach (var dto in dtos.Where(d => d.Generation != null))
+            dto.Generation!.Participants = (participants.GetValueOrDefault(dto.Id) ?? []).Select(GeneratedValueParticipantDto.FromModel).ToList();
     }
 
     /// <summary>
@@ -4626,6 +4642,7 @@ public class SynchronisationController(
                     : null;
             // Likewise the save's non-blocking warnings (#1750), stamped on the saved instance, not the reloaded one.
             dto.Warnings = mapping.SaveWarnings.ToList();
+            await AttachGeneratedValueParticipantsAsync([dto], [created!], syncRule.ConnectedSystemId);
             // Only a mapping reading mv["..."] can be a derived flow, so nothing is looked up for any other.
             if (DerivedFlowGraph.ReadsMetaverse(mapping))
                 AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
@@ -4672,7 +4689,8 @@ public class SynchronisationController(
     /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised,
     /// and its <c>dependentDerivedFlows</c> any Attribute Flow deriving a Metaverse attribute that the update left with a
     /// missing input (the update goes ahead regardless).</response>
-    /// <response code="400">The request named no setting, named one that does not apply to this mapping, or carried an invalid Expression.</response>
+    /// <response code="400">The request named no setting, named one that does not apply to this mapping, carried an invalid Expression,
+    /// or excluded a Connected System the generated value is not exported to unchanged (the message names it).</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPatch("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "UpdateSyncRuleMapping")]
@@ -4720,6 +4738,7 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
             var dto = SyncRuleMappingDto.FromEntity(updated);
+            await AttachGeneratedValueParticipantsAsync([dto], [updated], syncRule.ConnectedSystemId);
             if (DerivedFlowGraph.ReadsMetaverse(updated))
                 AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
             return Ok(dto);

@@ -1,0 +1,128 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Checked for availability in" (Unique Value Generation, #242, release 3): every Connected System a generated value
+   is exported to, how JIM checks the value there (its own records, a probe of the target, or not at all, and why),
+   and the Include switch that excludes a system from the checks. Display only: the host loads the rows
+   (ConnectedSystemServer.GetGeneratedValueParticipantsAsync) and reloads them when the Include switch changes
+   Generation.Exclusions, which saves with the rest of the generation settings. *@
+
+<div class="mt-5" data-testid="generated-value-availability-panel">
+    <MudText Typo="Typo.subtitle2" Class="mb-1">Checked for availability in</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@GeneratedValueAvailabilityWording.PanelHelperText</MudText>
+
+    @if (Participants == null)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (Participants.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="generated-value-availability-empty">
+            @GeneratedValueAvailabilityWording.NoParticipantsText
+        </MudText>
+    }
+    else
+    {
+        <MudSimpleTable Elevation="0" Outlined="true" Class="jim-availability-table">
+            <thead>
+                <tr>
+                    <th>Connected System</th>
+                    <th>Exported as</th>
+                    <th>Checked</th>
+                    <th class="jim-availability-include">Include</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var participant in Participants)
+                {
+                    var excluded = IsExcluded(participant);
+                    @* Until the host reloads after the switch, a row switched back on still carries its excluded read;
+                       it says nothing rather than the exclusion it no longer has. *@
+                    var reason = GeneratedValueAvailabilityWording.ReasonText(excluded
+                        ? GeneratedValueParticipantReason.Excluded
+                        : participant.Reason == GeneratedValueParticipantReason.Excluded ? GeneratedValueParticipantReason.None : participant.Reason);
+                    var check = excluded ? GeneratedValueParticipantCheck.NotChecked : participant.Check;
+                    <tr @key="@($"{participant.ConnectedSystemId}:{participant.ConnectedSystemObjectTypeAttributeId}")"
+                        class="@(excluded ? "jim-availability-row-excluded" : null)"
+                        data-testid="generated-value-availability-row" data-excluded="@(excluded ? "true" : "false")">
+                        <td>
+                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@participant.ConnectedSystemName"
+                                        Href="@($"/admin/connected-systems/{participant.ConnectedSystemId}")" Class="ma-0" />
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@participant.ConnectorName</MudText>
+                        </td>
+                        <td>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@participant.AttributeName" />
+                        </td>
+                        <td>
+                            <MudChip T="string" Variant="Variant.Text" Class="ma-0" data-testid="generated-value-availability-check"
+                                     Color="@(check == GeneratedValueParticipantCheck.JimRecordsAndProbe ? Color.Success : Color.Default)">
+                                @GeneratedValueAvailabilityWording.CheckLabel(check)
+                            </MudChip>
+                            @if (reason != null)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="generated-value-availability-reason">@reason</MudText>
+                            }
+                        </td>
+                        <td class="jim-availability-include">
+                            @if (participant.CanBeExcluded)
+                            {
+                                <MudSwitch T="bool" Value="@(!excluded)" ValueChanged="@(include => OnIncludeChangedAsync(participant, include))"
+                                           Color="Color.Primary" Disabled="Disabled" aria-label="@($"Check {participant.ConnectedSystemName} for availability")"
+                                           data-testid="generated-value-availability-include" />
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The rows to show, from <c>ConnectedSystemServer.GetGeneratedValueParticipantsAsync</c>; null while loading.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<GeneratedValueParticipant>? Participants { get; set; }
+
+    /// <summary>
+    /// The generated mapping's settings, whose <see cref="SyncRuleMappingGeneration.Exclusions"/> the Include switch
+    /// edits in place, so they save with the rest of the generation settings.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMappingGeneration Generation { get; set; } = null!;
+
+    /// <summary>Raised after the Include switch changes the exclusions, so the host can reload the rows.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Excluded as the form now stands. The switch edits the exclusions before the host reloads the rows, so the row
+    /// follows the form at once rather than the last read.
+    /// </summary>
+    private bool IsExcluded(GeneratedValueParticipant participant) =>
+        participant.CanBeExcluded
+            ? Generation.Exclusions.Any(e => e.ConnectedSystemId == participant.ConnectedSystemId)
+            : participant.IsExcluded;
+
+    private async Task OnIncludeChangedAsync(GeneratedValueParticipant participant, bool include)
+    {
+        if (include)
+            Generation.Exclusions.RemoveAll(e => e.ConnectedSystemId == participant.ConnectedSystemId);
+        else if (Generation.Exclusions.All(e => e.ConnectedSystemId != participant.ConnectedSystemId))
+            Generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion { SyncRuleMappingGenerationId = Generation.Id, ConnectedSystemId = participant.ConnectedSystemId });
+
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+}

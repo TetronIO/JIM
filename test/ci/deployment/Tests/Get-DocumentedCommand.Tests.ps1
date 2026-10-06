@@ -58,6 +58,24 @@ BeforeAll {
       image tar czf /backup/keys.tar.gz -C /keys .
     ```
 
+### 3. Check the keys
+
+=== "Podman"
+
+    ```bash
+    podman check
+    ```
+
+=== "Docker"
+
+    Words only, with no command.
+
+Then, on either:
+
+```bash
+tar tzf keys.tar.gz | grep key-
+```
+
 ## Restoring {#restoring}
 
 1. **Restore the keys first**:
@@ -127,26 +145,52 @@ Describe 'Get-DocumentedCommand' {
     }
 
     It 'stops when the page has no such heading' {
-        { & $script:ScriptPath -Path $script:Page -Heading '3. Back up the logs' -Tab 'Docker' } |
-            Should -Throw '*3. Back up the logs*'
+        { & $script:ScriptPath -Path $script:Page -Heading '4. Back up the logs' -Tab 'Docker' } |
+            Should -Throw '*4. Back up the logs*'
     }
 
-    It 'finds the Docker key backup and restore in Backup & Disaster Recovery, which the deployment-boot check runs' {
+    It 'returns the first block outside any tab when no tab is named, past the tabs before it' {
+        $command = & $script:ScriptPath -Path $script:Page -Heading '3. Check the keys'
+
+        $command | Should -BeExactly 'tar tzf keys.tar.gz | grep key-'
+    }
+
+    It 'does not take a block after the end of a tab as the tab''s own' {
+        { & $script:ScriptPath -Path $script:Page -Heading '3. Check the keys' -Tab 'Docker' } |
+            Should -Throw '*3. Check the keys*Docker*'
+    }
+
+    It 'stops, when no tab is named, at a section whose every block is in a tab' {
+        { & $script:ScriptPath -Path $script:Page -Heading '1. Back up the database' } |
+            Should -Throw '*1. Back up the database*outside a tab*'
+    }
+
+    It 'finds the key backup, its check and the restore in Backup & Disaster Recovery, which the deployment-boot check runs' {
         $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'backup-recovery.md'
 
-        $backup = & $script:ScriptPath -Path $page -Heading '2. Back up the encryption keys' -Tab 'Docker'
-        $restore = & $script:ScriptPath -Path $page -Heading 'Restoring' -Tab 'Docker'
+        foreach ($tab in 'Docker', 'Podman') {
+            $backup = & $script:ScriptPath -Path $page -Heading '2. Back up the encryption keys' -Tab $tab
+            $restore = & $script:ScriptPath -Path $page -Heading 'Restoring' -Tab $tab
 
-        $backup | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
-        $restore | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
+            $backup | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
+            $restore | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
+        }
+        & $script:ScriptPath -Path $page -Heading '2. Back up the encryption keys' | Should -BeLike 'tar *jim-keys-*.tar.gz*key-*'
     }
 
-    It 'finds the rootless helpers in Running JIM on Podman, whose jim-systemctl the deployment-boot check runs' {
+    It 'finds the jim-podman function in Running on Podman, which the rootless deployment-boot leg runs the Podman commands with' {
         $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'podman.md'
 
-        $helpers = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
+        $commands = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
 
-        $helpers | Should -Match '(?m)^jim-systemctl\(\) \{'
-        $helpers | Should -Match '(?m)^jim-podman\(\) \{'
+        $commands | Should -Match '(?m)^jim-podman\(\) \{.*\}$'
+    }
+
+    It 'finds the jim-systemctl function in Running on Podman, which the rootless deployment-boot leg stops and starts JIM with' {
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'podman.md'
+
+        $commands = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
+
+        $commands | Should -Match '(?m)^jim-systemctl\(\) \{.*\}$'
     }
 }

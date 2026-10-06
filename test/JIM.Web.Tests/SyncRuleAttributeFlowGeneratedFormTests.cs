@@ -44,6 +44,9 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         // Object Type's import rules once a generated import mapping has a target; there are none here.
         var connectedSystems = new Mock<IConnectedSystemRepository>();
         connectedSystems.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRule>());
+        // The generated form's "Checked for availability in" panel (#242, release 3): no export rules here.
+        connectedSystems.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
+        connectedSystems.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() => []);
         repo.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
         repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
         _jim = new JimApplication(repo.Object);

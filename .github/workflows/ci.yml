@@ -644,8 +644,8 @@ jobs:
     # Installs JIM the way a customer does, three times over: from a release bundle built from this commit,
     # with the bundle's own setup.sh, offline, on Docker, on rootful Podman and on rootless Podman. Each leg
     # then checks what the customer would: JIM ready over HTTPS with the certificate the installer created,
-    # every container's own health check passing, and data kept through a stop and start; on Docker, also the
-    # documented key backup and restore, run as the page gives them, fetching no image
+    # every container's own health check passing, data kept through a stop and start, and the documented key
+    # backup and restore, run as the page gives them, putting the keys back and fetching no image
     # (test/ci/deployment/Invoke-DeploymentBoot.ps1). Last, it compares what the two runtimes actually run,
     # so the compose files and the pod files cannot drift apart unnoticed (Compare-RuntimeParity.ps1). This
     # is the only check that boots the production deployment of either runtime.

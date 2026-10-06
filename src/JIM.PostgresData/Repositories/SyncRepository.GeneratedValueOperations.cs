@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Exceptions;
+using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
@@ -76,6 +77,30 @@ public partial class SyncRepository
             connectedSystemObjectTypeAttributeId, normalisedValues.ToArray()).ToListAsync();
 
         return rows.Select(r => r.ToHolder()).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetConnectedSystemAttributeSampleValuesAsync(int connectedSystemObjectTypeAttributeId, int maximumCount)
+    {
+        if (maximumCount <= 0)
+            return [];
+
+        // The inner LIMIT bounds the rows read before DISTINCT, so a sample costs a handful of rows rather than a
+        // de-duplication of every value the attribute holds (it runs once per probed attribute per run, but an
+        // attribute can hold a million values). A probed attribute is meant to be unique, so a few times the wanted
+        // count is ample to find that many distinct values; finding fewer only means fewer controls to choose from.
+        var rows = await _context.Database.SqlQueryRaw<string>(
+            @"SELECT DISTINCT s.""Value""
+              FROM (SELECT av.""StringValue"" AS ""Value""
+                    FROM ""ConnectedSystemObjectAttributeValues"" av
+                    JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = av.""ConnectedSystemObjectId""
+                    WHERE av.""AttributeId"" = {0} AND cso.""Status"" = {1}
+                      AND av.""StringValue"" IS NOT NULL AND av.""StringValue"" <> ''
+                    LIMIT {2}) s
+              LIMIT {3}",
+            connectedSystemObjectTypeAttributeId, (int)ConnectedSystemObjectStatus.Normal, maximumCount * 4, maximumCount).ToListAsync();
+
+        return rows;
     }
 
     /// <inheritdoc />

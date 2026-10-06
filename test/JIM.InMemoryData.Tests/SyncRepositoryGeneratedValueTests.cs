@@ -546,6 +546,54 @@ public class SyncRepositoryGeneratedValueTests
 
     #endregion
 
+    #region Probe control values
+
+    [Test]
+    public async Task GetConnectedSystemAttributeSampleValuesAsync_ReturnsDistinctValuesHeldByNormalObjectsOnlyAsync()
+    {
+        SeedCsoWithStringValue(attributeId: 9, value: "asmith");
+        SeedCsoWithStringValue(attributeId: 9, value: "asmith");
+        SeedCsoWithStringValue(attributeId: 9, value: "bjones");
+        SeedCsoWithStringValue(attributeId: 9, value: "obsolete.holder", ConnectedSystemObjectStatus.Obsolete);
+        SeedCsoWithStringValue(attributeId: 9, value: "not.yet.provisioned", ConnectedSystemObjectStatus.PendingProvisioning);
+        SeedCsoWithStringValue(attributeId: 10, value: "other.attribute");
+
+        var values = await _repo.GetConnectedSystemAttributeSampleValuesAsync(9, 10);
+
+        Assert.That(values, Is.EquivalentTo(new[] { "asmith", "bjones" }));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAttributeSampleValuesAsync_MoreValuesThanWanted_ReturnsAtMostTheMaximumAsync()
+    {
+        for (var i = 0; i < 5; i++)
+            SeedCsoWithStringValue(attributeId: 9, value: $"user{i}");
+
+        var values = await _repo.GetConnectedSystemAttributeSampleValuesAsync(9, 3);
+
+        Assert.That(values, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAttributeSampleValuesAsync_NoValuesHeld_ReturnsEmptyAsync()
+    {
+        var values = await _repo.GetConnectedSystemAttributeSampleValuesAsync(9, 3);
+
+        Assert.That(values, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAttributeSampleValuesAsync_ZeroWanted_ReturnsEmptyAsync()
+    {
+        SeedCsoWithStringValue(attributeId: 9, value: "asmith");
+
+        var values = await _repo.GetConnectedSystemAttributeSampleValuesAsync(9, 0);
+
+        Assert.That(values, Is.Empty);
+    }
+
+    #endregion
+
     #region Helpers
 
     private static GeneratedValueAssignment NewMetaverseAssignment(int metaverseAttributeId, Guid mvoId, string value) => new()
@@ -589,11 +637,12 @@ public class SyncRepositoryGeneratedValueTests
         _repo.SeedMetaverseObject(mvo);
     }
 
-    private Guid SeedCsoWithStringValue(int attributeId, string value)
+    private Guid SeedCsoWithStringValue(int attributeId, string value, ConnectedSystemObjectStatus status = ConnectedSystemObjectStatus.Normal)
     {
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
+            Status = status,
             AttributeValues = [new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attributeId, StringValue = value }]
         };
         _repo.SeedConnectedSystemObject(cso);

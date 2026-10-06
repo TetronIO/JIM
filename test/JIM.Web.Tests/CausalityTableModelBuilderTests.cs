@@ -444,6 +444,30 @@ public class CausalityTableModelBuilderTests
     }
 
     /// <summary>
+    /// A downstream target disconnected by a Disconnect Deprovisioning Action (#1966) is a Disconnect row: the object
+    /// stays in the target system, but JIM no longer manages it, so it counts as destructive.
+    /// </summary>
+    [Test]
+    public void Build_SpeculativeScopeExitWithDisconnectAction_ProjectsADestructiveDisconnectRow()
+    {
+        var targetDisconnected = new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+            TargetEntityId = Guid.NewGuid(),
+            TargetEntityDescription = "Glitterband EMEA",
+            DetailMessage = "2"
+        };
+        var preview = new SyncPreviewResult { OutcomeTree = [targetDisconnected] };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, PreviewContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var row = table.Rows.SingleOrDefault(r => r.ChangeKind == CausalityTableChangeKind.Disconnect);
+        Assert.That(row, Is.Not.Null);
+        Assert.That(CausalityTableFilters.Matches(row!, CausalityTableFilter.Destructive), Is.True);
+    }
+
+    /// <summary>
     /// A downstream target whose provisioning was withdrawn before it was ever exported
     /// must produce its own row, distinct from Deprovision: nothing was ever created in the target system,
     /// so nothing is being removed from it, and the row must not be treated as Destructive.

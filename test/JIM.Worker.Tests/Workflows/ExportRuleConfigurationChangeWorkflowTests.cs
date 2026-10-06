@@ -333,7 +333,8 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
     public async Task FullSync_AfterScopingCriteriaAreNarrowedWithOutcomeTrackingOff_StillRecordsAnItemForTheDisconnectedObjectAsync()
     {
         // Whether an object gets an item turns on what the review did to it, not on how much outcome detail the run
-        // records: with tracking off there are no outcomes to go by, and a disconnection records none either.
+        // records: with tracking off there are no outcomes to go by at all.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None);
         var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false, deprovisionAction: OutboundDeprovisionAction.Disconnect);
 
         ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
@@ -342,6 +343,57 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
 
         Assert.That(activity.RunProfileExecutionItems.Select(i => i.DisplayNameSnapshot).ToList(), Is.EqualTo(new[] { ItemNameOf(ctx, "Carol") }),
             DescribeItems(activity));
+    }
+
+    [Test]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowedWithDisconnect_RecordsTheDisconnectionOnTheObjectsItemAsync()
+    {
+        // A Disconnect leaves the account in the target system and queues nothing, so without its own outcome the item
+        // says nothing about what happened to it (#1966).
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false, deprovisionAction: OutboundDeprovisionAction.Disconnect);
+        var carolsAccount = DirectoryAccountOf(ctx, "Carol");
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        Assert.That(item, Is.Not.Null, "one item, for Carol: " + DescribeItems(activity));
+        var disconnection = item!.SyncOutcomes.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(carolsAccount.MetaverseObjectId, Is.Null, "arrange check: Carol's account was disconnected");
+            Assert.That(disconnection, Is.Not.Null, "the disconnection is recorded on Carol's item: " + DescribeItems(activity));
+            Assert.That(disconnection?.TargetEntityId, Is.EqualTo(carolsAccount.Id), "naming the account it disconnected");
+            Assert.That(disconnection?.TargetEntityDescription, Is.EqualTo("Directory"), "and the system it is in");
+            Assert.That(PendingExportsFor(ctx.Directory), Is.Empty, "a disconnection exports nothing");
+        }
+    }
+
+    [TestCase(OutboundDeprovisionAction.Delete, ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued)]
+    [TestCase(OutboundDeprovisionAction.Disconnect, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected)]
+    public async Task FullSync_WhenAnObjectsOwnChangeTakesItOutOfScope_RecordsTheDeprovisioningOnItsItemAsync(
+        OutboundDeprovisionAction action, ActivityRunProfileExecutionItemSyncOutcomeType expectedOutcome)
+    {
+        // Not the review: Bob's own data changes. The deprovisioning his scope exit causes belongs on the item recording
+        // that change, as a provisioning does, so the Activity shows why his account is going.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false, deprovisionAction: action);
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        await RunFullSyncAsync(ctx.Hr);
+
+        await Task.Delay(5);
+        var bobInHr = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id &&
+            c.AttributeValues.Any(av => av.Attribute?.Name == "DisplayName" && av.StringValue == "Bob"));
+        bobInHr.AttributeValues.Single(av => av.Attribute?.Name == "Title").StringValue = "Contractor";
+        bobInHr.LastUpdated = DateTime.UtcNow;
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var bobsItem = activity.RunProfileExecutionItems.SingleOrDefault(i => i.ConnectedSystemObjectId == bobInHr.Id);
+        Assert.That(bobsItem, Is.Not.Null, DescribeItems(activity));
+        Assert.That(bobsItem!.SyncOutcomes.Select(o => o.OutcomeType), Does.Contain(expectedOutcome), DescribeItems(activity));
     }
 
     [Test]
@@ -641,6 +693,11 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         .Where(mvo => mvo.Type?.Id == ctx.MvType.Id && mvo.ScopeReviewPending)
         .Select(mvo => mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayName.Id)?.StringValue)
         .ToList();
+
+    /// <summary>A person's account in the Directory, by the DisplayName it holds.</summary>
+    private ConnectedSystemObject DirectoryAccountOf(Context ctx, string displayName) => SyncRepo.ConnectedSystemObjects.Values
+        .Single(c => c.ConnectedSystemId == ctx.Directory.Id &&
+            c.AttributeValues.Any(av => av.Attribute?.Name == "DisplayName" && av.StringValue == displayName));
 
     private List<PendingExport> PendingExportsFor(ConnectedSystem system) =>
         SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == system.Id).ToList();
