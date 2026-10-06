@@ -2046,8 +2046,20 @@ launch_jim() {
     fi
 
     info "Starting JIM..."
+    local web_started
+    web_started=$(web_started_at)
     (cd "$install_dir" && eval "$compose_cmd") || fatal "Failed to start JIM. See the messages above."
+    # Compose leaves a running jim.web alone when its configuration is unchanged, as it is when running this
+    # script again changes only the certificate, which jim.web reads when it starts.
+    if [ -n "$web_started" ] && [ "$(web_started_at)" = "$web_started" ]; then
+        restart_web "$install_dir"
+    fi
     wait_for_jim "$install_dir"
+}
+
+# When jim.web last started, which changes whenever Compose starts or recreates it; nothing when there is none.
+web_started_at() {
+    docker inspect -f '{{.State.StartedAt}}' jim.web 2>/dev/null || true
 }
 
 # Waits until jim.web reports healthy, which its health check does once JIM is ready to serve.
