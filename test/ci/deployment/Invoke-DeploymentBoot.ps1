@@ -101,6 +101,12 @@ $OutputPath = (Resolve-Path $OutputPath).Path
 $isRoot = (id -u) -eq '0'
 # Always an array, possibly empty, so that it prefixes command lines rather than joining their words.
 $elevate = @(if (-not $isRoot) { 'sudo' })
+# The functions the documentation defines for operating a rootless JIM, read before installing anything, so a page
+# that lost them fails the leg at once.
+$rootlessHelpers = if ($Rootless) {
+    & (Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1') -Heading 'Rootless commands' `
+        -Path (Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration' 'podman.md')
+}
 
 function Write-Step {
     param([string]$Message)
@@ -178,8 +184,14 @@ function Invoke-Documented {
 
 function Invoke-Systemctl {
     param([string[]]$Arguments)
-    $systemctl = @(if ($Rootless) { $elevate + @('systemctl', '--user', '-M', "$account@") } else { $elevate + 'systemctl' })
-    Invoke-Native -Command ($systemctl + $Arguments) | Out-Null
+    if (-not $Rootless) {
+        Invoke-Native -Command ($elevate + 'systemctl' + $Arguments) | Out-Null
+        return
+    }
+    # As Running JIM on Podman has an administrator do it: with its jim-systemctl, from the page's own text. Until
+    # #1955 the page gave systemctl --user -M jim@, which fails on a minimal RHEL-family host. The function runs
+    # sudo itself.
+    Invoke-Native -Command (@('bash', '-ec', "$rootlessHelpers`njim-systemctl `"`$@`"", 'bash') + $Arguments) | Out-Null
 }
 
 function Invoke-Compose {
