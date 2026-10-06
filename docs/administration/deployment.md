@@ -99,7 +99,7 @@ On Podman, the containers are named `jim-web`, `jim-worker`, `jim-scheduler` and
 | **Started with**   | `--profile with-db` (Docker), or the `jim-database` pod (Podman) | JIM alone                |
 | **Best for**       | Evaluations, small deployments                | Production, existing DBA team               |
 | **Backup**         | Volume snapshots                              | Your existing DB backup tooling             |
-| **Tuning**         | Default settings in compose file              | Full control                                |
+| **Tuning**         | Sized to the host's memory by the installer ([Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)) | Full control |
 
 !!! tip
     Start with bundled PostgreSQL for evaluation. Migrate to external for production workloads where you need backup, high availability, or monitoring integration.
@@ -193,6 +193,22 @@ Then carry on at [After Installing](#after-installing).
 
 Each [release](https://github.com/TetronIO/JIM/releases) includes a bundle, `jim-release-X.Y.Z.tar.gz`, holding everything an installation needs: the images, the compose files and the installer. Nothing is downloaded while installing from it.
 
+### Checking the Download
+
+Download `jim-release-X.Y.Z.tar.gz.sha256` from the release too, and check the bundle against it before carrying it into the air-gapped site. In the folder holding both:
+
+```bash
+sha256sum -c jim-release-X.Y.Z.tar.gz.sha256   # Should print OK
+```
+
+On Windows, in PowerShell, this should print `True`:
+
+```powershell
+(Get-FileHash jim-release-X.Y.Z.tar.gz -Algorithm SHA256).Hash -eq (Get-Content jim-release-X.Y.Z.tar.gz.sha256).Split(' ')[0]
+```
+
+Once extracted, `checksums.sha256` inside the bundle checks each file in it, as below.
+
 ### Bundle Contents
 
 ```text
@@ -221,13 +237,13 @@ jim-release-X.Y.Z/
 |   +-- README.md
 |   +-- CHANGELOG.md
 |   +-- INSTALL.md            # These instructions, for reading offline
-+-- checksums.sha256          # SHA256 checksums for verification
++-- checksums.sha256          # The checksum of every file in the bundle, by its path within it
 +-- README.txt                # Quick start guide
 ```
 
 ### With the Installer (Recommended)
 
-Transfer the bundle to the JIM server by your organisation's approved method, then:
+[Check the download](#checking-the-download), transfer the bundle to the JIM server by your organisation's approved method, then:
 
 ```bash
 tar -xzf jim-release-X.Y.Z.tar.gz
@@ -254,7 +270,7 @@ cp compose/docker-compose.yml compose/docker-compose.production.yml /opt/jim/
 cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
 ```
 
-1. Edit `/opt/jim/.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the version in the bundle's `VERSION` file, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`; for your own server, give its name and JIM's credentials.
+1. Edit `/opt/jim/.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the version in the bundle's `VERSION` file, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`, and on a host with more than 4 GB of memory, size it as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)); for your own server, give its name and JIM's credentials.
     For the bundled PostgreSQL on Docker's classic image store (`docker info` shows `Storage Driver: overlay2` rather than `overlayfs` with the containerd snapshotter), Docker drops the registry digest the compose file pins PostgreSQL by when it loads the image, so run the loaded image by its ID instead, after checking that ID is the one the bundle records:
 
     ```bash
@@ -282,7 +298,7 @@ Then carry on at [After Installing](#after-installing).
 
 `setup.sh` installs JIM on Docker or Podman, whichever the server has, asking which where both are installed (or pass `--runtime docker` or `--runtime podman`). It installs in `/opt/jim` (or `./jim` when not run as root) and asks, in turn:
 
-1. **Database**: the bundled PostgreSQL, whose password it generates, or your own server
+1. **Database**: the bundled PostgreSQL, whose password it generates and whose memory it sizes to the host (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)), or your own server
 2. **Identity provider**: the settings from your client registration
 3. **HTTPS port**: 443 unless you choose another. It checks nothing else on the server already uses the port.
 4. **Certificate**: one it creates, from a certificate authority of its own, or your organisation's certificate and key, which it checks before installing (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
@@ -292,7 +308,7 @@ On Docker, it keeps `.env`, which holds the database password and your identity 
 
 On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld and, on Ubuntu 24.04, to let JIM's containers use the network under AppArmor; rootless, it also lets unprivileged programs use port 443.
 
-It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
+It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do. If JIM is not ready within ten minutes, it names each of JIM's containers that is not running properly (the bundled database's included), with the end of its log, and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
 ```bash
 sudo /opt/jim/setup.sh --renew-certificate   # a certificate the installer created, before it expires
@@ -791,6 +807,7 @@ Use this checklist before going live:
 
 For air-gapped deployments, also verify:
 
+- [ ] The bundle matched its checksums: `jim-release-X.Y.Z.tar.gz.sha256` where it was downloaded, and `checksums.sha256` in the extracted bundle (see [Checking the Download](#checking-the-download))
 - [ ] All images loaded successfully (`docker images | grep jim`, or on Podman `podman images` as the account that runs JIM)
 - [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server

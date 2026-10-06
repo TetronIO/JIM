@@ -149,24 +149,21 @@ services:
     image: ${JIM_DB_IMAGE:-docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722}
     profiles:
       - with-db
-    # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
-    # The default values below are for a 64GB Windows / 32GB WSL / 16 core / NVME system.
-    # For other host sizes, override 'command' and 'shm_size' in a compose override file
-    # (see docker-compose.override.yml for an example with 8GB hosts).
-    # IMPORTANT: shm_size must be >= shared_buffers (with ~25% headroom recommended):
-    #   shared_buffers=2GB  -> shm_size: '3gb'    (e.g. 16GB host)
-    #   shared_buffers=4GB  -> shm_size: '5gb'    (e.g. 32GB host)
-    #   shared_buffers=8GB  -> shm_size: '10gb'   (e.g. 64GB host)
-    #   shared_buffers=16GB -> shm_size: '20gb'   (e.g. 128GB host)
+    # PostgreSQL tuning. The memory settings come from .env, where setup.sh sizes them to the host's memory
+    # (JIM_DB_SHARED_BUFFERS, JIM_DB_EFFECTIVE_CACHE_SIZE, JIM_DB_MAINTENANCE_WORK_MEM, JIM_DB_WORK_MEM and
+    # JIM_DB_SHM_SIZE; see the Configuration Reference). Unset, they suit the documented 4 GB minimum host: every
+    # release up to v0.16.0 fixed shared_buffers at 8GB here, which no host with less than about 10 GB could give,
+    # so the database never started on one (#1943). The rest assume an SSD, and up to 16 cores.
+    # shm_size is /dev/shm, which holds the shared memory of parallel queries; Docker's default is only 64 MB.
     # statement_timeout=300000 (5 minutes) prevents runaway queries
     # log_min_duration_statement (JIM_DB_LOG_MIN_DURATION) logs slow queries for performance analysis
     # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI.
     # The entrypoint wrapper creates a postgres-owned subdirectory before delegating to the
     # standard postgres entrypoint, since the shared volume root is owned by root.
     entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
-    command: postgres -c max_connections=200 -c shared_buffers=8GB -c effective_cache_size=24GB -c maintenance_work_mem=2GB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=1000 -c work_mem=102300kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
+    command: postgres -c max_connections=200 -c shared_buffers=${JIM_DB_SHARED_BUFFERS:-1GB} -c effective_cache_size=${JIM_DB_EFFECTIVE_CACHE_SIZE:-2GB} -c maintenance_work_mem=${JIM_DB_MAINTENANCE_WORK_MEM:-256MB} -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=1000 -c work_mem=${JIM_DB_WORK_MEM:-4MB} -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
     restart: always
-    shm_size: '10gb'
+    shm_size: ${JIM_DB_SHM_SIZE:-1280mb}
     volumes:
       - jim-db-volume:/var/lib/postgresql
       - jim-logs-volume:/var/log/jim

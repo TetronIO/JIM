@@ -34,6 +34,12 @@ data:
   JIM_DB_LOG_SENSITIVE_INFO: "false"
   # Slow query log threshold in milliseconds; -1 disables it.
   JIM_DB_LOG_MIN_DURATION: "1000"
+  # The bundled PostgreSQL's memory. setup.sh sizes these to the host; commented out, the defaults shown suit a 4 GB
+  # host. Restart jim-database.service after a change.
+  # JIM_DB_SHARED_BUFFERS: 1GB
+  # JIM_DB_EFFECTIVE_CACHE_SIZE: 2GB
+  # JIM_DB_MAINTENANCE_WORK_MEM: 256MB
+  # JIM_DB_WORK_MEM: 4MB
 
   # --- Logging ---
   # Verbose, Debug, Information, Warning, Error or Fatal.

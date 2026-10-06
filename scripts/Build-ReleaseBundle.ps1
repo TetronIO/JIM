@@ -12,7 +12,8 @@
     - Podman pod files and Quadlet units
     - PowerShell module
     - Installation documentation
-    - SHA256 checksums for integrity verification
+    - SHA256 checksums for integrity verification: checksums.sha256 in the bundle, listing each file by its path
+      within it, and jim-release-X.Y.Z.tar.gz.sha256 beside the archive. Test-ReleaseBundle.ps1 checks both.
 
 .PARAMETER Version
     The version number for the release (e.g., "0.2.0").
@@ -242,10 +243,12 @@ try {
 
     if (Test-Path $psModuleSrc) {
         Copy-Item -Recurse $psModuleSrc $psModuleDst
-        # Remove test files from the bundle
-        $testsPath = Join-Path $psModuleDst "Tests"
-        if (Test-Path $testsPath) {
-            Remove-Item -Recurse -Force $testsPath
+        # Leave out what is only for developing the module: its tests, and the notes for coding agents.
+        foreach ($developmentOnly in 'Tests', 'CLAUDE.md') {
+            $developmentPath = Join-Path $psModuleDst $developmentOnly
+            if (Test-Path $developmentPath) {
+                Remove-Item -Recurse -Force $developmentPath
+            }
         }
         Write-Host "  Copied JIM PowerShell module" -ForegroundColor Gray
     }
@@ -297,9 +300,12 @@ You need:
 
 ## Install
 
-1. Transfer jim-release-$Version.tar.gz to the server by your organisation's
-   approved method, then extract it and check it arrived intact; every line
-   should end in OK:
+1. Before transferring it, check the download: in the folder holding
+   jim-release-$Version.tar.gz and jim-release-$Version.tar.gz.sha256, both
+   from the release page, sha256sum -c jim-release-$Version.tar.gz.sha256
+   should print OK. Transfer it to the server by your organisation's approved
+   method, then extract it and check it arrived intact; every line should end
+   in OK:
 
     ``````bash
     tar -xzf jim-release-$Version.tar.gz
@@ -405,7 +411,10 @@ Edit /opt/jim/.env: set DOCKER_REGISTRY=ghcr.io/tetronio/ and
 JIM_VERSION=$Version, and the identity provider settings its comments
 describe. For the bundled PostgreSQL, set JIM_DB_HOSTNAME=jim.database (the
 template's localhost is for development) and choose a strong JIM_DB_PASSWORD;
-for your own server, give its name and JIM's credentials there.
+for your own server, give its name and JIM's credentials there. The bundled
+PostgreSQL's memory settings (JIM_DB_SHARED_BUFFERS and those beside it) suit a
+4 GB host unless set; on a larger host, size them as the installer would (the
+Configuration Reference, "Bundled PostgreSQL Memory", gives the rules).
 
 For the bundled PostgreSQL on Docker's classic image store (docker info shows
 Storage Driver: overlay2), Docker drops the registry digest the compose file
@@ -457,8 +466,9 @@ cp podman/quadlet/jim.network podman/quadlet/jim.kube podman/quadlet/jim-databas
 
 Leave out jim-database.kube if you use your own PostgreSQL server. Edit
 /opt/jim/jim-config.yaml: fill in the identity provider settings, and for your
-own PostgreSQL server set JIM_DB_HOSTNAME to its name. To use a port other than
-443, change PublishPort= in /etc/containers/systemd/jim.kube.
+own PostgreSQL server set JIM_DB_HOSTNAME to its name. For the bundled
+PostgreSQL on a host larger than 4 GB, size its memory as for Docker above. To
+use a port other than 443, change PublishPort= in /etc/containers/systemd/jim.kube.
 
 Store the database password and client secret in Podman, from a copy of
 podman/jim-secrets.yaml with both filled in, then delete the copy:
@@ -542,24 +552,24 @@ License: See https://junctional.io/license
     ($readme -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/README.txt"
     Write-Host "  Created: README.txt" -ForegroundColor Gray
 
-    # Generate checksums
+    # Generate checksums, each file named by its path within the bundle, which is where sha256sum -c looks for it
+    # when run there. $bundlePath may be relative (the release passes ./release-output) while a file's FullName is
+    # absolute, so compare full paths: cutting the one by the other's length named every file under the build
+    # runner's folders instead, and sha256sum -c failed on every line (#1942).
     Write-Host "`nGenerating checksums..." -ForegroundColor Cyan
-    Push-Location $bundlePath
+    $bundleFullPath = (Resolve-Path $bundlePath).Path
+    $checksumPath = Join-Path $bundleFullPath "checksums.sha256"
+    $filesToHash = @(Get-ChildItem -Path $bundleFullPath -Recurse -File | Where-Object { $_.FullName -ne $checksumPath })
 
-    $checksumFile = "checksums.sha256"
-    $filesToHash = Get-ChildItem -Recurse -File | Where-Object { $_.Name -ne $checksumFile }
-
-    $checksums = @()
-    foreach ($file in $filesToHash) {
-        $relativePath = $file.FullName.Substring($bundlePath.Length + 1).Replace('\', '/')
+    $checksums = foreach ($file in $filesToHash) {
+        $relativePath = [IO.Path]::GetRelativePath($bundleFullPath, $file.FullName).Replace('\', '/')
         $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
-        $checksums += "$hash  $relativePath"
+        [pscustomobject]@{ Path = $relativePath; Line = "$hash  $relativePath" }
     }
 
-    $checksums | Set-Content $checksumFile
+    # LF line endings, which sha256sum needs: on a CRLF line it looks for a file whose name ends in a carriage return.
+    (($checksums | Sort-Object Path | ForEach-Object Line) -join "`n") + "`n" | Set-Content -NoNewline $checksumPath
     Write-Host "  Generated checksums for $($filesToHash.Count) files" -ForegroundColor Gray
-
-    Pop-Location
 
     Write-Host "`nRelease bundle complete!" -ForegroundColor Green
     Write-Host "Bundle location: $bundlePath" -ForegroundColor Cyan
@@ -569,16 +579,23 @@ License: See https://junctional.io/license
         $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
 
         Push-Location $OutputPath
-        tar -czf "$bundleName.tar.gz" $bundleName
-        Pop-Location
+        try {
+            tar -czf "$bundleName.tar.gz" $bundleName
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to create the archive $tarballPath"
+            }
 
-        if ($LASTEXITCODE -eq 0) {
-            $tarballSize = (Get-Item $tarballPath).Length / 1MB
-            Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
+            # The archive's own checksum, published beside it, so that the download can be checked before it is
+            # carried into an air-gapped site: sha256sum -c on this file, in the folder holding both.
+            $archiveHash = (Get-FileHash -Path "$bundleName.tar.gz" -Algorithm SHA256).Hash.ToLower()
+            "$archiveHash  $bundleName.tar.gz`n" | Set-Content -NoNewline "$bundleName.tar.gz.sha256"
         }
-        else {
-            Write-Warning "Failed to create tarball"
+        finally {
+            Pop-Location
         }
+
+        $tarballSize = (Get-Item $tarballPath).Length / 1MB
+        Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB), and its checksum, $bundleName.tar.gz.sha256" -ForegroundColor Green
         Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
     }
 }
