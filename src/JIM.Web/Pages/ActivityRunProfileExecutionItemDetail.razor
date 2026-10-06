@@ -186,6 +186,27 @@
                             }
                         </MudStack>
                     }
+                    else if (_activityRunProfileExecutionItem.MetaverseObjectId.HasValue)
+                    {
+                        @* The item records a Metaverse Object rather than a Connected System Object (an export scope
+                           review, #1971): link it while it exists, and say so once it has been deleted. *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
+                            @if (_identityHeader != null)
+                            {
+                                <ObjectChip Kind="ObjectChipKind.MetaverseObject"
+                                            TypeName="@_identityHeader.TypeName"
+                                            Name="@_identityHeader.NameOrId"
+                                            Href="@Utilities.GetMetaverseObjectHref(_identityHeader)" />
+                            }
+                            else
+                            {
+                                <ObjectChip Kind="ObjectChipKind.MetaverseObject"
+                                            TypeName="@(_activityRunProfileExecutionItem.ObjectTypeSnapshot ?? "Object")"
+                                            Name="@_activityRunProfileExecutionItem.DisplayNameSnapshot" />
+                                <MudText Class="mud-text-secondary">(deleted)</MudText>
+                            }
+                        </MudStack>
+                    }
                     else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
                     {
                         @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
@@ -488,23 +509,48 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// provisioning or exporting to a CSO on system B); see <see cref="CausalityPageContext"/> for
     /// which consumers need which identity.
     /// </summary>
-    private CausalityPageContext BuildCausalityPageContext() => new(
-        ConnectedSystemId: _runConnectedSystemHeader?.Id,
-        ConnectedSystemName: _runConnectedSystemHeader?.Name,
-        RunProfileName: _activity?.TargetName,
-        CsoId: _activityRunProfileExecutionItem?.ConnectedSystemObjectId,
-        CsoConnectedSystemId: _connectedSystemHeader?.Id,
-        CsoConnectedSystemName: _connectedSystemHeader?.Name,
-        CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.NameOrId
-                        ?? _activityRunProfileExecutionItem?.DisplayNameSnapshot,
-        CsoExternalId: _externalIdAttributeValue?.ToStringNoName()
-                       ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot,
-        CsoObjectTypeName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
-                           ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
-        MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
-        MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
-        DeletedMetaverseObjectId: _deletedIdentityId,
-        ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
+    private CausalityPageContext BuildCausalityPageContext()
+    {
+        // An item that records a Metaverse Object (an export scope review, #1971) has no record of its own: its name
+        // snapshot is the Metaverse Object's, and the record system resolved for it is merely the run's. Passed as a
+        // record, the panel drew an object that took no part in the run (#1982), so the Metaverse Object is passed as
+        // the subject instead.
+        var item = _activityRunProfileExecutionItem;
+        if (item is { ConnectedSystemObject: null, MetaverseObjectId: { } subjectId })
+        {
+            return new CausalityPageContext(
+                ConnectedSystemId: _runConnectedSystemHeader?.Id,
+                ConnectedSystemName: _runConnectedSystemHeader?.Name,
+                RunProfileName: _activity?.TargetName,
+                CsoId: null,
+                CsoConnectedSystemId: null,
+                CsoConnectedSystemName: null,
+                CsoDisplayName: null,
+                CsoExternalId: null,
+                CsoObjectTypeName: null,
+                MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName ?? item.ObjectTypeSnapshot,
+                MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
+                DeletedMetaverseObjectId: _deletedIdentityId,
+                ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames,
+                SubjectMetaverseObjectId: subjectId,
+                SubjectMetaverseObjectName: _identityHeader?.NameOrId ?? item.DisplayNameSnapshot);
+        }
+
+        return new CausalityPageContext(
+            ConnectedSystemId: _runConnectedSystemHeader?.Id,
+            ConnectedSystemName: _runConnectedSystemHeader?.Name,
+            RunProfileName: _activity?.TargetName,
+            CsoId: item?.ConnectedSystemObjectId,
+            CsoConnectedSystemId: _connectedSystemHeader?.Id,
+            CsoConnectedSystemName: _connectedSystemHeader?.Name,
+            CsoDisplayName: item?.ConnectedSystemObject?.NameOrId ?? item?.DisplayNameSnapshot,
+            CsoExternalId: _externalIdAttributeValue?.ToStringNoName() ?? item?.ExternalIdSnapshot,
+            CsoObjectTypeName: item?.ConnectedSystemObject?.Type?.Name ?? item?.ObjectTypeSnapshot,
+            MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
+            MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
+            DeletedMetaverseObjectId: _deletedIdentityId,
+            ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
+    }
 
     /// <summary>
     /// The outcome types whose <c>TargetEntityId</c> is the Metaverse Object's own id. Only these are used to
@@ -537,17 +583,24 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         if (_activityRunProfileExecutionItem == null)
             return;
 
-        var identityId = _activityRunProfileExecutionItem.SyncOutcomes
-            .Where(o => IdentityTargetingOutcomes.Contains(o.OutcomeType))
-            .Select(o => o.TargetEntityId)
-            .FirstOrDefault(id => id.HasValue && id.Value != Guid.Empty);
-        if (identityId is not { } id)
+        if (ResolveIdentityId(_activityRunProfileExecutionItem) is not { } id)
             return;
 
         _identityHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(id);
         if (_identityHeader == null)
             _deletedIdentityId = id;
     }
+
+    /// <summary>
+    /// The id of the Identity the item is about: the Metaverse Object it names, where it records one directly (an
+    /// export scope review, #1971, whose outcomes target the accounts it acted on rather than the object), otherwise
+    /// the object its identity-targeting outcome points at.
+    /// </summary>
+    private static Guid? ResolveIdentityId(ActivityRunProfileExecutionItem item) =>
+        item.MetaverseObjectId ?? item.SyncOutcomes
+            .Where(o => IdentityTargetingOutcomes.Contains(o.OutcomeType))
+            .Select(o => o.TargetEntityId)
+            .FirstOrDefault(id => id.HasValue && id.Value != Guid.Empty);
 
     /// <summary>
     /// Removes the "Eligible for deletion: ..." segment from a deletion outcome's detail message, for
@@ -863,6 +916,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => $"{typeName} Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Changes",
+            ObjectChangeType.ExportScopeReview => $"{typeName} Reviewed Against Export Scope",
             _ => "Synchronisation Complete"
         };
     }
@@ -925,6 +979,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         if (_activityRunProfileExecutionItem?.ConnectedSystemObject != null)
             return "Connected System Object";
 
+        // An export scope review item records a Metaverse Object, not a CSO
+        if (_activityRunProfileExecutionItem?.MetaverseObjectId.HasValue == true)
+            return "Metaverse Object";
+
         // Housekeeping deletion items describe the deleted Metaverse Object, not a CSO
         if (IsHousekeepingContext()
             && _activityRunProfileExecutionItem?.ObjectChangeType == ObjectChangeType.Deleted
@@ -972,6 +1030,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => "The Connected System Object was deprovisioned from the target system.",
             // Other
             ObjectChangeType.NoChange => "The Connected System Object was already up to date.",
+            ObjectChangeType.ExportScopeReview => "A change to an export Synchronisation Rule had this Metaverse Object reviewed against the rule's scope during this synchronisation. The outcomes below show what the review did.",
             _ => "Synchronisation completed for the Connected System Object."
         };
     }
@@ -999,6 +1058,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => "Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Change",
+            ObjectChangeType.ExportScopeReview => "Export Scope Review",
             _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? "Unknown"
         };
     }

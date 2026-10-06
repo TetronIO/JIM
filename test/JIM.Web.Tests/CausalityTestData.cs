@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -71,6 +72,46 @@ public static class CausalityTestData
         CsoObjectTypeName: "person",
         MvoTypeName: "Person",
         MvoTypePluralName: "People");
+
+    /// <summary>
+    /// An export scope review item's page (#1971, #1982): the item records a Metaverse Object rather than a Connected
+    /// System Object, so the context names no record of its own and names the Metaverse Object as the subject instead.
+    /// The review disconnected the person's account in Glitterband EMEA (<see cref="ExportScopeReviewItem"/>).
+    /// </summary>
+    public static CausalityPageContext ExportScopeReviewContext() => new(
+        ConnectedSystemId: 1,
+        ConnectedSystemName: "Yellowstone APAC",
+        RunProfileName: "Delta Synchronisation",
+        CsoId: null,
+        CsoConnectedSystemId: null,
+        CsoConnectedSystemName: null,
+        CsoDisplayName: null,
+        CsoExternalId: null,
+        CsoObjectTypeName: null,
+        MvoTypeName: "Person",
+        MvoTypePluralName: "People",
+        ConnectedSystemObjectNames: new Dictionary<Guid, string> { [ProvisionedCsoId] = "Liam Allen" },
+        SubjectMetaverseObjectId: MvoId,
+        SubjectMetaverseObjectName: "Liam Allen");
+
+    /// <summary>
+    /// An export scope review item whose review disconnected the person's account in Glitterband EMEA under a
+    /// Disconnect Deprovisioning Action (#1966).
+    /// </summary>
+    public static ActivityRunProfileExecutionItem ExportScopeReviewItem()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = MvoId,
+            DisplayNameSnapshot = "Liam Allen",
+            ObjectTypeSnapshot = "Person"
+        };
+        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, parent: null, ordinal: 0,
+            targetEntityId: ProvisionedCsoId, targetEntityDescription: "Glitterband EMEA", detailMessage: "2|person");
+        return item;
+    }
 
     public static CausalityPageContext EmptyContext() => new(
         ConnectedSystemId: null,

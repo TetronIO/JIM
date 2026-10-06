@@ -19,7 +19,7 @@
             </span>
         </div>
         <div class="tl-body">
-            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(Model.IsSpeculative)</span></div>
+            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(Model.IsSpeculative, Model.Context.SubjectMetaverseObjectId != null)</span></div>
             <div class="tl-detail-line">
                 @if (!string.IsNullOrWhiteSpace(Model.Context.RunProfileName))
                 {
@@ -34,7 +34,18 @@
                 // cascades.
                 var systemName = Model.Context.CsoConnectedSystemName;
             }
-            @if (recordName != null || !string.IsNullOrWhiteSpace(systemName))
+            @if (Model.Context.SubjectMetaverseObjectId != null)
+            {
+                @* An item that records a Metaverse Object (an export scope review) is about that object, not a record
+                   (#1982). *@
+                <div class="evt-entities">
+                    <ObjectChip Name="@(Model.Context.SubjectMetaverseObjectName ?? "Metaverse Object")"
+                                Href="@Model.Context.SubjectMetaverseObjectHref"
+                                Kind="ObjectChipKind.MetaverseObject"
+                                TypeName="@Model.Context.MvoTypeName" />
+                </div>
+            }
+            else if (recordName != null || !string.IsNullOrWhiteSpace(systemName))
             {
                 <div class="evt-entities">
                     @if (recordName != null)
@@ -194,13 +205,14 @@
             return "This object would be picked up for processing.";
         }
 
+        var subject = Model.Context.SubjectMetaverseObjectId != null ? "Metaverse Object" : "Connected System Object";
         if (hasProfile && hasSystem)
-            return $" on {system} picked up this Connected System Object.";
+            return $" on {system} picked up this {subject}.";
         if (hasProfile)
-            return " picked up this Connected System Object.";
+            return $" picked up this {subject}.";
         if (hasSystem)
-            return $"A run on {system} picked up this Connected System Object.";
-        return "This Connected System Object was picked up for processing.";
+            return $"A run on {system} picked up this {subject}.";
+        return $"This {subject} was picked up for processing.";
     }
 
     private Task ToggleExpandedAsync(CausalityEvent causalityEvent)

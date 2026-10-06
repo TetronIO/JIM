@@ -53,7 +53,9 @@ public static class CausalityTableModelBuilder
             .OrderBy(r => r.ChangeKind == CausalityTableChangeKind.AttributeChange ? 1 : 0)
             .ToList();
 
-        var objects = BuildObjects(objectMeta, downstreamOrder, orderedRows);
+        // An item that records a Metaverse Object (an export scope review) has no source object to list (#1982).
+        var objects = BuildObjects(objectMeta, downstreamOrder, orderedRows,
+            includeSource: model.Context.SubjectMetaverseObjectId == null || orderedRows.Any(r => r.ObjectKey == SourceKey));
 
         return new CausalityTableModel
         {
@@ -363,7 +365,7 @@ public static class CausalityTableModelBuilder
     /// href of its own kind).
     /// </summary>
     private static string? IdentityHref(CausalityModel model) =>
-        model.AllEvents()
+        model.Context.SubjectMetaverseObjectHref ?? model.AllEvents()
             .Where(e => e.Lane == CausalityLane.Identity)
             .SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity && l.Href != null)
@@ -385,13 +387,15 @@ public static class CausalityTableModelBuilder
         // Never the object's own label: a joined object's preview knows the Metaverse Object exists but
         // not its name, and showing the object's name twice reads as though the object and the Metaverse
         // Object were one.
-        return linkedName ?? "Metaverse Object";
+        // An item that records a Metaverse Object names it outright (#1982).
+        return model.Context.SubjectMetaverseObjectName ?? linkedName ?? "Metaverse Object";
     }
 
     private static List<CausalityTableObject> BuildObjects(
-        Dictionary<string, ObjectMeta> objectMeta, List<string> downstreamOrder, IReadOnlyList<CausalityTableRow> rows)
+        Dictionary<string, ObjectMeta> objectMeta, List<string> downstreamOrder, IReadOnlyList<CausalityTableRow> rows,
+        bool includeSource)
     {
-        var orderedKeys = new List<string> { SourceKey, IdentityKey };
+        var orderedKeys = includeSource ? new List<string> { SourceKey, IdentityKey } : [IdentityKey];
         orderedKeys.AddRange(downstreamOrder);
 
         var objects = new List<CausalityTableObject> { BuildObject(EverythingKey, CausalityTableObjectRole.Everything,
