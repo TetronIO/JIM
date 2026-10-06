@@ -275,4 +275,153 @@ public class PredefinedSearchQueryDatabaseTests
         var id = await PersistSearchAsync(ids.TypeId, Group(SearchGroupType.All));
         Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Alice", "Bob", "Carol", "Dave" }));
     }
+
+    // ─── #1962: negated operators over multi-valued attributes and missing values ───
+
+    private static readonly Guid BadgeA = new("2d1f5c7a-8b0e-4f3a-9c61-000000000001");
+    private static readonly Guid BadgeB = new("2d1f5c7a-8b0e-4f3a-9c61-000000000002");
+    private static readonly Guid BadgeC = new("2d1f5c7a-8b0e-4f3a-9c61-000000000003");
+
+    private record MultiValuedSeedIds(int TypeId, int GroupsAttrId, int LevelsAttrId, int BadgesAttrId);
+
+    /// <summary>
+    /// Seeds a Member type with three multi-valued attributes (Text Groups, Number Levels, Guid Badges) and five
+    /// members: Mixed holds a matching value among others; Clear holds only non-matching values; Empty holds nothing;
+    /// MarkerOnly holds only asserted-null markers (#91); MarkerAndClear holds a marker beside non-matching values.
+    /// "Matching" means: Groups "Finance Readers", Levels 10, Badges A.
+    /// </summary>
+    private async Task<MultiValuedSeedIds> SeedMultiValuedAsync()
+    {
+        await using var ctx = NewContext();
+        var type = new MetaverseObjectType { Name = "Member", PluralName = "Members", BuiltIn = true };
+        var groups = new MetaverseAttribute { Name = "Groups", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, BuiltIn = true };
+        var levels = new MetaverseAttribute { Name = "Levels", Type = AttributeDataType.Number, AttributePlurality = AttributePlurality.MultiValued, BuiltIn = true };
+        var badges = new MetaverseAttribute { Name = "Badges", Type = AttributeDataType.Guid, AttributePlurality = AttributePlurality.MultiValued, BuiltIn = true };
+        type.Attributes.Add(groups);
+        type.Attributes.Add(levels);
+        type.Attributes.Add(badges);
+
+        MetaverseObject Member(string name, string[] groupValues, int[] levelValues, Guid[] badgeValues, bool withMarkers = false)
+        {
+            var mvo = new MetaverseObject { Type = type, CachedDisplayName = name };
+            mvo.AttributeValues.AddRange(groupValues.Select(v => new MetaverseObjectAttributeValue { Attribute = groups, StringValue = v }));
+            mvo.AttributeValues.AddRange(levelValues.Select(v => new MetaverseObjectAttributeValue { Attribute = levels, IntValue = v }));
+            mvo.AttributeValues.AddRange(badgeValues.Select(v => new MetaverseObjectAttributeValue { Attribute = badges, GuidValue = v }));
+            if (withMarkers)
+            {
+                mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = groups, NullValue = true });
+                mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = levels, NullValue = true });
+                mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = badges, NullValue = true });
+            }
+            return mvo;
+        }
+
+        ctx.MetaverseObjectTypes.Add(type);
+        ctx.MetaverseObjects.Add(Member("Mixed", ["All Staff", "Finance Readers"], [3, 10], [BadgeA, BadgeB]));
+        ctx.MetaverseObjects.Add(Member("Clear", ["All Staff", "Sales"], [3, 20], [BadgeB, BadgeC]));
+        ctx.MetaverseObjects.Add(Member("Empty", [], [], []));
+        ctx.MetaverseObjects.Add(Member("MarkerOnly", [], [], [], withMarkers: true));
+        ctx.MetaverseObjects.Add(Member("MarkerAndClear", ["Sales"], [20], [BadgeC], withMarkers: true));
+        await ctx.SaveChangesAsync();
+
+        return new MultiValuedSeedIds(type.Id, groups.Id, levels.Id, badges.Id);
+    }
+
+    private static PredefinedSearchCriteria Badge(int attrId, SearchComparisonType op, Guid value) =>
+        new() { MetaverseAttributeId = attrId, ComparisonType = op, GuidValue = value };
+
+    /// <summary>
+    /// Every negated operator, over every value shape. A negated operator is met when the object holds at least one
+    /// value and no value matches the operator it negates, exactly as Synchronisation Rule scoping evaluates it (#1923):
+    /// Mixed holds a matching value, Empty and MarkerOnly hold no value at all, and an asserted-null marker is not a
+    /// value, so only Clear and MarkerAndClear qualify.
+    /// </summary>
+    [TestCase("Groups", SearchComparisonType.NotEquals, "Finance Readers")]
+    [TestCase("Groups", SearchComparisonType.NotStartsWith, "Fin")]
+    [TestCase("Groups", SearchComparisonType.NotEndsWith, "Readers")]
+    [TestCase("Groups", SearchComparisonType.NotContains, "Finance")]
+    [TestCase("Levels", SearchComparisonType.NotEquals, null)]
+    [TestCase("Badges", SearchComparisonType.NotEquals, null)]
+    public async Task NegatedOperator_MultiValuedAndMissingValues_MatchesOnlyObjectsHoldingNoMatchingValueAsync(string attribute, SearchComparisonType op, string? textValue)
+    {
+        var ids = await SeedMultiValuedAsync();
+        var criterion = attribute switch
+        {
+            "Groups" => Text(ids.GroupsAttrId, op, textValue!, caseSensitive: true),
+            "Levels" => Number(ids.LevelsAttrId, op, 10),
+            _ => Badge(ids.BadgesAttrId, op, BadgeA)
+        };
+
+        var id = await PersistSearchAsync(ids.TypeId, Group(SearchGroupType.All, new[] { criterion }));
+
+        Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Clear", "MarkerAndClear" }));
+    }
+
+    [Test]
+    public async Task NegatedOperator_SingleValuedAttribute_ExcludesObjectsWithNoValueAsync()
+    {
+        // Dave has no Account Expires; a negated operator needs a value to be met, as NotEquals already did and as
+        // scoping does. The text family used to include him.
+        var ids = await SeedAsync();
+        var id = await PersistSearchAsync(ids.TypeId, Group(SearchGroupType.All, new[] { Date(ids.AccountExpiresAttrId, SearchComparisonType.NotEquals, CarolExpires) }));
+        Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Alice", "Bob" }));
+    }
+
+    [Test]
+    public async Task PositiveOperator_MultiValuedAttribute_MatchesWhenAnyValueMatchesAsync()
+    {
+        var ids = await SeedMultiValuedAsync();
+        var id = await PersistSearchAsync(ids.TypeId, Group(SearchGroupType.All, new[] { Text(ids.GroupsAttrId, SearchComparisonType.Contains, "Finance", caseSensitive: true) }));
+        Assert.That(await RunAndGetNamesAsync(id), Is.EqualTo(new[] { "Mixed" }));
+    }
+
+    /// <summary>
+    /// The Synchronisation Rules documentation suggests a Predefined Search to see which Metaverse Objects an export
+    /// rule's criteria cover; that advice holds only while the SQL translator and the scoping evaluator agree. Runs every
+    /// operator through both over the same persisted objects and requires identical results.
+    /// </summary>
+    [TestCase(SearchComparisonType.Equals)]
+    [TestCase(SearchComparisonType.NotEquals)]
+    [TestCase(SearchComparisonType.StartsWith)]
+    [TestCase(SearchComparisonType.NotStartsWith)]
+    [TestCase(SearchComparisonType.EndsWith)]
+    [TestCase(SearchComparisonType.NotEndsWith)]
+    [TestCase(SearchComparisonType.Contains)]
+    [TestCase(SearchComparisonType.NotContains)]
+    public async Task EveryTextOperator_AgreesWithSynchronisationRuleScopingAsync(SearchComparisonType op)
+    {
+        var ids = await SeedMultiValuedAsync();
+        var value = op switch
+        {
+            SearchComparisonType.Equals or SearchComparisonType.NotEquals => "Finance Readers",
+            SearchComparisonType.StartsWith or SearchComparisonType.NotStartsWith => "Fin",
+            SearchComparisonType.EndsWith or SearchComparisonType.NotEndsWith => "Readers",
+            _ => "Finance"
+        };
+        var id = await PersistSearchAsync(ids.TypeId, Group(SearchGroupType.All, new[] { Text(ids.GroupsAttrId, op, value, caseSensitive: true) }));
+
+        var searchResults = await RunAndGetNamesAsync(id);
+        var scopingResults = await EvaluateScopingAsync(ids.TypeId, ids.GroupsAttrId, op, value);
+
+        Assert.That(searchResults, Is.EqualTo(scopingResults));
+    }
+
+    /// <summary>Evaluates one Text scoping criterion against every persisted object of the type, returning the names in scope, sorted.</summary>
+    private async Task<List<string>> EvaluateScopingAsync(int typeId, int attributeId, SearchComparisonType op, string value)
+    {
+        await using var ctx = NewContext();
+        var attribute = await ctx.MetaverseAttributes.SingleAsync(a => a.Id == attributeId);
+        var mvos = await ctx.MetaverseObjects
+            .Include(m => m.AttributeValues)
+            .Where(m => m.Type.Id == typeId)
+            .ToListAsync();
+
+        var rule = new JIM.Models.Logic.SyncRule { Name = "Parity", Direction = JIM.Models.Logic.SyncRuleDirection.Export };
+        var group = new JIM.Models.Logic.SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new JIM.Models.Logic.SyncRuleScopingCriteria { MetaverseAttribute = attribute, ComparisonType = op, StringValue = value, CaseSensitive = true });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var scoping = new JIM.Application.Servers.ScopingEvaluationServer();
+        return mvos.Where(m => scoping.IsMvoInScopeForExportRule(m, rule)).Select(m => m.CachedDisplayName!).OrderBy(n => n).ToList();
+    }
 }
