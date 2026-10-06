@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 namespace JIM.PostgresData.Repositories;
 
 public class SearchRepository : ISearchRepository
@@ -42,53 +43,37 @@ public class SearchRepository : ISearchRepository
 
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(int id)
     {
-        return await Repository.Database.PredefinedSearches.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(q => q.Attributes).
-            ThenInclude(q => q.MetaverseAttribute).
-            Include(q => q.MetaverseObjectType).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.ChildGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            SingleOrDefaultAsync(q => q.Id == id);
+        return await GetPredefinedSearchWithCriteriaAsync(q => q.Id == id);
     }
 
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
     {
-        return await Repository.Database.PredefinedSearches.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(q => q.Attributes).
-            ThenInclude(q => q.MetaverseAttribute).
-            Include(q => q.MetaverseObjectType).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.ChildGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            SingleOrDefaultAsync(q => q.Uri == uri);
+        return await GetPredefinedSearchWithCriteriaAsync(q => q.Uri == uri);
     }
 
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)
     {
-        return await Repository.Database.PredefinedSearches.
+        var typeId = metaverseObjectType.Id;
+        return await GetPredefinedSearchWithCriteriaAsync(q => q.MetaverseObjectType.Id == typeId && q.IsDefaultForMetaverseObjectType && q.IsEnabled);
+    }
+
+    /// <summary>
+    /// Loads the one search matching <paramref name="predicate"/> with its result attributes, Metaverse Object Type
+    /// and complete criteria tree. Shared by every full retrieval so they cannot disagree about what a search holds.
+    /// </summary>
+    private async Task<PredefinedSearch?> GetPredefinedSearchWithCriteriaAsync(Expression<Func<PredefinedSearch, bool>> predicate)
+    {
+        var search = await Repository.Database.PredefinedSearches.
             AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(q => q.Attributes).
             ThenInclude(a => a.MetaverseAttribute).
             Include(q => q.MetaverseObjectType).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            Include(q => q.CriteriaGroups).
-            ThenInclude(cg => cg.ChildGroups).
-            ThenInclude(cg => cg.Criteria).
-            ThenInclude(c => c.MetaverseAttribute).
-            SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType && q.IsEnabled);
+            SingleOrDefaultAsync(predicate);
+
+        // Criteria groups nest to any depth, which no Include chain can express; see PredefinedSearchCriteriaTreeLoader.
+        if (search != null)
+            await PredefinedSearchCriteriaTreeLoader.LoadAsync(Repository.Database, search);
+        return search;
     }
 
     public async Task<PredefinedSearch?> GetPredefinedSearchCoreAsync(int id)

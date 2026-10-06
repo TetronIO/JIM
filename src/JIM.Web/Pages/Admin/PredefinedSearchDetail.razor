@@ -91,33 +91,7 @@
             <MudStack>
                 @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups.OrderBy(g => g.Position))
                 {
-                    <MudPaper Class="pa-5" Outlined="true">
-                        @RenderGroupHeader(criteriaGroup, predefinedSearchBuiltIn)
-                        @RenderCriteria(criteriaGroup, predefinedSearchBuiltIn)
-
-                        <div class="mt-4">
-                            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
-                                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
-                                           OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria</MudButton>
-                            </MudTooltip>
-                            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
-                                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
-                                           OnClick="@(() => HandleOpenAddChildGroupDialog(criteriaGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria Group</MudButton>
-                            </MudTooltip>
-                        </div>
-
-                        @foreach (var childGroup in criteriaGroup.ChildGroups.OrderBy(g => g.Position))
-                        {
-                            <MudPaper Class="pa-5 mt-4 ml-6" Outlined="true">
-                                @RenderGroupHeader(childGroup, predefinedSearchBuiltIn)
-                                @RenderCriteria(childGroup, predefinedSearchBuiltIn)
-                                <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
-                                    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
-                                               OnClick="@(() => HandleOpenAddCriteriaDialog(childGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria</MudButton>
-                                </MudTooltip>
-                            </MudPaper>
-                        }
-                    </MudPaper>
+                    @RenderGroup(criteriaGroup, predefinedSearchBuiltIn, nested: false)
                 }
             </MudStack>
         }
@@ -236,7 +210,30 @@
         set { if (_newCriterion != null) _newCriterion.ComparisonType = value ?? SearchComparisonType.NotSet; }
     }
 
-    // ─── Render helpers (shared by top-level and nested groups) ───
+    // ─── Render helpers (shared by groups at every depth) ───
+
+    // Groups nest to any depth, as the REST API and PowerShell allow, so a group renders its own child groups through
+    // this same fragment and every group offers both adds.
+    private RenderFragment RenderGroup(PredefinedSearchCriteriaGroup group, bool builtIn, bool nested) =>@<MudPaper Class="@(nested ? "pa-5 mt-4 ml-6" : "pa-5")" Outlined="true">
+        @RenderGroupHeader(group, builtIn)
+        @RenderCriteria(group, builtIn)
+
+        <div class="mt-4">
+            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
+                           OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria</MudButton>
+            </MudTooltip>
+            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
+                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
+                           OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria Group</MudButton>
+            </MudTooltip>
+        </div>
+
+        @foreach (var childGroup in group.ChildGroups.OrderBy(g => g.Position))
+        {
+            @RenderGroup(childGroup, builtIn, nested: true)
+        }
+    </MudPaper>;
 
     private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<div class="d-flex justify-space-between align-center">
         <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>

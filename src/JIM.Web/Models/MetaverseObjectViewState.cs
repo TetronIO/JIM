@@ -60,8 +60,11 @@ public sealed class MetaverseObjectViewState(Guid objectId)
     public bool AttributeInspectorLoading { get; set; }
 
     // Connections tab (#1519): the joined Connected System Objects, loaded on first visit, and the per-row and
-    // outbound Sync Previews.
-    public List<MetaverseObjectConnection> Connections { get; set; } = [];
+    // outbound Sync Previews. Each connection carries why it exists, and the Not connected entries why the object is
+    // not in each other Connected System an enabled export rule targets, all evaluated at one instant (#348).
+    public List<MetaverseObjectConnectionExplanation> Connections { get; set; } = [];
+    public List<NotConnectedEntry> NotConnected { get; set; } = [];
+    public DateTime? ConnectionsEvaluatedAt { get; set; }
     public int ConnectorCount { get; set; }
     public bool ConnectionsLoading { get; set; }
     public bool ConnectionsLoaded { get; set; }
@@ -70,6 +73,13 @@ public sealed class MetaverseObjectViewState(Guid objectId)
     public CausalityPageContext? ConnectionPreviewContext { get; set; }
     public bool OutboundPreviewLoading { get; set; }
     public SyncPreviewResult? OutboundPreviewResult { get; set; }
+
+    // What the reader has opened on the Connections tab (#348): the joined rows, by Connected System Object id; the
+    // Not connected section; and its entries, by Synchronisation Rule id. The rules are the same for every object of
+    // a type, so these must go with the object, or the next person would open with the last one's entries expanded.
+    public HashSet<Guid> ExpandedConnectionIds { get; } = [];
+    public bool NotConnectedOpen { get; set; }
+    public HashSet<int> ExpandedNotConnectedRuleIds { get; } = [];
 
     // Password tab (#1635): the badge's queue rows are read with the page; the history and accounts load on first
     // visit.

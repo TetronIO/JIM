@@ -146,7 +146,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favou
 
 ## Criteria groups and criteria
 
-These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups can nest one level for mixed logic).
+These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups nest to any depth for mixed logic).
 
 All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
 

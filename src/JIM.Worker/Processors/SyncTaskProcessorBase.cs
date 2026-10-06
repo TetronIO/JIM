@@ -5586,7 +5586,7 @@ public abstract class SyncTaskProcessorBase
             if (mvo == null)
                 continue;
 
-            return await EstablishJoinAsync(connectedSystemObject, mvo);
+            return await EstablishJoinAsync(connectedSystemObject, mvo, importSyncRule);
         }
 
         // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
@@ -5597,8 +5597,9 @@ public abstract class SyncTaskProcessorBase
             if (matchingRules.Count > 0)
             {
                 var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+                // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
                 if (mvo != null)
-                    return await EstablishJoinAsync(connectedSystemObject, mvo);
+                    return await EstablishJoinAsync(connectedSystemObject, mvo, joiningSyncRule: null);
             }
         }
 
@@ -5660,7 +5661,8 @@ public abstract class SyncTaskProcessorBase
     /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
     /// to whichever site builds the root.
     /// </returns>
-    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
+        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
@@ -5708,8 +5710,7 @@ public abstract class SyncTaskProcessorBase
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
-        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-        connectedSystemObject.DateJoined = DateTime.UtcNow;
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow);
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
@@ -5773,8 +5774,7 @@ public abstract class SyncTaskProcessorBase
         mvo.Type = decision.MetaverseObjectType!;
         connectedSystemObject.MetaverseObject = mvo;
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
-        connectedSystemObject.DateJoined = DateTime.UtcNow;
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.Projection, decision.ProjectionSyncRule, DateTime.UtcNow);
 
         return true;
     }
@@ -6358,8 +6358,7 @@ public abstract class SyncTaskProcessorBase
                 mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
                 connectedSystemObject.MetaverseObject = null;
                 connectedSystemObject.MetaverseObjectId = null;
-                connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                connectedSystemObject.DateJoined = null;
+                connectedSystemObject.ClearJoinRecord();
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
                 // Apply pending attribute changes and queue the MVO onto the page-flush batch update

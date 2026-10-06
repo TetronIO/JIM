@@ -210,12 +210,24 @@
                 <div>
                     <MetaverseObjectConnectionsTable IsLoading="_object.ConnectionsLoading" IsLoaded="_object.ConnectionsLoaded"
                                                       Connections="_object.Connections" PreviewLoading="_object.ConnectionPreviewLoading"
-                                                      OnPreview="PreviewConnectionAsync" />
+                                                      OnPreview="PreviewConnectionAsync" EvaluatedAt="_object.ConnectionsEvaluatedAt"
+                                                      ExpandedIds="_object.ExpandedConnectionIds" @bind-Dense="_connectionsDense" />
 
                     @if (_object.ConnectionPreviewResult != null)
                     {
                         <div class="mt-6">
                             <SyncPreviewPanel PreviewResult="_object.ConnectionPreviewResult" Context="_object.ConnectionPreviewContext!" OnClose="CloseConnectionPreview" />
+                        </div>
+                    }
+
+                    @* Why this Metaverse Object is not in each other Connected System an enabled export Synchronisation
+                       Rule targets (#348): below the joined connections, collapsed, because most visits are about those. *@
+                    @if (_object.ConnectionsLoaded)
+                    {
+                        <div class="mt-6">
+                            <MetaverseObjectNotConnectedSection Entries="_object.NotConnected" EvaluatedAt="_object.ConnectionsEvaluatedAt"
+                                                                @bind-Open="_object.NotConnectedOpen"
+                                                                ExpandedRuleIds="_object.ExpandedNotConnectedRuleIds" Dense="_connectionsDense" />
                         </div>
                     }
 
@@ -311,6 +323,10 @@
     // user opens. Their badge counts are the exception, read with the page, because a badge that only appears once
     // its tab is opened is not a badge.
     private MetaverseObjectViewState _object = new(Guid.Empty);
+
+    // The Connections tab's row spacing, shared by its joined table and its Not connected list: the reader's saved
+    // table preference, read when the tab loads, and theirs rather than the object's, so it is not on the state.
+    private bool _connectionsDense = true;
 
     // The tab the reader is on, so moving to another object on the same tab can load that tab for the new object:
     // NavigableMudTabs only reports a change of tab, and the tab has not changed.
@@ -865,12 +881,18 @@
         if (MetaverseObject == null)
             return;
 
+        _connectionsDense = await UserPreferences.GetTableDenseAsync() != false;
         state.ConnectionsLoading = true;
         StateHasChanged();
         try
         {
             using var jim = JimFactory.Create();
-            state.Connections = await jim.Metaverse.GetMetaverseObjectConnectionsAsync(state.ObjectId);
+            // The Not connected entries cost no extra read (the rules and values are loaded for the joined rows
+            // anyway), so they come with the table and the section's count is right while it is still collapsed.
+            var explanations = await jim.Metaverse.GetMetaverseObjectConnectionExplanationsAsync(state.ObjectId, includeNotConnected: true);
+            state.Connections = explanations?.Connections ?? [];
+            state.NotConnected = explanations?.NotConnected ?? [];
+            state.ConnectionsEvaluatedAt = explanations?.EvaluatedAt;
             state.ConnectionsLoaded = true;
             state.ConnectorCount = state.Connections.Count; // the badge agrees with the table once the table has loaded
         }

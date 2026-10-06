@@ -147,6 +147,13 @@ public interface IMetaverseRepository
     public Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy);
 
     /// <summary>
+    /// Gets who made a Metaverse Object's earliest and latest changes: its Created By and Last Updated By, as the
+    /// portal's Properties tab shows them. Both null when the object has no change history (change tracking off, or
+    /// the history purged).
+    /// </summary>
+    public Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Returns a page of change-history records for a Metaverse Object, projected into a flat DTO
     /// so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
     /// </summary>
@@ -157,6 +164,13 @@ public interface IMetaverseRepository
     public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
+
+    /// <summary>
+    /// Gets every value a Metaverse Object holds for the given attributes (#348), uncapped, so scoping can be explained
+    /// against exactly the values synchronisation compares: a capped multi-valued load could change which value comes
+    /// first. Values carry their scalar fields, attribute id and asserted-null flag only.
+    /// </summary>
+    public Task<List<MetaverseObjectAttributeValue>> GetMetaverseObjectAttributeValuesAsync(Guid metaverseObjectId, IReadOnlyCollection<int> attributeIds);
 
     #region value provenance (#399)
 

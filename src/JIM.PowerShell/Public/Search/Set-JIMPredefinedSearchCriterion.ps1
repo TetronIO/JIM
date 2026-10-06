@@ -167,16 +167,13 @@ function Set-JIMPredefinedSearchCriterion {
 
         $attributeId = $MetaverseAttributeId
         if ($PSCmdlet.ParameterSetName -eq 'ByName') {
-            Write-Verbose "Looking up Metaverse attribute: $MetaverseAttributeName"
-            # The shared resolver reads every page of the attributes endpoint (#894, #1965).
             try {
-                $attribute = Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName
+                $attributeId = (Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName).id
             }
             catch {
                 Write-Error $_
                 return
             }
-            $attributeId = $attribute.id
             Write-Verbose "Resolved '$MetaverseAttributeName' to attribute ID $attributeId"
         }
 

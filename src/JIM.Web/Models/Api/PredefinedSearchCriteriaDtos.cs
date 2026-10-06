@@ -152,7 +152,7 @@ public class PredefinedSearchCriteriaGroupDto
 
     /// <summary>
     /// Nested child groups. A group combines its criteria and child groups with AND (type All) or OR (type Any);
-    /// top-level groups are combined with OR. Nesting is supported one level deep.
+    /// top-level groups are combined with OR. Groups nest to any depth.
     /// </summary>
     public List<PredefinedSearchCriteriaGroupDto> ChildGroups { get; set; } = new();
 

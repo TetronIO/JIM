@@ -190,8 +190,6 @@ function New-JIMScopingCriterion {
             $attrDisplay = "MV Attribute ID $MetaverseAttributeId"
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'ByMvName') {
-            Write-Verbose "Looking up Metaverse attribute: $MetaverseAttributeName"
-            # The shared resolver reads every page of the attributes endpoint (#894, #1965).
             try {
                 $attribute = Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName
             }

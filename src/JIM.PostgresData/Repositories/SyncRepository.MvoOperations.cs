@@ -909,9 +909,10 @@ public partial class SyncRepository
 
         // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
         // to these MVOs, and fix up tracked instances to match the database state so a later
-        // SaveChangesAsync does not write the stale FK value back.
+        // SaveChangesAsync does not write the stale FK value back. The join record (#348) goes with the join;
+        // JoinType and DateJoined are left as they always have been here.
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
             mvoIds);
         var mvoIdSet = mvoIds.ToHashSet();
         foreach (var trackedCso in _context.ChangeTracker.Entries<Models.Staging.ConnectedSystemObject>()
@@ -919,6 +920,9 @@ public partial class SyncRepository
         {
             trackedCso.Entity.MetaverseObjectId = null;
             trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinMethod = null;
+            trackedCso.Entity.JoinSyncRuleId = null;
+            trackedCso.Entity.JoinSyncRuleName = null;
         }
 
         // Reference attribute values on other MVOs that point at the deleted MVOs (e.g. Manager or

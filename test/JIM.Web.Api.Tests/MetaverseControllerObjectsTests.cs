@@ -10,6 +10,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
@@ -553,6 +554,62 @@ public class MetaverseControllerObjectsTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectWithProvenanceAsync(id), Times.Once);
         _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Created By and Last Updated By, as the portal's Properties tab shows them (#348, PRD requirement 24): the
+    /// initiators of the Metaverse Object's earliest and latest changes.
+    /// </summary>
+    [Test]
+    public async Task GetObjectAsync_ChangeHistoryRecorded_CarriesCreatedByAndLastUpdatedByAsync()
+    {
+        var id = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        var apiKeyId = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(new MetaverseObject
+        {
+            Id = id,
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = []
+        });
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectChangeInitiatorsAsync(id)).ReturnsAsync((
+            new MvoChangeInitiatorSummary { ChangeTime = DateTime.UtcNow.AddDays(-9), InitiatedByType = ActivityInitiatorType.User, InitiatedById = creatorId, InitiatedByName = "Alice Admin" },
+            new MvoChangeInitiatorSummary { ChangeTime = DateTime.UtcNow, InitiatedByType = ActivityInitiatorType.ApiKey, InitiatedById = apiKeyId, InitiatedByName = "Provisioning key" }));
+
+        var dto = (MetaverseObjectDto)((OkObjectResult)await _controller.GetObjectAsync(id)).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.CreatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(dto.CreatedById, Is.EqualTo(creatorId));
+            Assert.That(dto.CreatedByName, Is.EqualTo("Alice Admin"));
+            Assert.That(dto.LastUpdatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
+            Assert.That(dto.LastUpdatedById, Is.EqualTo(apiKeyId));
+            Assert.That(dto.LastUpdatedByName, Is.EqualTo("Provisioning key"));
+        }
+    }
+
+    [Test]
+    public async Task GetObjectAsync_NoChangeHistory_LeavesCreatedByAndLastUpdatedByEmptyAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(new MetaverseObject
+        {
+            Id = id,
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = []
+        });
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectChangeInitiatorsAsync(id)).ReturnsAsync((null, null));
+
+        var dto = (MetaverseObjectDto)((OkObjectResult)await _controller.GetObjectAsync(id)).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.CreatedByType, Is.Null);
+            Assert.That(dto.CreatedByName, Is.Null);
+            Assert.That(dto.LastUpdatedByType, Is.Null);
+            Assert.That(dto.LastUpdatedByName, Is.Null);
+        }
     }
 
     [Test]
