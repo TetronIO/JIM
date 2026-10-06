@@ -1286,6 +1286,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         public bool SupportsFilePaths => true;
         public bool SupportsPasswordSet => false;
         public bool SupportsPasswordPolicyDiscovery => false;
+        public bool SupportsUniquenessProbe => false;
 
         public IReadOnlyList<PendingExport> ExportedItems => _exportedItems;
 

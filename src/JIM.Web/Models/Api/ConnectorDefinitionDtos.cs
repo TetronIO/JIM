@@ -138,6 +138,12 @@ public class ConnectorDefinitionDto
     public bool SupportsPasswordPolicyDiscovery { get; set; }
 
     /// <summary>
+    /// Whether the connector can search the Connected System for values already in use, so that unique value
+    /// generation can avoid values held by accounts JIM has never imported.
+    /// </summary>
+    public bool SupportsUniquenessProbe { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the connector's schema follows (e.g. "Scim", "Ldap", "NotSet").
     /// Advisory metadata used for Standard Mapping hints.
     /// </summary>
@@ -175,6 +181,7 @@ public class ConnectorDefinitionDto
             SupportsFilePaths = entity.SupportsFilePaths,
             SupportsPasswordSet = entity.SupportsPasswordSet,
             SupportsPasswordPolicyDiscovery = entity.SupportsPasswordPolicyDiscovery,
+            SupportsUniquenessProbe = entity.SupportsUniquenessProbe,
             SchemaStandard = entity.SchemaStandard.ToString()
         };
     }
