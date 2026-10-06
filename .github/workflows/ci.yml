@@ -182,8 +182,8 @@ jobs:
 
   ldaps-tests:
     # Runs the RequiresLdaps NUnit tier against real directory servers over TLS:
-    # three OpenLDAP variants (system-trusted CA, JIM-store-only CA, expired
-    # certificate), a Samba AD Domain Controller and a 389 Directory Server pair
+    # four OpenLDAP variants (system-trusted CA, JIM-store-only CA, expired
+    # certificate, an intermediate CA the server does not send), a Samba AD Domain Controller and a 389 Directory Server pair
     # (JIM-store-only CA, expired certificate). These fixtures self-skip in
     # build-and-test (JIM_TEST_LDAPS_HOST unset); here the fixture script stands
     # the servers up and exports the environment variables that flip them from

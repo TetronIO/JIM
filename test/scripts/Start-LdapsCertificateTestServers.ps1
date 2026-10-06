@@ -17,6 +17,11 @@
         JIM certificate store is honoured, and that an unknown issuer is rejected without it.
       * A server presenting an expired certificate issued by that same CA. Used to prove trusting an issuer does not
         amount to waiving the validity period.
+      * A server whose certificate is issued by an intermediate CA beneath a third root, sending its own certificate
+        alone. The intermediate and the root are published only at the Authority Information Access addresses in the
+        certificates, which the test fixture serves itself from the exported directory and port. Used to prove that
+        trusting the root through JIM's trust action stores the intermediate JIM had to download, since the LDAP
+        client never downloads one (#1938).
 
     It then prints the environment variables that LdapsCertificateValidationTests, ServerCertificateProbeTests and
     the Samba AD / 389 Directory Server / unencrypted-connection fixtures read.
@@ -78,7 +83,15 @@ $servers = @(
     @{ Name = 'jim-ldaps-system-trusted'; Port = $null; Hostname = 'ldap-sys.local'; Ca = 'caA' }
     @{ Name = 'jim-ldaps-jim-store';      Port = $null; Hostname = 'ldap-jim.local'; Ca = 'caB' }
     @{ Name = 'jim-ldaps-expired';        Port = $null; Hostname = 'ldap-old.local'; Ca = 'caB' }
+    # Configured with an unrelated CA file on purpose: OpenSSL builds the chain a server sends from that file, so
+    # pointing it at this server's own hierarchy would send the intermediate and defeat the point of the server.
+    @{ Name = 'jim-ldaps-intermediate';   Port = $null; Hostname = 'ldap-int.local'; Ca = 'caA' }
 )
+
+# Where the intermediate-chain server's issuing CA and root are published, as the Authority Information Access
+# addresses in its certificates name them. The port is chosen here, because it has to be written into the
+# certificates; the test fixture serves the directory on it.
+$aiaPort = $null
 
 $systemTrustPath = '/usr/local/share/ca-certificates/jim-ldaps-test-ca-a.crt'
 $hostsFile = '/etc/hosts'
@@ -215,6 +228,31 @@ function New-Certificates {
             Invoke-OpenSsl @('x509', '-req', '-in', "$($pair.Name).csr", '-CA', "$($pair.Ca).crt", '-CAkey', "$($pair.Ca).key", '-CAcreateserial', '-out', "$($pair.Name).crt", '-days', '5', '-extfile', "$($pair.Name).ext")
         }
 
+        # A two-tier hierarchy whose server sends only its own certificate: root caC signs issuing CA caC1, which
+        # signs the server certificate. Each certificate names where its issuer can be downloaded (DER, as PKI
+        # publishes them), so JIM can assemble the chain the server does not send.
+        $aiaBase = "http://127.0.0.1:$script:aiaPort"
+        Invoke-OpenSsl @('req', '-x509', '-newkey', 'rsa:2048', '-keyout', 'caC.key', '-out', 'caC.crt', '-days', '5', '-nodes', '-subj', '/CN=JIM LDAPS Test Root CA C')
+        Set-Content -Path 'caC1.ext' -Value @(
+            'basicConstraints=critical,CA:TRUE,pathlen:0'
+            'keyUsage=critical,keyCertSign,cRLSign'
+            "authorityInfoAccess=caIssuers;URI:$aiaBase/root-ca.crt"
+        )
+        Invoke-OpenSsl @('req', '-newkey', 'rsa:2048', '-keyout', 'caC1.key', '-out', 'caC1.csr', '-nodes', '-subj', '/CN=JIM LDAPS Test Issuing CA C1')
+        Invoke-OpenSsl @('x509', '-req', '-in', 'caC1.csr', '-CA', 'caC.crt', '-CAkey', 'caC.key', '-CAcreateserial', '-out', 'caC1.crt', '-days', '5', '-extfile', 'caC1.ext')
+        Set-Content -Path 'int.ext' -Value @(
+            'subjectAltName=DNS:ldap-int.local'
+            'extendedKeyUsage=serverAuth'
+            "authorityInfoAccess=caIssuers;URI:$aiaBase/issuing-ca.crt"
+        )
+        Invoke-OpenSsl @('req', '-newkey', 'rsa:2048', '-keyout', 'int.key', '-out', 'int.csr', '-nodes', '-subj', '/CN=ldap-int.local')
+        Invoke-OpenSsl @('x509', '-req', '-in', 'int.csr', '-CA', 'caC1.crt', '-CAkey', 'caC1.key', '-CAcreateserial', '-out', 'int.crt', '-days', '5', '-extfile', 'int.ext')
+
+        New-Item -ItemType Directory -Path 'aia' -Force | Out-Null
+        Invoke-OpenSsl @('x509', '-in', 'caC.crt', '-outform', 'DER', '-out', 'aia/root-ca.crt')
+        Invoke-OpenSsl @('x509', '-in', 'caC1.crt', '-outform', 'DER', '-out', 'aia/issuing-ca.crt')
+        Get-ChildItem -Path 'aia' | ForEach-Object { & chmod 644 $_.FullName }
+
         # An expired certificate needs explicit dates, which only the openssl ca command accepts.
         New-Item -ItemType Directory -Path (Join-Path $WorkingDirectory 'ca/newcerts') -Force | Out-Null
         # The index must be genuinely empty; a file holding just a newline fails to parse ("Problem with index file").
@@ -257,6 +295,7 @@ function Start-TestServers {
         'jim-ldaps-system-trusted' = 'sys'
         'jim-ldaps-jim-store'      = 'jim'
         'jim-ldaps-expired'        = 'old'
+        'jim-ldaps-intermediate'   = 'int'
     }
 
     foreach ($server in $servers) {
@@ -558,6 +597,12 @@ if (Test-Path $WorkingDirectory) {
     Remove-Item $WorkingDirectory -Recurse -Force
 }
 
+# Any free loopback port; nothing listens on it until the test fixture serves the directory.
+$aiaListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$aiaListener.Start()
+$aiaPort = ([System.Net.IPEndPoint]$aiaListener.LocalEndpoint).Port
+$aiaListener.Stop()
+
 New-Certificates
 Start-TestServers
 Set-HostEntries
@@ -599,6 +644,10 @@ $environmentVariables = [ordered]@{
     JIM_TEST_LDAPS_SYSTEM_TRUSTED_PORT  = "$($serversByName['jim-ldaps-system-trusted'].Port)"
     JIM_TEST_LDAP_PLAIN_HOST            = 'ldap-sys.local'
     JIM_TEST_LDAP_PLAIN_PORT            = "$plainLdapHostPort"
+    JIM_TEST_LDAPS_INTERMEDIATE_HOST    = 'ldap-int.local'
+    JIM_TEST_LDAPS_INTERMEDIATE_PORT    = "$($serversByName['jim-ldaps-intermediate'].Port)"
+    JIM_TEST_LDAPS_AIA_PORT             = "$aiaPort"
+    JIM_TEST_LDAPS_AIA_DIRECTORY        = (Join-Path $WorkingDirectory 'aia')
 }
 
 if ($IncludeSambaAd) {

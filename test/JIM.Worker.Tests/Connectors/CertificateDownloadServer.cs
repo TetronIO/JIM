@@ -7,25 +7,45 @@ using System.Security.Cryptography.X509Certificates;
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
-/// Serves one certificate over HTTP, standing in for the address a PKI publishes in its certificates'
-/// Authority Information Access extension.
+/// Serves certificates over HTTP, standing in for the addresses a PKI publishes in its certificates' Authority
+/// Information Access extension.
 /// </summary>
 internal sealed class CertificateDownloadServer : IDisposable
 {
     private readonly HttpListener _listener = new();
-    private readonly byte[] _certificate;
+    private readonly IReadOnlyDictionary<string, byte[]> _files;
     private readonly Task _serving;
 
+    /// <summary>
+    /// Serves one certificate on a free port, at <see cref="Url"/>.
+    /// </summary>
     internal CertificateDownloadServer(X509Certificate2 certificate)
+        : this(FreePort(), new Dictionary<string, byte[]> { ["issuer.cer"] = certificate.RawData })
     {
-        _certificate = certificate.RawData;
-        var port = FreePort();
-        Url = $"http://127.0.0.1:{port}/issuer.cer";
-        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+    }
+
+    private CertificateDownloadServer(int port, IReadOnlyDictionary<string, byte[]> files)
+    {
+        _files = files;
+        BaseUrl = $"http://127.0.0.1:{port}/";
+        Url = BaseUrl + files.Keys.First();
+        _listener.Prefixes.Add(BaseUrl);
         _listener.Start();
         _serving = Task.Run(ServeAsync);
     }
 
+    /// <summary>
+    /// Serves every file in <paramref name="directory"/> on <paramref name="port"/>, for certificates generated
+    /// elsewhere with these addresses already written into them.
+    /// </summary>
+    internal static CertificateDownloadServer ServingDirectory(string directory, int port) =>
+        new(port, Directory.GetFiles(directory).ToDictionary(file => Path.GetFileName(file), File.ReadAllBytes));
+
+    internal string BaseUrl { get; }
+
+    /// <summary>
+    /// The address of the first certificate served.
+    /// </summary>
     internal string Url { get; }
 
     private async Task ServeAsync()
@@ -35,8 +55,17 @@ internal sealed class CertificateDownloadServer : IDisposable
             try
             {
                 var context = await _listener.GetContextAsync();
-                context.Response.ContentType = "application/pkix-cert";
-                await context.Response.OutputStream.WriteAsync(_certificate);
+                var name = context.Request.Url?.AbsolutePath.TrimStart('/') ?? string.Empty;
+                if (_files.TryGetValue(name, out var file))
+                {
+                    context.Response.ContentType = "application/pkix-cert";
+                    await context.Response.OutputStream.WriteAsync(file);
+                }
+                else
+                {
+                    context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                }
+
                 context.Response.Close();
             }
             catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
