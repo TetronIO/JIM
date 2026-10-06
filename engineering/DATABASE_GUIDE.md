@@ -101,6 +101,8 @@ EF Core migrations live in `src/JIM.PostgresData/Migrations/`. JIM.Worker applie
 
 **The upgrade path is tested on real PostgreSQL.** `MigrationUpgradePathDatabaseTests` (a `RequiresPostgres` fixture, run by the CI `database-tests` job) applies the migrations at head over the schema the previous release shipped, which is the path every upgrading customer takes and the one production cannot roll back.
 
+**Migrations must run as an ordinary user.** On the bundled database JIM's user is the cluster's superuser (`POSTGRES_USER`), but on a customer's own server it is only the owner of JIM's database, as the deployment guide's Before You Install SQL creates it. A migration may therefore need nothing a database owner lacks: no untrusted extension, no `ALTER SYSTEM`, no role or cluster-wide change. `ExternalDatabasePreparationDatabaseTests` (`RequiresPostgres`) runs that SQL from `docs/administration/deployment.md` as written, then applies every migration connected as the user it creates, so it fails when either the documented preparation (#1957: it once granted only `ALL PRIVILEGES ON DATABASE`, which since PostgreSQL 15 cannot create tables in `public`) or a new migration needs more. The bundled database and the rest of the `database-tests` job migrate as a superuser and would not notice.
+
 ---
 
 ## History Retention
