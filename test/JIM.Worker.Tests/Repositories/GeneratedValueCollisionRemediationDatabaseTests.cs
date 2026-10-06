@@ -376,6 +376,38 @@ public class GeneratedValueCollisionRemediationDatabaseTests
         }
     }
 
+    [Test]
+    public async Task AppendAttributeChangesToPendingExportAsync_ChangeCarriesAnotherInstanceOfATrackedAttribute_AppendsWithoutAttachingItAsync()
+    {
+        // Found by Scenario 023 against Samba AD: the revision drain appends the corrected value onto the rejected
+        // Create, on the worker's long-lived context, which already tracks the Connected System attribute; the new
+        // change's Attribute navigation is a different instance of that attribute (export evaluation's cache), so
+        // walking the graph to add the change threw "another instance with the same key value is already being
+        // tracked" and failed the synchronisation.
+        var estate = await SeedEstateAsync();
+        var (exportId, changeId) = await AddPendingExportAsync(estate, "jbloggs", PendingExportStatus.Pending);
+
+        await using (var ctx = NewContext())
+        {
+            var tracked = await ctx.ConnectedSystemAttributes.AsTracking().SingleAsync(a => a.Id == estate.CsAttributeId);
+            var otherInstance = new ConnectedSystemObjectTypeAttribute
+            {
+                Id = tracked.Id, Name = tracked.Name, Type = tracked.Type, AttributePlurality = tracked.AttributePlurality, Selected = true
+            };
+            var corrected = new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), Attribute = otherInstance, AttributeId = otherInstance.Id, StringValue = "jbloggs1",
+                ChangeType = PendingExportAttributeChangeType.Update
+            };
+
+            await new PostgresDataRepository(ctx).ConnectedSystems.AppendAttributeChangesToPendingExportAsync(exportId, [corrected], [changeId]);
+        }
+
+        await using var check = NewContext();
+        var changes = await check.Set<PendingExportAttributeValueChange>().Where(c => c.PendingExportId == exportId).ToListAsync();
+        Assert.That(changes.Select(c => c.StringValue), Is.EqualTo(new[] { "jbloggs1" }), "the superseded change is removed and the corrected one added");
+    }
+
     // ---- Deletion paths ----
 
     [Test]

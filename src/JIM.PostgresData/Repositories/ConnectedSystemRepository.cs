@@ -4841,10 +4841,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (changesToAdd.Count > 0)
         {
+            // Track each change on its own, never through AddRange: AddRange walks the graph, and a change's Attribute
+            // navigation is export evaluation's cached instance, which on the worker's long-lived context is routinely a
+            // different instance of an attribute already tracked, so the walk throws "another instance with the same
+            // key value is already being tracked" (src/CLAUDE.md, "DbSet.Add Walks the Graph; Entry() Does Not"). The
+            // foreign keys are set as scalars, so nothing else needs attaching.
             foreach (var change in changesToAdd)
+            {
                 change.PendingExportId = pendingExportId;
-
-            await Repository.Database.PendingExportAttributeValueChanges.AddRangeAsync(changesToAdd);
+                change.AttributeId = change.Attribute?.Id ?? change.AttributeId;
+                Repository.Database.Entry(change).State = EntityState.Added;
+            }
         }
 
         if (changeIdsToRemove.Count > 0 || changesToAdd.Count > 0)
