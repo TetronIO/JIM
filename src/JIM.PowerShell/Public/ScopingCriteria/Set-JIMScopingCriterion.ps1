@@ -177,10 +177,11 @@ function Set-JIMScopingCriterion {
             $body.metaverseAttributeId = $MetaverseAttributeId
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'ByMvName') {
-            $attributes = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes"
-            $attribute = $attributes | Where-Object { $_.name -eq $MetaverseAttributeName } | Select-Object -First 1
-            if (-not $attribute) {
-                Write-Error "Metaverse attribute '$MetaverseAttributeName' not found."
+            try {
+                $attribute = Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName
+            }
+            catch {
+                Write-Error $_
                 return
             }
             $body.metaverseAttributeId = $attribute.id

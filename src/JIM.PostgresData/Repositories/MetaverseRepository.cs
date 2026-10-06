@@ -788,23 +788,17 @@ public class MetaverseRepository : IMetaverseRepository
         }));
 
         // 9. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
-        //     search's criteria-group graph (one level of nesting, as elsewhere).
+        //     search's criteria-group tree, at any depth (a criterion missed here is left filtering on an attribute the
+        //     type no longer has); global lists all.
         List<int> predefinedSearchCriterionIds;
         if (objectTypeId.HasValue)
         {
             var typeId = objectTypeId.Value;
-            var directSearchCriteria = db.PredefinedSearches
+            var typeSearchIds = await db.PredefinedSearches
                 .Where(s => s.MetaverseObjectType.Id == typeId)
-                .SelectMany(s => s.CriteriaGroups)
-                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            var childSearchCriteria = db.PredefinedSearches
-                .Where(s => s.MetaverseObjectType.Id == typeId)
-                .SelectMany(s => s.CriteriaGroups)
-                .SelectMany(g => g.ChildGroups)
-                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
-                .Select(c => c.Id);
-            predefinedSearchCriterionIds = await directSearchCriteria.Union(childSearchCriteria).ToListAsync();
+                .Select(s => s.Id)
+                .ToListAsync();
+            predefinedSearchCriterionIds = await PredefinedSearchCriteriaTreeLoader.GetCriterionIdsAsync(db, typeSearchIds, attributeId);
         }
         else
         {
