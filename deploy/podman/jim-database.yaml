@@ -5,10 +5,12 @@
 # JIM reaches this pod on the jim network at the host name jim-database, which jim-config.yaml sets as
 # JIM_DB_HOSTNAME. PostgreSQL is not published on the host.
 #
-# The tuning matches docker-compose.yml, and suits a large host: 64 GB of memory and 16 cores. For another size,
-# change the settings below (https://pgtune.leopard.in.ua/ suggests values). Unlike Docker, Podman cannot enlarge
-# a pod's /dev/shm, so dynamic_shared_memory_type=mmap keeps PostgreSQL's parallel query memory in its data folder
-# instead; shared_buffers never used /dev/shm.
+# The tuning matches docker-compose.yml. The memory settings come from jim-config.yaml, where setup.sh sizes them to
+# the host's memory (JIM_DB_SHARED_BUFFERS, JIM_DB_EFFECTIVE_CACHE_SIZE, JIM_DB_MAINTENANCE_WORK_MEM and
+# JIM_DB_WORK_MEM; see the Configuration Reference); unset, they suit the documented 4 GB minimum host. The rest
+# assume an SSD, and up to 16 cores. Unlike Docker, Podman cannot enlarge a pod's /dev/shm, so
+# dynamic_shared_memory_type=mmap keeps PostgreSQL's parallel query memory in its data folder instead;
+# shared_buffers never used /dev/shm.
 
 apiVersion: v1
 kind: Pod
@@ -22,24 +24,24 @@ spec:
     - name: postgres
       image: __POSTGRES_IMAGE__
       # The logs volume's root belongs to root, so this wrapper creates a folder PostgreSQL may write its logs to
-      # before handing over to the image's own entrypoint.
+      # before handing over to the image's own entrypoint. It also adds the settings read from jim-config.yaml, with
+      # the same defaults as docker-compose.yml.
       command:
         - /bin/bash
         - -c
         - >-
           mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database &&
-          exec docker-entrypoint.sh "$@" -c "log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000}"
+          exec docker-entrypoint.sh "$@"
+          -c "shared_buffers=${JIM_DB_SHARED_BUFFERS:-1GB}"
+          -c "effective_cache_size=${JIM_DB_EFFECTIVE_CACHE_SIZE:-2GB}"
+          -c "maintenance_work_mem=${JIM_DB_MAINTENANCE_WORK_MEM:-256MB}"
+          -c "work_mem=${JIM_DB_WORK_MEM:-4MB}"
+          -c "log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000}"
         - --
       args:
         - postgres
         - -c
         - max_connections=200
-        - -c
-        - shared_buffers=8GB
-        - -c
-        - effective_cache_size=24GB
-        - -c
-        - maintenance_work_mem=2GB
         - -c
         - checkpoint_completion_target=0.9
         - -c
@@ -50,8 +52,6 @@ spec:
         - random_page_cost=1.1
         - -c
         - effective_io_concurrency=1000
-        - -c
-        - work_mem=102300kB
         - -c
         - min_wal_size=1GB
         - -c
@@ -98,6 +98,18 @@ spec:
         - name: JIM_DB_LOG_MIN_DURATION
           valueFrom:
             configMapKeyRef: { name: jim-config, key: JIM_DB_LOG_MIN_DURATION, optional: true }
+        - name: JIM_DB_SHARED_BUFFERS
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_SHARED_BUFFERS, optional: true }
+        - name: JIM_DB_EFFECTIVE_CACHE_SIZE
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_EFFECTIVE_CACHE_SIZE, optional: true }
+        - name: JIM_DB_MAINTENANCE_WORK_MEM
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_MAINTENANCE_WORK_MEM, optional: true }
+        - name: JIM_DB_WORK_MEM
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_WORK_MEM, optional: true }
       # Podman 5 restarts a container whose liveness check fails. PostgreSQL counts as started once it accepts
       # connections, however long the first start or a crash recovery takes, and as alive while it answers at all,
       # even to refuse a connection while it starts up. Only five minutes without an answer restarts it.

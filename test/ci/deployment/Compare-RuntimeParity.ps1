@@ -64,12 +64,13 @@ $IntendedDifferences = @(
     }
     @{
         Service = 'web', 'worker', 'scheduler'; Property = 'environment variable'; On = 'Docker'
-        Values = @('DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT', 'JIM_DB_IMAGE')
-        Reason = 'Settings of the Compose files themselves (the images and the published port), which env_file also passes into the containers, where nothing reads them. The pod files name the images, and jim.kube publishes the port. JIM_DB_IMAGE is set only for an air-gapped install on Docker''s classic image store (#1854).'
+        Values = @('DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT', 'JIM_DB_IMAGE', 'JIM_DB_SHM_SIZE')
+        Reason = 'Settings of the Compose files themselves (the images, the published port and the database''s /dev/shm), which env_file also passes into the containers, where nothing reads them. The pod files name the images, jim.kube publishes the port, and Podman cannot size a pod''s /dev/shm. JIM_DB_IMAGE is set only for an air-gapped install on Docker''s classic image store (#1854).'
     }
     @{
-        Service = 'database'; Property = 'environment variable'; On = 'Podman'; Values = @('JIM_DB_LOG_MIN_DURATION')
-        Reason = 'The database pod''s command reads the slow query threshold from its environment; Compose puts it into the command itself.'
+        Service = 'database'; Property = 'environment variable'; On = 'Podman'
+        Values = @('JIM_DB_LOG_MIN_DURATION', 'JIM_DB_SHARED_BUFFERS', 'JIM_DB_EFFECTIVE_CACHE_SIZE', 'JIM_DB_MAINTENANCE_WORK_MEM', 'JIM_DB_WORK_MEM')
+        Reason = 'The database pod''s command reads the slow query threshold and its memory settings from its environment; Compose puts them into the command itself.'
     }
     @{
         Service = 'web'; Property = 'mount'; On = 'Docker'; Values = @('/run/jim-tls/tls.crt', '/run/jim-tls/tls.key')

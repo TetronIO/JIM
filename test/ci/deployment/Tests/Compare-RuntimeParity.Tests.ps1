@@ -185,10 +185,12 @@ Describe 'Compare-RuntimeParity' {
         $podman = New-Services
         # Compose passes its own settings, and the whole .env for the database, into the containers.
         foreach ($name in 'web', 'worker', 'scheduler') {
-            $docker[$name].Env += 'DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT', 'JIM_DB_IMAGE'
+            $docker[$name].Env += 'DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT', 'JIM_DB_IMAGE', 'JIM_DB_SHM_SIZE'
         }
-        # Compose puts the slow query threshold into the database's command itself; Podman's command reads it.
+        # Compose puts the slow query threshold and the memory sizes into the database's command itself; Podman's
+        # command reads them from its environment.
         $docker.database.Env = @($docker.database.Env | Where-Object { $_ -ne 'JIM_DB_LOG_MIN_DURATION' })
+        $podman.database.Env += 'JIM_DB_SHARED_BUFFERS', 'JIM_DB_EFFECTIVE_CACHE_SIZE', 'JIM_DB_MAINTENANCE_WORK_MEM', 'JIM_DB_WORK_MEM'
         # The certificate: two files on Docker, one secret folder on Podman.
         $docker.web.Mounts += '/run/jim-tls/tls.crt', '/run/jim-tls/tls.key'
         $podman.web.Mounts += '/run/jim-tls'
