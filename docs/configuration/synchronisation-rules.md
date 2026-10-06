@@ -78,6 +78,16 @@ Criteria are organised into groups with AND/OR logic and support nested groups f
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
+### How criteria are evaluated
+
+Three rules decide outcomes that are easy to misread from the editor:
+
+- **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
+- **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
+- **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
+
+To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
+
 ### Multi-valued attributes in scope
 
 A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:

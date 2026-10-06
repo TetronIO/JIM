@@ -1411,6 +1411,238 @@ Describe 'Get-JIMMetaverseObjectProvenance' {
     }
 }
 
+Describe 'Get-JIMMetaverseObjectConnection' {
+
+    BeforeAll {
+        # The connections endpoint's response, as Invoke-JIMApi returns it (PascalCase): one joined connection and
+        # two enabled export rules whose Connected Systems hold no joined object.
+        function New-ConnectionsResponse {
+            param([guid]$MetaverseObjectId)
+            [PSCustomObject]@{
+                MetaverseObjectId = $MetaverseObjectId
+                DisplayName       = 'Jane Smith'
+                EvaluatedAt       = [datetime]'2026-10-04T10:41:00Z'
+                Connections       = @(
+                    [PSCustomObject]@{
+                        ConnectedSystemObjectId = [guid]::NewGuid()
+                        DisplayName             = 'jsmith'
+                        ConnectedSystemId       = 5
+                        ConnectedSystemName     = 'HR'
+                        ObjectTypeName          = 'person'
+                        JoinType                = 'Projected'
+                        IsSource                = $true
+                        IsTarget                = $false
+                        State                   = 'InSync'
+                        Join                    = [PSCustomObject]@{ Method = 'Projection'; SyncRuleName = 'HR Users Import'; Description = 'Projected by the Synchronisation Rule "HR Users Import"' }
+                        Scoping                 = @([PSCustomObject]@{ SyncRuleName = 'HR Users Import'; Outcome = 'InScope'; Hint = ''; Criteria = @() })
+                        Conflicts               = @()
+                    }
+                )
+                NotConnected      = @(
+                    [PSCustomObject]@{
+                        ConnectedSystemId     = 10
+                        ConnectedSystemName   = 'Finance App'
+                        ConnectedSystemStatus = 'Active'
+                        SyncRuleId            = 42
+                        SyncRuleName          = 'Finance App Users Export'
+                        ObjectTypeName        = 'account'
+                        Reason                = 'NotInScope'
+                        Hint                  = 'Fails on Department'
+                        BulletsTitle          = 'To come into scope'
+                        Bullets               = @([PSCustomObject]@{ Text = 'Department must equal "Finance" (currently "Engineering")'; Segments = @() })
+                        Summary               = "Jane Smith is not provisioned to Finance App.`nReason: not in scope."
+                        Scoping               = [PSCustomObject]@{
+                            SyncRuleName = 'Finance App Users Export'
+                            Outcome      = 'OutOfScope'
+                            Criteria     = @([PSCustomObject]@{ Path = '1.1'; Met = $false; AttributeName = 'Department' })
+                        }
+                    },
+                    [PSCustomObject]@{
+                        ConnectedSystemId     = 20
+                        ConnectedSystemName   = 'Learning Platform'
+                        ConnectedSystemStatus = 'Active'
+                        SyncRuleId            = 43
+                        SyncRuleName          = 'Learning Platform Export'
+                        ObjectTypeName        = 'learner'
+                        Reason                = 'NotYetProvisioned'
+                        Hint                  = 'In scope; nothing staged yet'
+                        BulletsTitle          = 'What happens next'
+                        Bullets               = @()
+                        Summary               = 'Jane Smith is not provisioned to Learning Platform.'
+                        Scoping               = [PSCustomObject]@{ SyncRuleName = 'Learning Platform Export'; Outcome = 'InScope'; Criteria = @() }
+                    }
+                )
+            }
+        }
+    }
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMMetaverseObjectConnection
+        }
+
+        It 'Should have a mandatory Id parameter that accepts GUID' {
+            $param = $command.Parameters['Id']
+            $param.ParameterType.Name | Should -Be 'Guid'
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Id parameter that accepts pipeline by property name' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a ConnectedSystemName parameter with validation' {
+            $param = $command.Parameters['ConnectedSystemName']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have an IncludeNotConnected switch' {
+            $command.Parameters['IncludeNotConnected'].ParameterType.Name | Should -Be 'SwitchParameter'
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Get-JIMMetaverseObjectConnection -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Request Binding' {
+
+        It 'Requests the connections endpoint without the not-connected entries by default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ MetaverseObjectId = $mvoId; Connections = @(); NotConnected = $null } }
+
+                Get-JIMMetaverseObjectConnection -Id $mvoId | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/connections"
+                }
+            }
+        }
+
+        It 'Requests the not-connected entries with -IncludeNotConnected' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ MetaverseObjectId = $mvoId; Connections = @(); NotConnected = @() } }
+
+                Get-JIMMetaverseObjectConnection -Id $mvoId -IncludeNotConnected | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/connections?includeNotConnected=true"
+                }
+            }
+        }
+
+        It 'Accepts a Metaverse Object piped from Get-JIMMetaverseObject' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ MetaverseObjectId = $mvoId; Connections = @(); NotConnected = $null } }
+
+                [PSCustomObject]@{ Id = $mvoId; DisplayName = 'Jane Smith' } | Get-JIMMetaverseObjectConnection | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/connections"
+                }
+            }
+        }
+    }
+
+    Context 'Output' {
+
+        It 'Emits one object per connection and per not-connected entry, with a uniform top level' {
+            InModuleScope JIM -Parameters @{ Response = (New-ConnectionsResponse -MetaverseObjectId ([guid]::NewGuid())) } {
+                param($Response)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { $Response }
+
+                $results = @(Get-JIMMetaverseObjectConnection -Id $Response.MetaverseObjectId -IncludeNotConnected)
+
+                $results.Count | Should -Be 3
+                $joined = $results[0]
+                $joined.ConnectedSystem | Should -Be 'HR'
+                $joined.Object | Should -Be 'jsmith'
+                $joined.Connected | Should -BeTrue
+                $joined.Role | Should -Be 'Source'
+                $joined.State | Should -Be 'InSync'
+                $joined.Join.Description | Should -Be 'Projected by the Synchronisation Rule "HR Users Import"'
+                $joined.Scoping[0].SyncRuleName | Should -Be 'HR Users Import'
+
+                $notInScope = $results[1]
+                $notInScope.ConnectedSystem | Should -Be 'Finance App'
+                $notInScope.Connected | Should -BeFalse
+                $notInScope.Object | Should -BeNullOrEmpty
+                $notInScope.Role | Should -Be 'Target'
+                $notInScope.State | Should -Be 'NotInScope'
+                $notInScope.SyncRule | Should -Be 'Finance App Users Export'
+                $notInScope.Hint | Should -Be 'Fails on Department'
+                $notInScope.Bullets | Should -Be @('Department must equal "Finance" (currently "Engineering")')
+                $notInScope.Summary | Should -BeLike 'Jane Smith is not provisioned to Finance App.*'
+                @($notInScope.Scoping)[0].Criteria[0].Path | Should -Be '1.1'
+            }
+        }
+
+        It 'Lets failing criteria be filtered without walking the tree' {
+            InModuleScope JIM -Parameters @{ Response = (New-ConnectionsResponse -MetaverseObjectId ([guid]::NewGuid())) } {
+                param($Response)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { $Response }
+
+                $failing = Get-JIMMetaverseObjectConnection -Id $Response.MetaverseObjectId -IncludeNotConnected |
+                    ForEach-Object { $_.Scoping } | ForEach-Object { $_.Criteria } | Where-Object { -not $_.Met }
+
+                @($failing).Count | Should -Be 1
+                @($failing)[0].AttributeName | Should -Be 'Department'
+            }
+        }
+
+        It 'Filters by -ConnectedSystemName case-insensitively' {
+            InModuleScope JIM -Parameters @{ Response = (New-ConnectionsResponse -MetaverseObjectId ([guid]::NewGuid())) } {
+                param($Response)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { $Response }
+
+                $results = @(Get-JIMMetaverseObjectConnection -Id $Response.MetaverseObjectId -IncludeNotConnected -ConnectedSystemName 'finance app')
+
+                $results.Count | Should -Be 1
+                $results[0].SyncRule | Should -Be 'Finance App Users Export'
+            }
+        }
+
+        It 'Errors when -ConnectedSystemName matches nothing' {
+            InModuleScope JIM -Parameters @{ Response = (New-ConnectionsResponse -MetaverseObjectId ([guid]::NewGuid())) } {
+                param($Response)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { $Response }
+
+                { Get-JIMMetaverseObjectConnection -Id $Response.MetaverseObjectId -ConnectedSystemName 'Nowhere' -ErrorAction Stop } |
+                    Should -Throw "*No connection to a Connected System named 'Nowhere'*"
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMMetaverseObjectConnection -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+        It 'Should document its output shape' { $help.returnValues | Out-String | Should -Match 'ConnectedSystem' }
+    }
+}
+
 Describe 'Get-JIMGeneratedValue' {
 
     Context 'Parameter Validation' {

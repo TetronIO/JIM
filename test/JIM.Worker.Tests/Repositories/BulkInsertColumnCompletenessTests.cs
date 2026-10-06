@@ -140,6 +140,27 @@ public class BulkInsertColumnCompletenessTests
         }
     }
 
+    /// <summary>
+    /// The synchronisation page flush persists joins through the join-state list alone, so every column describing a
+    /// join must be in it: a join column missing here is lost on every join made during synchronisation (#348).
+    /// </summary>
+    [Test]
+    public void ConnectedSystemObjectJoinStateUpdateColumns_CoverEveryJoinColumn()
+    {
+        var joinColumns = CsoBulkColumns.ConnectedSystemObjects
+            .Where(c => c.StartsWith("Join", StringComparison.Ordinal) || c is "MetaverseObjectId" or "DateJoined")
+            .ToHashSet();
+        var actual = CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.ToHashSet();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joinColumns.Except(actual).OrderBy(c => c), Is.Empty,
+                "Join column(s) missing from ConnectedSystemObjectsJoinStateUpdate; joins made during synchronisation would not persist them");
+            Assert.That(actual.Except(CsoBulkColumns.ConnectedSystemObjects).OrderBy(c => c), Is.Empty,
+                "ConnectedSystemObjectsJoinStateUpdate names column(s) the table does not have");
+        }
+    }
+
     [Test]
     public void ConnectedSystemObjectChangeBulkColumns_MatchMappedColumnsExactly()
     {

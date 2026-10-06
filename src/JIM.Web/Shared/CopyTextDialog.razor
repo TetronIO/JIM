@@ -1,0 +1,53 @@
+@inject IJSRuntime JsRuntime
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Offers text to copy by hand when the browser would not let JIM write it to the clipboard: over plain HTTP the
+   Clipboard API does not exist at all. The text arrives selected, so Ctrl+C (Cmd+C on a Mac) is all it takes. *@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Your browser did not let JIM copy this to the clipboard. It is selected below; press Ctrl+C (Cmd+C on a
+            Mac) to copy it.
+        </MudText>
+        <textarea @ref="_textArea" class="jim-copy-text-fallback" readonly rows="@Rows" aria-label="Text to copy"
+                  data-testid="jim-copy-text-fallback" value="@Text"></textarea>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="Close">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The text to offer.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    private ElementReference _textArea;
+
+    /// <summary>One row per line of the text, within reason, so it reads without scrolling where it can.</summary>
+    private int Rows => Math.Clamp(Text.Split('\n').Length + 1, 3, 16);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("jimInterop.selectAllAndKeepFocus", _textArea);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            // Selecting it is a convenience: the text is there to select by hand either way.
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+}

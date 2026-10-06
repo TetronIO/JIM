@@ -11,7 +11,7 @@ Nothing you configure changes to ask it. JIM evaluates the object against the st
 ## Where to find it
 
 - **Connected System Object page**: a **Preview Sync** button beside **Set Password**, opening the preview inline below the object's header.
-- **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation.
+- **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation. Each row also expands to explain why the connection exists, and a **Not connected** section below says why the object has no object in other Connected Systems; see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
 - **Metaverse Object detail page, Connections tab, below the table**: **Preview Exports**, which previews what would export from the Metaverse Object as it stands now, with no inbound chain (see [Export-only preview](#export-only-preview-from-a-metaverse-object) below).
 
 Each panel names the Connected System whose Full Synchronisation is being previewed, so a preview reached from a Connected System Object's Connections row is never mistaken for a preview of a different system.

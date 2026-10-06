@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
@@ -17,6 +18,29 @@ public class MetaverseObjectDto
     public Guid Id { get; set; }
     public DateTime Created { get; set; }
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The kind of principal behind the earliest recorded change (User, ApiKey or System), with
+    /// <see cref="CreatedById"/> and <see cref="CreatedByName"/>; null when no change history is recorded.
+    /// </summary>
+    public ActivityInitiatorType? CreatedByType { get; set; }
+
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>The name of the principal behind the earliest recorded change, as it was then.</summary>
+    public string? CreatedByName { get; set; }
+
+    /// <summary>
+    /// The kind of principal behind the latest recorded change, with <see cref="LastUpdatedById"/> and
+    /// <see cref="LastUpdatedByName"/>; null when no change history is recorded.
+    /// </summary>
+    public ActivityInitiatorType? LastUpdatedByType { get; set; }
+
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>The name of the principal behind the latest recorded change, as it was then.</summary>
+    public string? LastUpdatedByName { get; set; }
+
     public string? DisplayName { get; set; }
     public MetaverseObjectStatus Status { get; set; }
     public MetaverseObjectOrigin Origin { get; set; }
@@ -50,7 +74,11 @@ public class MetaverseObjectDto
     /// what is joined (it runs after the object itself is loaded), so the rows come from it rather than from the
     /// entity's own navigation; the entity supplies only each row's best-ranked name, which it alone carries.
     /// </param>
-    public static MetaverseObjectDto FromEntity(MetaverseObject entity, IReadOnlyCollection<MetaverseObjectConnection> connections)
+    /// <param name="initiators">Who made the object's earliest and latest changes, from
+    /// <c>MetaverseServer.GetMetaverseObjectChangeInitiatorsAsync</c>: Created By and Last Updated By, as the portal's
+    /// Properties tab shows them.</param>
+    public static MetaverseObjectDto FromEntity(MetaverseObject entity, IReadOnlyCollection<MetaverseObjectConnection> connections,
+        (MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest) initiators = default)
     {
         var namesByConnectedSystemObjectId = entity.ConnectedSystemObjects
             .Where(cso => !string.IsNullOrEmpty(cso.NameOrId))
@@ -63,6 +91,12 @@ public class MetaverseObjectDto
             Id = entity.Id,
             Created = entity.Created,
             LastUpdated = entity.LastUpdated,
+            CreatedByType = initiators.Earliest?.InitiatedByType,
+            CreatedById = initiators.Earliest?.InitiatedById,
+            CreatedByName = initiators.Earliest?.InitiatedByName,
+            LastUpdatedByType = initiators.Latest?.InitiatedByType,
+            LastUpdatedById = initiators.Latest?.InitiatedById,
+            LastUpdatedByName = initiators.Latest?.InitiatedByName,
             DisplayName = entity.Name,
             Status = entity.Status,
             Origin = entity.Origin,
