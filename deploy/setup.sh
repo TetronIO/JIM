@@ -1245,6 +1245,23 @@ host_memory_mb() {
     awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo 2>/dev/null || true
 }
 
+# A PostgreSQL memory setting in MB, rounded down; empty when it is not a size the installer can read. As PostgreSQL
+# reads them, the units are case-sensitive, and a number without one counts in the setting's own unit, given in bytes
+# (8192 for shared_buffers, whose unit is the 8 kB page).
+postgres_size_mb() {
+    local value="$1" unit="$2" bytes
+    [[ "$value" =~ ^([0-9]+(\.[0-9]+)?)(B|kB|MB|GB|TB)?$ ]] || return 0
+    case "${BASH_REMATCH[3]}" in
+        B) bytes=1 ;;
+        kB) bytes=1024 ;;
+        MB) bytes=1048576 ;;
+        GB) bytes=1073741824 ;;
+        TB) bytes=1099511627776 ;;
+        *) bytes="$unit" ;;
+    esac
+    awk -v n="${BASH_REMATCH[1]}" -v b="$bytes" 'BEGIN { printf "%d", n * b / 1048576 }'
+}
+
 # Whether the installation's settings file sets a setting, other than commented out or empty.
 config_sets() {
     local key="$1"
@@ -1290,8 +1307,8 @@ size_database() {
         [JIM_DB_SHM_SIZE]="$((shared + shared / 4))mb"
     )
 
-    local key value name
-    local -a chosen=()
+    local key
+    local -a keys=()
     for key in "${DATABASE_MEMORY_SETTINGS[@]}"; do
         if [ "$RUNTIME" = "podman" ] && [ "$key" = "JIM_DB_SHM_SIZE" ]; then
             continue
@@ -1299,16 +1316,41 @@ size_database() {
         if [ "$mode" = "keep" ] && config_sets "$key"; then
             continue
         fi
+        keys+=("$key")
+    done
+    [ ${#keys[@]} -gt 0 ] || return 0
+
+    # A shared_buffers given in the environment is checked before anything is written: PostgreSQL allocates it in full
+    # when it starts, so one the host cannot give stops the database, which would otherwise surface only at the end of
+    # the wait for JIM to be ready (#1948).
+    local gb caution=""
+    gb=$(awk -v m="$memory" 'BEGIN { printf "%.1f", m / 1024 }')
+    if [ -n "${JIM_DB_SHARED_BUFFERS:-}" ] && [[ " ${keys[*]} " == *" JIM_DB_SHARED_BUFFERS "* ]]; then
+        local given advice="Leave JIM_DB_SHARED_BUFFERS unset for the installer to choose, which on this host is ${shared}MB; see ${DOCS_BASE}/administration/configuration/#bundled-postgresql-memory"
+        given=$(postgres_size_mb "$JIM_DB_SHARED_BUFFERS" 8192)
+        if [ -z "$given" ]; then
+            caution="JIM_DB_SHARED_BUFFERS is ${JIM_DB_SHARED_BUFFERS}, which is not a size the installer can read, so it could not check that this host can give it. PostgreSQL refuses a size it cannot read too: its units are kB, MB, GB and TB, and the case matters. ${advice}"
+        elif [ "$given" -ge "$memory" ]; then
+            fatal "JIM_DB_SHARED_BUFFERS is ${JIM_DB_SHARED_BUFFERS}, which this host, with ${gb} GB of memory, cannot give: PostgreSQL allocates shared_buffers in full when it starts, so the database would not start. ${advice}"
+        elif [ "$given" -gt $((memory / 2)) ]; then
+            caution="JIM_DB_SHARED_BUFFERS is ${JIM_DB_SHARED_BUFFERS}, more than half this host's ${gb} GB of memory, which leaves little for JIM's services and PostgreSQL's other memory, so they may run out of it under load. ${advice}"
+        fi
+    fi
+
+    local value name label
+    local -a chosen=()
+    for key in "${keys[@]}"; do
         value="${!key:-${sized[$key]}}"
+        label=""
+        [ -z "${!key:-}" ] || label=" (given)"
         set_setting "$key" "$value"
         name="${key#JIM_DB_}"
-        chosen+=("${name,,} ${value}")
+        chosen+=("${name,,} ${value}${label}")
     done
-    if [ ${#chosen[@]} -gt 0 ]; then
-        local summary
-        printf -v summary '%s, ' "${chosen[@]}"
-        success "Sized the bundled PostgreSQL for this host's $(awk -v m="$memory" 'BEGIN { printf "%.1f", m / 1024 }') GB of memory: ${summary%, }"
-    fi
+    local summary
+    printf -v summary '%s, ' "${chosen[@]}"
+    success "Sized the bundled PostgreSQL for this host's ${gb} GB of memory: ${summary%, }"
+    [ -z "$caution" ] || warn "$caution"
 }
 
 # --- Configure database ---
