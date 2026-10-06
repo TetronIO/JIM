@@ -2668,7 +2668,21 @@ public class ExportEvaluationServer
                         AttributeValueChanges = new List<PendingExportAttributeValueChange>(dbPendingExport.AttributeValueChanges)
                     };
                     var beforeIds = mergeShell.AttributeValueChanges.Select(avc => avc.Id).ToHashSet();
-                    var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(mergeShell, attributeChanges);
+
+                    // A generated export mapping re-evaluated here stages an unresolved marker, which this branch cannot
+                    // resolve (see the guard below). Where the Create already carries that attribute, the marker would
+                    // only resolve to the same sticky assignment the Create was staged with (or corrected to, by
+                    // Collision Remediation's export-mode rewrite), so the Create's own value stands and the marker is
+                    // no change at all. Reached when a revision drain (Unique Value Generation, #242, release 4)
+                    // re-evaluates an object whose rejected Create carries an export-mode generated value.
+                    var attributeIdsTheCreateCarries = dbPendingExport.AttributeValueChanges
+                        .Where(c => c.PendingGeneration == null)
+                        .Select(c => c.AttributeId)
+                        .ToHashSet();
+                    var changesToMerge = attributeChanges
+                        .Where(c => c.PendingGeneration == null || !attributeIdsTheCreateCarries.Contains(c.AttributeId))
+                        .ToList();
+                    var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(mergeShell, changesToMerge);
                     var changesToAdd = mergeShell.AttributeValueChanges.Where(avc => !beforeIds.Contains(avc.Id)).ToList();
                     var changeIdsToRemove = beforeIds.Except(mergeShell.AttributeValueChanges.Select(avc => avc.Id)).ToList();
 

@@ -196,6 +196,35 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullSync_DrainingARevisionOntoARejectedCreateCarryingAnExportModeGeneratedValue_KeepsThatValueAsync()
+    {
+        // Found by Scenario 023 against Samba AD: the rejected Create also carries an export-mode generated value. The
+        // drain re-evaluates the object's exports, which re-stages that mapping as an unresolved generation marker; the
+        // Create has already been attempted, so the change is appended onto it in place, a path with no deferred
+        // resolution step, and the synchronisation failed outright rather than keep the value the Create already holds.
+        var ctx = await SetUpAsync(directoryExportModeEmployeeNumber: true);
+        var employeeNumber = DirectoryAttribute(ctx, "employeeNumber");
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        var generatedBefore = DirectoryExport(ctx).AttributeValueChanges.Single(c => c.AttributeId == employeeNumber.Id).StringValue;
+        await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+
+        var syncActivity = await RunFullSyncAsync(ctx.Hr);
+
+        var export = DirectoryExport(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(syncActivity.Status, Is.Not.EqualTo(ActivityStatus.FailedWithError), syncActivity.ErrorMessage);
+            Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty, "the revision is drained");
+            Assert.That(export.AttributeValueChanges.Where(c => c.AttributeId == ctx.SAMAccountName.Id).Select(c => c.StringValue),
+                Is.EqualTo(new[] { "joe.bloggs1" }), "the corrected value reaches the queued Create");
+            Assert.That(export.AttributeValueChanges.Where(c => c.AttributeId == employeeNumber.Id).Select(c => c.StringValue),
+                Is.EqualTo(new[] { generatedBefore }), "the export-mode generated value the Create already carries is kept, exactly once");
+            Assert.That(export.AttributeValueChanges.Any(c => c.PendingGeneration != null), Is.False, "no unresolved marker is left on the export");
+        }
+    }
+
+    [Test]
     public async Task Export_RejectionOfAValueAlreadyCorrected_IsAnOrdinaryErrorAndDoesNotRemediateAgainAsync()
     {
         var ctx = await SetUpAsync();
@@ -454,7 +483,7 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectTypeAttribute ContractorUid,
         int ContractorCsoTypeId);
 
-    private async Task<Context> SetUpAsync(bool connectorClassifies = true)
+    private async Task<Context> SetUpAsync(bool connectorClassifies = true, bool directoryExportModeEmployeeNumber = false)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -498,17 +527,36 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
 
         var directory = await CreateConnectedSystemAsync("Directory");
         directory.ConnectorDefinition.SupportsUniquenessRejectionClassification = connectorClassifies;
-        var directoryType = await CreateCsoTypeAsync(directory.Id, "DirectoryUser", new List<ConnectedSystemObjectTypeAttribute>
+        var directoryAttributes = new List<ConnectedSystemObjectTypeAttribute>
         {
             new() { Name = "objectGUID", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
             new() { Name = "sAMAccountName", Type = AttributeDataType.Text, Selected = true },
             new() { Name = "userPrincipalName", Type = AttributeDataType.Text, Selected = true }
-        });
+        };
+        if (directoryExportModeEmployeeNumber)
+            directoryAttributes.Add(new() { Name = "employeeNumber", Type = AttributeDataType.Text, Selected = true });
+        var directoryType = await CreateCsoTypeAsync(directory.Id, "DirectoryUser", directoryAttributes);
         var sAMAccountName = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
         var directoryUpn = directoryType.Attributes.Single(a => a.Name == "userPrincipalName");
         var directoryExport = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export", enableProvisioning: true);
         AddDirectFlow(directoryExport, sAMAccountName, accountName);
         AddDirectFlow(directoryExport, directoryUpn, userPrincipalName);
+        if (directoryExportModeEmployeeNumber)
+        {
+            // An export-mode generated value on the same target as the import-mode Account Name.
+            var employeeNumber = directoryType.Attributes.Single(a => a.Name == "employeeNumber");
+            directoryExport.AttributeFlowRules.Add(new SyncRuleMapping
+            {
+                SyncRule = directoryExport, SyncRuleId = directoryExport.Id,
+                TargetConnectedSystemAttribute = employeeNumber, TargetConnectedSystemAttributeId = employeeNumber.Id,
+                Generation = new SyncRuleMappingGeneration
+                {
+                    TokenKind = GeneratedValueTokenKind.OnlyIfTaken, SuffixStyle = GeneratedValueSuffixStyle.Number, SuffixStart = 1,
+                    AttemptLimit = 1000, NeverReuse = true, CollisionRemediation = true
+                },
+                Sources = { new SyncRuleMappingSource { Order = 0, Expression = "\"n-\" + Lower(mv[\"EmployeeId\"])" } }
+            });
+        }
 
         // Contractor receives the Account Name too (a participating target), but provisions nothing itself: the
         // anchoring cases seed its account directly.
@@ -619,6 +667,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
 
     private SyncRuleMapping GeneratedMapping(Context ctx) =>
         SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.Generation != null);
+
+    private ConnectedSystemObjectTypeAttribute DirectoryAttribute(Context ctx, string name) =>
+        SyncRepo.ObjectTypes[ctx.SAMAccountName.ConnectedSystemObjectType.Id].Attributes.Single(a => a.Name == name);
 
     private MetaverseObject Mvo() => SyncRepo.MetaverseObjects.Values.Single();
 
