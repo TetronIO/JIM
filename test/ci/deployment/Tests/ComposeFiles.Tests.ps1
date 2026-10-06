@@ -101,6 +101,16 @@ Describe 'The database container''s environment on the <Stack> stack' -Skip:$scr
         $script:Services['jim.database'].Command | Should -Contain 'log_min_duration_statement=750'
     }
 
+    It 'drops a session whose client has gone within two minutes' {
+        # Without TCP keepalives PostgreSQL holds such a session for about two hours, Linux's default. On Podman
+        # every stop of JIM leaves its sessions so, since the pod's network goes before its services close their
+        # connections (#1980).
+        $command = $script:Services['jim.database'].Command
+        $command | Should -Contain 'tcp_keepalives_idle=60'
+        $command | Should -Contain 'tcp_keepalives_interval=10'
+        $command | Should -Contain 'tcp_keepalives_count=6'
+    }
+
     It 'still gives JIM''s own services the settings file, secrets included' {
         $script:Services['jim.web'].Environment['JIM_SSO_SECRET'] | Should -Be 'sso-secret-for-test'
         $script:Services['jim.worker'].Environment['JIM_DB_PASSWORD'] | Should -Be 'database-password-for-test'
