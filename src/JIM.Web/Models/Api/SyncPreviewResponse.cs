@@ -53,6 +53,14 @@ public class SyncPreviewResponse
     /// </summary>
     public List<SyncRuleReferenceDto> AffectedSyncRules { get; set; } = [];
 
+    /// <summary>
+    /// Each value the preview generated that the real synchronisation would also probe for (Unique Value
+    /// Generation): the preview is a dry run and checks JIM's own records only, while the synchronisation also asks
+    /// these Connected Systems whether the value is already in use, and generates a different value if one of them
+    /// already has an account using it. Empty when no generated value would be probed.
+    /// </summary>
+    public List<SyncPreviewGeneratedValueProbeDto> GeneratedValueProbes { get; set; } = [];
+
     public static SyncPreviewResponse FromModel(SyncPreviewResult result) => new()
     {
         OutcomeTree = [.. result.OutcomeTree.Select(SyncOutcomeNodeDto.FromModel)],
@@ -61,6 +69,7 @@ public class SyncPreviewResponse
         Errors = [.. result.Errors.Select(SyncPreviewMessageDto.FromModel)],
         Warnings = [.. result.Warnings.Select(SyncPreviewMessageDto.FromModel)],
         HasBlockingErrors = result.HasBlockingErrors,
-        AffectedSyncRules = [.. result.AffectedSyncRules.Select(SyncRuleReferenceDto.FromModel)]
+        AffectedSyncRules = [.. result.AffectedSyncRules.Select(SyncRuleReferenceDto.FromModel)],
+        GeneratedValueProbes = [.. result.GeneratedValueProbes.Select(SyncPreviewGeneratedValueProbeDto.FromModel)]
     };
 }

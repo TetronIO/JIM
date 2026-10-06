@@ -161,6 +161,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Select(cs => new { cs.Id, cs.Name })
             .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
+    public Task<List<ConnectedSystem>> GetConnectedSystemsWithConnectorDefinitionsAsync()
+        // EF is fine here: a configuration-sized table, read once per participants request or save.
+        => Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Include(cs => cs.ConnectorDefinition)
+            .OrderBy(cs => cs.Id)
+            .ToListAsync();
+
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
         return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).Select(cs => new ConnectedSystemHeader
@@ -7157,6 +7165,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.AttributeFlowRules)
                 .ThenInclude(m => m.Generation)
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(sr => sr.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Every export Synchronisation Rule with the Attribute Flow graph the generated-value participants read model and
+    /// exclusion validation read (Unique Value Generation, #242, release 3). AsNoTracking for the same reason as
+    /// <see cref="GetImportSyncRulesForMetaverseObjectTypeAsync"/>: a save path calling this may hold a tracked,
+    /// already-mutated mapping, and must compare against what the database holds.
+    /// </summary>
+    public async Task<List<SyncRule>> GetExportSyncRulesWithAttributeFlowsAsync()
+    {
+        return await Repository.Database.SyncRules
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Sources)
+                    .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.TargetConnectedSystemAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Generation)
+            .Where(sr => sr.Direction == SyncRuleDirection.Export)
             .OrderBy(sr => sr.Id)
             .ToListAsync();
     }

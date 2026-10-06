@@ -1007,6 +1007,15 @@ public interface IConnectedSystemRepository
     Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Gets every export Synchronisation Rule, disabled rules included, with each rule's Attribute Flow mappings, their
+    /// sources (with the Metaverse attribute each reads), their target Connected System attributes and generation
+    /// settings (Unique Value Generation, #242, release 3). Read untracked: the generated-value participants panel and
+    /// the save-time exclusion validation compare against what the database holds, never against a graph the caller may
+    /// be mid-way through mutating.
+    /// </summary>
+    Task<List<SyncRule>> GetExportSyncRulesWithAttributeFlowsAsync();
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
     /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"
@@ -1035,6 +1044,13 @@ public interface IConnectedSystemRepository
     /// single map read replaces per-system queries.
     /// </summary>
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
+
+    /// <summary>
+    /// Every Connected System with its Connector Definition and nothing else, untracked (Unique Value Generation, #242,
+    /// release 3): what the generated-value participants read model needs to name each system and its Connector, and to
+    /// ask the Connector whether it can probe.
+    /// </summary>
+    public Task<List<ConnectedSystem>> GetConnectedSystemsWithConnectorDefinitionsAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
