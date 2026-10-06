@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-06, JIM v0.16.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -50,7 +50,7 @@ flowchart TD
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> DeferredRecall[FlushDeferredRecallRpeisAsync:<br/>one RPEI per referencing CSO whose<br/>reference-recall Pending Export was staged]
-    DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for MVOs the<br/>Temporal Scope Reconciler flagged #892]
+    DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for flagged MVOs:<br/>the Temporal Scope Reconciler's #892 and an<br/>export rule configuration change's #1925<br/>Batches of 500, change detection off as in the<br/>page flush; the clear keeps the flags and<br/>stops if an export rule changed since this run<br/>read its rules, for the next run to review]
     ScopeReview --> Watermark[Record ConfigurationLastFullyAppliedAt<br/>Full Sync only<br/>Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
     Watermark --> Sweep{Full Sync, and armed by<br/>a Connector Space clear?}
     Sweep -->|No| End([Sync Complete])

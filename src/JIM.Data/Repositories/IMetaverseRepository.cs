@@ -97,9 +97,16 @@ public interface IMetaverseRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
-    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// scope, unless an export Synchronisation Rule changed since the run read its rules; see
+    /// <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
     /// </summary>
-    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c> (issue #1925); see
+    /// <c>ISyncRepository.FlagMetaverseObjectsOfTypeForScopeReviewAsync</c>.
+    /// </summary>
+    public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId);
 
     /// <summary>
     /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
@@ -121,9 +128,10 @@ public interface IMetaverseRepository
     /// <summary>
     /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
     /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
-    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
-    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
-    /// is empty.
+    /// <c>ScopeReviewPending</c> for those in <paramref name="flaggedIds"/>. A flag already set is left set: another
+    /// rule's sweep or a configuration change (#1925) may have raised it, and one rule finding the object in
+    /// agreement with its own scope says nothing about theirs. The synchronisation that re-evaluates the object
+    /// clears it. No-op when <paramref name="evaluatedIds"/> is empty.
     /// </summary>
     public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
 
