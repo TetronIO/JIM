@@ -2700,6 +2700,34 @@ function Write-Spinner {
     Write-Host "`r  $spinner $Message".PadRight(80) -NoNewline -ForegroundColor Yellow
 }
 
+function Get-UniquenessProbeWarningPattern {
+    <#
+    .SYNOPSIS
+        The regular expression for one line of the warning a synchronisation Activity carries when JIM could not
+        probe a Connected System for values already in use (Unique Value Generation, #242, release 3).
+
+    .DESCRIPTION
+        The worker appends one line per Connected System per run:
+        "JIM couldn't probe <System> for values already in use. <reason>. JIM chose N value(s) using its own records
+        only." The pattern is anchored at both ends, so a line carrying anything else does not match. Pass it to
+        Assert-ActivitySuccess -AllowedWarningMessagePattern to accept exactly that warning and nothing more.
+
+    .PARAMETER ConnectedSystemName
+        The Connected System the line must name, matched literally. Omit to accept any Connected System.
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $sync.activityId -Name "HR Delta Sync" `
+            -AllowedWarningMessagePattern (Get-UniquenessProbeWarningPattern -ConnectedSystemName "Panoply AD")
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [string]$ConnectedSystemName
+    )
+
+    $system = if ($ConnectedSystemName) { [regex]::Escape($ConnectedSystemName) } else { '.+' }
+    return "^JIM couldn't probe $system for values already in use\. .+\. JIM chose [1-9][0-9]* values? using its own records only\.`$"
+}
+
 function Assert-ActivitySuccess {
     <#
     .SYNOPSIS
@@ -2730,12 +2758,25 @@ function Assert-ActivitySuccess {
 
         Validates that Delta Sync completed, allowing any warnings (but not errors).
 
+    .PARAMETER AllowedWarningMessagePattern
+        A regular expression the Activity's own warning message must satisfy for 'CompleteWithWarning' to pass:
+        every non-blank line of it must match, and no execution item may carry an error. Implies -AllowWarnings for
+        that one shape of warning only; a warning status with no message, a line that does not match, or an item
+        error still fails. Get-UniquenessProbeWarningPattern builds the pattern for the probe warning.
+
     .EXAMPLE
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Delta Import" `
             -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
 
         Validates that the Delta Import completed, allowing CompleteWithWarning ONLY if
         all warning RPEIs have the DeltaImportFallbackToFullImport error type.
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "HR Delta Sync" `
+            -AllowedWarningMessagePattern (Get-UniquenessProbeWarningPattern -ConnectedSystemName "Panoply AD")
+
+        Validates that the sync completed, allowing CompleteWithWarning ONLY if the Activity's warning is made of
+        probe warning lines naming Panoply AD and no object failed.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -2748,7 +2789,10 @@ function Assert-ActivitySuccess {
         [switch]$AllowWarnings,
 
         [Parameter(Mandatory=$false)]
-        [string[]]$AllowedWarningTypes
+        [string[]]$AllowedWarningTypes,
+
+        [Parameter(Mandatory=$false)]
+        [string]$AllowedWarningMessagePattern
     )
 
     # Fetch the Activity details
@@ -2759,6 +2803,31 @@ function Assert-ActivitySuccess {
     }
 
     $status = $activity.status
+
+    # A warning accepted only for the shape the caller names: every line of the Activity's own warning message
+    # matches, and no object failed (an item error would also make the status CompleteWithWarning).
+    if ($status -eq 'CompleteWithWarning' -and $AllowedWarningMessagePattern) {
+        $warningMessage = "$($activity.warningMessage)"
+        if ([string]::IsNullOrWhiteSpace($warningMessage)) {
+            throw "Activity '$Name' completed with a warning but carries no warning message to check against the allowed pattern (ActivityId: $ActivityId)"
+        }
+
+        $unexpectedLines = @($warningMessage -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Where-Object { $_.Trim() -notmatch $AllowedWarningMessagePattern })
+        if ($unexpectedLines.Count -gt 0) {
+            throw "Activity '$Name' completed with an unexpected warning: $($unexpectedLines -join ' | ') (ActivityId: $ActivityId)"
+        }
+
+        $erroredItems = @(Get-JIMActivity -Id $ActivityId -ExecutionItems |
+            Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' })
+        if ($erroredItems.Count -gt 0) {
+            $errorTypes = ($erroredItems | ForEach-Object { $_.errorType } | Select-Object -Unique) -join ', '
+            throw "Activity '$Name' carries $($erroredItems.Count) execution item error(s) ($errorTypes) beside its allowed warning (ActivityId: $ActivityId)"
+        }
+
+        Write-Host "  ✓ $Name completed with the expected warning only (Status: $status)" -ForegroundColor Green
+        return
+    }
 
     # Define acceptable statuses
     $acceptableStatuses = @('Complete')
