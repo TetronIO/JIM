@@ -111,21 +111,18 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
     /// awaiting deletion rather than by the metaverse, and where it is large the framework's dispatch decision
     /// hands the whole preview to JIM.Worker, which is what that decision is for.
     /// </summary>
-    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context)
+    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context) =>
+        await PreviewImpactCounter.CountAsync((await CreateImpactCounterAsync(context))!, EvaluateDeltasAsync(context, CancellationToken.None));
+
+    /// <summary>
+    /// Stage 2 counted in the framework's one evaluation pass (#1530): one per delta, per transition, exactly as
+    /// <see cref="CountImpactAsync"/> counts.
+    /// </summary>
+    public Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var counts = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>();
-        await foreach (var delta in EvaluateDeltasAsync(context, CancellationToken.None))
-            counts[delta.TransitionType] = counts.GetValueOrDefault(delta.TransitionType) + 1;
-
-        return
-        [
-            .. counts
-                .OrderByDescending(c => c.Value)
-                .ThenBy(c => c.Key)
-                .Select(c => new PreviewImpactCount(c.Key, c.Value, MetaverseObjectTypeId: TargetIdOf(context)))
-        ];
+        return Task.FromResult<IPreviewImpactCounter?>(PreviewImpactCounter.PerDelta(metaverseObjectTypeId: TargetIdOf(context)));
     }
 
     public async IAsyncEnumerable<PreviewDelta> EvaluateDeltasAsync(PreviewContext context,

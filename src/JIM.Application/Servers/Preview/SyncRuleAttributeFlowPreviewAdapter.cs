@@ -160,23 +160,19 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     /// that object's values, resolved against Attribute Priority. There is no SQL form of it at all, and the only
     /// alternative to streaming would be a second implementation of Attribute Flow.
     /// </remarks>
-    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context)
+    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context) =>
+        await PreviewImpactCounter.CountAsync((await CreateImpactCounterAsync(context))!, EvaluateDeltasAsync(context, CancellationToken.None));
+
+    /// <summary>
+    /// Stage 2 counted in the framework's one evaluation pass (#1530): one per delta, per transition, exactly as
+    /// <see cref="CountImpactAsync"/> counts.
+    /// </summary>
+    public async Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var rule = await GetRuleAsync(context);
-        var counts = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>();
-
-        await foreach (var delta in EvaluateDeltasAsync(context, CancellationToken.None))
-            counts[delta.TransitionType] = counts.GetValueOrDefault(delta.TransitionType) + 1;
-
-        return
-        [
-            .. counts
-                .OrderByDescending(count => count.Value)
-                .ThenBy(count => count.Key)
-                .Select(count => new PreviewImpactCount(count.Key, count.Value, ConnectedSystemId: rule.ConnectedSystemId))
-        ];
+        return PreviewImpactCounter.PerDelta(connectedSystemId: rule.ConnectedSystemId);
     }
 
     public async IAsyncEnumerable<PreviewDelta> EvaluateDeltasAsync(PreviewContext context,

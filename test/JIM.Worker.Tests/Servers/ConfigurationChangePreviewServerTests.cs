@@ -315,6 +315,107 @@ public class ConfigurationChangePreviewServerTests
         }
     }
 
+    [Test]
+    public async Task RunPreviewAsync_AdapterCountingFromItsDeltas_EvaluatesOnceAndCountsThatPassAsync()
+    {
+        _adapter.CountsFromDeltas = true;
+        _adapter.Deltas.AddRange([OutOfScope("Ada"), OutOfScope("Grace"), OutOfScope("Alan"), DomainChange("Ada"), DomainChange("Grace")]);
+
+        var server = NewServer();
+        var request = NewRequest();
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        var counts = JsonSerializer.Deserialize<List<PreviewImpactCount>>(_preview!.ImpactCounts!);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_adapter.EvaluateCalls, Is.EqualTo(1), "the population is evaluated once, not once to count and again for the detail");
+            Assert.That(_adapter.CountCalls, Is.Zero);
+            Assert.That(counts, Is.EqualTo(new[]
+            {
+                new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 3, MetaverseObjectTypeId: ObjectTypeId),
+                new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, 2, MetaverseObjectTypeId: ObjectTypeId)
+            }));
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
+            Assert.That(_preview!.ImpactCountsStarted, Is.Not.Null);
+            Assert.That(_preview!.ImpactCountsCompleted, Is.Not.Null);
+            Assert.That(_persistedGroups.Sum(g => g.ObjectCount), Is.EqualTo(5), "the summary comes from the same pass");
+            Assert.That(_preview!.IsComplete, Is.True);
+            Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
+        }
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_AdapterCountingFromItsDeltasFailsMidway_RecordsNoPartialCountsAsync()
+    {
+        _adapter.CountsFromDeltas = true;
+        for (var i = 0; i < 10; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+        _adapter.ThrowAfterDeltas = 4;
+        _adapter.EvaluateThrows = new InvalidOperationException("evaluation failed");
+
+        var server = NewServer();
+        var request = NewRequest();
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_preview!.ImpactCounts, Is.Null, "four of ten objects counted is a wrong number, not a partial answer");
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
+            Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
+            Assert.That(_persistedGroups, Is.Empty);
+            Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+        }
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_AdapterCountingFromItsDeltasCancelled_RecordsTheCountsCancelledAsync()
+    {
+        _adapter.CountsFromDeltas = true;
+        for (var i = 0; i < 50; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+        using var cancellation = new CancellationTokenSource();
+        _adapter.OnDeltaYielded = yielded =>
+        {
+            if (yielded == 10)
+                cancellation.Cancel();
+        };
+
+        var server = NewServer();
+        var request = NewRequest();
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, cancellation.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_preview!.ImpactCounts, Is.Null);
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
+            Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
+            Assert.That(_preview!.HasFailed, Is.False);
+            Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Cancelled));
+        }
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_CreatingTheCounterThrows_FailsWithoutEvaluatingAsync()
+    {
+        _adapter.CreateCounterThrows = new InvalidOperationException("configuration could not be loaded");
+
+        var server = NewServer();
+        var request = NewRequest();
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
+            Assert.That(_adapter.EvaluateCalls, Is.Zero);
+            Assert.That(_preview!.HasFailed, Is.True);
+            Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+        }
+    }
+
     #endregion
 
     #region Stages 3 and 4: grouping, capping and progress
@@ -732,6 +833,8 @@ public class ConfigurationChangePreviewServerTests
         public List<PreviewImpactCount> Counts { get; } = [];
         public List<PreviewDelta> Deltas { get; } = [];
 
+        public bool CountsFromDeltas { get; set; }
+        public Exception? CreateCounterThrows { get; set; }
         public Exception? ValidateThrows { get; set; }
         public Exception? CountThrows { get; set; }
         public Exception? EvaluateThrows { get; set; }
@@ -764,6 +867,13 @@ public class ConfigurationChangePreviewServerTests
             if (CountThrows is not null)
                 throw CountThrows;
             return Task.FromResult(new List<PreviewImpactCount>(Counts));
+        }
+
+        public Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context)
+        {
+            if (CreateCounterThrows is not null)
+                throw CreateCounterThrows;
+            return Task.FromResult(CountsFromDeltas ? PreviewImpactCounter.PerDelta(metaverseObjectTypeId: ObjectTypeId) : null);
         }
 
         public async IAsyncEnumerable<PreviewDelta> EvaluateDeltasAsync(PreviewContext context,

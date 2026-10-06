@@ -151,6 +151,16 @@ public class ConnectedSystemDeletionPreviewAdapterTests : SynchronisedDeprovisio
     }
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        var ctx = await SetUpTwoObjectsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        ApplyStagedExports(ctx.Target);
+
+        await JIM.Worker.Tests.Servers.PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(Adapter, ContextFor(ctx.Hr.Id));
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_StreamsTheDeprovisioningPreviewAsync()
     {
         var ctx = await SetUpTwoContributorsWithExportTargetAsync();

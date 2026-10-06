@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phase 1 complete; Phase 2 in progress)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -140,7 +140,7 @@ Scenario: Previewing and running from a script
 ### Phase 2: streaming walk and single-pass counting
 
 - The walk streams per-object results; no cap by default; samples kept as a consumer for the existing engine API.
-- Framework counts from the delta stream for adapters that declare it; the deletion adapter adopts it (one pass instead of two).
+- Single-pass counting ✅: an adapter that can only count by evaluating supplies an `IPreviewImpactCounter` (`CreateImpactCounterAsync`; `PreviewImpactCounter.PerDelta` or `PerSubject`), which the framework feeds during the one evaluation pass and records only when the whole stream completes. Wider than first planned: eight adapters counted by streaming their own deltas, not just the deletion adapter, and all eight adopted it, each with an equivalence test (its counter fed its own deltas equals its `CountImpactAsync`). Runtime: a 1,108-object deletion preview went from 3.8s to 2.1s with identical counts.
 - Evaluated-object count recorded on the preview (migration).
 
 ### Phase 3: adapter and transitions
