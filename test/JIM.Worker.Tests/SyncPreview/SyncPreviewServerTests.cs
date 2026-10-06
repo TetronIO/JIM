@@ -414,6 +414,40 @@ public class SyncPreviewServerTests
         }
     }
 
+    /// <summary>
+    /// The Disconnect counterpart (#1966): a joined target object leaves the export rule's scope under a Disconnect
+    /// Deprovisioning Action. The real run breaks the join and records a TargetDisconnected outcome; the preview must
+    /// propose the same node and no export, and must not break the join itself.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForMvoAsync_TargetOutOfScopeWithDisconnectAction_ReportsTargetDisconnectedNodeAsync()
+    {
+        var (mvo, _, exportRule, _, cso) = ArrangeOutboundFixture(csoStoredEmployeeId: "EMP001");
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = MetaverseObjectTypesData.Single(t => t.Name == "User").Attributes
+                .Single(a => a.Name == Constants.BuiltInAttributes.DisplayName),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "a display name this Metaverse Object does not have"
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        var result = await Jim.SyncPreview.PreviewSyncForMvoAsync(mvo.Id);
+
+        Assert.That(result.OutcomeTree, Has.Count.EqualTo(1));
+        var node = result.OutcomeTree[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected));
+            Assert.That(node.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(node.TargetEntityId, Is.EqualTo(cso.Id), "naming the object that would be disconnected");
+            Assert.That(result.Outbound.ProposedExports, Is.Empty, "a disconnection exports nothing");
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not disconnect the object");
+        }
+    }
+
     [Test]
     public async Task PreviewSyncForMvoAsync_UnknownMetaverseObject_ReturnsObjectNotFoundErrorWithoutThrowingAsync()
     {
