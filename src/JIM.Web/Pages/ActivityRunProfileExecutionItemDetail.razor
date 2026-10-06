@@ -777,7 +777,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 ConnectedSystemId: OutcomeDetailMessageParser.Parse(o.DetailMessage).ConnectedSystemId,
                 CsoId: o.OutcomeType switch
                 {
-                    ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => o.TargetEntityId,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected => o.TargetEntityId,
                     ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                         or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => o.ConnectedSystemObjectChange?.ConnectedSystemObjectId,
                     _ => null

@@ -122,7 +122,11 @@ public class SyncOutcomeTypeOrdinalTests
         // with a changed or an identical value, and a corrective update staged to a target Connected System.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = 52,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = 53,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = 54
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = 54,
+
+        // A scope exit under a Disconnect Deprovisioning Action broke the join to the object in the target system and
+        // left it in place (#1966): the Disconnect sibling of DeprovisionQueued (25), with nothing exported.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = 55
     };
 
     [Test]

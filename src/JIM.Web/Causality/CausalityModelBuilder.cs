@@ -531,6 +531,7 @@ public static class CausalityModelBuilder
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
+            or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
             || SyncOutcomeTypes.IsPendingExport(outcomeType);
     }
 
@@ -573,6 +574,8 @@ public static class CausalityModelBuilder
                 // Provisioning withdrawn before it was ever exported is the same export-side
                 // event as DeprovisionQueued, minus the export: it belongs beside it, not in the Identity lane.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
+                // The Disconnect sibling of DeprovisionQueued (#1966): the object it names is in the target system.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
@@ -735,6 +738,37 @@ public static class CausalityModelBuilder
                             JimUtilities.GetConnectedSystemObjectHref(targetSystemId, targetCsoId),
                             CausalityEntityKind.Record,
                             ObjectTypeName: parsedDetail.CsoTypeName));
+                    }
+                }
+                else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
+                {
+                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.ConnectedSystem));
+                }
+                break;
+
+            case ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected:
+                // The object disconnected stays in the target system (#1966), so it links to its connector space page,
+                // named as a Provisioned outcome's record is: its current name where the page resolved one.
+                if (parsedDetail.ConnectedSystemId.HasValue)
+                {
+                    var disconnectedSystemId = parsedDetail.ConnectedSystemId.Value;
+                    links.Add(new CausalityEntityLink(
+                        outcome.TargetEntityDescription ?? "Connected System",
+                        JimUtilities.GetConnectedSystemHref(disconnectedSystemId),
+                        CausalityEntityKind.ConnectedSystem));
+
+                    if (outcome.TargetEntityId is { } disconnectedCsoId && disconnectedCsoId != Guid.Empty)
+                    {
+                        var currentName = context.ConnectedSystemObjectNames?.TryGetValue(disconnectedCsoId, out var resolvedName) == true
+                            ? resolvedName
+                            : null;
+                        links.Add(new CausalityEntityLink(
+                            currentName ?? (parsedDetail.CsoTypeName != null
+                                ? $"{parsedDetail.CsoTypeName}: {disconnectedCsoId}"
+                                : disconnectedCsoId.ToString()),
+                            JimUtilities.GetConnectedSystemObjectHref(disconnectedSystemId, disconnectedCsoId),
+                            CausalityEntityKind.Record,
+                            ObjectTypeName: currentName != null ? parsedDetail.CsoTypeName : null));
                     }
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
