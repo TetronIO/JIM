@@ -104,6 +104,9 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
         // The dialog's live Metaverse-Derived Attribute Flow analysis (#1750) reads the Metaverse Object Type's import
         // rules and the type itself; none here.
         _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRule>());
+        // The generated form's "Checked for availability in" panel (#242, release 3): no export rules here.
+        _csRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
+        _csRepo.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() => []);
         repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
         // An empty settings store: no feature flag is set.
         repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());

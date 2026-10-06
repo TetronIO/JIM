@@ -40,6 +40,7 @@ public class ConnectorDeclarationSyncTests
         public bool SupportsFilePaths { get; init; }
         public bool SupportsPasswordSet { get; init; }
         public bool SupportsPasswordPolicyDiscovery { get; init; }
+        public bool SupportsUniquenessProbe { get; init; }
         public AttributeStandard SchemaStandard { get; init; }
     }
 
@@ -59,6 +60,7 @@ public class ConnectorDeclarationSyncTests
         SupportsFilePaths = true,
         SupportsPasswordSet = true,
         SupportsPasswordPolicyDiscovery = true,
+        SupportsUniquenessProbe = true,
         SchemaStandard = AttributeStandard.Ldap
     };
 
@@ -84,6 +86,7 @@ public class ConnectorDeclarationSyncTests
         Assert.That(definition.SupportsFilePaths, Is.True);
         Assert.That(definition.SupportsPasswordSet, Is.True);
         Assert.That(definition.SupportsPasswordPolicyDiscovery, Is.True);
+        Assert.That(definition.SupportsUniquenessProbe, Is.True);
         Assert.That(definition.SchemaStandard, Is.EqualTo(AttributeStandard.Ldap));
     }
 

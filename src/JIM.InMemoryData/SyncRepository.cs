@@ -3877,6 +3877,22 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<string>> GetConnectedSystemAttributeSampleValuesAsync(int connectedSystemObjectTypeAttributeId, int maximumCount)
+    {
+        IReadOnlyList<string> values = maximumCount <= 0
+            ? []
+            : _csos.Values
+                .Where(cso => cso.Status == ConnectedSystemObjectStatus.Normal)
+                .SelectMany(cso => cso.AttributeValues)
+                .Where(av => av.AttributeId == connectedSystemObjectTypeAttributeId && !string.IsNullOrEmpty(av.StringValue))
+                .Select(av => av.StringValue!)
+                .Distinct()
+                .Take(maximumCount)
+                .ToList();
+        return Task.FromResult(values);
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values)
     {
         var wanted = new HashSet<long>(values);

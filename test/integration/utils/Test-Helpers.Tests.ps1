@@ -919,3 +919,114 @@ Describe 'Test-TemplateSpansSyncPages' {
         Test-TemplateSpansSyncPages -Template 'Medium' -SyncPageSize 1000 | Should -BeFalse
     }
 }
+
+Describe 'Get-UniquenessProbeWarningPattern' {
+    # The line the worker appends to a synchronisation Activity's warning, once per Connected System, when it could
+    # not probe that system for values already in use (Unique Value Generation, #242, release 3).
+    It 'matches the probe warning line for the named Connected System' {
+        $line = "JIM couldn't probe Panoply AD for values already in use. Connecting to it failed: The LDAP server is unavailable. JIM chose 1 value using its own records only."
+
+        $line | Should -Match (Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD')
+    }
+
+    It 'matches the plural form' {
+        $line = "JIM couldn't probe Panoply AD for values already in use. The probe did not return a sAMAccountName value JIM knows is there, so the account JIM connects with may not be able to see the values already in use. JIM chose 12 values using its own records only."
+
+        $line | Should -Match (Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD')
+    }
+
+    It 'does not match the line for a different Connected System' {
+        $line = "JIM couldn't probe Yellowstone OpenLDAP for values already in use. Connecting to it failed: x. JIM chose 1 value using its own records only."
+
+        $line | Should -Not -Match (Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD')
+    }
+
+    It 'treats the Connected System name literally, not as a regular expression' {
+        $pattern = Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Corp.AD (EU)'
+
+        "JIM couldn't probe Corp.AD (EU) for values already in use. Reason. JIM chose 1 value using its own records only." | Should -Match $pattern
+        "JIM couldn't probe CorpXAD (EU) for values already in use. Reason. JIM chose 1 value using its own records only." | Should -Not -Match $pattern
+    }
+
+    It 'matches any Connected System when no name is given' {
+        "JIM couldn't probe Anything At All for values already in use. Reason. JIM chose 3 values using its own records only." |
+            Should -Match (Get-UniquenessProbeWarningPattern)
+    }
+
+    It 'does not match a count of zero, a missing reason, or surrounding text' {
+        $pattern = Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD'
+
+        "JIM couldn't probe Panoply AD for values already in use. Reason. JIM chose 0 values using its own records only." | Should -Not -Match $pattern
+        "JIM couldn't probe Panoply AD for values already in use. JIM chose 1 value using its own records only." | Should -Not -Match $pattern
+        "Prefix. JIM couldn't probe Panoply AD for values already in use. Reason. JIM chose 1 value using its own records only." | Should -Not -Match $pattern
+        "JIM couldn't probe Panoply AD for values already in use. Reason. JIM chose 1 value using its own records only. Suffix" | Should -Not -Match $pattern
+    }
+}
+
+Describe 'Assert-ActivitySuccess -AllowedWarningMessagePattern' {
+    BeforeAll {
+        # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing the module.
+        function Get-JIMActivity { param([string]$Id, [switch]$ExecutionItems) }
+        function Get-JIMActivityStats { param([string]$ActivityId) }
+
+        $script:probeLine = "JIM couldn't probe Panoply AD for values already in use. Connecting to it failed: x. JIM chose 1 value using its own records only."
+        $script:probePattern = Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD'
+    }
+
+    BeforeEach {
+        $script:activityStatus = 'CompleteWithWarning'
+        $script:activityWarning = $script:probeLine
+        $script:executionItems = @()
+        Mock Get-JIMActivity -ParameterFilter { -not $ExecutionItems } {
+            [PSCustomObject]@{ id = $Id; status = $script:activityStatus; warningMessage = $script:activityWarning; errorMessage = $null; message = $null }
+        }
+        Mock Get-JIMActivity -ParameterFilter { $ExecutionItems } { $script:executionItems }
+        Mock Write-Host {}
+    }
+
+    It 'passes a Complete Activity' {
+        $script:activityStatus = 'Complete'
+        $script:activityWarning = $null
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } | Should -Not -Throw
+    }
+
+    It 'passes CompleteWithWarning when every warning line matches and no item carries an error' {
+        $script:activityWarning = "$($script:probeLine)`n`n$($script:probeLine)`r`n"
+        $script:executionItems = @([PSCustomObject]@{ errorType = 'NotSet' }, [PSCustomObject]@{ errorType = $null })
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } | Should -Not -Throw
+    }
+
+    It 'throws, naming the line, when a warning line does not match' {
+        $script:activityWarning = "$($script:probeLine)`nSomething else went wrong."
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } |
+            Should -Throw '*Something else went wrong.*'
+    }
+
+    It 'throws when an execution item carries an error, even though every warning line matches' {
+        $script:executionItems = @([PSCustomObject]@{ errorType = 'GeneratedValueExhausted'; errorMessage = 'exhausted' })
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } |
+            Should -Throw '*GeneratedValueExhausted*'
+    }
+
+    It 'throws when the Activity warned but carries no warning message to check' {
+        $script:activityWarning = '   '
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } |
+            Should -Throw '*no warning message*'
+    }
+
+    It 'still refuses CompleteWithWarning when no pattern is given' {
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' } | Should -Throw '*did not complete successfully*'
+    }
+
+    It 'still refuses a failed Activity' {
+        $script:activityStatus = 'FailedWithError'
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $script:probePattern } |
+            Should -Throw '*did not complete successfully*'
+    }
+}

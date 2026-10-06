@@ -61,6 +61,16 @@ public sealed class UniqueValueResolveOptions
     public int SequenceBlockSize { get; init; } = 100;
 
     /// <summary>
+    /// The run's live probe of its participating Connected Systems (release 3), consulted by the ProbeGate, last of
+    /// the gates, for every request carrying <see cref="GenerationRequest.ProbeTargets"/>. Null when nothing is
+    /// probed: every caller but the worker's synchronisation, and a run that has not yet needed one. Settable rather
+    /// than init-only because the worker creates the session lazily, the first time the run resolves a generation
+    /// that has probe targets, long after these options were built. Ignored under <see cref="DryRun"/>: Sync Preview
+    /// checks the local gates only.
+    /// </summary>
+    public IUniquenessProbeSession? ProbeSession { get; set; }
+
+    /// <summary>
     /// Per attribute (keyed the same way as <see cref="GeneratedValueSequence"/>: exactly one of the tuple's
     /// two ids set), the numbers reserved in the current block that have not yet been drawn. Read and refilled
     /// by <see cref="SequenceAllocator"/> only.

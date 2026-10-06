@@ -61,4 +61,10 @@ public class SyncPreviewResult
     /// The Synchronisation Rules that participated at any step of the previewed chain.
     /// </summary>
     public List<SyncPreviewSyncRuleReference> AffectedSyncRules { get; set; } = [];
+
+    /// <summary>
+    /// Each value the preview generated that the real synchronisation would also probe for (Unique Value Generation,
+    /// #242, release 3), with the Connected Systems it would probe. Empty when no generated value would be probed.
+    /// </summary>
+    public List<SyncPreviewGeneratedValueProbe> GeneratedValueProbes { get; set; } = [];
 }

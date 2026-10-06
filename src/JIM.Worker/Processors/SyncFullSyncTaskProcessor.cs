@@ -15,6 +15,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Worker.UniqueValues;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -35,8 +36,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
-        UniqueValueReservationSet? uniqueValueReservations = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations)
+        UniqueValueReservationSet? uniqueValueReservations = null,
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost)
     {
     }
 
@@ -52,6 +54,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // process-wide reservation set whatever happened (success, failure or cancellation), so a value
             // this run proposed but never committed is not held against every other run for ever.
             _uniqueValueReservations.ReleaseAll(_activity.Id);
+
+            // Unique Value Generation (#242, release 3): report each Connected System that could not be probed for a
+            // value this run issued, as an Activity warning, and close every probe connection the run opened.
+            await CloseUniquenessProbeSessionAsync();
         }
     }
 

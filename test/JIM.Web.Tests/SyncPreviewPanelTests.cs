@@ -158,4 +158,67 @@ public class SyncPreviewPanelTests
 
         Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-notice']"), Is.Empty);
     }
+
+    private static SyncPreviewResult PreviewWithGeneratedValue(params SyncPreviewGeneratedValueProbe[] probes) => new()
+    {
+        OutcomeTree =
+        [
+            new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                Children = [new SyncOutcomeNode { OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, DetailMessage = "Account Name: jallen" }]
+            }
+        ],
+        GeneratedValueProbes = [.. probes]
+    };
+
+    /// <summary>
+    /// Release 3 (#242): where the synchronisation would probe a target the preview cannot, the probe note replaces the
+    /// generic one and names the value, set as code.
+    /// </summary>
+    [Test]
+    public void Render_GeneratedValueTheRunWouldProbe_ShowsTheProbeNoteInsteadOfTheGenericNote()
+    {
+        var preview = PreviewWithGeneratedValue(new SyncPreviewGeneratedValueProbe { AttributeName = "Account Name", Value = "jallen", ConnectedSystemNames = ["Corp AD"] });
+
+        var cut = _context.Render<SyncPreviewPanel>(ps => ps
+            .Add(c => c.PreviewResult, preview)
+            .Add(c => c.Context, Context()));
+
+        var note = cut.Find("[data-testid='jim-sync-preview-generated-value-probe-notice']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(note.QuerySelector("code")?.TextContent, Is.EqualTo("jallen"));
+            Assert.That(note.TextContent, Does.Contain("Corp AD"));
+            Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-notice']"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Render_TwoGeneratedValuesTheRunWouldProbe_ShowsOneNoteEach()
+    {
+        var preview = PreviewWithGeneratedValue(
+            new SyncPreviewGeneratedValueProbe { AttributeName = "Account Name", Value = "jallen", ConnectedSystemNames = ["Corp AD"] },
+            new SyncPreviewGeneratedValueProbe { AttributeName = "Email", Value = "jallen@corp.example", ConnectedSystemNames = ["Mail"] });
+
+        var cut = _context.Render<SyncPreviewPanel>(ps => ps
+            .Add(c => c.PreviewResult, preview)
+            .Add(c => c.Context, Context()));
+
+        Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-probe-notice']"), Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void Render_GeneratedValueNoTargetProbes_ShowsTheGenericNoteOnly()
+    {
+        var cut = _context.Render<SyncPreviewPanel>(ps => ps
+            .Add(c => c.PreviewResult, PreviewWithGeneratedValue())
+            .Add(c => c.Context, Context()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-notice']"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-probe-notice']"), Is.Empty);
+        }
+    }
 }

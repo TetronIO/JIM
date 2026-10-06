@@ -1931,6 +1931,9 @@ function Reset-JIMForNextScenario {
     foreach ($dept in @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement", "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")) {
         docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=panoply,DC=local" --force-subtree-delete 2>&1 | Out-Null
     }
+    # Scenario 023's probe steps: the brownfield account's out-of-scope OU and the restricted bind account
+    docker exec samba-ad-primary samba-tool ou delete "OU=Legacy,DC=panoply,DC=local" --force-subtree-delete 2>&1 | Out-Null
+    docker exec samba-ad-primary samba-tool user delete svc-jim-restricted 2>&1 | Out-Null
 
     # Source (resurgam.local) — used by Scenarios 002, 008
     $sourceRunning = docker ps --filter "name=samba-ad-source" --format '{{.Names}}' 2>$null

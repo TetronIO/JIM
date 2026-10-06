@@ -45,6 +45,7 @@ public class ConnectorDefinitionDtoTests
             SupportsFilePaths = false,
             SupportsPasswordSet = false,
             SupportsPasswordPolicyDiscovery = false,
+            SupportsUniquenessProbe = true,
             SchemaStandard = AttributeStandard.Scim,
             Settings =
             [
@@ -102,6 +103,7 @@ public class ConnectorDefinitionDtoTests
             Assert.That(dto.SupportsFilePaths, Is.False);
             Assert.That(dto.SupportsPasswordSet, Is.False);
             Assert.That(dto.SupportsPasswordPolicyDiscovery, Is.False);
+            Assert.That(dto.SupportsUniquenessProbe, Is.True);
             Assert.That(dto.SchemaStandard, Is.EqualTo("Scim"));
         }
     }

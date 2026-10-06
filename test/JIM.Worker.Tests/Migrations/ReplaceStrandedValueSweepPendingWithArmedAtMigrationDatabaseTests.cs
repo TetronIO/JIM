@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -73,12 +72,10 @@ public class ReplaceStrandedValueSweepPendingWithArmedAtMigrationDatabaseTests
         {
             await priorContext.GetService<IMigrator>().MigrateAsync(PreviousMigrationId);
 
-            var definition = new ConnectorDefinition { Name = "1605-migration-def" };
-            priorContext.ConnectorDefinitions.Add(definition);
-            await priorContext.SaveChangesAsync();
+            var definitionId = await InsertConnectorDefinitionAsync(priorContext, "1605-migration-def");
 
-            armedSystemId = await InsertConnectedSystemAsync(priorContext, definition.Id, "1605-armed-system", strandedValueSweepPending: true);
-            unarmedSystemId = await InsertConnectedSystemAsync(priorContext, definition.Id, "1605-unarmed-system", strandedValueSweepPending: false);
+            armedSystemId = await InsertConnectedSystemAsync(priorContext, definitionId, "1605-armed-system", strandedValueSweepPending: true);
+            unarmedSystemId = await InsertConnectedSystemAsync(priorContext, definitionId, "1605-unarmed-system", strandedValueSweepPending: false);
         }
 
         // Phase two: a fresh context (a new app process, as an upgrade is) applies the migration under test.
@@ -102,6 +99,32 @@ public class ReplaceStrandedValueSweepPendingWithArmedAtMigrationDatabaseTests
             Assert.That(unarmedSystem.StrandedValueSweepArmedAt, Is.Null,
                 "a system whose #1549 flag was FALSE must come out of the migration with no arming");
         }
+    }
+
+    private static async Task<int> InsertConnectorDefinitionAsync(JimDbContext context, string name)
+    {
+        // Raw SQL for the same reason as the Connected System below: the EF model declares every Connector Definition
+        // column added since this migration (a later capability flag, say), which the database does not have yet at
+        // this point in the phased migration, so an EF-tracked insert fails on a column that does not exist.
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText =
+            @"INSERT INTO ""ConnectorDefinitions""
+                (""Name"", ""BuiltIn"", ""Created"", ""CreatedByType"", ""LastUpdatedByType"", ""SchemaStandard"",
+                 ""SupportsAutoConfirmExport"", ""SupportsDeltaImport"", ""SupportsExport"", ""SupportsFilePaths"",
+                 ""SupportsFullImport"", ""SupportsPaging"", ""SupportsParallelExport"", ""SupportsPartitionContainers"",
+                 ""SupportsPartitions"", ""SupportsPasswordPolicyDiscovery"", ""SupportsPasswordSet"",
+                 ""SupportsSecondaryExternalId"", ""SupportsUserSelectedAttributeTypes"", ""SupportsUserSelectedExternalId"")
+              VALUES (@name, false, @created, 0, 0, 0,
+                      false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+              RETURNING ""Id""";
+        command.Parameters.Add(new NpgsqlParameter("name", name));
+        command.Parameters.Add(new NpgsqlParameter("created", DateTime.UtcNow));
+
+        if (command.Connection!.State != System.Data.ConnectionState.Open)
+            await command.Connection.OpenAsync();
+
+        var result = await command.ExecuteScalarAsync();
+        return (int)result!;
     }
 
     private static async Task<int> InsertConnectedSystemAsync(JimDbContext context, int connectorDefinitionId, string name, bool strandedValueSweepPending)
