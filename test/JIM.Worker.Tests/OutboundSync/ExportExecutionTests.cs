@@ -2860,7 +2860,7 @@ public class ExportExecutionTests
             Assert.That(result.UnrecordedExportCount, Is.EqualTo(1), "the run must report what it could not record");
             Assert.That(retained, Is.Not.Null, "an export whose values were not recorded must not be confirmed away");
             Assert.That(retained!.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
-            Assert.That(retained.AttributeValueChanges.Select(c => c.Status),
+            Assert.That(retained!.AttributeValueChanges.Select(c => c.Status),
                 Is.All.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
             Assert.That(cso.AttributeValues, Is.Empty);
         }

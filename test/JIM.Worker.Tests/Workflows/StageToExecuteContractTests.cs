@@ -360,7 +360,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         var clearChange = stagedClear!.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(stagedClear.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(stagedClear!.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
             Assert.That(clearChange, Is.Not.Null, "the staged change must be for the cleared attribute");
             Assert.That(clearChange?.StringValue, Is.Null, "and must carry no value");
         }
