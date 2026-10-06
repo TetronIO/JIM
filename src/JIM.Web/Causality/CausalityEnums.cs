@@ -98,7 +98,7 @@ public enum CausalityTableChangeKind
     /// <summary>The object was joined to an existing Identity, or a scheduled deletion was cancelled by a rejoin (Joined, MvoDeletionCancelled).</summary>
     Join,
 
-    /// <summary>A join broke without an out-of-scope determination, or a downstream target lost its join with no matching export rule.</summary>
+    /// <summary>A join broke without an out-of-scope determination, a downstream target lost its join with no matching export rule, or a downstream target was disconnected by a Disconnect Deprovisioning Action (TargetDisconnected).</summary>
     Disconnect,
 
     /// <summary>The Identity was deleted or its deletion was scheduled.</summary>

@@ -19,7 +19,16 @@ function Get-JIMSyncRuleMapping {
         If not specified, all mappings for the Synchronisation Rule are returned.
 
     .OUTPUTS
-        PSCustomObject representing Synchronisation Rule Mapping(s).
+        PSCustomObject representing Synchronisation Rule Mapping(s), the same shape from the list and from
+        -MappingId. A generated mapping's Generation property carries its uniqueness token settings, and:
+        - Generation.Exclusions: the IDs of the Connected Systems excluded from the value's availability
+          checks (empty when none is).
+        - Generation.Participants: every Connected System attribute the value is exported to, ordered by
+          Connected System name then attribute name. Each has ConnectedSystemId, ConnectedSystemName,
+          ConnectorName, ConnectedSystemObjectTypeAttributeId, AttributeName, IsExcluded, CanBeExcluded,
+          Check (JimRecordsAndProbe, JimRecordsOnly or NotChecked) and Reason (None, ConnectorCannotProbe,
+          AttributeNotProbed, NotTextValue, ExportedThroughExpression, CombinedWithOtherSources or Excluded).
+        Generation is null for every other mapping.
 
     .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1
@@ -30,6 +39,13 @@ function Get-JIMSyncRuleMapping {
         Get-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5
 
         Gets a specific mapping from Synchronisation Rule 1.
+
+    .EXAMPLE
+        (Get-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12).Generation.Participants |
+            Select-Object ConnectedSystemName, AttributeName, Check, Reason
+
+        Lists where a generated value is checked for availability, and how: JIM's own records and a probe of
+        the target, JIM's records only, or not at all, with the reason.
 
     .LINK
         New-JIMSyncRuleMapping

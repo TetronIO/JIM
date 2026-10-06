@@ -280,8 +280,12 @@
 
     @if (!string.IsNullOrEmpty(_activity.WarningMessage))
     {
+        @* One line per warning: a synchronisation can record several, one per Connected System it couldn't probe (#242). *@
         <MudAlert Severity="Severity.Warning" Class="mt-4">
-            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.WarningMessage</MudText>
+            @foreach (var warningLine in _activity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@warningLine</MudText>
+            }
         </MudAlert>
     }
 

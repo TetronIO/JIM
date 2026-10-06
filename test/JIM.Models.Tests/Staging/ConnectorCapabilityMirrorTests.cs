@@ -202,6 +202,8 @@ public class ConnectorCapabilityMirrorTests
 
         public bool SupportsPasswordPolicyDiscovery => Get<bool>(nameof(SupportsPasswordPolicyDiscovery));
 
+        public bool SupportsUniquenessProbe => Get<bool>(nameof(SupportsUniquenessProbe));
+
         public AttributeStandard SchemaStandard => Get<AttributeStandard>(nameof(SchemaStandard));
     }
 }

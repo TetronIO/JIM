@@ -65,9 +65,20 @@ External PostgreSQL: use your existing database backup tooling against the JIM d
 
 === "Podman"
 
+    From a container of JIM's own image, which is already on the server, writing the archive to its output. Podman's container log is off for it (`--log-driver none`), or Podman would keep a copy of the keys there:
+
     ```bash
-    sudo podman volume export jim-keys-volume | gzip > jim-keys-2026-07-09.tar.gz
+    sudo podman run --rm --network none --log-driver none --user 0 --entrypoint tar -v jim-keys-volume:/keys:ro \
+      "$(awk '$1 == "image:" { print $2; exit }' /opt/jim/jim.yaml)" czf - -C /keys . > jim-keys-2026-07-09.tar.gz
     ```
+
+    Not `podman volume export`: on a [rootless](podman.md#rootless-commands) installation, Podman 4's writes an empty archive while appearing to succeed.
+
+Then check the archive holds the keys. It lists one `key-` file per key; if it lists none, the backup failed, whatever the command reported, so check the volume's name and take it again before you upgrade or rely on it:
+
+```bash
+tar tzf jim-keys-2026-07-09.tar.gz | grep key-
+```
 
 If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of using the managed volume, simply back up that directory.
 

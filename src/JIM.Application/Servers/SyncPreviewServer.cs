@@ -1018,6 +1018,7 @@ public class SyncPreviewServer
                     case GenerationOutcomeKind.Generated:
                         _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
                         forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
+                        await RecordGeneratedValueProbesAsync(result, request.Mapping, outcome.Value!, context, exportRules);
                         break;
 
                     case GenerationOutcomeKind.Sticky:
@@ -1058,6 +1059,38 @@ public class SyncPreviewServer
         }
 
         return forOutcomeTree;
+    }
+
+    /// <summary>
+    /// Records that the real synchronisation would probe for <paramref name="value"/> (#242, release 3), naming the
+    /// Connected Systems it would probe, so the preview can say that it checked JIM's own records only. The preview
+    /// itself never probes: it is a dry run. Computed from this preview's own export rules, through the same read
+    /// model as the generated mapping's "Checked for availability in" panel.
+    /// </summary>
+    private async Task RecordGeneratedValueProbesAsync(SyncPreviewResult result, SyncRuleMapping mapping, string value, CsoPreviewContext context, IEnumerable<SyncRule> exportRules)
+    {
+        var generationId = mapping.Generation!.Id;
+        if (!context.ProbedSystemNamesByGenerationId.TryGetValue(generationId, out var names))
+        {
+            var participants = await Application.ConnectedSystems.GetGeneratedValueParticipantsAsync(mapping, context.ConnectedSystemId, exportRules);
+            names = participants
+                .Where(p => p.Check == GeneratedValueParticipantCheck.JimRecordsAndProbe)
+                .Select(p => p.ConnectedSystemName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            context.ProbedSystemNamesByGenerationId[generationId] = names;
+        }
+
+        if (names.Count == 0)
+            return;
+
+        result.GeneratedValueProbes.Add(new SyncPreviewGeneratedValueProbe
+        {
+            AttributeName = mapping.TargetMetaverseAttribute!.Name,
+            Value = value,
+            ConnectedSystemNames = [.. names]
+        });
     }
 
     /// <summary>
@@ -1451,6 +1484,13 @@ public class SyncPreviewServer
         /// <see cref="BuildOutOfScopeCascadeAsync"/>.
         /// </summary>
         public Dictionary<Guid, List<ConnectedSystemObject>>? JoinedCsosByMvoIdForDeletion { get; set; }
+
+        /// <summary>
+        /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), the names of the Connected Systems the
+        /// real synchronisation would probe for its value (#242, release 3), computed once from this context's own export
+        /// rules on first need, so a full-system preview asks each Connector once rather than once per object.
+        /// </summary>
+        public Dictionary<int, List<string>> ProbedSystemNamesByGenerationId { get; } = [];
     }
 
     /// <summary>
@@ -1627,8 +1667,8 @@ public class SyncPreviewServer
     /// <summary>
     /// Builds the outbound outcome nodes in the real tree's shape: a Provisioned node (with the staged
     /// Pending Export nested beneath) where the preview would create a target object, a Pending Export
-    /// node where it would update one, and a Deprovision Queued node where an out-of-scope object would
-    /// have a Delete staged.
+    /// node where it would update one, a Deprovision Queued node where an out-of-scope object would
+    /// have a Delete staged, and a Target Disconnected node where it would be disconnected instead.
     /// </summary>
     private static void BuildOutboundOutcomeNodes(
         List<SyncOutcomeNode> siblings,
@@ -1676,6 +1716,22 @@ public class SyncPreviewServer
                     });
                     break;
 
+                // A Disconnect stages nothing, but the real run still records the disconnection on the object's item
+                // (#1966), so the preview proposes the same node and no export.
+                case OutboundPreviewEntryKind.Deprovisioning
+                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.Disconnect:
+                    siblings.Add(new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                        TargetEntityId = entry.ExistingTargetCsoId,
+                        TargetEntityDescription = systemName,
+                        SyncRuleId = entry.SyncRuleId,
+                        SyncRuleName = entry.SyncRuleName,
+                        DetailMessage = entry.ConnectedSystemId.ToString(),
+                        Ordinal = siblings.Count
+                    });
+                    break;
+
                 case OutboundPreviewEntryKind.Deprovisioning
                     when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeleteExport:
                     siblings.Add(new SyncOutcomeNode
@@ -1684,6 +1740,9 @@ public class SyncPreviewServer
                         TargetEntityDescription = systemName,
                         SyncRuleId = entry.SyncRuleId,
                         SyncRuleName = entry.SyncRuleName,
+                        // A scope exit's Delete carries no attribute changes (unlike a deletion cascade's, which
+                        // carries the target's secondary external id), and the real run records that count (#1964).
+                        DetailCount = 0,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
                         StagedChangeType = PendingExportChangeType.Delete,
                         Ordinal = siblings.Count

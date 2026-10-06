@@ -747,6 +747,8 @@ public static class CausalitySummaryBuilder
             // cancellation carries no attribute changes at all (nothing was ever exported).
             ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled =>
                 $"Provisioning cancelled · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+            ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected =>
+                $"Disconnected from target system · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
             _ => display.Label
