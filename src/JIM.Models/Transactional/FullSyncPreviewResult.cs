@@ -33,6 +33,13 @@ public class FullSyncPreviewResult
     public int SkippedObjectCount { get; set; }
 
     /// <summary>
+    /// How many loaded objects were not evaluated because the run would skip them too: unchanged since the system's
+    /// last synchronisation, with no configuration change since configuration was last fully applied (#1530; see
+    /// <see cref="JIM.Models.Staging.ConnectedSystemObject.IsUnchangedSince"/>). Such an object would not change.
+    /// </summary>
+    public int UnchangedObjectCount { get; set; }
+
+    /// <summary>
     /// True when the work budget stopped the preview before the whole population was evaluated; the counts
     /// and samples then describe the evaluated subset, not the system (PRD requirement 14).
     /// </summary>

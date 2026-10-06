@@ -3190,13 +3190,25 @@ public class ExportEvaluationServer
     /// changed values are considered, a removal clears its target attribute, and recall semantics apply (existing
     /// target objects are updated; none is provisioned). Null asks the state-assertion question.
     /// </param>
+    /// <param name="synchronisationChanges">
+    /// The change a synchronisation's inbound evaluation made to the one Metaverse Object passed (#1530): its changed
+    /// values (additions, then removals) and the removals themselves. When given, the evaluation answers as the run's
+    /// own export evaluation does after Attribute Flow: only the changed values are considered, scope transitions
+    /// provision and deprovision, and no-net-change detection applies. Empty changes ask only the scope question, as
+    /// the run's export scope review does (#892, #1925). Null, with no recall, asks the state-assertion question.
+    /// </param>
     internal async Task<OutboundPreviewResult> EvaluateOutboundPreviewForMaterialisedMvosAsync(
         IReadOnlyCollection<MetaverseObject> mvos,
         ExportEvaluationCache cache,
-        (List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue> RemovedAttributes)? recall = null)
+        (List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue> RemovedAttributes)? recall = null,
+        (List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes)? synchronisationChanges = null)
     {
         if (recall != null && mvos.Count != 1)
             throw new ArgumentException("A recall change describes one Metaverse Object, so exactly one must be passed with it.", nameof(recall));
+        if (synchronisationChanges != null && mvos.Count != 1)
+            throw new ArgumentException("A synchronisation's change describes one Metaverse Object, so exactly one must be passed with it.", nameof(synchronisationChanges));
+        if (recall != null && synchronisationChanges != null)
+            throw new ArgumentException("A change is either a recall or a synchronisation's, not both.", nameof(synchronisationChanges));
 
         var result = new OutboundPreviewResult();
 
@@ -3213,8 +3225,12 @@ public class ExportEvaluationServer
                 continue;
 
             // What a synchronisation of this object now would consider: its current values (asserted-null
-            // markers excluded, exactly as evaluation sources them). A recall considers only what it changed.
-            var changedAttributes = recall?.ChangedAttributes ?? mvo.AttributeValues.Where(av => !av.NullValue).ToList();
+            // markers excluded, exactly as evaluation sources them). A recall, or a synchronisation's own change,
+            // considers only what it changed.
+            var changedAttributes = recall?.ChangedAttributes
+                ?? synchronisationChanges?.ChangedAttributes
+                ?? mvo.AttributeValues.Where(av => !av.NullValue).ToList();
+            var removedAttributes = recall?.RemovedAttributes ?? synchronisationChanges?.RemovedAttributes;
 
             foreach (var exportRule in exportRules)
             {
@@ -3223,7 +3239,7 @@ public class ExportEvaluationServer
                 if (IsMvoInScopeForExportRule(mvo, exportRule))
                 {
                     result.Entries.Add(await BuildStagingPreviewEntryAsync(
-                        this, cache, mvo, exportRule, existingCso, changedAttributes, recall?.RemovedAttributes));
+                        this, cache, mvo, exportRule, existingCso, changedAttributes, removedAttributes, recallSemantics: recall != null));
                     continue;
                 }
 
@@ -3282,13 +3298,14 @@ public class ExportEvaluationServer
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        HashSet<MetaverseObjectAttributeValue>? recallRemovedAttributes = null)
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes,
+        bool recallSemantics)
     {
         // Read-only lookup (the preview never writes): needed for the same reason as the real staging
         // path - telling a never-sent Create apart from one already sent and awaiting confirmation.
         var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
         var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes,
-            recallSemantics: recallRemovedAttributes != null, existingPendingExport);
+            recallSemantics, existingPendingExport);
 
         Guid? wouldJoinCsoId = null;
         var effectiveChangeType = decision.ChangeType;
@@ -3317,7 +3334,7 @@ public class ExportEvaluationServer
                 mvo, exportRule, changedAttributes, effectiveChangeType.Value,
                 existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
                 out noNetChangeSkipped, ExpressionEvaluator,
-                removedAttributes: recallRemovedAttributes,
+                removedAttributes: removedAttributes,
                 noNetChangeSkipped: noNetChangeSkippedChanges);
 
             // Unique Value Generation (#242, Phase 2 work package H): a generated export mapping stages a

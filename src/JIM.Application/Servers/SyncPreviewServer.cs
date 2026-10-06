@@ -242,7 +242,7 @@ public class SyncPreviewServer
 
         var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer,
             Proposal(proposedSyncRule, proposedRuleSet));
-        return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+        return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true, asTheRunWould: true);
     }
 
     /// <summary>
@@ -301,7 +301,7 @@ public class SyncPreviewServer
             if (cso == null)
                 continue;
 
-            results[connectedSystemObjectId] = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true);
+            results[connectedSystemObjectId] = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true, asTheRunWould: false);
         }
 
         return results;
@@ -332,9 +332,9 @@ public class SyncPreviewServer
         var previewServer = new ExportEvaluationServer(Application, guardedRepository);
         await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
 
+        // A system with no objects is still previewed: its synchronisation walks nothing, but it drains the export
+        // scope review all the same (below).
         result.TotalObjectCount = await guardedRepository.GetConnectedSystemObjectCountAsync(connectedSystemId);
-        if (result.TotalObjectCount == 0)
-            return result;
 
         var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
 
@@ -349,16 +349,31 @@ public class SyncPreviewServer
 
         var sampleCountsByCategory = new Dictionary<FullSyncPreviewCategory, int>();
 
+        // The unchanged-object optimisation, decided as the run decides it (SyncFullSyncTaskProcessor): while no
+        // configuration has changed since it was last fully applied, the run skips every object unchanged since the
+        // system's last synchronisation, drift and all, so the preview proposes nothing for one either (#1530).
+        DateTime? unchangedWatermark = null;
+        var watermarks = await guardedRepository.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
+        if (watermarks?.LastSyncCompletedAt != null)
+        {
+            unchangedWatermark = ConnectedSystem.GetUnchangedObjectWatermark(watermarks.Value.LastSyncCompletedAt,
+                watermarks.Value.ConfigurationLastFullyAppliedAt, await guardedRepository.GetLatestSyncRuleConfigurationChangeAsync());
+        }
+
         // Keyset pagination from the zero GUID, matching the sync processors' population walk.
         var afterId = Guid.Empty;
-        var stopped = false;
+        var stopped = result.TotalObjectCount == 0;
+        var walked = stopped;
         while (!stopped)
         {
             var page = await guardedRepository.GetConnectedSystemObjectsAsync(
                 connectedSystemId, page: 1, pageSize: options.PageSize,
                 knownTotalCount: result.TotalObjectCount, afterId: afterId);
             if (page.Results.Count == 0)
+            {
+                walked = true;
                 break;
+            }
             afterId = page.Results[^1].Id;
 
             // One outbound-cache refresh per page for the joined objects' Metaverse Objects, instead of
@@ -402,8 +417,13 @@ public class SyncPreviewServer
                     result.SkippedObjectCount++;
                     continue;
                 }
+                if (unchangedWatermark.HasValue && cso.IsUnchangedSince(unchangedWatermark.Value))
+                {
+                    result.UnchangedObjectCount++;
+                    continue;
+                }
 
-                var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false);
+                var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false, asTheRunWould: true);
                 result.EvaluatedObjectCount++;
 
                 var category = Categorise(preview);
@@ -423,15 +443,24 @@ public class SyncPreviewServer
             }
 
             if (page.Results.Count < options.PageSize)
+            {
+                walked = true;
                 break;
+            }
         }
 
-        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped), " +
+        // The run drains the export scope review once its own objects are processed, so the preview does too, unless
+        // the walk stopped early: a truncated preview is partial either way, and the review would overrun its budget.
+        if (walked)
+            await PreviewExportScopeReviewAsync(result, context, previewServer, guardedRepository, options, stopwatch);
+
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped, {Unchanged} unchanged), " +
             "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
+            "{Reviewed} Metaverse Object(s) export scope reviewed; " +
             "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
-            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount,
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount, result.UnchangedObjectCount,
             result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
-            result.Counts.NotConnected, result.Counts.BlockedByErrors,
+            result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
             result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
             result.Truncated, result.TruncationReason, stopwatch.Elapsed.TotalSeconds);
         return result;
@@ -440,6 +469,48 @@ public class SyncPreviewServer
     #endregion
 
     #region private methods
+
+    /// <summary>
+    /// The export scope review (#892, #1925), previewed as the run drains it (<c>SyncTaskProcessorBase.
+    /// ProcessScopeReviewPendingMetaverseObjectsAsync</c>): every Metaverse Object flagged <c>ScopeReviewPending</c>,
+    /// whatever its type and wherever it is joined, evaluated for export scope alone against every target. An object the
+    /// walk already reviewed is skipped, so its exports are proposed once; the run's second evaluation of it finds the
+    /// first one's exports already staged and adds nothing.
+    /// </summary>
+    private async Task PreviewExportScopeReviewAsync(
+        FullSyncPreviewResult result,
+        CsoPreviewContext context,
+        ExportEvaluationServer previewServer,
+        ISyncRepository guardedRepository,
+        FullSyncPreviewOptions options,
+        System.Diagnostics.Stopwatch stopwatch)
+    {
+        // Read whole rather than in the run's batches: the run clears each batch's flags as it goes, which is how it
+        // pages, and the preview clears nothing. The flagged set is what the review evaluates in full either way.
+        var flaggedIds = (await guardedRepository.GetMetaverseObjectIdsWithScopeReviewPendingAsync(int.MaxValue))
+            .Where(id => !context.ScopeReviewedMetaverseObjectIds.Contains(id))
+            .ToList();
+
+        foreach (var batch in flaggedIds.Chunk(options.PageSize))
+        {
+            await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, batch.ToList());
+            foreach (var mvo in await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync(batch))
+            {
+                if (options.TimeBudget.HasValue && stopwatch.Elapsed >= options.TimeBudget.Value)
+                {
+                    result.Truncated = true;
+                    result.TruncationReason = FullSyncPreviewTruncationReason.TimeBudgetExhausted;
+                    return;
+                }
+
+                var reviewed = new SyncPreviewResult();
+                ComposeOutbound(reviewed, await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], context.Cache,
+                    synchronisationChanges: ([], null)));
+                result.Counts.ExportScopeReviewed++;
+                AddOutboundToCounts(result.Counts, reviewed);
+            }
+        }
+    }
 
     /// <summary>
     /// Builds the shared, read-only inputs one Connected System's CSO previews evaluate against: the
@@ -497,9 +568,18 @@ public class SyncPreviewServer
             ReservationOwnerId = Guid.NewGuid()
         };
 
+        // Drift correction's inputs, exactly as the run builds them (SyncTaskProcessorBase.BuildDriftDetectionCache):
+        // the export rules that enforce state on THIS Connected System, and the import mappings of every system, so a
+        // value this system legitimately contributes is not read as drift (#1530).
+        var driftExportRules = syncRules
+            .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export && sr.EnforceState && sr.ConnectedSystemId == connectedSystemId)
+            .ToList();
+        var importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
+
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
             BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
-            uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage);
+            uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage,
+            driftExportRules, importMappingCache);
     }
 
     /// <summary>
@@ -535,10 +615,19 @@ public class SyncPreviewServer
     /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the working
     /// Metaverse Object before evaluating outbound. Single-object previews pass true; the full-system walk
     /// passes false, having refreshed the whole page's joined Metaverse Objects in one call.</param>
+    /// <param name="asTheRunWould">
+    /// True to answer what a synchronisation of this object would do (#1530): exports are evaluated only over what
+    /// the object's own inbound evaluation changed (or, for an object flagged for export scope review, for scope
+    /// alone), and drift is corrected only in this Connected System, where an export rule enforces state. False asks
+    /// the state-assertion question instead (every difference between the Metaverse Object and every target), which
+    /// the configuration change adapters ask of a baseline and a proposal so the difference between the two cancels
+    /// whatever neither changes.
+    /// </param>
     private async Task<SyncPreviewResult> PreviewCsoCoreAsync(
         ConnectedSystemObject cso,
         CsoPreviewContext context,
-        bool refreshCacheForWorkingMvo)
+        bool refreshCacheForWorkingMvo,
+        bool asTheRunWould)
     {
         var result = new SyncPreviewResult();
         var connectedSystemId = context.ConnectedSystemId;
@@ -566,6 +655,20 @@ public class SyncPreviewServer
                 Detail = "No enabled import Synchronisation Rule applies to this object's type; a synchronisation would not process it inbound.",
                 ConnectedSystemId = connectedSystemId
             });
+
+            // A target's joined object still gets its drift corrected (#1530): with no import rule nothing flows in
+            // and no export evaluation is queued, but the run checks the object against what its enforcing export
+            // rules say it should hold, which is a Full Synchronisation of a target's whole point.
+            if (asTheRunWould && cso.MetaverseObjectId.HasValue && context.DriftExportRules.Count > 0)
+            {
+                var joinedMvo = (await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([cso.MetaverseObjectId.Value]))
+                    .SingleOrDefault();
+                if (joinedMvo != null)
+                {
+                    inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
+                    AddDriftCorrectionRoot(result, ProposeDriftCorrections(result, cso, CloneForPreview(joinedMvo), context));
+                }
+            }
             return result;
         }
 
@@ -605,6 +708,7 @@ public class SyncPreviewServer
         // Attribute Flow can mutate it without touching shared state.
         SyncRule? projectionSyncRule = null;
         MetaverseObject? workingMvo;
+        var flaggedForScopeReview = false;
         if (cso.MetaverseObjectId.HasValue)
         {
             inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
@@ -621,6 +725,7 @@ public class SyncPreviewServer
                 return result;
             }
             workingMvo = CloneForPreview(joinedMvo);
+            flaggedForScopeReview = joinedMvo.ScopeReviewPending;
         }
         else
         {
@@ -632,6 +737,7 @@ public class SyncPreviewServer
             {
                 inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
                 workingMvo = CloneForPreview(matchedMvo);
+                flaggedForScopeReview = matchedMvo.ScopeReviewPending;
             }
             else
             {
@@ -757,13 +863,41 @@ public class SyncPreviewServer
             inbound.AttributeFlowChanges.Add(BuildAttributeFlowChange(removal, isAddition: false));
         var flowCount = inbound.AttributeFlowChanges.Count;
 
+        // The change set the run's export evaluation is given (SyncTaskProcessorBase snapshots the same two lists
+        // before applying them): additions then removals, and the removals on their own.
+        var changedAttributes = workingMvo.PendingAttributeValueAdditions
+            .Concat(workingMvo.PendingAttributeValueRemovals)
+            .ToList();
+        var removedAttributes = workingMvo.PendingAttributeValueRemovals.Count > 0
+            ? workingMvo.PendingAttributeValueRemovals.ToHashSet()
+            : null;
+
         _syncEngine.ApplyPendingAttributeChanges(workingMvo);
 
-        // The outbound chain over the prospective Metaverse Object state, against the context's shared cache.
+        // The outbound chain over the prospective Metaverse Object state, against the context's shared cache. As the
+        // run would: exports are evaluated only when Attribute Flow changed the object (the run queues no export
+        // evaluation otherwise), or for scope alone when the object is flagged for export scope review, which the run
+        // drains in the same synchronisation.
         if (refreshCacheForWorkingMvo && workingMvo.Id != Guid.Empty)
             await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
-        var outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache);
+        OutboundPreviewResult outbound;
+        if (!asTheRunWould)
+            outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache);
+        else if (changedAttributes.Count > 0)
+            outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                synchronisationChanges: (changedAttributes, removedAttributes));
+        else if (flaggedForScopeReview)
+            outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                synchronisationChanges: ([], null));
+        else
+            outbound = new OutboundPreviewResult();
+        if (asTheRunWould && flaggedForScopeReview)
+            context.ScopeReviewedMetaverseObjectIds.Add(workingMvo.Id);
         ComposeOutbound(result, outbound);
+
+        // Drift correction, as the run would: this object's own values, where an export rule to this Connected System
+        // enforces state, against what the Metaverse Object says they should be.
+        var driftedAttributeCount = asTheRunWould ? ProposeDriftCorrections(result, cso, workingMvo, context) : 0;
 
         foreach (var rule in inScopeRules.Where(rule => result.AffectedSyncRules.All(r => r.Id != rule.Id)))
             result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = rule.Id, Name = rule.Name });
@@ -830,9 +964,75 @@ public class SyncPreviewServer
             BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, context.SystemNames);
         }
 
-        Log.Debug("PreviewCsoCoreAsync: Previewed CSO {CsoId} in system {SystemId}: {FlowCount} inbound flow(s), {EntryCount} outbound decision(s), {ErrorCount} error(s), {WarningCount} warning(s).",
-            cso.Id, connectedSystemId, flowCount, outbound.Entries.Count, result.Errors.Count, result.Warnings.Count);
+        AddDriftCorrectionRoot(result, driftedAttributeCount);
+
+        Log.Debug("PreviewCsoCoreAsync: Previewed CSO {CsoId} in system {SystemId}: {FlowCount} inbound flow(s), {EntryCount} outbound decision(s), {DriftCount} drifted attribute(s), {ErrorCount} error(s), {WarningCount} warning(s).",
+            cso.Id, connectedSystemId, flowCount, outbound.Entries.Count, driftedAttributeCount, result.Errors.Count, result.Warnings.Count);
         return result;
+    }
+
+    /// <summary>
+    /// The run records a drift correction on an execution item of its own, as a root outcome counting the drifted
+    /// attributes, so the preview proposes it as a root of its own.
+    /// </summary>
+    private static void AddDriftCorrectionRoot(SyncPreviewResult result, int driftedAttributeCount)
+    {
+        if (driftedAttributeCount == 0)
+            return;
+
+        // Shaped as the run shapes it (SyncTaskProcessorBase.EvaluateDriftAndEnforceState): the count alone.
+        result.OutcomeTree.Add(new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection,
+            DetailCount = driftedAttributeCount,
+            Ordinal = result.OutcomeTree.Count
+        });
+    }
+
+    /// <summary>
+    /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
+    /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
+    /// correction for an object the export evaluation already proposes an update for is folded into that update, as
+    /// the run merges the two Pending Exports for one object.
+    /// </summary>
+    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System.</returns>
+    private int ProposeDriftCorrections(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
+        CsoPreviewContext context)
+    {
+        // Not only for an object already joined: the run evaluates drift for every object it leaves joined, the one
+        // this synchronisation joins or projects included, against the Metaverse Object as Attribute Flow left it.
+        if (context.DriftExportRules.Count == 0)
+            return 0;
+
+        var drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
+            context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+        if (!drift.HasDrift)
+            return 0;
+
+        // Detection stages each change by attribute id alone, which is all the run persists; the preview names the
+        // attribute so it can be shown. The changes are fresh to this preview, so nothing shared is touched.
+        var attributesById = context.ObjectTypes.SelectMany(t => t.Attributes).ToDictionary(a => a.Id);
+        foreach (var change in drift.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges))
+        {
+            if (change.Attribute == null && attributesById.TryGetValue(change.AttributeId, out var attribute))
+                change.Attribute = attribute;
+        }
+
+        foreach (var correction in drift.CorrectiveExports)
+        {
+            var proposed = result.Outbound.ProposedExports.Find(pe =>
+                pe.ChangeType == PendingExportChangeType.Update && pe.ConnectedSystemObjectId == correction.ConnectedSystemObjectId);
+            if (proposed == null)
+            {
+                result.Outbound.ProposedExports.Add(correction);
+                continue;
+            }
+
+            proposed.AttributeValueChanges.AddRange(correction.AttributeValueChanges
+                .Where(change => proposed.AttributeValueChanges.All(existing => existing.AttributeId != change.AttributeId)));
+        }
+
+        return drift.DriftedAttributes.Count;
     }
 
     /// <summary>
@@ -1472,7 +1672,9 @@ public class SyncPreviewServer
         AttributePriorityContext PriorityContext,
         UniqueValueGenerationServer UniqueValueGenerationServer,
         UniqueValueResolveOptions UniqueValueResolveOptions,
-        string? DerivedFlowCycleMessage)
+        string? DerivedFlowCycleMessage,
+        List<SyncRule> DriftExportRules,
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse
@@ -1491,6 +1693,12 @@ public class SyncPreviewServer
         /// rules on first need, so a full-system preview asks each Connector once rather than once per object.
         /// </summary>
         public Dictionary<int, List<string>> ProbedSystemNamesByGenerationId { get; } = [];
+
+        /// <summary>
+        /// The Metaverse Objects flagged for export scope review that a walked object's preview already evaluated
+        /// outbound (#1530), so the review after a full-system walk does not propose their exports a second time.
+        /// </summary>
+        public HashSet<Guid> ScopeReviewedMetaverseObjectIds { get; } = [];
     }
 
     /// <summary>
@@ -1531,6 +1739,14 @@ public class SyncPreviewServer
             case FullSyncPreviewCategory.BlockedByErrors: counts.BlockedByErrors++; break;
         }
 
+        AddOutboundToCounts(counts, preview);
+    }
+
+    /// <summary>
+    /// Folds one preview's proposed exports into the whole-population outbound counters.
+    /// </summary>
+    private static void AddOutboundToCounts(FullSyncPreviewCounts counts, SyncPreviewResult preview)
+    {
         counts.ObjectsToCreate += preview.Outbound.ObjectsToCreate;
         counts.ObjectsToUpdate += preview.Outbound.ObjectsToUpdate;
         counts.ObjectsToDelete += preview.Outbound.ObjectsToDelete;

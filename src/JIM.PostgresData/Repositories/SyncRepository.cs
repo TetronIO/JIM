@@ -444,6 +444,16 @@ public partial class SyncRepository : ISyncRepository
         return latestRuleChange > latestMappingChange ? latestRuleChange : latestMappingChange;
     }
 
+    public async Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
+    {
+        var watermarks = await _context.ConnectedSystems
+            .AsNoTracking()
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => new { cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt })
+            .SingleOrDefaultAsync();
+        return watermarks == null ? null : (watermarks.LastSyncCompletedAt, watermarks.ConfigurationLastFullyAppliedAt);
+    }
+
     public async Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         if (syncRuleIds.Count == 0)
