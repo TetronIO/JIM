@@ -1,0 +1,101 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Why one of a Metaverse Object's connections exists (#348): the expansion of its row on the Connections tab. How it
+   joined comes from the join record (the method and Synchronisation Rule recorded when it joined, or derived from
+   Activity history); scoping is evaluated now, against current values, and labelled so, because it answers whether
+   the connection is still in scope rather than why it joined. Every sentence is the server's. *@
+<div class="jim-connection-detail" data-testid="jim-mvo-connection-detail">
+    <section class="jim-connection-detail-section">
+        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">How it joined</MudText>
+        <MudText data-testid="jim-join-description">@Connection.Join.Description</MudText>
+        <div class="jim-connection-detail-meta">
+            @if (Connection.Join.DateJoined.HasValue)
+            {
+                var dateJoined = Connection.Join.DateJoined.Value;
+                <span>@dateJoined.ToLocalTime().ToFriendlyDate()</span>
+            }
+            @if (Connection.Join.Source == JoinRecordSource.Derived)
+            {
+                <span>Taken from Activity history</span>
+            }
+            @if (ActivityHref is { } activityHref)
+            {
+                <MudLink Href="@activityHref" data-testid="jim-join-activity-link">View in Activity</MudLink>
+            }
+            @if (Connection.Join.SyncRuleId.HasValue)
+            {
+                var syncRuleId = Connection.Join.SyncRuleId.Value;
+                <MudLink Href="@($"/admin/sync-rules/{syncRuleId}")" data-testid="jim-join-rule-link">Open Synchronisation Rule</MudLink>
+            }
+        </div>
+    </section>
+
+    <section class="jim-connection-detail-section">
+        <div class="jim-connection-detail-heading-row">
+            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Scoping</MudText>
+            @if (EvaluatedAt.HasValue)
+            {
+                var evaluatedAt = EvaluatedAt.Value;
+                <MudText Typo="Typo.caption" Class="mud-text-secondary" data-testid="jim-connection-evaluated-at">
+                    Evaluated now, against current values, at @evaluatedAt.ToLocalTime().ToFriendlyDate()
+                </MudText>
+            }
+        </div>
+        @if (Connection.Scoping.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-connection-no-scoping">
+                No enabled Synchronisation Rule applies to this connection, so there is no scoping to evaluate.
+            </MudText>
+        }
+        else
+        {
+            <div class="jim-connection-detail-explanations">
+                @foreach (var explanation in Connection.Scoping)
+                {
+                    <ScopingExplanationView @key="explanation.SyncRuleId" Explanation="explanation" />
+                }
+            </div>
+        }
+    </section>
+
+    @if (Connection.Conflicts.Count > 0)
+    {
+        <section class="jim-connection-detail-section">
+            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Object Type conflicts</MudText>
+            @foreach (var conflict in Connection.Conflicts)
+            {
+                <div @key="conflict.SyncRuleId" class="jim-connection-conflict" data-testid="jim-connection-conflict">
+                    <MudText Typo="Typo.body2">@conflict.Description</MudText>
+                    <ScopingExplanationView Explanation="conflict.Scoping" />
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The connection to explain, as the server built it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public MetaverseObjectConnectionExplanation Connection { get; set; } = null!;
+
+    /// <summary>
+    /// When the scoping was evaluated: one instant for the whole tab.
+    /// </summary>
+    [Parameter]
+    public DateTime? EvaluatedAt { get; set; }
+
+    /// <summary>
+    /// Where the join is recorded in history: the item that processed this object where it is known, since that is
+    /// where the join itself appears; otherwise the Activity; otherwise nowhere (history has aged out).
+    /// </summary>
+    private string? ActivityHref =>
+        Connection.Join.RunProfileExecutionItemId is { } itemId ? $"/activity/item/{itemId}"
+        : Connection.Join.ActivityId is { } activityId ? $"/activity/{activityId}"
+        : null;
+}

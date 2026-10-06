@@ -6039,3 +6039,256 @@ html[lang] .jim-password-timeline.mud-timeline {
     color: var(--mud-palette-text-disabled);
     cursor: default;
 }
+
+/* ─── Connection explanations (#348): the Connections tab's row expansions and Not connected section ───
+   Every colour is a theme token, so the explanations follow the active theme. Outcomes are carried by icon and words
+   as well as colour (each criterion's icon has an accessible label, and the server's text says "is", "has no value",
+   "cannot be evaluated"), so nothing here is the only signal. */
+.mud-table-root .mud-table-cell.jim-expand-column {
+    width: 1%;
+    padding-right: 0;
+    white-space: nowrap;
+}
+
+/* The expansion spans the whole row on the table's recessed surface, so it reads as belonging to the row above. */
+.mud-table-root .mud-table-cell.jim-connection-detail-cell,
+td.jim-connection-detail-cell {
+    padding: 16px 24px 20px 56px;
+    background: var(--jim-inner-surface, var(--mud-palette-background));
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+}
+
+.jim-connection-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.jim-connection-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.jim-connection-detail-heading-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+}
+
+.jim-connection-detail-heading.mud-typography {
+    font-weight: 600;
+}
+
+/* Date joined, provenance and links: one line of facts, separated by gaps rather than punctuation. */
+.jim-connection-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 16px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-connection-detail-explanations {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.jim-connection-conflict {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* One rule's scoping, as a tree. */
+.jim-scoping-explanation {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 16px;
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-radius: var(--jim-container-radius);
+}
+
+.jim-scoping-explanation-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 6px;
+}
+
+.jim-scoping-no-criteria {
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* A nested group is indented under its parent behind a rule, so the tree's shape reads at a glance. */
+.jim-scoping-group .jim-scoping-group,
+.jim-scoping-alternatives > .jim-scoping-group {
+    margin-left: 8px;
+    padding-left: 14px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+}
+
+.jim-scoping-group-heading {
+    padding: 8px 0 2px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Icon, the criterion, what the object held: the third column right-aligned so the values line up down the tree. */
+.jim-scoping-criterion {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) minmax(8rem, max-content);
+    gap: 10px;
+    align-items: center;
+    padding: 6px 0;
+    border-top: 1px solid var(--mud-palette-table-lines);
+    font-size: 0.875rem;
+}
+
+.jim-scoping-criterion-icon {
+    display: inline-flex;
+}
+
+.jim-scoping-criterion-actual {
+    text-align: right;
+    color: var(--mud-palette-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.jim-scoping-criterion-notmet .jim-scoping-criterion-actual,
+.jim-scoping-criterion-invalid .jim-scoping-criterion-actual,
+.jim-scoping-criterion-attributemissing .jim-scoping-criterion-actual {
+    color: var(--jim-chip-text-error);
+    font-weight: 500;
+}
+
+.jim-scoping-criterion-novalue .jim-scoping-criterion-actual {
+    color: var(--jim-chip-text-warning);
+    font-weight: 500;
+}
+
+/* The server's bullets: each typed segment set apart by its look, never by added words. */
+.jim-scoping-bullets {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.jim-explanation-attribute {
+    font-weight: 600;
+}
+
+.jim-explanation-value,
+.jim-explanation-current {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, transparent);
+}
+
+.jim-explanation-current {
+    color: var(--jim-chip-text-error);
+}
+
+.jim-explanation-no-value {
+    color: var(--jim-chip-text-warning);
+    font-weight: 500;
+}
+
+.jim-explanation-hidden {
+    font-style: italic;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Not connected: below the joined table and deliberately quieter than it (no surface fill, secondary text), since
+   most visits are about where the object is connected. */
+.jim-not-connected-section {
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-radius: var(--jim-container-radius);
+    overflow: hidden;
+}
+
+.jim-not-connected-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    width: 100%;
+    padding: 12px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.jim-not-connected-toggle:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-not-connected-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.jim-not-connected-title {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-not-connected-count {
+    min-width: 1.5rem;
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.375rem;
+    text-align: center;
+    color: var(--mud-palette-text-primary);
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
+}
+
+.jim-not-connected-caption {
+    font-size: 0.8125rem;
+}
+
+.jim-not-connected-caption:last-child {
+    margin-left: auto;
+}
+
+.jim-not-connected-empty {
+    padding: 4px 16px 16px 52px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-not-connected-table {
+    border-top: 1px solid var(--mud-palette-table-lines);
+}
+
+/* The Copy summary fallback: the summary in a plain, selectable box, laid out as it will paste. */
+.jim-copy-text-fallback {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--mud-palette-text-primary);
+    background: var(--jim-inner-surface, var(--mud-palette-background));
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: 6px;
+    resize: vertical;
+}
