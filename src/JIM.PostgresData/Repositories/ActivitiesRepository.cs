@@ -1765,6 +1765,7 @@ public class ActivityRepository : IActivityRepository
         int totalProvisioned;
         int totalMvoDeleted;
         int totalGeneratedValues;
+        int totalGeneratedValuesRemediated;
 
         if (hasOutcomes)
         {
@@ -1798,6 +1799,7 @@ public class ActivityRepository : IActivityRepository
             // Unique Value Generation (#242): an outcome-only concept, like Provisioned above; no
             // ObjectChangeType equivalent exists for the legacy fallback below.
             totalGeneratedValues = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+            totalGeneratedValuesRemediated = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
         }
         else
         {
@@ -1830,6 +1832,7 @@ public class ActivityRepository : IActivityRepository
 
             // Unique Value Generation (#242): likewise an outcome-only concept, predating this graph's legacy path.
             totalGeneratedValues = 0;
+            totalGeneratedValuesRemediated = 0;
         }
 
         // --- Stats that always come from RPEIs ---
@@ -1851,6 +1854,9 @@ public class ActivityRepository : IActivityRepository
 
         // Unique Value Generation (#242): counted from RPEI error types the same way, always per-RPEI
         // regardless of hasOutcomes.
+        // Release 4: the items whose rejected generated value waits on an administrator's decision.
+        var totalGeneratedValuesNeedingDecision =
+            errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
         var totalGeneratedValueFailures =
             errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted) +
             errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded) +
@@ -1889,6 +1895,8 @@ public class ActivityRepository : IActivityRepository
             TotalMvoDeleted = totalMvoDeleted,
             TotalGeneratedValues = totalGeneratedValues,
             TotalGeneratedValueFailures = totalGeneratedValueFailures,
+            TotalGeneratedValuesRemediated = totalGeneratedValuesRemediated,
+            TotalGeneratedValuesNeedingDecision = totalGeneratedValuesNeedingDecision,
 
             // Direct creation stats
             TotalCreated = totalCreated,

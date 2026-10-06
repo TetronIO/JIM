@@ -969,6 +969,7 @@ public sealed class UniqueValueGenerationServer
             Id = Guid.NewGuid(),
             Value = value,
             NormalisedValue = normalisedValue,
+            BaseValue = string.IsNullOrWhiteSpace(request.BaseValue) ? null : request.BaseValue,
             State = GeneratedValueAssignmentState.Proposed,
             SyncRuleMappingGenerationId = request.Generation.Id,
             Created = now,

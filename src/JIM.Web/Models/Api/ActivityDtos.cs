@@ -697,6 +697,18 @@ public class ActivityRunProfileExecutionStatsDto
     /// (exhausted, width exceeded, or an unresolved collision).
     /// </summary>
     public int TotalGeneratedValueFailures { get; set; }
+
+    /// <summary>
+    /// Number of generated values Collision Remediation corrected after a target rejected them as already in use
+    /// (Unique Value Generation, #242, release 4).
+    /// </summary>
+    public int TotalGeneratedValuesRemediated { get; set; }
+
+    /// <summary>
+    /// Number of rejected generated values that could not safely be corrected and wait on an administrator's
+    /// decision (Unique Value Generation, #242, release 4).
+    /// </summary>
+    public int TotalGeneratedValuesNeedingDecision { get; set; }
     #endregion
 
     #region Export Stats
@@ -797,6 +809,8 @@ public class ActivityRunProfileExecutionStatsDto
             TotalProvisioned = stats.TotalProvisioned,
             TotalGeneratedValues = stats.TotalGeneratedValues,
             TotalGeneratedValueFailures = stats.TotalGeneratedValueFailures,
+            TotalGeneratedValuesRemediated = stats.TotalGeneratedValuesRemediated,
+            TotalGeneratedValuesNeedingDecision = stats.TotalGeneratedValuesNeedingDecision,
 
             // Export
             TotalExported = stats.TotalExported,
