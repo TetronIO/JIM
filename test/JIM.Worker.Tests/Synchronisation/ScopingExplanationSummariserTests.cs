@@ -452,20 +452,44 @@ public class ScopingExplanationSummariserTests
         }
     }
 
-    [Test]
-    public void ToComeIntoScope_FurtherValuesNotCompared_SaysHowMany()
+    [TestCase(SearchComparisonType.Equals, new[] { "Sales", "Finance", "Legal" }, "includes Finance (one of 3 values)")]
+    [TestCase(SearchComparisonType.Equals, new[] { "Sales", "Legal", "HR" }, "none of 3 values equals Finance")]
+    [TestCase(SearchComparisonType.NotEquals, new[] { "Sales", "Finance" }, "includes Finance (one of 2 values)")]
+    [TestCase(SearchComparisonType.NotEquals, new[] { "Sales", "Legal" }, "none of 2 values equals Finance")]
+    [TestCase(SearchComparisonType.NotContains, new[] { "Sales", "Finance Team" }, "includes Finance Team (one of 2 values)")]
+    public void DescribeActual_MultipleValues_NamesTheValueThatDecidedOrSaysNoneMatched(SearchComparisonType comparison, string[] values, string expected)
     {
-        var person = Person((Department, "Sales"), (Department, "Finance"), (Department, "Legal"));
+        var person = Person(values.Select(v => (Department, (object?)v)).ToArray());
 
-        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, "Finance"))), person));
-        var describedActual = ScopingExplanationSummariser.DescribeActual(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, "Finance"))), person)
-            .Groups.Single().Criteria.Single());
+        var criterion = Explain(Rule(All(Criterion(Department, comparison, "Finance"))), person).Groups.Single().Criteria.Single();
+
+        Assert.That(ScopingExplanationSummariser.DescribeActual(criterion), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ToComeIntoScope_MultipleValues_SaysNoneMatchesOrWhichValueBlocksIt()
+    {
+        var noneMatching = Person((Department, "Sales"), (Department, "Legal"), (Department, "HR"));
+        var oneBlocking = Person((Department, "Sales"), (Department, "Finance"));
+
+        var needsAMatch = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, "Finance"))), noneMatching));
+        var needsNoMatch = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.NotEquals, "Finance"))), oneBlocking));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Department must equal \"Finance\" (currently \"Sales\"; 2 more values not compared)" }));
-            Assert.That(describedActual, Is.EqualTo("is Sales (2 more values not compared)"));
+            Assert.That(PlainText(needsAMatch), Is.EqualTo(new[] { "Department must equal \"Finance\" (none of its 3 values matches)" }));
+            Assert.That(PlainText(needsNoMatch), Is.EqualTo(new[] { "Department must not equal \"Finance\" (currently includes \"Finance\", one of 2 values)" }));
         }
+    }
+
+    [Test]
+    public void ToComeIntoScope_MultipleValuesWhereNoneIsRequired_SaysHowManyThereAre()
+    {
+        var person = Person((Department, "Sales"), (Department, "Legal"));
+
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(Rule(All(Criterion(Department, SearchComparisonType.Equals, null))), person));
+
+        Assert.That(PlainText(bullets), Is.EqualTo(new[] { "Department must have no value (currently 2 values)" }));
     }
 
     [Test]

@@ -2433,7 +2433,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
+    /// Builds a parameterised EXISTS-based SQL fragment for a single predefined-search criterion.
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
     /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
@@ -2450,12 +2450,14 @@ public class MetaverseRepository : IMetaverseRepository
         var dataType = criteria.GetAttributeDataType()
             ?? throw new NotSupportedException("Predefined search criterion has no resolvable attribute data type.");
 
-        // EXISTS: at least one of the object's values for this attribute satisfies the predicate.
+        // Operators mean exactly what they mean in Synchronisation Rule scoping (ScopingEvaluationServer, #1923, #1962):
+        // a positive operator is met when ANY of the object's values satisfies it; a negated operator is given the
+        // predicate of the operator it negates and is met when the object holds at least one value (asserted-null
+        // markers excluded, #91) and NO value satisfies that predicate. An object with no value meets neither.
         string Exists(string predicate) =>
             $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
-        // NOT EXISTS: none of the object's values for this attribute satisfies the predicate (negative text operators).
-        string NotExists(string predicate) =>
-            $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
+        string NoValueMatches(string matchPredicate) =>
+            $"""({Exists("NOT cav.\"NullValue\"")} AND NOT {Exists(matchPredicate)})""";
 
         NotSupportedException Unsupported() =>
             new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
@@ -2467,45 +2469,41 @@ public class MetaverseRepository : IMetaverseRepository
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
                 const string col = "cav.\"StringValue\"";
                 // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
+                var equalsPredicate = criteria.CaseSensitive
+                    ? $"{col} = {valParam}"
+                    : $"lower({col}) = lower({valParam})";
+                var startsWithPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                    : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'";
+                var endsWithPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                    : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}";
+                var containsPredicate = criteria.CaseSensitive
+                    ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                    : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'";
                 return criteria.ComparisonType switch
                 {
-                    SearchComparisonType.Equals => criteria.CaseSensitive
-                        ? Exists($"{col} = {valParam}")
-                        : Exists($"lower({col}) = lower({valParam})"),
-                    SearchComparisonType.NotEquals => criteria.CaseSensitive
-                        ? Exists($"{col} <> {valParam}")
-                        : Exists($"lower({col}) <> lower({valParam})"),
-                    SearchComparisonType.StartsWith => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
-                    SearchComparisonType.NotStartsWith => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
-                    SearchComparisonType.EndsWith => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
-                    SearchComparisonType.NotEndsWith => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
-                    SearchComparisonType.Contains => Exists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
-                    SearchComparisonType.NotContains => NotExists(criteria.CaseSensitive
-                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
-                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    SearchComparisonType.Equals => Exists(equalsPredicate),
+                    SearchComparisonType.NotEquals => NoValueMatches(equalsPredicate),
+                    SearchComparisonType.StartsWith => Exists(startsWithPredicate),
+                    SearchComparisonType.NotStartsWith => NoValueMatches(startsWithPredicate),
+                    SearchComparisonType.EndsWith => Exists(endsWithPredicate),
+                    SearchComparisonType.NotEndsWith => NoValueMatches(endsWithPredicate),
+                    SearchComparisonType.Contains => Exists(containsPredicate),
+                    SearchComparisonType.NotContains => NoValueMatches(containsPredicate),
                     _ => throw Unsupported()
                 };
             }
             case AttributeDataType.Number:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Integer) { Value = (object?)criteria.IntValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.LongNumber:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.Decimal:
                 // PostgreSQL numeric comparison is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Numeric) { Value = (object?)criteria.DecimalValue ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.DateTime:
                 // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
                 // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
@@ -2513,13 +2511,13 @@ public class MetaverseRepository : IMetaverseRepository
                     ? RelativeDateResolver.Resolve(criteria.RelativeCount.Value, criteria.RelativeUnit.Value, criteria.RelativeDirection.Value, nowUtc)
                     : NormaliseToUtc(criteria.DateTimeValue);
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)dateBoundary ?? DBNull.Value });
-                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, Unsupported);
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, NoValueMatches, Unsupported);
             case AttributeDataType.Boolean:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Boolean) { Value = (object?)criteria.BoolValue ?? DBNull.Value });
                 return criteria.ComparisonType switch
                 {
                     SearchComparisonType.Equals => Exists($"cav.\"BoolValue\" = {valParam}"),
-                    SearchComparisonType.NotEquals => Exists($"cav.\"BoolValue\" <> {valParam}"),
+                    SearchComparisonType.NotEquals => NoValueMatches($"cav.\"BoolValue\" = {valParam}"),
                     _ => throw Unsupported()
                 };
             case AttributeDataType.Guid:
@@ -2527,7 +2525,7 @@ public class MetaverseRepository : IMetaverseRepository
                 return criteria.ComparisonType switch
                 {
                     SearchComparisonType.Equals => Exists($"cav.\"GuidValue\" = {valParam}"),
-                    SearchComparisonType.NotEquals => Exists($"cav.\"GuidValue\" <> {valParam}"),
+                    SearchComparisonType.NotEquals => NoValueMatches($"cav.\"GuidValue\" = {valParam}"),
                     _ => throw Unsupported()
                 };
             default:
@@ -2537,14 +2535,16 @@ public class MetaverseRepository : IMetaverseRepository
 
     /// <summary>
     /// Builds the SQL predicate for an ordered (Number / LongNumber / Decimal / DateTime) comparison, supporting
-    /// equality and the four ordering operators. Throws for any operator that does not apply.
+    /// equality and the four ordering operators. <paramref name="exists"/> applies a positive operator's predicate and
+    /// <paramref name="noValueMatches"/> a negated operator's (given the predicate of the operator it negates). Throws
+    /// for any operator that does not apply.
     /// </summary>
-    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
+    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<string, string> noValueMatches, Func<NotSupportedException> unsupported)
     {
         return comparisonType switch
         {
             SearchComparisonType.Equals => exists($"{column} = {valParam}"),
-            SearchComparisonType.NotEquals => exists($"{column} <> {valParam}"),
+            SearchComparisonType.NotEquals => noValueMatches($"{column} = {valParam}"),
             SearchComparisonType.LessThan => exists($"{column} < {valParam}"),
             SearchComparisonType.LessThanOrEquals => exists($"{column} <= {valParam}"),
             SearchComparisonType.GreaterThan => exists($"{column} > {valParam}"),

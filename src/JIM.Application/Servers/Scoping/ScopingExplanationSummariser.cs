@@ -60,12 +60,22 @@ internal static class ScopingExplanationSummariser
             return "cannot be evaluated";
         if (criterion.Masked)
             return "is hidden";
-        if (criterion.ActualDisplay == null)
+        if (criterion.ValueCount == 0)
             return "has no value";
+        if (criterion.ValueCount == 1)
+            return $"is {criterion.ActualDisplay}";
 
-        return criterion.AdditionalValuesNotEvaluated > 0
-            ? $"is {criterion.ActualDisplay} ({FurtherValues(criterion.AdditionalValuesNotEvaluated)})"
-            : $"is {criterion.ActualDisplay}";
+        // Several values (#1923): name the one that decided it, or say that none matched.
+        var count = criterion.ValueCount.ToString(CultureInfo.InvariantCulture);
+        if (criterion.ActualDisplay != null)
+            return $"includes {criterion.ActualDisplay} (one of {count} values)";
+
+        var expected = criterion.ExpectedDisplay ?? criterion.RelativeDisplay;
+        if (expected == null)
+            return $"has {count} values";
+
+        var (condition, _) = Wording(PositiveForm(criterion.ComparisonType), criterion.AttributeType);
+        return $"none of {count} values {condition} {expected}";
     }
 
     /// <summary>A group as one line of the tree, for example "All of these must be met (not met)".</summary>
@@ -419,7 +429,7 @@ internal static class ScopingExplanationSummariser
         }
 
         // A negated comparison fails on a missing value only because there is no value: the value is what is needed.
-        if (includeCurrent && noValue && IsNegated(criterion.ComparisonType))
+        if (includeCurrent && noValue && SearchComparisonOperators.IsNegated(criterion.ComparisonType))
         {
             line.Text(form == Form.Requirement ? $" needs a value that {condition} " : $" has a value that {condition} ");
             AppendExpected(line, criterion, quote);
@@ -453,15 +463,41 @@ internal static class ScopingExplanationSummariser
 
     private static void AppendCurrent(LineBuilder line, ScopingCriterionExplanation criterion, bool quote, bool caseIsTheReason)
     {
+        if (criterion.ValueCount > 1)
+        {
+            AppendCurrentOfSeveral(line, criterion, quote);
+            return;
+        }
+
         line.Text(caseIsTheReason ? " (case-sensitive; currently " : " (currently ");
         if (criterion.ActualDisplay == null)
             line.Value(ExplanationSegmentKind.NoValue, "no value", quote: false);
         else
             line.Value(ExplanationSegmentKind.CurrentValue, criterion.ActualDisplay, quote);
-
-        if (criterion.AdditionalValuesNotEvaluated > 0)
-            line.Text($"; {FurtherValues(criterion.AdditionalValuesNotEvaluated)}");
         line.Text(")");
+    }
+
+    /// <summary>
+    /// What an object holding several values for the attribute has (#1923), for a criterion it fails: the value standing
+    /// in the way of a negated one, or that none of its values meets a positive one.
+    /// </summary>
+    private static void AppendCurrentOfSeveral(LineBuilder line, ScopingCriterionExplanation criterion, bool quote)
+    {
+        var count = criterion.ValueCount.ToString(CultureInfo.InvariantCulture);
+        if (criterion.ActualDisplay != null)
+        {
+            line.Text(" (currently includes ");
+            line.Value(ExplanationSegmentKind.CurrentValue, criterion.ActualDisplay, quote);
+            line.Text($", one of {count} values)");
+        }
+        else if (criterion.ExpectedDisplay == null && criterion.RelativeDisplay == null)
+        {
+            line.Text($" (currently {count} values)");
+        }
+        else
+        {
+            line.Text($" (none of its {count} values matches)");
+        }
     }
 
     /// <summary>
@@ -492,9 +528,15 @@ internal static class ScopingExplanationSummariser
             ? SearchComparisonOperators.LabelFor(comparison, type.Value)
             : comparison.ToString().SplitOnCapitalLetters()).ToLowerInvariant();
 
-    private static bool IsNegated(SearchComparisonType comparison) => comparison is
-        SearchComparisonType.NotEquals or SearchComparisonType.NotStartsWith or
-        SearchComparisonType.NotEndsWith or SearchComparisonType.NotContains;
+    /// <summary>The operator a negated one negates ("does not equal" to "equals"); any other operator unchanged.</summary>
+    private static SearchComparisonType PositiveForm(SearchComparisonType comparison) => comparison switch
+    {
+        SearchComparisonType.NotEquals => SearchComparisonType.Equals,
+        SearchComparisonType.NotStartsWith => SearchComparisonType.StartsWith,
+        SearchComparisonType.NotEndsWith => SearchComparisonType.EndsWith,
+        SearchComparisonType.NotContains => SearchComparisonType.Contains,
+        _ => comparison
+    };
 
     /// <summary>
     /// Whether a case-sensitive text criterion failed only on case, so the words can say that is why: without it,
@@ -524,9 +566,6 @@ internal static class ScopingExplanationSummariser
             _ => false
         };
     }
-
-    private static string FurtherValues(int count) =>
-        count == 1 ? "1 more value not compared" : $"{count.ToString(CultureInfo.InvariantCulture)} more values not compared";
 
     #endregion
 

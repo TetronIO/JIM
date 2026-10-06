@@ -84,9 +84,21 @@ Three rules decide outcomes that are easy to misread from the editor:
 
 - **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
 - **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
-- **A multi-valued attribute compares one of its values**<br /> Which value is compared is not defined, so avoid scoping on a multi-valued attribute until [#1923](https://github.com/TetronIO/JIM/issues/1923) settles how all of its values should count. The Connections tab shows the value that was compared and how many others there were.
+- **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
 
 To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
+
+### Multi-valued attributes in scope
+
+A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:
+
+- **Positive operators**<br /> *equals*, *starts with*, *ends with*, *contains*, and the ordering comparisons (*less than*, *before*, *greater than*, *after* and their *or equal to* forms) are met when **any** value matches.
+- **Negated operators**<br /> *does not equal*, *does not start with*, *does not end with* and *does not contain* are met when **no** value matches.
+- **No values at all**<br /> Handled exactly as for a single-valued attribute: only an *equals* criterion with an empty value matches.
+
+For example, an export rule scoped to `Groups` *contains* `Finance` includes a Metaverse Object whose groups are `All Staff` and `Finance Readers`, and `Groups` *does not contain* `Finance` excludes it. An import rule scoped to `objectClass` *equals* `user` includes a directory user whose classes are `top`, `person`, `organizationalPerson` and `user`.
+
+Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
 
 ### Relative dates in scope filters
 

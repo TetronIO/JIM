@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-04-23 |
-| **Last Updated** | 2026-10-05 |
+| **Last Updated** | 2026-10-06 |
 | **Status** | Active |
 
 This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
@@ -150,6 +150,20 @@ Worked examples (export rule on a Person's termination-date attribute):
 - **Leavers terminated within the last year**: an `All` group with the date attribute *on or before* `30 days ago` (`LessThanOrEquals`, 30 Days Ago) and *after* `364 days ago` (`GreaterThan`, 364 Days Ago). The window slides forward on every run.
 - **Accounts expiring soon**: `AccountExpiry` *on or before* `7 days from now` (`LessThanOrEquals`, 7 Days FromNow) scopes in objects due to expire within the coming week.
 
+## Multi-valued attributes
+
+A criterion is evaluated against every value the object holds for its attribute, never one chosen value ([issue #1923](https://github.com/TetronIO/JIM/issues/1923)). Before that fix both paths took `FirstOrDefault`, so the outcome for a multi-valued attribute depended on value order, which nothing defines: the same object could be in scope on one run and out on the next, churning provisioning and deprovisioning.
+
+- **Positive operators** (`Equals`, `StartsWith`, `EndsWith`, `Contains`, and the four ordering comparisons) are met when **any** value satisfies them.
+- **Negated operators** (`NotEquals`, `NotStartsWith`, `NotEndsWith`, `NotContains`; classified by `SearchComparisonOperators.IsNegated`) are met when **every** value satisfies them, which for real values is "no value matches the operator it negates".
+- **No values**: the missing-value rule is unchanged (only an all-empty absolute `Equals` criterion matches). On the export path, asserted-null markers (`NullValue`, #91) are excluded before counting, so they are never treated as values.
+
+`ScopingEvaluator` applies the any/every choice in its criterion evaluation, walking the values through the struct value source (`TryGetNextValue`, which allocates nothing) and stopping at the first value that decides; every caller (sync, export evaluation, the previews, the Temporal Scope Reconciler, the connection explanations) inherits the semantics. Evaluating a negated operator as "every value satisfies it", rather than "not any value matches the positive form", is deliberate: for zero or one value it is identical to the previous per-value evaluation, so single-valued attributes are scoped exactly as before, including the edge cases the comparison helpers already define for a value whose typed field is empty.
+
+Predefined Search applies the same semantics in SQL (`MetaverseRepository.BuildPredefinedSearchCriterionSql`): a positive operator is `EXISTS` a matching value, a negated one is "`EXISTS` a non-marker value `AND NOT EXISTS` a matching value" ([issue #1962](https://github.com/TetronIO/JIM/issues/1962); before that its `NotEquals` meant "some value differs" and its negated text operators matched objects with no value). `PredefinedSearchQueryDatabaseTests.EveryTextOperator_AgreesWithSynchronisationRuleScopingAsync` runs both over the same persisted objects, because the public docs tell administrators to preview an export rule's coverage with a Predefined Search. Two consequences are documented for administrators: ordering comparisons can both be met at once (`[3, 10]` is both `< 5` and `> 5`), and two criteria in an `All` group can be met by different values, so a range on a multi-valued attribute does not require one value inside it. There is no "every value" mode; it was considered alongside forbidding multi-valued attributes in criteria, and both were rejected (forbidding breaks common configurations such as scoping a directory import on `objectClass`; a per-criterion mode adds a field across the editor, REST and PowerShell with no demonstrated need).
+
+Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationMultiValuedTests.cs` covers every operator for every data type over no values, one value, several matching, several non-matching and mixed values, on both paths and under every ordering of the values.
+
 ## Criteria groups and loading
 
 A rule's criteria are a tree: top-level groups (ORed together; the rule is in scope if any top-level group is met), each an `All` or `Any` group of criteria and child groups, nested to any depth. An empty group counts as met, and a rule with no groups is in scope.
@@ -162,12 +176,12 @@ There is one implementation of scoping evaluation: `ScopingEvaluator` (`src/JIM.
 
 - Top-level groups are ORed, and synchronisation stops at the first one met. Within a group every child is evaluated (no short-circuit), then `All` or `Any` applies; an empty group is met.
 - A missing value (no row, or a Metaverse asserted-null marker, #91) fails every comparison except Equals against an all-empty absolute criterion.
-- Only an attribute's first value is compared ([#1923](https://github.com/TetronIO/JIM/issues/1923)).
+- Every value an attribute holds is compared ([#1923](https://github.com/TetronIO/JIM/issues/1923)); see [Multi-valued attributes](#multi-valued-attributes).
 - An operator invalid for the attribute's type throws `InvalidOperationException` when synchronisation reaches it (defence in depth behind the write path's validation).
 
 The evaluator reads objects through a struct value source (`MvoScopingValueSource`, `CsoScopingValueSource`) under a generic constraint, so there is no boxing or interface dispatch, and builds an explanation tree only when one is asked for: the boolean path allocates nothing per evaluation (`ScopingExplanationTests` guards this; it previously cost a list per group and a closure per criterion). In explain mode an invalid criterion is recorded as `Invalid` rather than thrown, every top-level group is evaluated so the whole tree can be shown, and the rule outcome is still the one synchronisation would reach: `Undetermined` only where synchronisation would reach the invalid criterion before a met group, `InScope` where it stops at an earlier met group.
 
-An explanation (`ScopingExplanation`, `src/JIM.Models/Logic/Scoping/`) records each group's outcome, met count and child count, and each criterion's attribute, comparison, expected value (a relative date's resolved boundary too), the value compared, how many further values went uncompared, and an outcome (Met, Not met, No value, Attribute missing, Invalid). Nodes carry a one-based dot path (`1.3.2`), criteria counted before child groups as the evaluator takes them. Values are rendered culture-invariantly (dates in UTC, `4 Oct 2026` at midnight, `4 Oct 2026 10:41 UTC` otherwise). Values of credential attributes are withheld: names on `CredentialAttributes`' denylist always, and credential-like names on text or binary attributes (a date such as `pwdLastSet` cannot hold a credential, and its value is often why a rule scopes someone out). `ScopingExplanationTests` compares the two modes across every operator, data type and value state, relative dates, trees to depth four, and a few thousand seeded random trees, on both sides.
+An explanation (`ScopingExplanation`, `src/JIM.Models/Logic/Scoping/`) records each group's outcome, met count and child count, and each criterion's attribute, comparison, expected value (a relative date's resolved boundary too), the value the outcome turned on (on a multi-valued attribute the value that decided it, none where every value went the same way), how many values the object holds, and an outcome (Met, Not met, No value, Attribute missing, Invalid). Nodes carry a one-based dot path (`1.3.2`), criteria counted before child groups as the evaluator takes them. Values are rendered culture-invariantly (dates in UTC, `4 Oct 2026` at midnight, `4 Oct 2026 10:41 UTC` otherwise). Values of credential attributes are withheld: names on `CredentialAttributes`' denylist always, and credential-like names on text or binary attributes (a date such as `pwdLastSet` cannot hold a credential, and its value is often why a rule scopes someone out). `ScopingExplanationTests` compares the two modes across every operator, data type and value state, relative dates, trees to depth four, and a few thousand seeded random trees, on both sides.
 
 `ScopingExplanationSummariser` turns an explanation into words, once, on the server: the one-line hint ("Fails on Department; Cost Centre or Job Title"), the "To come into scope" bullets, a copyable plain-text summary and the tree's line descriptions. It words comparisons with the criteria editors' labels (`SearchComparisonOperators.LabelFor`), so the editor and the explanation never disagree on how a comparison reads.
 
@@ -194,4 +208,4 @@ The following behaviours are out of scope for the current implementation. They a
 - Outbound flow: `src/JIM.Application/Servers/ExportEvaluationServer.cs`.
 - Deletion rule evaluation: `src/JIM.Application/Servers/SyncEngine.cs`.
 - Evaluation and explanations: `src/JIM.Application/Servers/Scoping/ScopingEvaluator.cs`, `src/JIM.Models/Logic/Scoping/`.
-- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `ScopingExplanationTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.
+- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `ScopingEvaluationMultiValuedTests.cs`, `ScopingExplanationTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.

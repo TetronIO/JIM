@@ -22,7 +22,7 @@ namespace JIM.Application.Servers.Scoping;
 /// <item><description>Top-level groups are ORed, and synchronisation stops at the first one met.</description></item>
 /// <item><description>Within a group every child is evaluated (no short-circuit), then <c>All</c> or <c>Any</c> applies; an empty group is met.</description></item>
 /// <item><description>A missing value fails every comparison except Equals against an all-empty absolute criterion.</description></item>
-/// <item><description>Only an attribute's first value is compared (#1923).</description></item>
+/// <item><description>Every value an attribute holds is compared (#1923): a positive operator is met by any value, a negated one only when every value meets it (no value matches what it negates).</description></item>
 /// <item><description>Relative dates resolve against one instant per evaluation.</description></item>
 /// <item><description>An operator invalid for the attribute's type makes synchronisation fail loudly when it is reached.</description></item>
 /// </list>
@@ -145,15 +145,39 @@ internal static class ScopingEvaluator
         }
 
         var boundary = type == AttributeDataType.DateTime ? ResolveCriterionDate(criterion, nowUtc) : null;
-        var hasValue = source.TryGetFirstValue(attributeId, out var value);
-        var met = hasValue ? Compare(type, value, criterion, boundary) : MatchesMissingValue(criterion);
+
+        // Walk the values until one decides (#1923). A positive operator is met by the first value that meets it; a
+        // negated operator needs every value to meet it, so the first value that does not decides it is not met.
+        // For one value both reduce to comparing that value, so single-valued attributes scope exactly as before.
+        var negated = SearchComparisonOperators.IsNegated(criterion.ComparisonType);
+        var position = 0;
+        var heldCount = 0;
+        var decided = false;
+        ScopingValue lastHeld = default;
+        while (source.TryGetNextValue(attributeId, ref position, out var value))
+        {
+            heldCount++;
+            lastHeld = value;
+            if (Compare(type, value, criterion, boundary) != negated)
+            {
+                decided = true;
+                break;
+            }
+        }
+
+        var met = heldCount == 0 ? MatchesMissingValue(criterion) : decided != negated;
         var outcome = met
             ? ScopingCriterionOutcome.Met
-            : hasValue ? ScopingCriterionOutcome.NotMet : ScopingCriterionOutcome.NoValue;
+            : heldCount > 0 ? ScopingCriterionOutcome.NotMet : ScopingCriterionOutcome.NoValue;
 
         if (node != null)
-            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary,
-                hasValue ? value : null, source.CountValues(attributeId));
+        {
+            // The value the outcome turned on: the one that decided it, or a lone value either way. Where several values
+            // all went the same way, no single one did, and none is named.
+            var valueCount = source.CountValues(attributeId);
+            ScopingValue? shown = decided || valueCount == 1 ? lastHeld : null;
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary, shown, valueCount);
+        }
 
         return outcome;
     }

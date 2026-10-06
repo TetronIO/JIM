@@ -20,10 +20,11 @@ internal interface IScopingValueSource
     bool TryGetAttribute(SyncRuleScopingCriteria criterion, out int attributeId, out AttributeDataType type, out string name);
 
     /// <summary>
-    /// The value scoping compares for the attribute: the object's first value for it (#1923). False when the object
-    /// holds none.
+    /// The object's next value for the attribute at or after <paramref name="position"/>, advancing
+    /// <paramref name="position"/> past it; false once there are no more. Start at zero. Scoping compares every value
+    /// an attribute holds (#1923), and walking them this way allocates nothing.
     /// </summary>
-    bool TryGetFirstValue(int attributeId, out ScopingValue value);
+    bool TryGetNextValue(int attributeId, ref int position, out ScopingValue value);
 
     /// <summary>How many values the object holds for the attribute. Explanations only; synchronisation never asks.</summary>
     int CountValues(int attributeId);

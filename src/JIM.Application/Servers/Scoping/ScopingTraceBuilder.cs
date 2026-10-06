@@ -59,7 +59,8 @@ internal static class ScopingTraceBuilder
     /// </summary>
     /// <param name="boundary">The date a DateTime criterion compared against; null for other types, or when the
     /// criterion was not evaluated because its operator is invalid.</param>
-    /// <param name="value">The value compared; null when the object held none, or the criterion was not evaluated.</param>
+    /// <param name="value">The value the outcome turned on: the one that decided it, or a lone value; null when the object
+    /// held none, when several values all went the same way, or when the criterion was not evaluated.</param>
     /// <param name="valueCount">How many values the object holds for the attribute.</param>
     internal static void RecordAttribute(ScopingCriterionExplanation node, SyncRuleScopingCriteria criterion, int attributeId,
         AttributeDataType type, string attributeName, DateTime? boundary, ScopingValue? value, int valueCount)
@@ -67,7 +68,7 @@ internal static class ScopingTraceBuilder
         node.AttributeId = attributeId;
         node.AttributeName = attributeName;
         node.AttributeType = type;
-        node.AdditionalValuesNotEvaluated = Math.Max(0, valueCount - 1);
+        node.ValueCount = valueCount;
 
         if (type == AttributeDataType.DateTime && criterion.ValueMode == DateCriteriaValueMode.Relative &&
             criterion.RelativeCount.HasValue && criterion.RelativeUnit.HasValue && criterion.RelativeDirection.HasValue)

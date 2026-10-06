@@ -44,7 +44,7 @@ function Get-JIMMetaverseObjectConnection {
         ActivityId, RunProfileExecutionItemId), Hint, BulletsTitle, Bullets (plain-text lines),
         Summary, Scoping (one explanation per Synchronisation Rule, each with SyncRuleName,
         Direction, Outcome, Hint, Groups and Criteria, a flat list of every criterion with Path,
-        Met, Outcome, AttributeName, ComparisonType, Expected, Actual, Description and
+        Met, Outcome, AttributeName, ComparisonType, Expected, Actual, ValueCount, Description and
         ActualDescription), Conflicts (export rules that cannot connect because this connection
         holds the slot) and EvaluatedAt (UTC).
 

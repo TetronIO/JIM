@@ -29,12 +29,12 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
         return true;
     }
 
-    public bool TryGetFirstValue(int attributeId, out ScopingValue value)
+    public bool TryGetNextValue(int attributeId, ref int position, out ScopingValue value)
     {
         var values = connectedSystemObject.AttributeValues;
-        for (var i = 0; i < values.Count; i++)
+        while (position < values.Count)
         {
-            var candidate = values[i];
+            var candidate = values[position++];
             if (candidate.AttributeId != attributeId)
                 continue;
 

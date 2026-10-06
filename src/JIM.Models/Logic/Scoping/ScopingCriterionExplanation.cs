@@ -43,17 +43,21 @@ public sealed class ScopingCriterionExplanation
     /// <summary>The boundary a relative date criterion resolved to at evaluation, in UTC; null when absolute.</summary>
     public DateTime? ResolvedDate { get; set; }
 
-    /// <summary>The value the object held and the criterion compared, rendered; null when it held none.</summary>
+    /// <summary>
+    /// The value the outcome turned on, rendered: for a multi-valued attribute the value that decided it (the one that
+    /// met a positive operator, or matched what a negated operator excludes), otherwise the object's only value. Null when
+    /// the object held none, or when it held several and every one went the same way, so that no single value decided.
+    /// </summary>
     public string? ActualDisplay { get; set; }
 
     /// <summary>True when the expected and actual values are withheld because the attribute may hold a credential.</summary>
     public bool Masked { get; set; }
 
     /// <summary>
-    /// How many further values the object holds for the attribute that were not compared: scoping compares only an
-    /// attribute's first value (#1923).
+    /// How many values the object holds for the attribute; asserted-null markers are not values. Every one is compared
+    /// (#1923).
     /// </summary>
-    public int AdditionalValuesNotEvaluated { get; set; }
+    public int ValueCount { get; set; }
 
     public ScopingCriterionOutcome Outcome { get; set; }
 

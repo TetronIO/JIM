@@ -383,6 +383,19 @@ public class ScopingExplanationTests
             return [];
         if (roll == 1 && side == Side.Metaverse)
             return [new HeldValue(attribute.Id, attribute.Type, null, AssertedNull: true)];
+
+        // About one attribute in five holds several values (#1923), on the Metaverse side sometimes beside a marker.
+        if (roll is 2 or 3)
+        {
+            var several = new List<HeldValue>();
+            if (side == Side.Metaverse && random.Next(3) == 0)
+                several.Add(new HeldValue(attribute.Id, attribute.Type, null, AssertedNull: true));
+            var count = random.Next(2, 4);
+            for (var i = 0; i < count; i++)
+                several.Add(new HeldValue(attribute.Id, attribute.Type, RandomValue(random, attribute.Type, allowNull: false)));
+            return several;
+        }
+
         return [new HeldValue(attribute.Id, attribute.Type, RandomValue(random, attribute.Type, allowNull: false))];
     }
 
@@ -811,7 +824,7 @@ public class ScopingExplanationTests
     }
 
     [Test]
-    public void ExplainMvoForExportRule_MultipleValues_ComparesTheFirstAndCountsTheRest()
+    public void ExplainMvoForExportRule_MultipleValues_ShowsTheValueThatMatchedAndCountsOnlyRealValues()
     {
         var rule = Rule(Side.Metaverse, Group(SearchGroupType.All, Criterion(Side.Metaverse, Department, SearchComparisonType.Equals, "Finance")));
         HeldValue[] held =
@@ -827,31 +840,101 @@ public class ScopingExplanationTests
         var criterion = explanation.Groups.Single().Criteria.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(inScope, Is.False, "only the first real value is compared (#1923)");
-            Assert.That(criterion.ActualDisplay, Is.EqualTo("Sales"));
-            Assert.That(criterion.AdditionalValuesNotEvaluated, Is.EqualTo(2), "the asserted-null marker is not a value");
+            Assert.That(inScope, Is.True, "a positive operator is met by any value (#1923)");
+            Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.Met));
+            Assert.That(criterion.ActualDisplay, Is.EqualTo("Finance"), "the value that met it, not whichever loaded first");
+            Assert.That(criterion.ValueCount, Is.EqualTo(3), "the asserted-null marker is not a value");
         }
     }
 
     [Test]
-    public void ExplainCsoForImportRule_MultipleValues_ComparesTheFirstAndCountsTheRest()
+    public void Explain_MultipleValues_PositiveOperatorThatNoValueMeets_NamesNoSingleValue()
     {
-        var rule = Rule(Side.ConnectedSystem, Group(SearchGroupType.All, Criterion(Side.ConnectedSystem, Department, SearchComparisonType.Equals, "Finance")));
-        HeldValue[] held =
-        [
-            new(Department.Id, Department.Type, "Finance"),
-            new(Department.Id, Department.Type, "Sales"),
-            new(Department.Id, Department.Type, "Legal")
-        ];
+        foreach (var side in new[] { Side.Metaverse, Side.ConnectedSystem })
+        {
+            var rule = Rule(side, Group(SearchGroupType.All, Criterion(side, Department, SearchComparisonType.Equals, "Finance")));
+            HeldValue[] held =
+            [
+                new(Department.Id, Department.Type, "Sales"),
+                new(Department.Id, Department.Type, "Legal"),
+                new(Department.Id, Department.Type, "HR")
+            ];
 
-        var (inScope, explanation) = Evaluate(Side.ConnectedSystem, rule, held);
+            var (inScope, explanation) = Evaluate(side, rule, held);
+
+            var criterion = explanation.Groups.Single().Criteria.Single();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(inScope, Is.False, side.ToString());
+                Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.NotMet), side.ToString());
+                Assert.That(criterion.ActualDisplay, Is.Null, $"{side}: every value failed, so no one value decided it");
+                Assert.That(criterion.ValueCount, Is.EqualTo(3), side.ToString());
+            }
+        }
+    }
+
+    [Test]
+    public void Explain_MultipleValues_NegatedOperatorThatOneValueBreaks_ShowsThatValue()
+    {
+        foreach (var side in new[] { Side.Metaverse, Side.ConnectedSystem })
+        {
+            var rule = Rule(side, Group(SearchGroupType.All, Criterion(side, Department, SearchComparisonType.NotEquals, "Finance")));
+            HeldValue[] held =
+            [
+                new(Department.Id, Department.Type, "Sales"),
+                new(Department.Id, Department.Type, "Finance")
+            ];
+
+            var (inScope, explanation) = Evaluate(side, rule, held);
+
+            var criterion = explanation.Groups.Single().Criteria.Single();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(inScope, Is.False, $"{side}: a negated operator needs no value to match what it negates (#1923)");
+                Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.NotMet), side.ToString());
+                Assert.That(criterion.ActualDisplay, Is.EqualTo("Finance"), side.ToString());
+                Assert.That(criterion.ValueCount, Is.EqualTo(2), side.ToString());
+            }
+        }
+    }
+
+    [Test]
+    public void Explain_MultipleValues_NegatedOperatorEveryValueMeets_NamesNoSingleValue()
+    {
+        foreach (var side in new[] { Side.Metaverse, Side.ConnectedSystem })
+        {
+            var rule = Rule(side, Group(SearchGroupType.All, Criterion(side, Department, SearchComparisonType.NotEquals, "Finance")));
+            HeldValue[] held =
+            [
+                new(Department.Id, Department.Type, "Sales"),
+                new(Department.Id, Department.Type, "Legal")
+            ];
+
+            var (inScope, explanation) = Evaluate(side, rule, held);
+
+            var criterion = explanation.Groups.Single().Criteria.Single();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(inScope, Is.True, side.ToString());
+                Assert.That(criterion.Outcome, Is.EqualTo(ScopingCriterionOutcome.Met), side.ToString());
+                Assert.That(criterion.ActualDisplay, Is.Null, side.ToString());
+                Assert.That(criterion.ValueCount, Is.EqualTo(2), side.ToString());
+            }
+        }
+    }
+
+    [Test]
+    public void Explain_SingleValue_ShowsItAndCountsOne()
+    {
+        var rule = Rule(Side.Metaverse, Group(SearchGroupType.All, Criterion(Side.Metaverse, Department, SearchComparisonType.Equals, "Finance")));
+
+        var (_, explanation) = Evaluate(Side.Metaverse, rule, [new(Department.Id, Department.Type, "Sales")]);
 
         var criterion = explanation.Groups.Single().Criteria.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(inScope, Is.True);
-            Assert.That(criterion.ActualDisplay, Is.EqualTo("Finance"));
-            Assert.That(criterion.AdditionalValuesNotEvaluated, Is.EqualTo(2));
+            Assert.That(criterion.ActualDisplay, Is.EqualTo("Sales"), "a lone value is what the outcome turned on, met or not");
+            Assert.That(criterion.ValueCount, Is.EqualTo(1));
         }
     }
 

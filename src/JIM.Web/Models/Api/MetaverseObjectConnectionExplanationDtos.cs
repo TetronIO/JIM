@@ -275,14 +275,17 @@ public class ScopingCriterionExplanationDto
     /// <summary>The instant a relative date criterion resolved to, in UTC.</summary>
     public DateTime? ResolvedDate { get; set; }
 
-    /// <summary>The value the object held and the criterion compared, rendered; null when it held none.</summary>
+    /// <summary>
+    /// The value the outcome turned on, rendered: for a multi-valued attribute the value that decided it, otherwise the
+    /// object's only value. Null when it held none, or held several and no single one decided.
+    /// </summary>
     public string? Actual { get; set; }
 
     /// <summary>True when the values are withheld because the attribute may hold a credential.</summary>
     public bool Masked { get; set; }
 
-    /// <summary>Further values the attribute holds that were not compared: scoping compares the first value only.</summary>
-    public int AdditionalValuesNotEvaluated { get; set; }
+    /// <summary>How many values the object holds for the attribute; scoping compares every one.</summary>
+    public int ValueCount { get; set; }
 
     /// <summary>The criterion as a condition, for example "Department equals Finance".</summary>
     public string Description { get; set; } = string.Empty;
@@ -306,7 +309,7 @@ public class ScopingCriterionExplanationDto
         ResolvedDate = model.ResolvedDate,
         Actual = model.ActualDisplay,
         Masked = model.Masked,
-        AdditionalValuesNotEvaluated = model.AdditionalValuesNotEvaluated,
+        ValueCount = model.ValueCount,
         Description = model.Description,
         ActualDescription = model.ActualDescription
     };

@@ -1011,7 +1011,7 @@ One `PSCustomObject` per entry. Joined connections and not-connected entries sha
 | `Hint` | A not-connected entry's one-line qualifier, for example *Fails on Department; Cost Centre or Job Title*. |
 | `BulletsTitle`, `Bullets` | What a not-connected entry needs, or what happens next, as plain-text lines. |
 | `Summary` | A not-connected entry as plain text to paste into a ticket, ending with the evaluation time in UTC. |
-| `Scoping` | One explanation per Synchronisation Rule: `SyncRuleId`, `SyncRuleName`, `Direction`, `Outcome` (`InScope`, `OutOfScope` or `Undetermined`), `HasCriteria`, `EvaluatedAt`, `Hint`, `Groups` (the criteria tree) and `Criteria`, a flat list of every criterion with `Path`, `Met`, `Outcome`, `AttributeName`, `AttributeType`, `ComparisonType`, `Expected`, `Actual`, `Masked`, `Description` and `ActualDescription`. |
+| `Scoping` | One explanation per Synchronisation Rule: `SyncRuleId`, `SyncRuleName`, `Direction`, `Outcome` (`InScope`, `OutOfScope` or `Undetermined`), `HasCriteria`, `EvaluatedAt`, `Hint`, `Groups` (the criteria tree) and `Criteria`, a flat list of every criterion with `Path`, `Met`, `Outcome`, `AttributeName`, `AttributeType`, `ComparisonType`, `Expected`, `Actual` (the value the outcome turned on; empty when several values all went the same way), `ValueCount`, `Masked`, `Description` and `ActualDescription`. |
 | `Conflicts` | Enabled export Synchronisation Rules that cannot connect because this connection holds the Metaverse Object's one slot in the Connected System with an object of another type: `SyncRuleId`, `SyncRuleName`, `TargetObjectTypeName`, `ExistingObjectTypeName`, `Description` and `Scoping`. |
 | `EvaluatedAt` | When every scoping evaluation was made, in UTC. |
 
