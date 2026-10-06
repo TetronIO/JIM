@@ -15,7 +15,8 @@
 #
 # Restart JIM after a change:
 #   rootful (the default):  systemctl restart jim.service
-#   rootless:               systemctl --user -M jim@ restart jim.service
+#   rootless:               jim-systemctl restart jim.service, with jim-systemctl as defined in
+#                           https://docs.junctional.io/administration/podman/#rootless-commands
 
 apiVersion: v1
 kind: ConfigMap
