@@ -1611,11 +1611,26 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
     {
+        // Mirrors the PostgreSQL statement: nothing is cleared once an export rule has been created or updated since
+        // the run read its rules (#1925).
+        var exportRulesChanged = _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
+            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
+        if (exportRulesChanged)
+            return Task.FromResult(false);
+
         foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
             stored!.ScopeReviewPending = false;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
+    }
+
+    public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
+    {
+        var toFlag = _mvos.Values.Where(mvo => !mvo.ScopeReviewPending && mvo.Type?.Id == metaverseObjectTypeId).ToList();
+        foreach (var mvo in toFlag)
+            mvo.ScopeReviewPending = true;
+        return Task.FromResult(toFlag.Count);
     }
 
     public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
@@ -2433,7 +2448,7 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
-    public void SetAutoDetectChangesEnabled(bool enabled)
+    public virtual void SetAutoDetectChangesEnabled(bool enabled)
     {
         // No-op — no EF change tracker in memory
     }
@@ -2525,7 +2540,7 @@ public class SyncRepository : ISyncRepository
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         => CreateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
 
-    public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    public virtual Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         => UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
 
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
@@ -2541,7 +2556,7 @@ public class SyncRepository : ISyncRepository
 
     #region Pending Export — Singular Convenience Methods
 
-    public Task CreatePendingExportAsync(PendingExport pendingExport)
+    public virtual Task CreatePendingExportAsync(PendingExport pendingExport)
         => CreatePendingExportsAsync(new[] { pendingExport });
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)
