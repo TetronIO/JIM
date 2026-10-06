@@ -71,7 +71,7 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove", CausalityTone.Info, Icons.Material.Filled.FilterAltOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
         (ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected in target system", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected from target system", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
 
         // Unique Value Generation (#242): generation, retirement and Collision Remediation outcomes (Adopted is retired but still rendered).
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated", CausalityTone.Primary, Icons.Material.Filled.Fingerprint),

@@ -100,8 +100,8 @@ public static class OutcomeDisplayMap
         // no longer managed, so Warning rather than DeprovisionQueued's Error, and the same link-off icon as the
         // item's own Disconnected, which it is deliberately not (that names the item's own object).
         [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] =
-            new OutcomeDisplay("Disconnected in target system", CausalityTone.Warning, Icons.Material.Filled.LinkOff,
-                SpeculativeLabel: "Would be disconnected in its target Connected System"),
+            new OutcomeDisplay("Disconnected from target system", CausalityTone.Warning, Icons.Material.Filled.LinkOff,
+                SpeculativeLabel: "Would be disconnected from its target Connected System"),
 
         // Export execution outcomes
         [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] =

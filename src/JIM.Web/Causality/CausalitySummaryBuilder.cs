@@ -748,7 +748,7 @@ public static class CausalitySummaryBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled =>
                 $"Provisioning cancelled · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected =>
-                $"Disconnected in target system · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+                $"Disconnected from target system · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
             _ => display.Label

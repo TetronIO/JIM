@@ -68,7 +68,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled")]
-    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected in target system")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected from target system")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired")]
