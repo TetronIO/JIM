@@ -78,6 +78,16 @@ Criteria are organised into groups with AND/OR logic and support nested groups f
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
+### How criteria are evaluated
+
+Three rules decide outcomes that are easy to misread from the editor:
+
+- **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
+- **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
+- **A multi-valued attribute compares one of its values**<br /> Which value is compared is not defined, so avoid scoping on a multi-valued attribute until [#1923](https://github.com/TetronIO/JIM/issues/1923) settles how all of its values should count. The Connections tab shows the value that was compared and how many others there were.
+
+To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
+
 ### Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.

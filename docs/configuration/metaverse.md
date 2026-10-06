@@ -154,6 +154,35 @@ The same information is available through the REST API (`GET /api/v1/metaverse/o
 
 A value's source is not only in the Inspect view: the object's **Changes** tab names each attribute change's source alongside the change itself, and a [Pending Export's detail page](connected-systems.md#pending-exports) shows both where the outbound value came from and which Attribute Flow staged it. Both link back into Inspect so you can jump straight from a change or a queued export to the full picture.
 
+### Why it is connected, and why it is not
+
+A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
+
+**Why it is connected.** Expand a connection's row to see:
+
+- **How it joined**<br /> One sentence naming how the Connected System Object came to be joined and which Synchronisation Rule was responsible: projected by an import rule, provisioned by an export rule, joined by matching under an import rule, joined by matching on the Connected System's own Object Matching Rules (no rule is responsible), or joined by an export rule that found an existing object instead of provisioning a new one. The date it joined follows, with links to the Activity that made the join and to the rule. JIM records this at the moment of joining. For objects joined before JIM recorded it, the rule is taken from Activity history while that history is still kept, marked **Taken from Activity history**; where neither source holds it, the sentence says it was not recorded rather than guessing. A rule deleted since is still named, followed by "(since deleted)".
+- **Scoping**<br /> Each enabled Synchronisation Rule relevant to the connection, evaluated against current values: import rules against the Connected System Object's values for a source, export rules against the Metaverse Object's values for a target. It is labelled with the time it was evaluated, because it answers whether the connection is in scope now, not why it joined. A connection that is now out of scope of a rule (an import rule set to keep the join, or an export rule whose deprovisioning is under way) shows that rule as **Not in scope**, with the criteria it fails.
+- **Object Type conflicts**<br /> Another enabled export rule that targets the same Connected System for a different object type cannot connect this Metaverse Object, because a Metaverse Object has one Connected System Object per Connected System and this connection already holds it. The row says so, naming the rule.
+
+**Why it is not connected.** Below the table, the **Not connected** section lists every enabled export Synchronisation Rule for the Metaverse Object's type whose Connected System holds no object joined to it. It is collapsed until you open it; its heading counts the entries. When there are none it says the object is connected everywhere an enabled export rule targets. Rules on a Connected System being deleted are left out; rules on a disabled Connected System are listed, and their hint says the Connected System is disabled. A connection still being provisioned (**Pending export** or **Awaiting confirmation**) is already a row in the table above, so it never appears here.
+
+Each entry shows the Connected System, the rule, one reason and a one-line hint naming what it fails on, without values:
+
+| Reason | What it means | What its expansion shows |
+|---|---|---|
+| **Not in scope** | The object fails the rule's scoping criteria. | **To come into scope**: each failing condition in words, with the current value, then the rule's criteria evaluated. |
+| **Rule doesn't provision** | The object is in scope, but the rule's **Provision to Connected System** is off and no object exists to join. | What would connect it: switch provisioning on, or create an object in the Connected System that joins. |
+| **Rule misconfigured** | A criterion uses a comparison its attribute's type cannot use, so the rule's scoping cannot be evaluated. | The criterion, and that it needs correcting or removing in the rule. |
+| **Not yet provisioned** | The object is in scope and the rule provisions, but nothing has been staged. | Provisioning is staged the next time the object's attribute values change during synchronisation; a synchronisation that changes none of them does not stage it. This is the state of every already-in-scope object after an export rule is created, has provisioning switched on, or has its criteria widened ([#1925](https://github.com/TetronIO/JIM/issues/1925)). |
+
+**Copy summary** on an entry puts a plain-text explanation on the clipboard, ready for a ticket or a message: the object's name, the Connected System, the reason, the rule, the bullets and the time it was evaluated in UTC, so it reads the same wherever it is pasted. You do not need to expand the entry first. Where your browser does not allow JIM to use the clipboard (over plain HTTP, for example), a dialog shows the summary already selected, ready to copy.
+
+**Reading the criteria.** The criteria are drawn as the rule defines them: each group says whether all or any of its conditions must be met, and whether it was. Each condition shows what the object held and its outcome: **Met**, **Not met**, **No value** (an attribute with no value fails every comparison except one that requires no value), a condition that references no attribute (for example, after its attribute was deleted), or one that cannot be evaluated. A rule with several top-level groups is in scope when any one of them is met, and the explanation presents them as alternatives. Relative dates resolve to the instant shown. Where an attribute holds several values, the condition shows the value it compared and says how many more there were. Values of credential attributes are never shown.
+
+Nothing on the Connections tab changes data: the explanations are evaluated in memory against values already stored.
+
+The same explanations, in the same words, are available through the REST API (`GET /api/v1/metaverse/objects/{id}/connections`, adding `?includeNotConnected=true` for the Not connected entries; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectConnection`](../powershell/metaverse.md#get-jimmetaverseobjectconnection)).
+
 ## Confirming a configuration change
 
 Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).

@@ -975,7 +975,7 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 ### Get-JIMMetaverseObjectConnection
 
-Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words.
+Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
 
 For each Connected System Object joined to the Metaverse Object, it returns how the object was joined (the method, the Synchronisation Rule responsible, the date and the Activity) and the scoping of every relevant enabled Synchronisation Rule, evaluated now against current values. With `-IncludeNotConnected`, it also returns one entry per enabled export Synchronisation Rule whose Connected System holds no object joined to this one, with the reason, a one-line hint, what would change it, and a plain-text summary to paste into a ticket.
 
