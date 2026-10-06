@@ -280,6 +280,145 @@ Describe 'setup.sh configure_database' -Skip:$script:NoBash {
     }
 }
 
+Describe 'setup.sh wait_for_jim, when JIM does not become ready' -Skip:$script:NoBash {
+    BeforeAll {
+        # An installation whose web service never passes its health check, on a runtime faked from a table of each
+        # container's state: "status|restarts|health" ("missing" for a container that does not exist). Logs are
+        # one line naming the container, and the database's ends in PostgreSQL's out-of-memory failure (#1943).
+        function Get-UnreadyArrangement {
+            param([string]$Runtime = 'docker', [hashtable]$States, [string]$BundledDatabase = 'true')
+            $cases = ($States.Keys | ForEach-Object { "            $_) state='$($States[$_])' ;;" }) -join "`n"
+            $lookup = @"
+container_state() {
+        case "`$1" in
+$cases
+            *) state='running|0|healthy' ;;
+        esac
+    }
+"@
+            $fake = if ($Runtime -eq 'docker') {
+                @"
+docker() {
+    $lookup
+    case "`$1" in
+        inspect)
+            container_state "`$4"
+            [ "`$state" != missing ] || return 1
+            echo "`$state" ;;
+        logs)
+            echo "log of `$4"
+            [ "`$4" != jim.database ] || echo 'FATAL:  could not map anonymous shared memory: Cannot allocate memory' ;;
+    esac
+}
+"@
+            }
+            else {
+                @"
+as_jim_account() { "`$@"; }
+podman() {
+    $lookup
+    case "`$1" in
+        inspect)
+            container_state "`$4"
+            [ "`$state" != missing ] || return 1
+            echo "`${state%|*}" ;;
+        healthcheck)
+            container_state "`$3"
+            [ "`${state##*|}" != unhealthy ] ;;
+        logs)
+            echo "log of `$4"
+            [ "`$4" != jim-database-postgres ] || echo 'FATAL:  could not map anonymous shared memory: Cannot allocate memory' ;;
+    esac
+}
+"@
+            }
+            @"
+RUNTIME=$Runtime
+USE_BUNDLED_DB=$BundledDatabase
+PODMAN_ACCOUNT=
+READY_TIMEOUT_SECONDS=0
+jim_is_healthy() { return 1; }
+$fake
+"@
+        }
+    }
+
+    It 'names the database when it keeps restarting, with the end of its log, and how to see more' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.database' = 'restarting|9|'; 'jim.web' = 'running|0|unhealthy' }
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim; echo "READY=$JIM_READY"' $arrange
+
+        $result.Output | Should -BeLike '*READY=false*'
+        $result.Output | Should -BeLike '*jim.database: restarting, restarted 9 times*'
+        $result.Output | Should -BeLike '*could not map anonymous shared memory*'
+        $result.Output | Should -BeLike '*jim.web: unhealthy*'
+        $result.Output | Should -BeLike '*--profile with-db logs jim.database jim.web*'
+    }
+
+    It 'names the database first, as the service the others wait for' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.database' = 'restarting|9|'; 'jim.web' = 'running|0|unhealthy' }
+
+        $output = (Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange).Output
+
+        $output.IndexOf('jim.database:') | Should -BeLessThan $output.IndexOf('jim.web:')
+        $output | Should -BeLike '*fix the database first*'
+    }
+
+    It 'leaves out the containers that are running properly' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.database' = 'restarting|9|' }
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -Not -BeLike '*jim.worker:*'
+        $result.Output | Should -Not -BeLike '*log of jim.worker*'
+    }
+
+    It 'names a container that was never created' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.worker' = 'missing' }
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -BeLike '*jim.worker: not created*'
+    }
+
+    It 'names a container that stopped, with its exit code' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.scheduler' = 'exited|0||139' }
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -BeLike '*jim.scheduler: exited (code 139)*'
+    }
+
+    It 'says where to look when every container is running but JIM is not ready, the database included' {
+        $arrange = Get-UnreadyArrangement -States @{}
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -BeLike '*JIM is not ready after 10 minutes*'
+        $result.Output | Should -BeLike '*--profile with-db logs jim.database jim.worker jim.scheduler jim.web*'
+    }
+
+    It 'checks no database container when JIM uses your own PostgreSQL server' {
+        $arrange = Get-UnreadyArrangement -States @{ 'jim.database' = 'missing' } -BundledDatabase 'false'
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -Not -BeLike '*jim.database*'
+        $result.Output | Should -Not -BeLike '*--profile with-db*'
+    }
+
+    It 'on Podman, names the database pod''s container, with the end of its log' {
+        $arrange = Get-UnreadyArrangement -Runtime podman -States @{ 'jim-database-postgres' = 'running|12|'; 'jim-web' = 'running|0|unhealthy' }
+
+        $result = Invoke-SetupFunction 'wait_for_jim /opt/jim' $arrange
+
+        $result.Output | Should -BeLike '*jim-database-postgres: restarted 12 times*'
+        $result.Output | Should -BeLike '*could not map anonymous shared memory*'
+        $result.Output | Should -BeLike '*jim-web: unhealthy*'
+        $result.Output | Should -BeLike '*podman logs jim-database-postgres*'
+    }
+}
+
 Describe 'setup.sh pinned_database_image' -Skip:$script:NoBash {
     It 'reads the PostgreSQL image docker-compose.yml pins, without the JIM_DB_IMAGE syntax around it' {
         $compose = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..' 'docker-compose.yml')).Path

@@ -308,7 +308,7 @@ On Docker, it keeps `.env`, which holds the database password and your identity 
 
 On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld and, on Ubuntu 24.04, to let JIM's containers use the network under AppArmor; rootless, it also lets unprivileged programs use port 443.
 
-It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
+It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do. If JIM is not ready within ten minutes, it names each of JIM's containers that is not running properly (the bundled database's included), with the end of its log, and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
 ```bash
 sudo /opt/jim/setup.sh --renew-certificate   # a certificate the installer created, before it expires

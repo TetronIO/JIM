@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)
 - 🐛 Synchronisation Rule scoping criteria nested more than two groups deep are now evaluated; previously the deeper groups were ignored, so such rules could include objects their criteria excluded, and the editor dropped those groups from view after saving. (#348)
 - 🐛 Following a reference from one Metaverse Object to another now shows the new object's Changes, Connections, Password and Properties details; previously the first object's could stay on screen, and Load more could mix two objects' change history. (#348)
+- 🐛 When JIM is not ready after installing or upgrading, `setup.sh` now names each container that is not running properly, the bundled database included, with the end of its log, instead of pointing at the web and worker logs only. (#1944)
 - 🐛 The bundled PostgreSQL now starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum and 8 GB recommendation included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
 - 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; in every earlier release it failed on every line, because each file was listed under the build machine's folders. The bundle also no longer carries a development notes file. (#1942)
 

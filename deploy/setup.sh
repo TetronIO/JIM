@@ -108,6 +108,9 @@ TLS_CA_DAYS=3650
 # The standard HTTPS port, so that users and identity provider registrations need no port in JIM's address.
 DEFAULT_WEB_PORT=443
 
+# How long the installer waits for JIM to be ready after starting it.
+READY_TIMEOUT_SECONDS=600
+
 # Podman: the oldest version with Quadlet, which runs JIM's pods under systemd, and the files a release publishes
 # for it (the pod and settings files, then the Quadlet units).
 PODMAN_MIN_VERSION="4.4"
@@ -2008,7 +2011,7 @@ launch_jim() {
 # Waits until jim.web reports healthy, which its health check does once JIM is ready to serve.
 wait_for_jim() {
     local install_dir="$1"
-    local deadline=$((SECONDS + 600))
+    local deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
 
     info "Waiting for JIM to be ready (the first start prepares the database, which takes a few minutes)..."
     while [ "$SECONDS" -lt "$deadline" ]; do
@@ -2020,10 +2023,119 @@ wait_for_jim() {
         sleep 5
     done
     JIM_READY="false"
+    report_unready_containers "$install_dir"
+}
+
+# JIM's containers, the database's first: the others wait for it.
+jim_containers() {
     if [ "$RUNTIME" = "podman" ]; then
-        warn "JIM is not ready after 10 minutes. See what it is doing with: $(jim_podman_command logs jim-web), and $(jim_podman_command logs jim-worker)"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo jim-database-postgres
+        fi
+        echo jim-worker jim-scheduler jim-web
     else
-        warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo jim.database
+        fi
+        echo jim.worker jim.scheduler jim.web
+    fi
+}
+
+# What is wrong with one of JIM's containers, such as "restarting, restarted 9 times"; nothing when it runs properly.
+container_problem() {
+    local name="$1"
+    local state status restarts health="" code
+    if [ "$RUNTIME" = "podman" ]; then
+        state=$(as_jim_account podman inspect --format '{{.State.Status}}|{{.RestartCount}}|{{.State.ExitCode}}' "$name" 2>/dev/null) \
+            || { echo "not created"; return; }
+        IFS='|' read -r status restarts code <<< "$state"
+        # Podman runs health checks on a timer only under systemd, so run the check rather than read its last result.
+        # It exits 1 when the check fails, and otherwise for a container without one.
+        local check=0
+        as_jim_account podman healthcheck run "$name" >/dev/null 2>&1 || check=$?
+        if [ "$check" -eq 1 ]; then
+            health="unhealthy"
+        fi
+    else
+        state=$(docker inspect -f '{{.State.Status}}|{{.RestartCount}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.ExitCode}}' "$name" 2>/dev/null) \
+            || { echo "not created"; return; }
+        IFS='|' read -r status restarts health code <<< "$state"
+    fi
+
+    local -a problems=()
+    if [ "$status" != "running" ]; then
+        if [ "$status" = "exited" ] && [ -n "$code" ]; then
+            problems+=("exited (code ${code})")
+        else
+            problems+=("$status")
+        fi
+    fi
+    if [ "${restarts:-0}" -gt 0 ] 2>/dev/null; then
+        problems+=("restarted ${restarts} times")
+    fi
+    case "$health" in
+        unhealthy) problems+=("unhealthy") ;;
+        starting) problems+=("not yet healthy") ;;
+    esac
+    if [ ${#problems[@]} -gt 0 ]; then
+        local joined
+        printf -v joined '%s, ' "${problems[@]}"
+        echo "${joined%, }"
+    fi
+}
+
+# Says JIM is not ready, naming each of its containers that is not running properly, with the end of its log, so
+# that the message names the failure itself (#1944). Until then it named the web and worker logs only, which show
+# just their side of a database that never started, and Compose starts them regardless of the bundled database.
+report_unready_containers() {
+    local install_dir="$1"
+    local name problem database_failed=""
+    local -a failing=()
+    for name in $(jim_containers); do
+        problem=$(container_problem "$name")
+        [ -n "$problem" ] || continue
+        if [ ${#failing[@]} -eq 0 ]; then
+            warn "JIM is not ready after 10 minutes. These containers are not running properly:"
+        fi
+        failing+=("$name")
+        case "$name" in
+            jim.database|jim-database-postgres) database_failed="true" ;;
+        esac
+        echo "  ${BOLD}${name}${RESET}: ${problem}"
+        [ "$problem" != "not created" ] || continue
+        echo "    The end of its log:"
+        if [ "$RUNTIME" = "podman" ]; then
+            as_jim_account podman logs --tail 20 "$name" 2>&1 | sed 's/^/      /' || true
+        else
+            docker logs --tail 20 "$name" 2>&1 | sed 's/^/      /' || true
+        fi
+    done
+
+    local -a shown=()
+    if [ ${#failing[@]} -gt 0 ]; then
+        shown=("${failing[@]}")
+        if [ -n "$database_failed" ]; then
+            warn "JIM's services wait for the bundled database, so fix the database first: see ${DOCS_BASE}/administration/troubleshooting/"
+        fi
+    else
+        warn "JIM is not ready after 10 minutes, though each of its containers is running."
+        read -r -a shown <<< "$(jim_containers | tr '\n' ' ')"
+    fi
+
+    if [ "$RUNTIME" = "podman" ]; then
+        local -a commands=()
+        for name in "${shown[@]}"; do
+            commands+=("$(jim_podman_command logs "$name")")
+        done
+        local joined
+        printf -v joined '%s; ' "${commands[@]}"
+        warn "See what it is doing with: ${joined%; }"
+    else
+        local compose="docker compose ${COMPOSE_FILES[*]}"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            compose="${compose} --profile with-db"
+        fi
+        warn "See what it is doing with: cd ${install_dir} && ${compose} logs ${shown[*]}"
     fi
 }
 
