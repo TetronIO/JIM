@@ -974,6 +974,23 @@ public class JimDbContext : DbContext
             .HasFilter("\"MetaverseObjectId\" IS NOT NULL")
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique");
 
+        // Durable join record (#348): the Synchronisation Rule that projected, provisioned or joined the object.
+        // SetNull on rule deletion so the object survives and JoinSyncRuleName still names the rule. No navigation:
+        // nothing loads the rule through the object, and the object graph stays as light as it was.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasOne<SyncRule>()
+            .WithMany()
+            .HasForeignKey(cso => cso.JoinSyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Partial for the same reason as IX_PendingExports_ProvisioningSyncRuleId: the index exists so deleting a
+        // Synchronisation Rule does not scan every Connected System Object to null the column, and unjoined objects
+        // (most of a large Connector Space) are never rows that delete has to visit.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.JoinSyncRuleId)
+            .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
+            .HasFilter("\"JoinSyncRuleId\" IS NOT NULL");
+
         // Additional performance indexes for worker task queue processing
         // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
         modelBuilder.Entity<WorkerTask>()

@@ -328,8 +328,7 @@ public static class ConnectedSystemObjectObsoletionService
         mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
         connectedSystemObject.MetaverseObject = null;
         connectedSystemObject.MetaverseObjectId = null;
-        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-        connectedSystemObject.DateJoined = null;
+        connectedSystemObject.ClearJoinRecord();
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvoId}.");
 
         // Report the disconnection so the caller can account for it before it is flushed to the database
