@@ -6972,6 +6972,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
     }
 
+    public async Task<Dictionary<int, SyncRuleMappingGeneration>> GetSyncRuleMappingGenerationsAsync(IReadOnlyCollection<int> generationIds)
+    {
+        if (generationIds.Count == 0)
+            return [];
+
+        // Read-only comparison input, so no tracking, for the same reason as GetSyncRuleInitialPasswordAsync.
+        var ids = generationIds.ToList();
+        return await Repository.Database.SyncRuleMappingGenerations
+            .AsNoTracking()
+            .Include(g => g.Exclusions)
+            .Where(g => ids.Contains(g.Id))
+            .ToDictionaryAsync(g => g.Id);
+    }
+
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)
     {
         var row = await Repository.Database.SyncRules

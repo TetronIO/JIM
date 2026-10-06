@@ -11,7 +11,7 @@ namespace JIM.Models.Transactional;
 /// revision-pending record, or, in export mode, the queued export attribute change carrying the value. Either every
 /// part is written or none is (<see cref="GeneratedValueRevisionResult"/>).
 /// </summary>
-public sealed class GeneratedValueRevision
+public sealed record GeneratedValueRevision
 {
     /// <summary>
     /// The assignment, already carrying its new value, normalised value, previous value, state and remediation

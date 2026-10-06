@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
+
 namespace JIM.Models.Transactional;
 
 /// <summary>
@@ -34,4 +36,18 @@ public sealed class GeneratedValueCollisionOutcome
     /// needed, the correction otherwise.
     /// </summary>
     public required string Message { get; init; }
+
+    /// <summary>
+    /// The id the export's Run Profile Execution Item takes: recorded on the assignment (and, for a remediation in import
+    /// mode, on the revision-pending record) before the item exists, so the next synchronisation's causal edge, and the
+    /// Needs Decision surfaces, can name it.
+    /// </summary>
+    public required Guid ExecutionItemId { get; init; }
+
+    /// <summary>
+    /// For a remediated value, the exported attribute that carried it unchanged, so the export item can record the
+    /// correction as that attribute set from the rejected value to the new one. Null when the export carried only a
+    /// value derived from it (the derived value follows at the next synchronisation), and when a decision is needed.
+    /// </summary>
+    public ConnectedSystemObjectTypeAttribute? CarryingAttribute { get; init; }
 }

@@ -431,6 +431,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // are persisted so provisioning/deprovisioning reflects the fully reconciled Metaverse state.
             await ProcessScopeReviewPendingMetaverseObjectsAsync();
 
+            // Collision Remediation (#242, release 4): carry generated values an export run corrected to the queued
+            // exports, the rejecting system's included, now that this run's own changes are persisted.
+            await ProcessGeneratedValueRevisionsPendingAsync();
+
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
 
