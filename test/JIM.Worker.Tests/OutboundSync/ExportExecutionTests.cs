@@ -1282,6 +1282,84 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// A rejection the Connector classified as a value already in use (Unique Value Generation, #242, release 4)
+    /// must reach the execution item with its classification and the attribute the Connected System named, not be
+    /// flattened to a general failure: Collision Remediation and the recorded export error both read it from there.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenExportRejectedAsValueAlreadyInUse_ExecutionItemCarriesTheClassificationAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "jimprobe1"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        const string serverText = "The object exists. 00002071: samldb: sAMAccountName 'jimprobe1' already in use!";
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Classifying Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.ValueAlreadyInUse(serverText, "sAMAccountName") });
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, mockConnector.Object, SyncRunMode.PreviewAndSync);
+
+        Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(1));
+        var item = result.ProcessedExportItems[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.EqualTo(1));
+            Assert.That(item.Succeeded, Is.False);
+            Assert.That(item.ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.UniqueValueAlreadyInUse));
+            Assert.That(item.RejectedAttributeName, Is.EqualTo("sAMAccountName"));
+            Assert.That(item.ErrorMessage, Is.EqualTo(serverText));
+            Assert.That(pendingExport.LastErrorMessage, Is.EqualTo(serverText));
+        }
+    }
+
+    /// <summary>
     /// Tests that ErrorCount continues to increment correctly on repeated failures.
     /// Each failure should increment ErrorCount by exactly 1.
     /// </summary>

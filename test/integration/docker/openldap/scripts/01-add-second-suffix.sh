@@ -135,6 +135,7 @@ olcDbMaxSize: 34359738368
 olcDbIndex: objectClass eq
 olcDbIndex: uid eq
 olcDbIndex: cn eq
+olcDbIndex: mail eq
 olcDbIndex: entryUUID eq
 olcSizeLimit: unlimited
 LDIF
@@ -469,6 +470,49 @@ else
     echo "[openldap-init] ERROR: one or more database or ppolicy overlay DNs (Yellowstone/Glitterband/accesslog database; Yellowstone/Glitterband ppolicy overlay) not found; cannot apply access control or password policy" >&2
     exit 1
 fi
+
+# Enforce unique mail addresses on both suffixes with the attribute uniqueness overlay
+# (slapo-unique), so the lab can produce a real OpenLDAP uniqueness rejection: Unique Value
+# Generation's Collision Remediation (#242, release 4) classifies a constraintViolation from this
+# overlay as "value already in use". Scope is each database's own suffix (the URI names no base),
+# so the same address may still exist once in Yellowstone and once in Glitterband, which the
+# cross-domain scenarios rely on. Only mail is enforced: uid is deliberately left alone, because
+# Scenario 019's auxiliary-class objects reuse a person's uid by design.
+#
+# The overlay searches the database for the value on every add, modify and rename that writes
+# mail, so an equality index on mail is mandatory: without it every write at the Scale templates
+# would be an unindexed scan of the whole suffix. Bitnami already indexes mail on Yellowstone (a
+# second definition is refused as a duplicate), and the Glitterband database's creation LDIF above
+# carries the index.
+#
+# The module gets a module list entry of its own carrying its path, as ppolicy's does above: the
+# base image's first module list points at a different directory (libexec), so appending
+# unique.so to it fails with "Other (80)".
+echo "[openldap-init] Enabling unique mail addresses (slapo-unique)..."
+if [ -f "$PPOLICY_MODULE_PATH/unique.so" ]; then
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<UQMODULE
+dn: cn=module,cn=config
+objectClass: olcModuleList
+cn: module
+olcModulePath: ${PPOLICY_MODULE_PATH}
+olcModuleLoad: unique.so
+UQMODULE
+    echo "[openldap-init] unique module loaded from ${PPOLICY_MODULE_PATH}/unique.so"
+else
+    echo "[openldap-init] ${PPOLICY_MODULE_PATH}/unique.so not found; assuming the overlay is compiled into slapd (the overlay add below fails if it is not)"
+fi
+
+for DB_DN in "$YELLOWSTONE_DB_DN" "$GLITTERBAND_DB_DN"; do
+    echo "[openldap-init] Adding the unique overlay to $DB_DN..."
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<UQOVERLAY
+dn: olcOverlay=unique,$DB_DN
+objectClass: olcOverlayConfig
+objectClass: olcUniqueConfig
+olcOverlay: unique
+olcUniqueURI: ldap:///?mail?sub
+UQOVERLAY
+    echo "[openldap-init] Unique mail enforced on $DB_DN"
+done
 
 # Relax MDB write durability for test speed unless explicitly disabled.
 # 'olcDbEnvFlags: nosync' skips the per-transaction fsync that otherwise caps

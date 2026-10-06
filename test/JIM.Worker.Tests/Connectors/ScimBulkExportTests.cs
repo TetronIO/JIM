@@ -453,6 +453,25 @@ public class ScimBulkExportTests
     }
 
     [Test]
+    public async Task ExportAsync_Bulk_AUniquenessRejectionIsClassifiedFromTheOperationsErrorAsync()
+    {
+        // The same rejection must classify the same way whichever way the change travelled.
+        var provider = BulkProvider();
+        provider.Options.RejectsDuplicateUserName = true;
+        provider.Options.UniquenessDetail = "The attribute 'userName' must be unique.";
+
+        var results = await ExportAsync(provider.CreateHandler(), BulkEnabled(), NewUser("ada"), NewUser("ada"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+            Assert.That(results[1].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.UniqueValueAlreadyInUse));
+            Assert.That(results[1].RejectedAttributeName, Is.EqualTo("userName"));
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_Bulk_ADeleteOfAResourceAlreadyGoneSucceedsAsync()
     {
         // The intended end state is that the resource is absent, and it is. Failing would leave a

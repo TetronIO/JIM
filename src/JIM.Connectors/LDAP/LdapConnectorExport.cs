@@ -139,7 +139,7 @@ internal class LdapConnectorExport
                 // Return failure result - ExportExecutionServer is responsible for updating
                 // ErrorCount, Status, and retry timing. The connector should
                 // only report success or failure via ConnectedSystemExportResult.
-                results.Add(ConnectedSystemExportResult.Failed(ex.Message));
+                results.Add(FailureFor(ex));
             }
         }
 
@@ -681,7 +681,7 @@ internal class LdapConnectorExport
                 {
                     _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process Pending Export {Id} ({ChangeType})",
                         pendingExport.Id, pendingExport.ChangeType);
-                    results[index] = ConnectedSystemExportResult.Failed(ex.Message);
+                    results[index] = FailureFor(ex);
                 }
                 finally
                 {
@@ -1952,9 +1952,24 @@ internal class LdapConnectorExport
         if (response == null)
             return false;
 
+        // A value already in use (a group's mail under OpenLDAP's slapo-unique, say) is a constraint violation too,
+        // but the directory said what it was, and it was not the placeholder.
+        if (LdapUniquenessRejectionClassifier.TryClassify(ex, out _))
+            return false;
+
         return response.ResultCode is ResultCode.ConstraintViolation or ResultCode.NoSuchObject
                                       or ResultCode.UnwillingToPerform;
     }
+
+    /// <summary>
+    /// The result for an export the directory refused. A rejection because a value is already in use is classified
+    /// as such, naming the attribute where the directory named it (Unique Value Generation, decision 9); every other
+    /// failure is reported as it always was. The directory's own message is kept whole either way.
+    /// </summary>
+    private static ConnectedSystemExportResult FailureFor(Exception ex) =>
+        LdapUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName)
+            ? ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName)
+            : ConnectedSystemExportResult.Failed(ex.Message);
 
     /// <summary>
     /// Returns a structured export error when the placeholder member DN is rejected by the directory.

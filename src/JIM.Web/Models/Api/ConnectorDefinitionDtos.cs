@@ -144,6 +144,12 @@ public class ConnectorDefinitionDto
     public bool SupportsUniquenessProbe { get; set; }
 
     /// <summary>
+    /// Whether the connector reports an export its Connected System rejected because a value is already in use as
+    /// such, rather than as an ordinary export failure, so that unique value generation can act on it.
+    /// </summary>
+    public bool SupportsUniquenessRejectionClassification { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the connector's schema follows (e.g. "Scim", "Ldap", "NotSet").
     /// Advisory metadata used for Standard Mapping hints.
     /// </summary>
@@ -182,6 +188,7 @@ public class ConnectorDefinitionDto
             SupportsPasswordSet = entity.SupportsPasswordSet,
             SupportsPasswordPolicyDiscovery = entity.SupportsPasswordPolicyDiscovery,
             SupportsUniquenessProbe = entity.SupportsUniquenessProbe,
+            SupportsUniquenessRejectionClassification = entity.SupportsUniquenessRejectionClassification,
             SchemaStandard = entity.SchemaStandard.ToString()
         };
     }

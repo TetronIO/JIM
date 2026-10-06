@@ -116,6 +116,16 @@ public interface IConnectorCapabilities
     public bool SupportsUniquenessProbe { get; }
 
     /// <summary>
+    /// Does the Connector tell a rejection because a value is already in use apart from every other export failure?
+    /// When true, the Connector reports such a rejection as
+    /// <see cref="Staging.ConnectedSystemExportErrorType.UniqueValueAlreadyInUse"/>, naming the attribute in
+    /// <see cref="Staging.ConnectedSystemExportResult.RejectedAttributeName"/> where its Connected System named it,
+    /// and Unique Value Generation's Collision Remediation can act on it. When false, such a rejection is an ordinary
+    /// export failure.
+    /// </summary>
+    public bool SupportsUniquenessRejectionClassification { get; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the Connected System's schema follows, if any. Purely advisory:
     /// the portal uses it to show the right Standard Mapping hints in the Attribute Flow editor, so an
     /// administrator mapping an LDAP system's "givenName" can see which Metaverse Attribute the standard

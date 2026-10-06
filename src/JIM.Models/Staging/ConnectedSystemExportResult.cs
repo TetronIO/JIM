@@ -27,6 +27,15 @@ public class ConnectedSystemExportResult
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
 
     /// <summary>
+    /// When <see cref="ErrorType"/> is <see cref="ConnectedSystemExportErrorType.UniqueValueAlreadyInUse"/>, the
+    /// Connected System attribute the server said holds a value already in use: <c>distinguishedName</c> when an
+    /// LDAP entry already exists at the DN, a column name for a database. Null when the server did not name one,
+    /// which is common, and for every other result. Never inferred from the export's contents: attribution that
+    /// guesses would have Collision Remediation revise a value that was never in use.
+    /// </summary>
+    public string? RejectedAttributeName { get; set; }
+
+    /// <summary>
     /// The primary external ID assigned by the target system.
     /// For LDAP, this would be the objectGUID.
     /// For systems that don't generate IDs, this may be null.
@@ -65,6 +74,21 @@ public class ConnectedSystemExportResult
             Success = false,
             ErrorMessage = errorMessage,
             ErrorType = ConnectedSystemExportErrorType.General
+        };
+
+    /// <summary>
+    /// Creates a failed result for a rejection because a value is already in use in the Connected System, naming
+    /// the attribute where the server named it.
+    /// </summary>
+    /// <param name="errorMessage">The server's own message, kept whole so an administrator sees what it said.</param>
+    /// <param name="rejectedAttributeName">The attribute the server named, or null when it named none.</param>
+    public static ConnectedSystemExportResult ValueAlreadyInUse(string errorMessage, string? rejectedAttributeName) =>
+        new()
+        {
+            Success = false,
+            ErrorMessage = errorMessage,
+            ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse,
+            RejectedAttributeName = rejectedAttributeName
         };
 
     /// <summary>

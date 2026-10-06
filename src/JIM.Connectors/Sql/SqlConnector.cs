@@ -126,6 +126,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     public bool SupportsPasswordPolicyDiscovery => false;
 
     public bool SupportsUniquenessProbe => false;
+    public bool SupportsUniquenessRejectionClassification => true;
 
     // Column names are whatever the schema's designer chose, so no standard vocabulary applies and the
     // Attribute Flow editor matches names against every standard instead.

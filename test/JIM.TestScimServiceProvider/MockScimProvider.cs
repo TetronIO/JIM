@@ -395,6 +395,9 @@ public sealed class MockScimProvider
         if (body == null)
             return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "The request body was not valid JSON.");
 
+        if (Options.RejectsDuplicateUserName && HoldsUserName(resourceType, body["userName"]?.ToString()))
+            return Error(HttpStatusCode.Conflict, ScimErrorTypes.Uniqueness, Options.UniquenessDetail);
+
         var resource = new MockScimResource
         {
             Id = $"generated-{++_resourcesCreated}",
@@ -411,6 +414,12 @@ public sealed class MockScimProvider
         response.StatusCode = HttpStatusCode.Created;
         return response;
     }
+
+    private bool HoldsUserName(string resourceType, string? userName) =>
+        userName != null && Resources.Any(resource =>
+            string.Equals(resource.ResourceType, resourceType, StringComparison.Ordinal) &&
+            resource.Attributes.TryGetValue("userName", out var held) &&
+            string.Equals(held?.ToString(), userName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Answers a request against one resource. PATCH applies operations with simple attribute paths

@@ -194,5 +194,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// administrator's decision. The Pending Export is Parked until Allow the rename, Retry or Leave it
     /// resolves it.
     /// </summary>
-    GeneratedValueCollisionUnresolved
+    GeneratedValueCollisionUnresolved,
+
+    /// <summary>
+    /// The Connected System rejected the export because a value it carries is already held by another object
+    /// there (an account name, an email address, an object already at that DN). Reported by Connectors that
+    /// classify such rejections (<c>SupportsUniquenessRejectionClassification</c>); a data conflict for an
+    /// administrator to resolve, not a JIM defect, so it does not count as an unhandled error.
+    /// </summary>
+    UniqueValueAlreadyInUse
 }

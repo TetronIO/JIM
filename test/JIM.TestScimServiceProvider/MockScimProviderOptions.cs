@@ -41,6 +41,18 @@ public sealed class MockScimProviderOptions
     /// </summary>
     public bool RejectsCreateWithMissingDependency { get; set; }
 
+    /// <summary>
+    /// Rejects a create whose <c>userName</c> another resource of the same type already holds, ignoring case,
+    /// with 409 <c>uniqueness</c>, as RFC 7644 has a provider report a value already in use.
+    /// </summary>
+    public bool RejectsDuplicateUserName { get; set; }
+
+    /// <summary>
+    /// The <c>detail</c> sent with a <see cref="RejectsDuplicateUserName"/> rejection. Defaults to the RFC 7644
+    /// description of <c>uniqueness</c>, which names no attribute, as many providers' messages do not.
+    /// </summary>
+    public string UniquenessDetail { get; set; } = "One or more of the attribute values are already in use or are reserved.";
+
     /// <summary>What <c>/ServiceProviderConfig</c> claims about entity tags.</summary>
     public bool SupportsETag { get; set; } = true;
 
