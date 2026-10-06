@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now provisions and deprovisions existing Metaverse Objects at the next synchronisation; it used to wait until each object's own values changed. (#1925)
+- 🐛 Objects moved into or out of scope by a relative date are now provisioned or deprovisioned by the next Delta Synchronisation even when it has nothing new to import, and are no longer missed when two Synchronisation Rules with relative dates cover them. (#1925)
 - 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
 - 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
