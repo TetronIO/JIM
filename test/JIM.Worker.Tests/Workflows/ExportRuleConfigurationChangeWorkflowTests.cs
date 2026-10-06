@@ -402,6 +402,31 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         }
     }
 
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowed_RecordsTheItemAsAReviewOfTheMetaverseObjectAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        // The review's item has no Connected System Object of its own, so unless it says what it is and whose it is,
+        // the item page reads it as an unclassified operation on an object that has been deleted (#1971).
+        SyncRepo.SetSyncOutcomeTrackingLevel(trackingLevel);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+        var carol = MetaverseObjectOf(ctx, "Carol");
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        Assert.That(item, Is.Not.Null, "one item, for Carol: " + DescribeItems(activity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item!.ObjectChangeType, Is.EqualTo(ObjectChangeType.ExportScopeReview));
+            Assert.That(item!.MetaverseObjectId, Is.EqualTo(carol.Id), "the item names the Metaverse Object it reviewed");
+            Assert.That(item!.ConnectedSystemObjectId, Is.Null);
+        }
+    }
+
     [Test]
     public async Task FullSync_AfterScopingCriteriaAreNarrowedWithOutcomeTrackingOff_StillRecordsAnItemForTheDisconnectedObjectAsync()
     {
@@ -504,10 +529,12 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
     /// How an item names a person's Metaverse Object. The fixture's attribute is "DisplayName" rather than the
     /// built-in "Display Name", so the object has no name of its own here and is named by its id instead.
     /// </summary>
-    private string ItemNameOf(Context ctx, string displayName) => SyncRepo.MetaverseObjects.Values
+    private string ItemNameOf(Context ctx, string displayName) => MetaverseObjectOf(ctx, displayName).NameOrId;
+
+    /// <summary>A person's Metaverse Object, by the DisplayName it holds.</summary>
+    private MetaverseObject MetaverseObjectOf(Context ctx, string displayName) => SyncRepo.MetaverseObjects.Values
         .Single(mvo => mvo.Type?.Id == ctx.MvType.Id &&
-            mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDisplayName.Id && av.StringValue == displayName))
-        .NameOrId;
+            mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDisplayName.Id && av.StringValue == displayName));
 
     private static string DescribeItems(Activity activity) => "items: [" + string.Join("; ", activity.RunProfileExecutionItems.Select(i =>
         $"{i.DisplayNameSnapshot ?? "(unnamed)"} {i.ObjectChangeType} {i.ErrorType} [{string.Join(", ", i.SyncOutcomes.Select(o => o.OutcomeType))}]")) + "]";

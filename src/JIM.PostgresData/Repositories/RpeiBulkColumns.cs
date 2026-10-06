@@ -23,7 +23,7 @@ internal static class RpeiBulkColumns
         "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
         "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
         "AttributeFlowCount", "OutcomeSummary", "PendingExportId",
-        "DeletionPolicySnapshotJson"
+        "DeletionPolicySnapshotJson", "MetaverseObjectId"
     ];
 
     /// <summary>
@@ -46,7 +46,7 @@ internal static class RpeiBulkColumns
     internal static readonly string[] ActivityRunProfileExecutionItemsUpdateExclusions =
     [
         "Id", "ActivityId", "ObjectChangeType", "NoChangeReason", "ConnectedSystemObjectId",
-        "ExternalIdSnapshot", "DisplayNameSnapshot", "ObjectTypeSnapshot", "PendingExportId"
+        "ExternalIdSnapshot", "DisplayNameSnapshot", "ObjectTypeSnapshot", "PendingExportId", "MetaverseObjectId"
     ];
 
     /// <summary>

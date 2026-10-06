@@ -61,6 +61,23 @@ public static class CausalitySummaryBuilder
         // Conditional mood throughout for a preview (#1519, D-S9): nothing here has happened yet.
         var verb = isSpeculative ? "would process" : "processed";
 
+        // An item that records a Metaverse Object (an export scope review) is about that object, not a record (#1982).
+        if (context.SubjectMetaverseObjectId != null)
+        {
+            if (string.IsNullOrWhiteSpace(context.SubjectMetaverseObjectName))
+            {
+                segments.Add(new SummarySegment.Text($" {verb} the Metaverse Object"));
+                return segments;
+            }
+
+            segments.Add(new SummarySegment.Text(!string.IsNullOrWhiteSpace(context.MvoTypeName)
+                ? $" {verb} {context.MvoTypeName} "
+                : $" {verb} "));
+            segments.Add(new SummarySegment.Entity(context.SubjectMetaverseObjectName, context.SubjectMetaverseObjectHref,
+                CausalityEntityKind.Identity));
+            return segments;
+        }
+
         if (recordLabel != null)
         {
             // Named by its object type where the builder knows it ("processed person Baseline User"), so

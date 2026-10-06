@@ -42,6 +42,28 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
+    public async Task Render_SourceRow_ForAnItemThatRecordsAMetaverseObject_ShowsTheMetaverseObjectNotARecordAsync()
+    {
+        // An export scope review item has no Connected System Object of its own, so its opening row names the
+        // Metaverse Object it is about (#1982).
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.ExportScopeReviewItem(), CausalityTestData.ExportScopeReviewContext());
+
+        var cut = RenderTimeline(context, model);
+
+        var sourceRowChips = cut.FindComponents<ObjectChip>()
+            .Where(c => c.Instance.Name == "Liam Allen" && c.Instance.Kind == ObjectChipKind.MetaverseObject)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sourceRowChips, Has.Count.EqualTo(1));
+            Assert.That(sourceRowChips.Single().Instance.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+            Assert.That(cut.FindComponents<ObjectChip>().Any(c => c.Instance.Kind == ObjectChipKind.ConnectedSystemObject
+                && c.Instance.Name == "Liam Allen" && c.Instance.Href == null), Is.False, "no record of the item's own");
+        }
+    }
+
+    [Test]
     public async Task Render_OpeningVerb_NamesTheConnectedSystemObjectAsync()
     {
         await using var context = CausalityBunitContext.Create();

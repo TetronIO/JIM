@@ -110,5 +110,13 @@ public enum ObjectChangeType
     /// <summary>
     /// MVO created directly (e.g. via data generation or admin UI) rather than via projection/sync.
     /// </summary>
-    Created
+    Created,
+
+    // Export scope review
+    /// <summary>
+    /// A Metaverse Object reviewed against the export Synchronisation Rules because a rule change flagged it
+    /// (#1925): the item records what the review provisioned, deprovisioned or queued for it. It has no Connected
+    /// System Object of its own; <c>ActivityRunProfileExecutionItem.MetaverseObjectId</c> names the object (#1971).
+    /// </summary>
+    ExportScopeReview
 }
