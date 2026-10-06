@@ -65,9 +65,20 @@ External PostgreSQL: use your existing database backup tooling against the JIM d
 
 === "Podman"
 
+    From a container of JIM's own image, which is already on the server, writing the archive to its output. Podman's container log is off for it (`--log-driver none`), or Podman would keep a copy of the keys there:
+
     ```bash
-    sudo podman volume export jim-keys-volume | gzip > jim-keys-2026-07-09.tar.gz
+    sudo podman run --rm --network none --log-driver none --user 0 --entrypoint tar -v jim-keys-volume:/keys:ro \
+      "$(awk '$1 == "image:" { print $2; exit }' /opt/jim/jim.yaml)" czf - -C /keys . > jim-keys-2026-07-09.tar.gz
     ```
+
+    Not `podman volume export`: on a [rootless](podman.md#rootless-commands) installation, Podman 4's writes an empty archive while appearing to succeed.
+
+Then check the archive holds the keys. It lists one `key-` file per key; if it lists none, the backup failed, whatever the command reported, so check the volume's name and take it again before you upgrade or rely on it:
+
+```bash
+tar tzf jim-keys-2026-07-09.tar.gz | grep key-
+```
 
 If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of using the managed volume, simply back up that directory.
 
@@ -102,21 +113,33 @@ Restore both artefacts from the **same backup set**, then start the services.
         gunzip -c jim-keys-2026-07-09.tar.gz | sudo podman volume import jim-keys-volume -
         ```
 
-2. **Restore the database** from the matching dump (bundled example):
+2. **Restore the database** from the matching dump, into an empty database. With JIM still stopped, the commands remove JIM's database, create it again, empty, and restore the dump into it (bundled example):
 
     === "Docker"
 
         ```bash
         docker cp ./jim-db-2026-07-09.dump jim.database:/tmp/jim.dump
-        docker exec jim.database pg_restore -U jim -d jim --clean --if-exists /tmp/jim.dump
+        docker exec jim.database dropdb -U jim --force jim
+        docker exec jim.database createdb -U jim jim
+        docker exec jim.database pg_restore -U jim -d jim --single-transaction /tmp/jim.dump
         docker exec jim.database rm /tmp/jim.dump
         ```
 
     === "Podman"
 
         ```bash
-        sudo podman exec -i jim-database-postgres pg_restore -U jim -d jim --clean --if-exists < jim-db-2026-07-09.dump
+        sudo podman exec jim-database-postgres dropdb -U jim --force jim
+        sudo podman exec jim-database-postgres createdb -U jim jim
+        sudo podman exec -i jim-database-postgres pg_restore -U jim -d jim --single-transaction < jim-db-2026-07-09.dump
         ```
+
+    When the restore succeeds, `pg_restore` exits with code 0 and, for the bundled database, prints nothing. If it reports an error, the database is not the one the dump holds: do not start JIM. `--single-transaction` restores all of the dump or none of it, so a failed restore leaves an empty database rather than part of one; resolve the error it names and run the commands again.
+
+    Run them only with JIM stopped, as in step 1. `--force` disconnects anything still connected to the database rather than refusing, because on Podman the database can go on holding JIM's connections after JIM has stopped; a JIM left running would be disconnected, and would reconnect to the database while it is being restored.
+
+    Restore into an empty database every time, rather than over the existing one with `pg_restore --clean`. `--clean` removes only what the dump holds, so whatever was added since the backup stays: rolling back after an upgrade, what the newer release added stops parts of the backup restoring, and leaves a mixture of the two releases that the older JIM starts on without complaint.
+
+    External PostgreSQL: restore into an empty database likewise, with your existing database tooling.
 
 3. **Start the stack** and verify:
 
@@ -163,7 +186,7 @@ There is no way to recover the original secret values without the keys; this is 
 - [ ] Encryption key set (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up at the same cadence as the database. On Podman, the volume is in Podman's storage, so a file-level backup of the server must include `/var/lib/containers`, or for a rootless installation `/home/jim/.local/share/containers`.
 - [ ] Database and key backups stored together as a labelled, matched pair.
 - [ ] Key backups protected with the same access controls as database backups.
-- [ ] Full restore (database plus keys) rehearsed in a scratch environment, with a Connected System confirmed to reconnect.
+- [ ] Full restore (database plus keys) rehearsed in a scratch environment, into an empty database with `pg_restore` reporting no errors, and a Connected System confirmed to reconnect.
 
 ## Related
 
