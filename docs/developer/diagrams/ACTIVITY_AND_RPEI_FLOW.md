@@ -152,7 +152,7 @@ flowchart TD
     Outcome -->|Delete succeeded| DeprovRPEI[RPEI: ObjectChangeType = Deprovisioned]
     Outcome -->|Deferred whole, a reference<br/>is still owed #1398| DeferRPEI[RPEI: ObjectChangeType = PendingExport<br/>No export outcome]
     Outcome -->|Unresolved reference, under<br/>Error handling| UnresolvedRPEI[RPEI: UnresolvedReference error]
-    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId or<br/>ClassMembershipRequirementsNotMet<br/>Error message + retry count]
+    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet or<br/>UniqueValueAlreadyInUse<br/>Error message + retry count]
 ```
 
 ## Activity Status Determination

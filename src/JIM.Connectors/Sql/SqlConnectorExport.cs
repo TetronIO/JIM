@@ -129,7 +129,11 @@ internal sealed class SqlConnectorExport
                 // cancellation, and that is the one thing this does not swallow.
                 failed++;
                 _logger.Error(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) could not be applied", pendingExport.Id, pendingExport.ChangeType);
-                results[index] = ConnectedSystemExportResult.Failed(ex.Message);
+                // A duplicate key is reported as a value already in use, naming the column where the database
+                // named one (Unique Value Generation, decision 9); the database's own message is kept whole.
+                results[index] = SqlUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName)
+                    ? ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName)
+                    : ConnectedSystemExportResult.Failed(ex.Message);
             }
         }
 

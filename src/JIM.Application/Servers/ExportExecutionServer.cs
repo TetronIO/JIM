@@ -1779,7 +1779,8 @@ public class ExportExecutionServer
                     Succeeded = false,
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                     ErrorCount = export.ErrorCount,
-                    ErrorType = exportResult.ErrorType
+                    ErrorType = exportResult.ErrorType,
+                    RejectedAttributeName = exportResult.RejectedAttributeName
                 }.WithCauseFrom(export));
                 continue;
             }
@@ -2623,7 +2624,8 @@ public class ExportExecutionServer
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                         ErrorCount = export.ErrorCount,
-                        ErrorType = exportResult.ErrorType
+                        ErrorType = exportResult.ErrorType,
+                        RejectedAttributeName = exportResult.RejectedAttributeName
                     }.WithCauseFrom(export));
                     continue;
                 }
@@ -3063,7 +3065,8 @@ public class ExportExecutionServer
                 Succeeded = false,
                 ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                 ErrorCount = export.ErrorCount,
-                ErrorType = exportResult.ErrorType
+                ErrorType = exportResult.ErrorType,
+                RejectedAttributeName = exportResult.RejectedAttributeName
             }.WithCauseFrom(export));
             return;
         }

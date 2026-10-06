@@ -43,6 +43,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     public bool SupportsUniquenessProbe => false;
 
+    public bool SupportsUniquenessRejectionClassification => false;
+
     // A delimited file's column names are whatever the file happens to carry, so no standard vocabulary is
     // claimed; the Attribute Flow editor falls back to matching names against every standard.
     public AttributeStandard SchemaStandard => AttributeStandard.NotSet;

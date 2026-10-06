@@ -109,6 +109,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal string? FailWhenCommandTextContains { get; set; }
 
     /// <summary>
+    /// The message and SQLSTATE the failure <see cref="FailWhenCommandTextContains"/> raises, when set, so a
+    /// test can stand in for a particular database refusal (a duplicate key, say) rather than a generic one.
+    /// </summary>
+    internal (string Message, string SqlState)? FailureDetail { get; set; }
+
+    /// <summary>
     /// When set, any command whose text contains this reports that it affected no row, without raising.
     /// That is how a statement the database accepted but applied to nothing is expressed here: a row an
     /// UPDATE or a DELETE keys on that is no longer there, or an INSERT a trigger silently discards.
@@ -866,7 +872,9 @@ internal sealed class FakeDbCommand : DbCommand
         _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction, columnTypes));
 
         if (_provider.FailWhenCommandTextContains is { } failureMarker && CommandText.Contains(failureMarker, StringComparison.Ordinal))
-            throw new FakeDbException($"The stand-in database refused: {CommandText}");
+            throw _provider.FailureDetail is { } detail
+                ? new FakeDbException(detail.Message, detail.SqlState)
+                : new FakeDbException($"The stand-in database refused: {CommandText}");
 
         if (_provider.FailAfterCommandCount is { } limit && _provider.ExecutedCommandTexts.Count > limit)
             throw new FakeDbException("The connection to the stand-in database was lost.");
@@ -1616,7 +1624,12 @@ internal sealed class CapturedLogSink : ILogEventSink
 /// </summary>
 internal sealed class FakeDbException : DbException
 {
-    internal FakeDbException(string message) : base(message)
+    private readonly string? _sqlState;
+
+    internal FakeDbException(string message, string? sqlState = null) : base(message)
     {
+        _sqlState = sqlState;
     }
+
+    public override string? SqlState => _sqlState;
 }

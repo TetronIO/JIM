@@ -243,6 +243,13 @@ public class ProcessedExportItem
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
 
     /// <summary>
+    /// The attribute the Connected System named when it rejected the export because a value is already in use
+    /// (<see cref="ConnectedSystemExportResult.RejectedAttributeName"/>); null when it named none or the export did
+    /// not fail that way.
+    /// </summary>
+    public string? RejectedAttributeName { get; set; }
+
+    /// <summary>
     /// The Pending Export this item reports on, captured before it is deleted. Set for every item raised by
     /// execution so a deferred item (one that wrote nothing) can still be tied to its export, and identifies
     /// the export cycle on the causal edge recording why the export happened (#1223).

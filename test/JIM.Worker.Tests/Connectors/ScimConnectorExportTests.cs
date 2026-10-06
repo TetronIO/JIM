@@ -113,6 +113,48 @@ public class ScimConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_CreateRejectedAsUniqueness_IsAValueAlreadyInUseThatNamesNoAttributeTheProviderDidNotAsync()
+    {
+        // The default detail is RFC 7644's own description of uniqueness, which names no attribute: classified,
+        // but left for Collision Remediation's other attribution steps (decision 9) rather than guessed.
+        var provider = new MockScimProvider();
+        provider.Options.RejectsDuplicateUserName = true;
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Create(user, Change("userName", user, "alice")), Create(user, Change("userName", user, "ALICE")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False);
+            Assert.That(results[1].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.UniqueValueAlreadyInUse));
+            Assert.That(results[1].RejectedAttributeName, Is.Null);
+            Assert.That(results[1].ErrorMessage, Does.Contain("already in use"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_CreateRejectedAsUniquenessNamingTheAttribute_CarriesTheAttributeAsync()
+    {
+        var provider = new MockScimProvider();
+        provider.Options.RejectsDuplicateUserName = true;
+        provider.Options.UniquenessDetail = "The attribute 'userName' must be unique; 'alice' is already in use.";
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Create(user, Change("userName", user, "alice")), Create(user, Change("userName", user, "alice")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[1].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.UniqueValueAlreadyInUse));
+            Assert.That(results[1].RejectedAttributeName, Is.EqualTo("userName"));
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_AttributeTheProviderSchemaDoesNotHave_FailsTheObjectRatherThanExportingPartOfItAsync()
     {
         // Exporting the rest would record the change as applied when part of it never left JIM.

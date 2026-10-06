@@ -130,6 +130,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     public bool SupportsUniquenessProbe => true;
 
+    public bool SupportsUniquenessRejectionClassification => true;
+
     // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
     // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
     public AttributeStandard SchemaStandard => AttributeStandard.Ldap;

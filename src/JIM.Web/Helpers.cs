@@ -368,6 +368,9 @@ public static class Helpers
             // "Refused" rather than "Failed": JIM declined to send the change, naming the configuration to
             // fix, which is a different message from an export the Connected System rejected (#492).
             [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = "Export Refused",
+            // The Connected System refused the export because another object there holds the value; the heading
+            // names the conflict, since that is what an administrator has to resolve.
+            [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened

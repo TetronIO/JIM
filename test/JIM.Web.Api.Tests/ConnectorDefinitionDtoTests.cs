@@ -46,6 +46,7 @@ public class ConnectorDefinitionDtoTests
             SupportsPasswordSet = false,
             SupportsPasswordPolicyDiscovery = false,
             SupportsUniquenessProbe = true,
+            SupportsUniquenessRejectionClassification = true,
             SchemaStandard = AttributeStandard.Scim,
             Settings =
             [
@@ -104,6 +105,7 @@ public class ConnectorDefinitionDtoTests
             Assert.That(dto.SupportsPasswordSet, Is.False);
             Assert.That(dto.SupportsPasswordPolicyDiscovery, Is.False);
             Assert.That(dto.SupportsUniquenessProbe, Is.True);
+            Assert.That(dto.SupportsUniquenessRejectionClassification, Is.True);
             Assert.That(dto.SchemaStandard, Is.EqualTo("Scim"));
         }
     }

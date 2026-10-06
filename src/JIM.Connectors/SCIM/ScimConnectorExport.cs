@@ -128,7 +128,7 @@ internal sealed class ScimConnectorExport
             _logger.Warning(ex, "SCIM export: the service provider rejected a {Method} of {Path}.",
                 operation.Method.Method, LogSanitiser.Sanitise(operation.Path));
 
-            return ConnectedSystemExportResult.Failed(ex.Message, ScimExportErrorClassifier.Classify((int?)ex.StatusCode, ex.ScimType));
+            return ScimExportErrorClassifier.Failure(ex.Message, (int?)ex.StatusCode, ex.Error);
         }
     }
 
@@ -192,7 +192,7 @@ internal sealed class ScimConnectorExport
             // Only the read that precedes a whole-resource replace can fail here; nothing has been
             // written, so this is a rejection of the read rather than an unknown outcome.
             _logger.Warning(ex, "SCIM export: the service provider would not return a {ObjectType} JIM needed to read before writing it back.", LogSanitiser.Sanitise(objectTypeName));
-            return ScimPreparedExport.From(ConnectedSystemExportResult.Failed(ex.Message, ScimExportErrorClassifier.Classify((int?)ex.StatusCode, ex.ScimType)));
+            return ScimPreparedExport.From(ScimExportErrorClassifier.Failure(ex.Message, (int?)ex.StatusCode, ex.Error));
         }
     }
 

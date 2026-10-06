@@ -363,14 +363,7 @@ public class SyncExportTaskProcessor
             // Set error information if the export failed
             if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
-                executionItem.ErrorType = exportItem.ErrorType switch
-                {
-                    ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
-                    // A refusal JIM made deliberately (#492), naming configuration an administrator has to
-                    // act on; the UnhandledError bucket would read as a JIM defect and fail the Activity.
-                    ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet => ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet,
-                    _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
-                };
+                executionItem.ErrorType = ToExecutionItemErrorType(exportItem.ErrorType);
                 executionItem.ErrorMessage = exportItem.ErrorCount > 1
                     ? $"Export failed after {exportItem.ErrorCount} attempts: {exportItem.ErrorMessage}"
                     : exportItem.ErrorCount == 1
@@ -581,4 +574,21 @@ public class SyncExportTaskProcessor
         // Always use preview mode for this method
         return await _syncServer.ExecuteExportsAsync(_connectedSystem, _connector, SyncRunMode.PreviewOnly);
     }
+
+    /// <summary>
+    /// The error type recorded on an export's Run Profile Execution Item for the way its Connector classified the
+    /// failure. Anything unclassified is an Unhandled Error, which fails the Activity.
+    /// </summary>
+    internal static ActivityRunProfileExecutionItemErrorType ToExecutionItemErrorType(ConnectedSystemExportErrorType? exportErrorType) =>
+        exportErrorType switch
+        {
+            ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
+            // A refusal JIM made deliberately (#492), naming configuration an administrator has to
+            // act on; the UnhandledError bucket would read as a JIM defect and fail the Activity.
+            ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet => ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet,
+            // The Connected System holds the value already: a data conflict for an administrator (or, release 4,
+            // Collision Remediation) to resolve, which the Connector told apart from other failures.
+            ConnectedSystemExportErrorType.UniqueValueAlreadyInUse => ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse,
+            _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
+        };
 }
