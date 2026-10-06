@@ -108,7 +108,7 @@ Restore both artefacts from the **same backup set**, then start the services.
 
         ```bash
         docker cp ./jim-db-2026-07-09.dump jim.database:/tmp/jim.dump
-        docker exec jim.database dropdb -U jim jim
+        docker exec jim.database dropdb -U jim --force jim
         docker exec jim.database createdb -U jim jim
         docker exec jim.database pg_restore -U jim -d jim --single-transaction /tmp/jim.dump
         docker exec jim.database rm /tmp/jim.dump
@@ -117,14 +117,14 @@ Restore both artefacts from the **same backup set**, then start the services.
     === "Podman"
 
         ```bash
-        sudo podman exec jim-database-postgres dropdb -U jim jim
+        sudo podman exec jim-database-postgres dropdb -U jim --force jim
         sudo podman exec jim-database-postgres createdb -U jim jim
         sudo podman exec -i jim-database-postgres pg_restore -U jim -d jim --single-transaction < jim-db-2026-07-09.dump
         ```
 
     When the restore succeeds, `pg_restore` exits with code 0 and, for the bundled database, prints nothing. If it reports an error, the database is not the one the dump holds: do not start JIM. `--single-transaction` restores all of the dump or none of it, so a failed restore leaves an empty database rather than part of one; resolve the error it names and run the commands again.
 
-    If `dropdb` reports that the database is being accessed by other users, JIM, or something else, is still connected to it, and nothing has been removed. Stop JIM as in step 1, close any other connection, and run the commands again.
+    Run them only with JIM stopped, as in step 1. `--force` disconnects anything still connected to the database rather than refusing, because on Podman the database can go on holding JIM's connections after JIM has stopped; a JIM left running would be disconnected, and would reconnect to the database while it is being restored.
 
     Restore into an empty database every time, rather than over the existing one with `pg_restore --clean`. `--clean` removes only what the dump holds, so whatever was added since the backup stays: rolling back after an upgrade, what the newer release added stops parts of the backup restoring, and leaves a mixture of the two releases that the older JIM starts on without complaint.
 
