@@ -15,8 +15,9 @@
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
       5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host.
-      6. Docker: backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as
-         written, and checks they fetched no image, which an air-gapped host could not, and put the key volume
+      6. Backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as written
+         (rootless, with jim-podman as Running on Podman says), checks the archive with the page's own check,
+         and checks the commands fetched no image, which an air-gapped host could not, and put the key volume
          back as it was; then starts JIM again on the restored keys.
       7. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
       8. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
@@ -152,6 +153,21 @@ function Invoke-Runtime {
     finally {
         Pop-Location
     }
+}
+
+# Runs a command as the documentation gives it, as an administrator does: as root, in a shell of root's own, so
+# with root's environment rather than this one, whose XDG folders would point the jim account's Podman at the
+# runner's. -e, so that a step that fails stops it.
+function Invoke-Documented {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [switch]$AllowFailure
+    )
+    # By its path: run as root, with no sudo to find it, PowerShell would take the first env on PATH, executable or not.
+    Invoke-Native -AllowFailure:$AllowFailure -Command ($elevate + @('/usr/bin/env', '-i',
+        'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'HOME=/root', 'bash', '-ec', $Command))
 }
 
 function Invoke-Systemctl {
@@ -386,53 +402,87 @@ try {
     }
     Write-Step "PostgreSQL runs with the memory the installer sized: $($sized -join ', ')"
 
-    # 6. Docker: the key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped
-    # as the page and the upgrade guide have it, and fetch no image. Until #1949 they ran an image JIM does not ship,
-    # which an air-gapped host cannot fetch. A marker in the key volume makes the round trip visible whether or not
-    # JIM has written its keys yet, and a file added after the backup must not survive the restore.
-    if ($Runtime -eq 'docker') {
-        $page = Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration' 'backup-recovery.md'
-        $getCommand = Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1'
-        $backup = & $getCommand -Path $page -Heading '2. Back up the encryption keys' -Tab 'Docker'
-        $restore = & $getCommand -Path $page -Heading 'Restoring' -Tab 'Docker'
-        $keys = Invoke-Runtime @('volume', 'inspect', '-f', '{{.Mountpoint}}', 'jim-keys-volume')
-        $keyVolumeState = {
-            Invoke-Native ($elevate + @('sh', '-c',
-                'cd "$1" && find . -printf "%U:%G %m %p\n" | sort && find . -type f -exec sha256sum {} + | sort', 'sh', $keys))
-        }
-        $images = { Invoke-Runtime @('image', 'ls', '--no-trunc', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}') }
-
-        Invoke-Runtime @('exec', $containers.web, 'sh', '-c', "echo $marker > /data/keys/ci-boot-marker") | Out-Null
-        Invoke-Compose @('stop', $containers.web, $containers.worker, $containers.scheduler)
-        $keysBefore = & $keyVolumeState
-        $imagesBefore = (& $images) -split "`n"
-        # In a folder of its own, outside the uploaded output: the archive holds the keys.
-        $backupFolder = Invoke-Native @('mktemp', '-d')
-        Push-Location $backupFolder
-        try {
-            Invoke-Native ($elevate + @('bash', '-ec', $backup)) | Out-Null
-            Invoke-Native ($elevate + @('sh', '-c', 'echo changed > "$1/ci-boot-marker" && echo stray > "$1/ci-stray"', 'sh', $keys)) |
-                Out-Null
-            Invoke-Native ($elevate + @('bash', '-ec', $restore)) | Out-Null
-        }
-        finally {
-            Pop-Location
-            Invoke-Native -AllowFailure ($elevate + @('rm', '-rf', $backupFolder)) | Out-Null
-        }
-
-        $fetched = @((& $images) -split "`n" | Where-Object { $_ -notin $imagesBefore })
-        if ($fetched) {
-            throw "The documented key backup or restore fetched an image, which an air-gapped host cannot: $($fetched -join ', ')"
-        }
-        $keysAfter = & $keyVolumeState
-        if ($keysAfter -cne $keysBefore) {
-            throw "The documented key restore did not put the key volume back as the backup took it.`nBefore:`n$keysBefore`nAfter:`n$keysAfter"
-        }
-        Invoke-Compose @('start', $containers.web, $containers.worker, $containers.scheduler)
-        Wait-Until -Description 'ready over HTTPS on the restored keys' -Condition { Test-ReadyOverHttps }
-        Wait-AllHealthy
-        Write-Step 'the documented key backup and restore put the key volume back, fetching no image'
+    # 6. The key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped as the page
+    # and the upgrade guide have it, and fetch no image. Until #1949 the Docker ones ran an image JIM does not ship,
+    # which an air-gapped host cannot fetch; until #1954 the Podman backup wrote an empty archive rootless, and said
+    # nothing. A marker in the key volume makes the round trip visible, and a file added after the backup must not
+    # survive the restore.
+    $docs = Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration'
+    $getCommand = Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1'
+    $page = Join-Path $docs 'backup-recovery.md'
+    $tab = if ($Runtime -eq 'docker') { 'Docker' } else { 'Podman' }
+    $backup = & $getCommand -Path $page -Heading '2. Back up the encryption keys' -Tab $tab
+    $check = & $getCommand -Path $page -Heading '2. Back up the encryption keys'
+    $restore = & $getCommand -Path $page -Heading 'Restoring' -Tab $tab
+    if ($Runtime -eq 'podman') {
+        # The page's installation folder is /opt/jim; this leg's is its own.
+        $backup = $backup.Replace('/opt/jim/', "$installPath/")
+        $restore = $restore.Replace('/opt/jim/', "$installPath/")
     }
+    if ($Rootless) {
+        # As Running on Podman says: jim-podman wherever the page runs sudo podman, defined as that page defines it.
+        $rootlessCommands = & $getCommand -Path (Join-Path $docs 'podman.md') -Heading 'Rootless commands'
+        $jimPodman = @($rootlessCommands -split "`n" | Where-Object { $_ -match '^jim-podman\(\)' })
+        if ($jimPodman.Count -ne 1) {
+            throw "Running on Podman's Rootless commands no longer define jim-podman on a line of its own:`n$rootlessCommands"
+        }
+        $backup = $jimPodman[0] + "`n" + ($backup -replace '\bsudo podman\b', 'jim-podman')
+        $restore = $jimPodman[0] + "`n" + ($restore -replace '\bsudo podman\b', 'jim-podman')
+    }
+    $keys = Invoke-Runtime @('volume', 'inspect', '-f', '{{.Mountpoint}}', 'jim-keys-volume')
+    $keyVolumeState = {
+        Invoke-Native ($elevate + @('sh', '-c',
+            'cd "$1" && find . -printf "%U:%G %m %p\n" | sort && find . -type f -exec sha256sum {} + | sort', 'sh', $keys))
+    }
+    $images = { Invoke-Runtime @('image', 'ls', '--no-trunc', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}') }
+
+    Invoke-Runtime @('exec', $containers.web, 'sh', '-c', "echo $marker > /data/keys/ci-boot-marker") | Out-Null
+    if ($Runtime -eq 'docker') {
+        Invoke-Compose @('stop', $containers.web, $containers.worker, $containers.scheduler)
+    }
+    else {
+        Invoke-Systemctl @('stop', 'jim.service')
+    }
+    $keysBefore = & $keyVolumeState
+    if ($keysBefore -notmatch '\./key-') {
+        throw "JIM has written no encryption key for the documented backup to take:`n$keysBefore"
+    }
+    $imagesBefore = (& $images) -split "`n"
+    # In a folder of its own, outside the uploaded output: the archive holds the keys.
+    $backupFolder = Invoke-Native @('mktemp', '-d')
+    Push-Location $backupFolder
+    try {
+        Invoke-Documented $backup | Out-Null
+        $listed = Invoke-Documented -AllowFailure $check
+        if ($LASTEXITCODE -ne 0) {
+            throw "The documented key backup wrote an archive without the keys in it, which the page's own check found:`n$backup"
+        }
+        Invoke-Native ($elevate + @('sh', '-c', 'echo changed > "$1/ci-boot-marker" && echo stray > "$1/ci-stray"', 'sh', $keys)) |
+            Out-Null
+        Invoke-Documented $restore | Out-Null
+    }
+    finally {
+        Pop-Location
+        Invoke-Native -AllowFailure ($elevate + @('rm', '-rf', $backupFolder)) | Out-Null
+    }
+
+    $fetched = @((& $images) -split "`n" | Where-Object { $_ -notin $imagesBefore })
+    if ($fetched) {
+        throw "The documented key backup or restore fetched an image, which an air-gapped host cannot: $($fetched -join ', ')"
+    }
+    $keysAfter = & $keyVolumeState
+    if ($keysAfter -cne $keysBefore) {
+        throw "The documented key restore did not put the key volume back as the backup took it.`nBefore:`n$keysBefore`nAfter:`n$keysAfter"
+    }
+    if ($Runtime -eq 'docker') {
+        Invoke-Compose @('start', $containers.web, $containers.worker, $containers.scheduler)
+    }
+    else {
+        Invoke-Systemctl @('start', 'jim.service')
+    }
+    Wait-Until -Description 'ready over HTTPS on the restored keys' -Condition { Test-ReadyOverHttps }
+    Wait-AllHealthy
+    Write-Step "the documented key backup ($(@($listed -split "`n").Count) key files) and restore put the key volume back, fetching no image"
 
     Assert-NoCrash -Stage 'the leg'
     Save-KernelLog
@@ -442,8 +492,7 @@ try {
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
-        $keyBackup = if ($Runtime -eq 'docker') { ', the documented key backup and restore worked offline' } else { '' }
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, none restarted and none denied by the kernel, data kept through a stop and start, PostgreSQL sized to the host$keyBackup" |
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, none restarted and none denied by the kernel, data kept through a stop and start, PostgreSQL sized to the host, the documented key backup and restore worked offline" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }
