@@ -65,6 +65,8 @@ On Docker, the installer upgrades an installation it made, connected or air-gapp
     sudo ./setup.sh --upgrade
     ```
 
+    Check the bundle when you download it, before carrying it to the server: see [Checking the Download](deployment.md#checking-the-download).
+
 It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 
 1. Stops if the new release is not newer than the one JIM runs, and asks you to confirm the database and encryption keys are backed up (set `JIM_SETUP_BACKUP_CONFIRMED=true` to answer in advance; a "no" cancels the upgrade).
@@ -112,9 +114,13 @@ The same upgrade by hand. On Podman, see [Upgrading on Podman](#upgrading-on-pod
 
 The same upgrade as [the installer's](#with-the-installer), by hand. The procedure mirrors a first-time air-gapped deployment, minus the initial configuration steps.
 
-1. **Transfer and verify the new release bundle** via your approved process:
+1. **Check, transfer and verify the new release bundle** via your approved process. Check the download first, where you downloaded it with its checksum file (see [Checking the Download](deployment.md#checking-the-download)), then extract and verify it on the JIM server:
 
     ```bash
+    # Where you downloaded it, before transferring it
+    sha256sum -c jim-release-0.14.0.tar.gz.sha256
+
+    # On the JIM server
     tar -xzf jim-release-0.14.0.tar.gz
     cd jim-release-0.14.0
     sha256sum -c checksums.sha256

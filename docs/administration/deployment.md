@@ -193,6 +193,22 @@ Then carry on at [After Installing](#after-installing).
 
 Each [release](https://github.com/TetronIO/JIM/releases) includes a bundle, `jim-release-X.Y.Z.tar.gz`, holding everything an installation needs: the images, the compose files and the installer. Nothing is downloaded while installing from it.
 
+### Checking the Download
+
+Download `jim-release-X.Y.Z.tar.gz.sha256` from the release too, and check the bundle against it before carrying it into the air-gapped site. In the folder holding both:
+
+```bash
+sha256sum -c jim-release-X.Y.Z.tar.gz.sha256   # Should print OK
+```
+
+On Windows, in PowerShell, this should print `True`:
+
+```powershell
+(Get-FileHash jim-release-X.Y.Z.tar.gz -Algorithm SHA256).Hash -eq (Get-Content jim-release-X.Y.Z.tar.gz.sha256).Split(' ')[0]
+```
+
+Once extracted, `checksums.sha256` inside the bundle checks each file in it, as below.
+
 ### Bundle Contents
 
 ```text
@@ -221,13 +237,13 @@ jim-release-X.Y.Z/
 |   +-- README.md
 |   +-- CHANGELOG.md
 |   +-- INSTALL.md            # These instructions, for reading offline
-+-- checksums.sha256          # SHA256 checksums for verification
++-- checksums.sha256          # The checksum of every file in the bundle, by its path within it
 +-- README.txt                # Quick start guide
 ```
 
 ### With the Installer (Recommended)
 
-Transfer the bundle to the JIM server by your organisation's approved method, then:
+[Check the download](#checking-the-download), transfer the bundle to the JIM server by your organisation's approved method, then:
 
 ```bash
 tar -xzf jim-release-X.Y.Z.tar.gz
@@ -791,6 +807,7 @@ Use this checklist before going live:
 
 For air-gapped deployments, also verify:
 
+- [ ] The bundle matched its checksums: `jim-release-X.Y.Z.tar.gz.sha256` where it was downloaded, and `checksums.sha256` in the extracted bundle (see [Checking the Download](#checking-the-download))
 - [ ] All images loaded successfully (`docker images | grep jim`, or on Podman `podman images` as the account that runs JIM)
 - [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
