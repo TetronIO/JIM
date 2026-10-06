@@ -70,6 +70,28 @@ BeforeAll {
         docker run --rm -v keys:/keys image sh -c "rm -rf /keys/*"
         ```
 
+2. **Restore the database** from the dump:
+
+    === "Podman"
+
+        ```bash
+        podman exec database restore
+        ```
+
+    === "Docker"
+
+        ```bash
+        docker exec database restore
+        ```
+
+3. **Start the stack**:
+
+    === "Docker"
+
+        ```bash
+        docker compose up
+        ```
+
 ### Only Podman here
 
 === "Podman"
@@ -101,6 +123,17 @@ Describe 'Get-DocumentedCommand' {
         $command | Should -BeExactly 'docker run --rm -v keys:/keys image sh -c "rm -rf /keys/*"'
     }
 
+    It 'returns the block under the named tab of the named step, past an earlier step''s' {
+        $command = & $script:ScriptPath -Path $script:Page -Heading 'Restoring' -Step 'Restore the database' -Tab 'Docker'
+
+        $command | Should -BeExactly 'docker exec database restore'
+    }
+
+    It 'stops when the section has no such step, rather than taking another step''s block' {
+        { & $script:ScriptPath -Path $script:Page -Heading 'Restoring' -Step 'Restore the logs' -Tab 'Docker' } |
+            Should -Throw '*Restoring*Restore the logs*Docker*'
+    }
+
     It 'stops at the next heading of the same level, rather than taking a later section''s block' {
         { & $script:ScriptPath -Path $script:Page -Heading 'Only Podman here' -Tab 'Docker' } |
             Should -Throw '*Only Podman here*Docker*'
@@ -119,5 +152,18 @@ Describe 'Get-DocumentedCommand' {
 
         $backup | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
         $restore | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
+    }
+
+    It 'finds the database backup and restore in Backup & Disaster Recovery, for Docker and Podman, which the deployment-boot check runs' {
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'backup-recovery.md'
+
+        foreach ($tab in 'Docker', 'Podman') {
+            $backup = & $script:ScriptPath -Path $page -Heading '1. Back up the database' -Tab $tab
+            $restore = & $script:ScriptPath -Path $page -Heading 'Restoring' -Step 'Restore the database' -Tab $tab
+
+            $backup | Should -BeLike '*pg_dump*jim-db-*.dump*'
+            $restore | Should -BeLike '*jim-db-*.dump*'
+            $restore | Should -BeLike '*pg_restore*'
+        }
     }
 }

@@ -18,8 +18,12 @@
       6. Docker: backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as
          written, and checks they fetched no image, which an air-gapped host could not, and put the key volume
          back as it was; then starts JIM again on the restored keys.
-      7. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
-      8. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
+      7. Docker and rootful Podman: rolls the database back as the Upgrading guide does, with the backup and
+         restore commands in Backup & Disaster Recovery, as written, over the changes a newer release makes, and
+         checks the restore succeeded and put back exactly the database the backup took; then starts JIM again
+         on the restored database.
+      8. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
+      9. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
 
     On failure it saves each container's log to the output folder before rethrowing.
 
@@ -389,13 +393,82 @@ try {
         Write-Step 'the documented key backup and restore put the key volume back, fetching no image'
     }
 
-    # 7. What each container runs, for the parity comparison.
+    # 7. Rolling back: the database backup and restore that Backup & Disaster Recovery gives, run as written with JIM
+    # stopped, put back exactly the database the backup took, after a newer release has changed it. Until #1951 the
+    # restore went over the existing database (pg_restore --clean), which could not take away a table the newer
+    # release had added referring to one of JIM's, as RetiredGeneratedValues does MetaverseAttributes: the tables it
+    # refers to never loaded, pg_restore failed, and the database was left a mixture of the two releases, which the
+    # older JIM started on without complaint. The page gives the commands for a rootful installation, and a rootless
+    # one runs the same commands through the jim account (Rootless commands, in the Podman page), so the rootless
+    # leg does not repeat them.
+    $rolledBack = -not $Rootless
+    if ($rolledBack) {
+        $page = Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration' 'backup-recovery.md'
+        $getCommand = Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1'
+        $tab = if ($Runtime -eq 'docker') { 'Docker' } else { 'Podman' }
+        $backup = & $getCommand -Path $page -Heading '1. Back up the database' -Tab $tab
+        $restore = & $getCommand -Path $page -Heading 'Restoring' -Step 'Restore the database' -Tab $tab
+        # Everything the database holds, as text that is the same for the same database: a fixed key for psql's
+        # \restrict line, which is otherwise random, and no planner statistics, which autovacuum can change.
+        $databaseState = {
+            Invoke-Runtime @('exec', $containers.database, 'pg_dump', '-U', 'jim', '-d', 'jim', '--no-statistics', '--restrict-key=ci')
+        }
+
+        if ($Runtime -eq 'docker') {
+            Invoke-Compose @('stop', $containers.web, $containers.worker, $containers.scheduler)
+        }
+        else {
+            Invoke-Systemctl @('stop', 'jim.service')
+        }
+        # In a folder of its own, outside the uploaded output: the dump holds the encrypted secrets.
+        $backupFolder = Invoke-Native @('mktemp', '-d')
+        Push-Location $backupFolder
+        try {
+            Invoke-Native ($elevate + @('bash', '-ec', $backup)) | Out-Null
+            $databaseBefore = & $databaseState
+            # What a newer release does to the database: a table of its own, referring to one of JIM's, and changes
+            # to what the backup holds.
+            Invoke-Sql (@(
+                    'CREATE TABLE ci_newer_release ("Id" integer PRIMARY KEY,'
+                    '  "MetaverseAttributeId" integer NOT NULL REFERENCES "MetaverseAttributes" ("Id"));'
+                    'INSERT INTO ci_newer_release SELECT 1, min("Id") FROM "MetaverseAttributes";'
+                    "UPDATE ci_boot_marker SET token = 'written after the backup';"
+                ) -join "`n") | Out-Null
+            Invoke-Native ($elevate + @('bash', '-ec', $restore)) | Out-Null
+        }
+        finally {
+            Pop-Location
+            Invoke-Native -AllowFailure ($elevate + @('rm', '-rf', $backupFolder)) | Out-Null
+        }
+
+        $databaseAfter = & $databaseState
+        if ($databaseAfter -cne $databaseBefore) {
+            $differences = Compare-Object ($databaseBefore -split "`n") ($databaseAfter -split "`n") |
+                Select-Object -First 20 | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
+            throw "The documented database restore did not put back the database the backup took. First differences (<= backed up, => restored):`n$($differences -join "`n")"
+        }
+        if ($Runtime -eq 'docker') {
+            Invoke-Compose @('start', $containers.web, $containers.worker, $containers.scheduler)
+        }
+        else {
+            Invoke-Systemctl @('start', 'jim.service')
+        }
+        Wait-Until -Description 'ready over HTTPS on the restored database' -Condition { Test-ReadyOverHttps }
+        Wait-AllHealthy
+        if ((Invoke-Sql 'SELECT token FROM ci_boot_marker;') -ne $marker) {
+            throw 'JIM does not run on the restored database: the marker the backup holds is not there'
+        }
+        Write-Step 'the documented database restore put back the database the backup took, over a newer release''s changes'
+    }
+
+    # 8. What each container runs, for the parity comparison.
     Invoke-Runtime (@('inspect') + @($containers.Values)) | Set-Content (Join-Path $OutputPath "$leg.inspect.json")
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
         $keyBackup = if ($Runtime -eq 'docker') { ', the documented key backup and restore worked offline' } else { '' }
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host$keyBackup" |
+        $rollBack = if ($rolledBack) { ', the documented database restore rolled back a newer release''s changes' } else { '' }
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host$keyBackup$rollBack" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }
@@ -408,7 +481,7 @@ catch {
     throw
 }
 finally {
-    # 8. Free the port for the next leg.
+    # 9. Free the port for the next leg.
     if (-not $KeepRunning -and (Test-Path $caPath)) {
         Write-Step 'stopping JIM'
         try {
