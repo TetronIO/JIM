@@ -6039,3 +6039,14 @@ html[lang] .jim-password-timeline.mud-timeline {
     color: var(--mud-palette-text-disabled);
     cursor: default;
 }
+
+/* "Checked for availability in" (generated Attribute Flow form, #242): an excluded Connected System's row steps back,
+   but its Include switch keeps full strength, since switching it back on is the one thing to do with that row. */
+.jim-availability-row-excluded td:not(.jim-availability-include) {
+    opacity: 0.55;
+}
+
+.jim-availability-table .jim-availability-include {
+    width: 1%;
+    white-space: nowrap;
+}
