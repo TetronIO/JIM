@@ -63,6 +63,9 @@
 #     JIM_DB_NAME           - Database name (default: jim)
 #     JIM_DB_USERNAME       - Database username (default: jim)
 #     JIM_DB_PASSWORD       - Database password (auto-generated if bundled)
+#     JIM_DB_SHARED_BUFFERS, JIM_DB_EFFECTIVE_CACHE_SIZE, JIM_DB_MAINTENANCE_WORK_MEM, JIM_DB_WORK_MEM,
+#     JIM_DB_SHM_SIZE       - The bundled database's memory settings (default: sized to this host's memory;
+#                             JIM_DB_SHM_SIZE is Docker only)
 #     JIM_SETUP_TLS_MODE    - "generate" (create a CA and server certificate) or "provided" (default: prompt)
 #     JIM_SETUP_TLS_NAMES   - Comma-separated DNS names and IP addresses users reach JIM at, for a generated
 #                             certificate (default: prompt, suggesting this host's name and address)
@@ -104,6 +107,9 @@ TLS_CA_DAYS=3650
 
 # The standard HTTPS port, so that users and identity provider registrations need no port in JIM's address.
 DEFAULT_WEB_PORT=443
+
+# How long the installer waits for JIM to be ready after starting it.
+READY_TIMEOUT_SECONDS=600
 
 # Podman: the oldest version with Quadlet, which runs JIM's pods under systemd, and the files a release publishes
 # for it (the pod and settings files, then the Quadlet units).
@@ -1229,6 +1235,82 @@ podman_start_commands() {
     fi
 }
 
+# --- Size the bundled database ---
+# The bundled PostgreSQL's memory settings, which it reads from the settings file. JIM_DB_SHM_SIZE is the database
+# container's /dev/shm on Docker; Podman cannot size a pod's, and its database pod does without (jim-database.yaml).
+DATABASE_MEMORY_SETTINGS=(JIM_DB_SHARED_BUFFERS JIM_DB_EFFECTIVE_CACHE_SIZE JIM_DB_MAINTENANCE_WORK_MEM JIM_DB_WORK_MEM JIM_DB_SHM_SIZE)
+
+# This host's memory in MB, as the kernel reports it; empty when it cannot be read.
+host_memory_mb() {
+    awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo 2>/dev/null || true
+}
+
+# Whether the installation's settings file sets a setting, other than commented out or empty.
+config_sets() {
+    local key="$1"
+    if [ "$RUNTIME" = "podman" ]; then
+        # A value, quoted as update_config_yaml writes it, or bare.
+        grep -Eq "^  ${key}: *(\"[^\"]|[^ \"#])" "$CONFIG_FILE" 2>/dev/null
+    else
+        grep -q "^${key}=." "$CONFIG_FILE" 2>/dev/null
+    fi
+}
+
+# Sizes the bundled PostgreSQL to this host's memory, and writes its settings to the settings file. Until #1943 the
+# compose and pod files fixed them for a 64 GB host, so the database could not start on one with less than about
+# 10 GB. A setting given in the environment is used as given, for automation; with "keep", as an upgrade passes,
+# a setting the installation already has is left alone. The Configuration Reference documents the rules:
+#   shared_buffers        a quarter of memory, at most 8 GB: JIM's own services share the host, and the largest
+#                         deployments JIM has been validated on ran with 8 GB
+#   effective_cache_size  half of memory: the page cache PostgreSQL can expect, beside JIM's services
+#   maintenance_work_mem  a sixteenth of memory, at most 2 GB
+#   work_mem              memory less shared_buffers, over three for each of the 200 connections allowed, and at
+#                         least PostgreSQL's own default, 4 MB
+#   shm_size (Docker)     shared_buffers and a quarter more
+size_database() {
+    local mode="${1:-}"
+    local memory
+    memory=$(host_memory_mb)
+    if ! [[ "$memory" =~ ^[0-9]+$ ]] || [ "$memory" -eq 0 ]; then
+        warn "Could not read this host's memory, so the bundled PostgreSQL keeps its default settings, which suit a 4 GB host. To size it, see ${DOCS_BASE}/administration/configuration/#bundled-postgresql-memory"
+        return
+    fi
+
+    local shared=$((memory / 4))
+    [ "$shared" -le 8192 ] || shared=8192
+    local maintenance=$((memory / 16))
+    [ "$maintenance" -le 2048 ] || maintenance=2048
+    local work=$(((memory - shared) / 600))
+    [ "$work" -ge 4 ] || work=4
+    local -A sized=(
+        [JIM_DB_SHARED_BUFFERS]="${shared}MB"
+        [JIM_DB_EFFECTIVE_CACHE_SIZE]="$((memory / 2))MB"
+        [JIM_DB_MAINTENANCE_WORK_MEM]="${maintenance}MB"
+        [JIM_DB_WORK_MEM]="${work}MB"
+        [JIM_DB_SHM_SIZE]="$((shared + shared / 4))mb"
+    )
+
+    local key value name
+    local -a chosen=()
+    for key in "${DATABASE_MEMORY_SETTINGS[@]}"; do
+        if [ "$RUNTIME" = "podman" ] && [ "$key" = "JIM_DB_SHM_SIZE" ]; then
+            continue
+        fi
+        if [ "$mode" = "keep" ] && config_sets "$key"; then
+            continue
+        fi
+        value="${!key:-${sized[$key]}}"
+        set_setting "$key" "$value"
+        name="${key#JIM_DB_}"
+        chosen+=("${name,,} ${value}")
+    done
+    if [ ${#chosen[@]} -gt 0 ]; then
+        local summary
+        printf -v summary '%s, ' "${chosen[@]}"
+        success "Sized the bundled PostgreSQL for this host's $(awk -v m="$memory" 'BEGIN { printf "%.1f", m / 1024 }') GB of memory: ${summary%, }"
+    fi
+}
+
 # --- Configure database ---
 configure_database() {
     echo
@@ -1300,6 +1382,10 @@ configure_database() {
         set_setting "JIM_DB_HOSTNAME" "jim-database"
     else
         set_setting "JIM_DB_HOSTNAME" "jim.database"
+    fi
+
+    if [ "$db_mode" = "bundled" ]; then
+        size_database
     fi
 }
 
@@ -1925,7 +2011,7 @@ launch_jim() {
 # Waits until jim.web reports healthy, which its health check does once JIM is ready to serve.
 wait_for_jim() {
     local install_dir="$1"
-    local deadline=$((SECONDS + 600))
+    local deadline=$((SECONDS + READY_TIMEOUT_SECONDS))
 
     info "Waiting for JIM to be ready (the first start prepares the database, which takes a few minutes)..."
     while [ "$SECONDS" -lt "$deadline" ]; do
@@ -1937,10 +2023,119 @@ wait_for_jim() {
         sleep 5
     done
     JIM_READY="false"
+    report_unready_containers "$install_dir"
+}
+
+# JIM's containers, the database's first: the others wait for it.
+jim_containers() {
     if [ "$RUNTIME" = "podman" ]; then
-        warn "JIM is not ready after 10 minutes. See what it is doing with: $(jim_podman_command logs jim-web), and $(jim_podman_command logs jim-worker)"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo jim-database-postgres
+        fi
+        echo jim-worker jim-scheduler jim-web
     else
-        warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo jim.database
+        fi
+        echo jim.worker jim.scheduler jim.web
+    fi
+}
+
+# What is wrong with one of JIM's containers, such as "restarting, restarted 9 times"; nothing when it runs properly.
+container_problem() {
+    local name="$1"
+    local state status restarts health="" code
+    if [ "$RUNTIME" = "podman" ]; then
+        state=$(as_jim_account podman inspect --format '{{.State.Status}}|{{.RestartCount}}|{{.State.ExitCode}}' "$name" 2>/dev/null) \
+            || { echo "not created"; return; }
+        IFS='|' read -r status restarts code <<< "$state"
+        # Podman runs health checks on a timer only under systemd, so run the check rather than read its last result.
+        # It exits 1 when the check fails, and otherwise for a container without one.
+        local check=0
+        as_jim_account podman healthcheck run "$name" >/dev/null 2>&1 || check=$?
+        if [ "$check" -eq 1 ]; then
+            health="unhealthy"
+        fi
+    else
+        state=$(docker inspect -f '{{.State.Status}}|{{.RestartCount}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.ExitCode}}' "$name" 2>/dev/null) \
+            || { echo "not created"; return; }
+        IFS='|' read -r status restarts health code <<< "$state"
+    fi
+
+    local -a problems=()
+    if [ "$status" != "running" ]; then
+        if [ "$status" = "exited" ] && [ -n "$code" ]; then
+            problems+=("exited (code ${code})")
+        else
+            problems+=("$status")
+        fi
+    fi
+    if [ "${restarts:-0}" -gt 0 ] 2>/dev/null; then
+        problems+=("restarted ${restarts} times")
+    fi
+    case "$health" in
+        unhealthy) problems+=("unhealthy") ;;
+        starting) problems+=("not yet healthy") ;;
+    esac
+    if [ ${#problems[@]} -gt 0 ]; then
+        local joined
+        printf -v joined '%s, ' "${problems[@]}"
+        echo "${joined%, }"
+    fi
+}
+
+# Says JIM is not ready, naming each of its containers that is not running properly, with the end of its log, so
+# that the message names the failure itself (#1944). Until then it named the web and worker logs only, which show
+# just their side of a database that never started, and Compose starts them regardless of the bundled database.
+report_unready_containers() {
+    local install_dir="$1"
+    local name problem database_failed=""
+    local -a failing=()
+    for name in $(jim_containers); do
+        problem=$(container_problem "$name")
+        [ -n "$problem" ] || continue
+        if [ ${#failing[@]} -eq 0 ]; then
+            warn "JIM is not ready after 10 minutes. These containers are not running properly:"
+        fi
+        failing+=("$name")
+        case "$name" in
+            jim.database|jim-database-postgres) database_failed="true" ;;
+        esac
+        echo "  ${BOLD}${name}${RESET}: ${problem}"
+        [ "$problem" != "not created" ] || continue
+        echo "    The end of its log:"
+        if [ "$RUNTIME" = "podman" ]; then
+            as_jim_account podman logs --tail 20 "$name" 2>&1 | sed 's/^/      /' || true
+        else
+            docker logs --tail 20 "$name" 2>&1 | sed 's/^/      /' || true
+        fi
+    done
+
+    local -a shown=()
+    if [ ${#failing[@]} -gt 0 ]; then
+        shown=("${failing[@]}")
+        if [ -n "$database_failed" ]; then
+            warn "JIM's services wait for the bundled database, so fix the database first: see ${DOCS_BASE}/administration/troubleshooting/"
+        fi
+    else
+        warn "JIM is not ready after 10 minutes, though each of its containers is running."
+        read -r -a shown <<< "$(jim_containers | tr '\n' ' ')"
+    fi
+
+    if [ "$RUNTIME" = "podman" ]; then
+        local -a commands=()
+        for name in "${shown[@]}"; do
+            commands+=("$(jim_podman_command logs "$name")")
+        done
+        local joined
+        printf -v joined '%s; ' "${commands[@]}"
+        warn "See what it is doing with: ${joined%; }"
+    else
+        local compose="docker compose ${COMPOSE_FILES[*]}"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            compose="${compose} --profile with-db"
+        fi
+        warn "See what it is doing with: cd ${install_dir} && ${compose} logs ${shown[*]}"
     fi
 }
 
@@ -2250,6 +2445,11 @@ upgrade_installation() {
     # A PostgreSQL image run by its ID is the previous release's: the new compose file's pin replaces it.
     if grep -q '^JIM_DB_IMAGE=' "$CONFIG_FILE"; then
         update_env "JIM_DB_IMAGE" "" "$CONFIG_FILE"
+    fi
+    # The bundled PostgreSQL's memory, where .env does not size it: the compose file's defaults now suit a 4 GB host,
+    # where until #1943 they suited a 64 GB one, so a larger host would otherwise lose its tuning.
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        size_database keep
     fi
 
     local -a profile=()

@@ -1189,26 +1189,11 @@ jim-db-stop && jim-db
 
 See `.devcontainer/POSTGRES_TUNING.md` for full details on tuning formulas and parameters.
 
-#### Production (Manual)
+#### Production
 
-The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. For other production environments, use [PGTune](https://pgtune.leopard.in.ua/) to generate settings, then override `command` and `shm_size` in a compose override file.
+The bundled PostgreSQL's memory settings in `docker-compose.yml` and `deploy/podman/jim-database.yaml` come from `JIM_DB_SHARED_BUFFERS`, `JIM_DB_EFFECTIVE_CACHE_SIZE`, `JIM_DB_MAINTENANCE_WORK_MEM`, `JIM_DB_WORK_MEM` and (Docker only) `JIM_DB_SHM_SIZE`, which `deploy/setup.sh` (`size_database`) sizes to the host's memory at install and, where absent, at upgrade. Unset, the defaults suit the documented 4 GB minimum host. Until #1943 they were fixed for a 64 GB host, so the database could not start on one with less than about 10 GB. The rules are documented for administrators in `docs/administration/configuration.md` (Bundled PostgreSQL Memory); keep them, the installer, and the defaults in both files in step. The deployment-boot CI job checks PostgreSQL runs with the sizes the installer chose, on Docker and Podman.
 
-**Key settings to adjust:**
-- `shared_buffers`: typically ~25% of available host RAM
-- `effective_cache_size`: typically ~75% of available host RAM
-- `shm_size` (Docker): must be >= `shared_buffers` with ~25% headroom
-
-**Sizing reference:**
-
-| Host RAM | `shared_buffers` | `shm_size` |
-|----------|------------------|------------|
-| 8GB      | 2GB              | 3gb        |
-| 16GB     | 4GB              | 5gb        |
-| 32GB     | 8GB              | 10gb       |
-| 64GB     | 16GB             | 20gb       |
-| 128GB    | 32GB             | 40gb       |
-
-> **Warning**: If `shm_size` is smaller than `shared_buffers`, PostgreSQL will crash under load. Docker defaults `shm_size` to only 64MB, which is insufficient for any non-trivial `shared_buffers` value.
+The development override (`docker-compose.override.yml`) reads the same variable names with its own low-footprint defaults, and replaces the base file's `command`, so the base defaults do not apply in development.
 
 ### Building Images
 ```bash

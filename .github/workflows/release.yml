@@ -581,7 +581,7 @@ jobs:
           # Publish-Module requires the folder name to match the module name ('JIM')
           $stagingPath = './publish-staging/JIM'
           New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
-          Copy-Item -Path './src/JIM.PowerShell/*' -Destination $stagingPath -Recurse -Exclude 'Tests'
+          Copy-Item -Path './src/JIM.PowerShell/*' -Destination $stagingPath -Recurse -Exclude 'Tests', 'CLAUDE.md'
 
           # Test the module can be imported
           Import-Module $stagingPath -Force
@@ -636,11 +636,21 @@ jobs:
           $bundleName = "jim-release-$version"
           echo "name=$bundleName" >> $env:GITHUB_OUTPUT
 
+      # The checks a customer runs, on the archive as it will be published: its own checksum, and sha256sum -c in
+      # the extracted bundle. Every release up to v0.16.0 shipped a checksums.sha256 that failed on every line (#1942).
+      - name: Check the release bundle
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.VERSION }}'
+          ./scripts/Test-ReleaseBundle.ps1 -ArchivePath ./release-output/jim-release-$version.tar.gz
+
       - name: Upload bundle artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: release-bundle
-          path: ./release-output/jim-release-${{ steps.version.outputs.VERSION }}.tar.gz
+          path: |
+            ./release-output/jim-release-${{ steps.version.outputs.VERSION }}.tar.gz
+            ./release-output/jim-release-${{ steps.version.outputs.VERSION }}.tar.gz.sha256
           retention-days: 5
 
       - name: Upload checksums artifact
@@ -746,6 +756,7 @@ jobs:
             --title "JIM v${VERSION}" \
             --notes-file ./release-notes.md \
             ./artifacts/jim-release-${VERSION}.tar.gz \
+            ./artifacts/jim-release-${VERSION}.tar.gz.sha256 \
             ./artifacts/checksums.sha256 \
             ./artifacts/sbom/*.spdx.json \
             ./docker-compose.yml \

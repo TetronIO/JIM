@@ -29,7 +29,7 @@ The pods are Kubernetes-style YAML files, which Podman runs with its built-in `p
 | File | What it holds | Yours to edit? |
 |------|---------------|----------------|
 | `/opt/jim/jim.yaml` | The JIM pod | No: an upgrade replaces it |
-| `/opt/jim/jim-database.yaml` | The PostgreSQL pod, and its tuning | Only to tune PostgreSQL |
+| `/opt/jim/jim-database.yaml` | The PostgreSQL pod, and its tuning; its memory settings come from `jim-config.yaml` (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)) | Only to tune PostgreSQL beyond its memory |
 | `/opt/jim/jim-config.yaml` | JIM's settings, with the same names as the Docker path's `.env` (see the [Configuration Reference](configuration.md#podman)) | Yes |
 | `/opt/jim/tls/` | JIM's certificate and key, and the installer's certificate authority | Through `setup.sh --certificate` |
 | `jim.kube`, `jim-database.kube`, `jim.network` | The Quadlet units systemd runs the pods from, including the HTTPS port (`PublishPort=443:8443` in `jim.kube`) | The port only |
@@ -134,7 +134,7 @@ If your organisation's policy requires every step by hand, these steps do what t
 
     The units expect the pod files in `/opt/jim`; if you put them elsewhere, change `Yaml=` and `ConfigMap=` in each `.kube` file. To use a port other than 443, change `PublishPort=` in `jim.kube`.
 
-2. **Fill in `/opt/jim/jim-config.yaml`**: the identity provider settings, and for your own PostgreSQL server its name in `JIM_DB_HOSTNAME`.
+2. **Fill in `/opt/jim/jim-config.yaml`**: the identity provider settings, and for your own PostgreSQL server its name in `JIM_DB_HOSTNAME`. For the bundled PostgreSQL on a host with more than 4 GB of memory, size it as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
 
 3. **Load the images**, from the release bundle's `docker-images` folder, or download them:
 
