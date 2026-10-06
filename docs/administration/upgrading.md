@@ -197,6 +197,8 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
 
     Upgrading from v0.16.0 or earlier with the bundled PostgreSQL: its memory settings now come from `jim-config.yaml`, and without them it uses defaults for a 4 GB host, where the earlier pod file asked for 8 GB of `shared_buffers`. On a larger host, add them to `jim-config.yaml`, sized as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
 
+    Upgrading a rootful JIM on Ubuntu 24.04 from v0.16.0 or earlier: add the AppArmor signal rule in [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor), without which JIM's services crash and restart, and in step 4 restart the server instead of the two services. Podman loads the rule only when the server starts.
+
 4. **Start JIM**, restarting the database first so it runs the release's PostgreSQL image:
 
     ```bash

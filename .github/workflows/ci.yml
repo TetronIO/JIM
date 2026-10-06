@@ -646,7 +646,9 @@ jobs:
     # then checks what the customer would: JIM ready over HTTPS with the certificate the installer created,
     # every container's own health check passing, and data kept through a stop and start; on Docker, also the
     # documented key backup and restore, run as the page gives them, fetching no image
-    # (test/ci/deployment/Invoke-DeploymentBoot.ps1). Last, it compares what the two runtimes actually run,
+    # (test/ci/deployment/Invoke-DeploymentBoot.ps1). Each leg also fails if any container restarted, or the
+    # kernel logged an AppArmor denial or a fault against them, since a crashed service is restarted and soon
+    # passes its health check again (#1953). Last, it compares what the two runtimes actually run,
     # so the compose files and the pod files cannot drift apart unnoticed (Compare-RuntimeParity.ps1). This
     # is the only check that boots the production deployment of either runtime.
     #
