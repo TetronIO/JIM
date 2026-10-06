@@ -101,6 +101,39 @@ public class ActivityRunProfileExecutionItemDetailTests
     }
 
     [Test]
+    public void BuildCausalityPageContext_ExportScopeReviewItem_NamesTheMetaverseObjectAndNoRecord()
+    {
+        // The item has no Connected System Object. Its name snapshot is the Metaverse Object's, and the record system the
+        // page resolves for it is the run's; passing either as a record made the panel invent a source object (#1982).
+        var metaverseObjectId = Guid.NewGuid();
+        var page = new ActivityRunProfileExecutionItemDetail();
+        SetPrivateField(page, "_activityRunProfileExecutionItem", new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = metaverseObjectId,
+            DisplayNameSnapshot = "Carol Ng",
+            ObjectTypeSnapshot = "Person"
+        });
+        SetPrivateField(page, "_runConnectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
+        SetPrivateField(page, "_connectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
+        SetPrivateField(page, "_identityHeader", new JIM.Models.Core.DTOs.MetaverseObjectHeader
+        {
+            Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People", CachedDisplayName = "Carol Ng"
+        });
+
+        var context = InvokeBuildCausalityPageContext(page);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.SubjectMetaverseObjectId, Is.EqualTo(metaverseObjectId));
+            Assert.That(context.SubjectMetaverseObjectName, Is.EqualTo("Carol Ng"));
+            Assert.That(context.CsoDisplayName, Is.Null);
+            Assert.That(context.CsoConnectedSystemId, Is.Null);
+            Assert.That(context.CsoObjectTypeName, Is.Null);
+        }
+    }
+
+    [Test]
     public void ResolveIdentityId_ExportScopeReviewItem_IsTheMetaverseObjectTheItemNames()
     {
         // A review item has no Connected System Object and no outcome targeting its Metaverse Object (its outcomes

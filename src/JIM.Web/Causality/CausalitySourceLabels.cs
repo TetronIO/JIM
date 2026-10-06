@@ -17,10 +17,12 @@ public static class CausalitySourceLabels
     /// <summary>
     /// The Timeline's opening verb, which reads as a sentence rather than as a card title. In the
     /// conditional mood for a Sync Preview (#1519): nothing has been processed yet, so the root reads
-    /// as what a run would do.
+    /// as what a run would do. An item that records a Metaverse Object rather than a Connected System Object (an
+    /// export scope review) names that instead (#1982).
     /// </summary>
-    public static string Verb(bool isSpeculative = false)
+    public static string Verb(bool isSpeculative = false, bool subjectIsMetaverseObject = false)
     {
-        return isSpeculative ? "Connected System Object would be processed" : "Connected System Object processed";
+        var subject = subjectIsMetaverseObject ? "Metaverse Object" : "Connected System Object";
+        return isSpeculative ? $"{subject} would be processed" : $"{subject} processed";
     }
 }

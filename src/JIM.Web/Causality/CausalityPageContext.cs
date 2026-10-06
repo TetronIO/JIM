@@ -59,6 +59,12 @@ namespace JIM.Web.Causality;
 /// object has since been deleted) simply falls back to the recorded label. Never populated for a
 /// speculative Sync Preview, which creates nothing.
 /// </param>
+/// <param name="SubjectMetaverseObjectId">
+/// The Metaverse Object the item records directly, where it records one rather than a Connected System Object (an
+/// export scope review item, #1971). Set, the item's subject is that Metaverse Object: the views name and link it
+/// as the subject and draw no record of the item's own, and the <c>Cso*</c> fields name no record (#1982).
+/// </param>
+/// <param name="SubjectMetaverseObjectName">The subject Metaverse Object's name; see <see cref="SubjectMetaverseObjectId"/>.</param>
 public sealed record CausalityPageContext(
     int? ConnectedSystemId,
     string? ConnectedSystemName,
@@ -72,4 +78,16 @@ public sealed record CausalityPageContext(
     string? MvoTypeName,
     string? MvoTypePluralName,
     Guid? DeletedMetaverseObjectId = null,
-    IReadOnlyDictionary<Guid, string>? ConnectedSystemObjectNames = null);
+    IReadOnlyDictionary<Guid, string>? ConnectedSystemObjectNames = null,
+    Guid? SubjectMetaverseObjectId = null,
+    string? SubjectMetaverseObjectName = null)
+{
+    /// <summary>
+    /// The subject Metaverse Object's own page, where there is one to link: null for an object since deleted, and where
+    /// the type's plural name the route is keyed on is not known.
+    /// </summary>
+    public string? SubjectMetaverseObjectHref =>
+        SubjectMetaverseObjectId is { } id && id != DeletedMetaverseObjectId && !string.IsNullOrWhiteSpace(MvoTypePluralName)
+            ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, MvoTypePluralName)
+            : null;
+}

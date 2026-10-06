@@ -509,23 +509,48 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// provisioning or exporting to a CSO on system B); see <see cref="CausalityPageContext"/> for
     /// which consumers need which identity.
     /// </summary>
-    private CausalityPageContext BuildCausalityPageContext() => new(
-        ConnectedSystemId: _runConnectedSystemHeader?.Id,
-        ConnectedSystemName: _runConnectedSystemHeader?.Name,
-        RunProfileName: _activity?.TargetName,
-        CsoId: _activityRunProfileExecutionItem?.ConnectedSystemObjectId,
-        CsoConnectedSystemId: _connectedSystemHeader?.Id,
-        CsoConnectedSystemName: _connectedSystemHeader?.Name,
-        CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.NameOrId
-                        ?? _activityRunProfileExecutionItem?.DisplayNameSnapshot,
-        CsoExternalId: _externalIdAttributeValue?.ToStringNoName()
-                       ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot,
-        CsoObjectTypeName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
-                           ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
-        MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
-        MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
-        DeletedMetaverseObjectId: _deletedIdentityId,
-        ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
+    private CausalityPageContext BuildCausalityPageContext()
+    {
+        // An item that records a Metaverse Object (an export scope review, #1971) has no record of its own: its name
+        // snapshot is the Metaverse Object's, and the record system resolved for it is merely the run's. Passed as a
+        // record, the panel drew an object that took no part in the run (#1982), so the Metaverse Object is passed as
+        // the subject instead.
+        var item = _activityRunProfileExecutionItem;
+        if (item is { ConnectedSystemObject: null, MetaverseObjectId: { } subjectId })
+        {
+            return new CausalityPageContext(
+                ConnectedSystemId: _runConnectedSystemHeader?.Id,
+                ConnectedSystemName: _runConnectedSystemHeader?.Name,
+                RunProfileName: _activity?.TargetName,
+                CsoId: null,
+                CsoConnectedSystemId: null,
+                CsoConnectedSystemName: null,
+                CsoDisplayName: null,
+                CsoExternalId: null,
+                CsoObjectTypeName: null,
+                MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName ?? item.ObjectTypeSnapshot,
+                MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
+                DeletedMetaverseObjectId: _deletedIdentityId,
+                ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames,
+                SubjectMetaverseObjectId: subjectId,
+                SubjectMetaverseObjectName: _identityHeader?.NameOrId ?? item.DisplayNameSnapshot);
+        }
+
+        return new CausalityPageContext(
+            ConnectedSystemId: _runConnectedSystemHeader?.Id,
+            ConnectedSystemName: _runConnectedSystemHeader?.Name,
+            RunProfileName: _activity?.TargetName,
+            CsoId: item?.ConnectedSystemObjectId,
+            CsoConnectedSystemId: _connectedSystemHeader?.Id,
+            CsoConnectedSystemName: _connectedSystemHeader?.Name,
+            CsoDisplayName: item?.ConnectedSystemObject?.NameOrId ?? item?.DisplayNameSnapshot,
+            CsoExternalId: _externalIdAttributeValue?.ToStringNoName() ?? item?.ExternalIdSnapshot,
+            CsoObjectTypeName: item?.ConnectedSystemObject?.Type?.Name ?? item?.ObjectTypeSnapshot,
+            MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
+            MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
+            DeletedMetaverseObjectId: _deletedIdentityId,
+            ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
+    }
 
     /// <summary>
     /// The outcome types whose <c>TargetEntityId</c> is the Metaverse Object's own id. Only these are used to
