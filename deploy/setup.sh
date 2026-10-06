@@ -1084,6 +1084,8 @@ install_podman_units() {
             chown "${PODMAN_ACCOUNT}:" "${unit_dir}/${unit}"
         fi
     done
+    # Quadlet generates jim.service from the units when systemd reloads; until then there is no unit to start.
+    jim_systemctl daemon-reload || fatal "Failed to reload systemd"
     success "Installed the systemd units in ${unit_dir}"
 }
 
@@ -1324,16 +1326,18 @@ start_podman() {
         --publish "${JIM_WEB_PORT}:8443" "${absolute_dir}/jim.yaml" >/dev/null || fatal "Failed to start JIM"
 }
 
-# The commands that start JIM, for an administrator who chose not to start it yet.
+# The commands that start JIM, for an administrator who chose not to start it yet. With systemd, the second
+# argument is the systemctl verb: restart, for a JIM that is running, which start would leave as it is.
 podman_start_commands() {
     local install_dir="$1"
+    local verb="${2:-start}"
     local absolute_dir
     absolute_dir=$(cd "$install_dir" && pwd)
     if [ "$PODMAN_SYSTEMD" = "true" ]; then
         if [ "$USE_BUNDLED_DB" = "true" ]; then
-            echo "  $(jim_systemctl_command) start jim-database.service"
+            echo "  $(jim_systemctl_command) ${verb} jim-database.service"
         fi
-        echo "  $(jim_systemctl_command) start jim.service"
+        echo "  $(jim_systemctl_command) ${verb} jim.service"
     else
         echo "  $(jim_podman_command network create --ignore jim)"
         if [ "$USE_BUNDLED_DB" = "true" ]; then
@@ -2076,7 +2080,7 @@ restart_web() {
         return
     fi
 
-    if [ -z "$(docker ps -q --filter name=^jim.web$ 2>/dev/null)" ]; then
+    if ! jim_running; then
         info "jim.web is not running; it will use the new certificate when JIM starts"
         return
     fi
@@ -2141,6 +2145,11 @@ launch_jim() {
     if [ "$RUNTIME" = "podman" ]; then
         if [ "$auto_start" != "true" ] && ! prompt_yn "Start JIM now?"; then
             echo
+            if jim_running; then
+                info "JIM is still running on its previous settings and certificate. To apply the new ones, run:"
+                podman_start_commands "$install_dir" restart
+                return
+            fi
             if [ "$PODMAN_SYSTEMD" = "true" ]; then
                 info "JIM will start at the next boot. To start it sooner, run:"
             else
@@ -2167,6 +2176,14 @@ launch_jim() {
 
     if [ "$auto_start" != "true" ] && ! prompt_yn "Start JIM now?"; then
         echo
+        if jim_running; then
+            # Without --force-recreate, Compose leaves jim.web running on its previous certificate when the
+            # certificate is all that changed.
+            info "JIM is still running on its previous settings and certificate. To apply the new ones, run:"
+            echo "  cd ${install_dir}"
+            echo "  ${compose_cmd} --force-recreate"
+            return
+        fi
         info "To start JIM later, run:"
         echo "  cd ${install_dir}"
         echo "  ${compose_cmd}"
@@ -2183,6 +2200,19 @@ launch_jim() {
         restart_web "$install_dir"
     fi
     wait_for_jim "$install_dir"
+}
+
+# Whether JIM is running, as it is when this script runs again over a running installation.
+jim_running() {
+    if [ "$RUNTIME" = "podman" ]; then
+        if [ "$PODMAN_SYSTEMD" = "true" ]; then
+            jim_systemctl is-active --quiet jim.service
+        else
+            as_jim_account podman pod exists jim >/dev/null 2>&1
+        fi
+    else
+        [ -n "$(docker ps -q --filter name=^jim.web$ 2>/dev/null)" ]
+    fi
 }
 
 # When jim.web last started, which changes whenever Compose starts or recreates it; nothing when there is none.
