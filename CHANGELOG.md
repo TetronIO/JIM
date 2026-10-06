@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
@@ -30,9 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now provisions and deprovisions existing Metaverse Objects at the next synchronisation; it used to wait until each object's own values changed. (#1925)
+- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation, not when each next changes. Changes saved before upgrading need saving again. (#1925)
 - 🐛 Objects moved into or out of scope by a relative date are now provisioned or deprovisioned by the next Delta Synchronisation even when it has nothing new to import, and are no longer missed when two Synchronisation Rules with relative dates cover them. (#1925)
 - 🐛 A synchronisation no longer fails with a duplicate key error when it deprovisions objects a relative date has moved out of an export rule's scope. (#1925)
+- 🐛 An export scope change that lands while a synchronisation is running (a saved rule change, or a relative date being crossed) now reaches every object it affects; objects that run updated could miss it. (#1925)
+- 🐛 A delete queued because an object left an export rule's scope now shows on that object's execution item and in the run's Pending Exports total, as a provisioning does. (#1925)
 - 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
 - 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)

@@ -166,7 +166,7 @@ stateDiagram-v2
 |------|-------------|--------------|
 | Create | No CSO exists in target system for this MVO | Provisions new object in target system. Connector creates object + sets attributes. PE captures DN template + all attributes. Once exported it is never re-sent while awaiting confirmation; changes arriving meanwhile are appended to it, and it becomes an Update once an import confirms the object exists. |
 | Update | CSO exists but attributes differ from MVO values | Updates existing object attributes. Only changed attributes are included. No-net-change detection avoids unnecessary exports. |
-| Delete | MVO deletion rule triggered, or MVO falls out of export scope | Removes object from target system. Created by EvaluateMvoDeletionAsync or EvaluateOutOfScopeExportsAsync. On success the PE goes to Exported and the confirming import removes the PE and CSO; for a CSO whose provisioning was never confirmed, the PE and CSO are removed at once. Never staged for provisioning that was never exported: that is cancelled instead. |
+| Delete | MVO deletion rule triggered, or MVO falls out of export scope | Removes object from target system. Created by EvaluateMvoDeletionAsync or EvaluateOutOfScopeExportsAsync, and reported as a `DeprovisionQueued` outcome on the execution item of the object that was deleted or left scope, which is also recorded as the Delete's queueing item (#1223, #1925). On success the PE goes to Exported and the confirming import removes the PE and CSO; for a CSO whose provisioning was never confirmed, the PE and CSO are removed at once. Never staged for provisioning that was never exported: that is cancelled instead. |
 
 ## Drift Detection Creates Corrective Exports
 
