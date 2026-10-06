@@ -15,12 +15,14 @@
     values are retired and never reissued while "Never reuse a value" is on, and are free again with it
     off, and (release 3, Phase 7) the live probe of the directory: an account created outside JIM is
     caught by the probe; a bind that cannot see the directory's values, and an unreachable directory,
-    each degrade to the local gates with one Activity warning line and never fail the run. This
-    scenario does NOT include Collision Remediation or Needs Decision (release 4). A target-side
-    collision is still an ordinary export error, which is
-    existing export behaviour rather than generation; it gets integration coverage with release 4's
-    Collision Remediation, which reworks that path (and needs the harness to accept an intended export
-    error, which its end-of-run log scan does not today).
+    each degrade to the local gates with one Activity warning line and never fail the run, and
+    (release 4, Phase 8) Collision Remediation: an account created after JIM staged a value but before
+    the export makes the directory refuse it; unanchored, JIM corrects it to the next candidate and the
+    next synchronisation and export carry the correction (derived Email and User Principal Name
+    following, including when the refused value is the derived one); anchored by the Cross-Domain
+    Export CSV target, the export is parked as Needs Decision; with the flow's Collision Remediation
+    switch off (set in the database until PR 9 gives it a surface), the refusal is an ordinary export
+    error. Steps that provoke an Error line on purpose declare it (Add-JimExpectedError).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
     Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName, so Email and User Principal Name
@@ -68,7 +70,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -598,6 +600,148 @@ function Wait-DirectoryAnswering {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
+# Collision Remediation (release 4): accounts that make a target refuse a value JIM has already
+# generated and staged, created after the synchronisation that chose the value (so neither the local
+# gates nor the probe could have seen them) and before the export that carries it
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+function New-CollidingDirectoryAccount {
+    <#
+    .SYNOPSIS
+        Creates an account outside JIM, in OU=Legacy (outside the import scope), holding one value a pending JIM
+        Create carries, so the directory refuses the export as "already in use". Returns its DN.
+    .DESCRIPTION
+        -Collide picks which value collides with the generated Account Name <Value>:
+          AccountName:       Samba AD sAMAccountName <Value> (domain-unique); its own UPN is distinct.
+          UserPrincipalName: Samba AD userPrincipalName <Value>@panoply.local (forest-unique, and derived from
+                             the generated Account Name through Email); its own sAMAccountName is distinct.
+          Mail:              OpenLDAP mail <Value>@panoply.local (unique per suffix through the lab's slapo-unique
+                             overlay, and derived from the generated Account Name as Email).
+        Every other attribute of the account is its own, so the directory names exactly one attribute.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][ValidateSet('AccountName', 'UserPrincipalName', 'Mail')][string]$Collide,
+        [Parameter(Mandatory=$true)][string]$Value,
+        [Parameter(Mandatory=$true)][ValidatePattern('^[a-z0-9]{1,8}$')][string]$Tag
+    )
+
+    $ouDn = if ($isRfcDirectory) { "ou=Legacy,$($DirectoryConfig.BaseDN)" } else { "OU=Legacy,$($DirectoryConfig.BaseDN)" }
+    $ou = New-DirectoryOu -DirectoryConfig $DirectoryConfig -Dn $ouDn -ViaServer
+    if (-not $ou.Success) {
+        throw "Failed to create the out-of-scope OU '$ouDn': $($ou.Output)"
+    }
+
+    if ($isRfcDirectory) {
+        if ($Collide -ne 'Mail') { throw "New-CollidingDirectoryAccount: only mail is unique in the OpenLDAP lab; '$Collide' cannot collide there" }
+        $uid = "legacy-$Tag"
+        $dn = "uid=$uid,$ouDn"
+        $ldif = (@(
+            "dn: $dn", "objectClass: inetOrgPerson", "uid: $uid", "cn: Legacy $Tag", "sn: Legacy",
+            "mail: $Value@panoply.local", "description: Created outside JIM"
+        ) -join "`n") + "`n"
+        $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
+        if ($result.Outcome -eq 'Failed') {
+            throw "Failed to create the colliding account '$dn': $($result.Output)"
+        }
+        return $dn
+    }
+
+    if ($Collide -eq 'Mail') { throw "New-CollidingDirectoryAccount: mail is not unique in Active Directory; collide on AccountName or UserPrincipalName" }
+    $sam = if ($Collide -eq 'AccountName') { $Value } else { "legacy-$Tag" }
+    $upn = if ($Collide -eq 'UserPrincipalName') { "$Value@panoply.local" } else { "legacy-$Tag@panoply.local" }
+    $dn = "CN=$sam,$ouDn"
+    $user = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $dn -SamAccountName $sam -Password 'Pz7#Kq2!Wm9$' `
+        -Attributes ([ordered]@{ userPrincipalName = $upn; description = 'Created outside JIM' })
+    if (-not $user.Success) {
+        throw "Failed to create the colliding account '$dn': $($user.Output)"
+    }
+    return $dn
+}
+
+function Invoke-JimDatabaseScalar {
+    <#
+    .SYNOPSIS
+        One scalar from the JIM database, for state no API surface reads (the revision-pending record, an
+        execution item's error message, the Collision Remediation switch).
+    #>
+    param([Parameter(Mandatory=$true)][string]$Sql)
+    $raw = docker exec (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -t -A -c $Sql 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Invoke-JimDatabaseScalar: psql failed: $raw" }
+    return "$raw".Trim()
+}
+
+function Get-RevisionsPendingCount {
+    <#
+    .SYNOPSIS
+        How many revision-pending records wait for a synchronisation to carry a corrected value to one object's exports.
+    #>
+    param([Parameter(Mandatory=$true)][guid]$MvoId)
+    return [int](Invoke-JimDatabaseScalar -Sql "SELECT count(*) FROM ""GeneratedValueRevisionsPending"" WHERE ""MetaverseObjectId"" = '$MvoId';")
+}
+
+function Set-AccountNameCollisionRemediation {
+    <#
+    .SYNOPSIS
+        Switches Collision Remediation on or off for the generated Account Name flow, IN THE DATABASE.
+    .DESCRIPTION
+        The switch (SyncRuleMappingGeneration.CollisionRemediation, default on) has no portal, REST or PowerShell
+        surface until release 4's PR 9 adds one. Until then this is the only way a scenario can turn it off; replace
+        it with Set-JIMSyncRuleMapping once that parameter exists. The export run reads the mapping afresh, so no
+        restart is needed.
+    #>
+    param([Parameter(Mandatory=$true)][bool]$Enabled)
+    $value = if ($Enabled) { 'true' } else { 'false' }
+    $updated = Invoke-JimDatabaseScalar -Sql "WITH u AS (UPDATE ""SyncRuleMappingGenerations"" SET ""CollisionRemediation"" = $value WHERE ""SyncRuleMappingId"" = $($config.AccountNameMappingId) RETURNING 1) SELECT count(*) FROM u;"
+    if ($updated -ne '1') { throw "Set-AccountNameCollisionRemediation: expected to update one generation row, updated '$updated'" }
+}
+
+function Get-NextCandidate {
+    <#
+    .SYNOPSIS
+        The OnlyIfTaken candidate after a rejected one: base -> base1, base1 -> base2, and so on.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Base, [Parameter(Mandatory=$true)][string]$Rejected)
+    $suffix = $Rejected.Substring($Base.Length)
+    $n = if ($suffix) { [int]$suffix } else { 0 }
+    return "$Base$($n + 1)"
+}
+
+function Add-CollisionJoiner {
+    <#
+    .SYNOPSIS
+        Adds an HR joiner and runs only the HR import and Delta Sync, so JIM generates and stages the joiner's Account
+        Name (with Email and User Principal Name derived from it) without exporting it. Returns the Metaverse Object.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$EmployeeId,
+        [Parameter(Mandatory=$true)][string]$FirstName,
+        [Parameter(Mandatory=$true)][string]$LastName,
+        [Parameter(Mandatory=$true)][string]$Department,
+        [Parameter(Mandatory=$true)][string]$Context
+    )
+    Add-HrCsvJoiner -EmployeeId $EmployeeId -FirstName $FirstName -LastName $LastName -Department $Department
+    Invoke-HrJoinerOrLeaverSync -Config $config -Context $Context
+    $person = Get-PersonByEmployeeId -EmployeeId $EmployeeId
+    Assert-NotNull -Value $person -Message "$FirstName $LastName was projected ($Context)"
+    return $person
+}
+
+function Start-DirectoryExportForCollision {
+    <#
+    .SYNOPSIS
+        Runs the directory Export on its own and returns the Activity, its stats and its execution items.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Context)
+    $run = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+    return @{
+        ActivityId = $run.activityId
+        Activity   = Get-JIMActivity -Id $run.activityId
+        Stats      = Get-JIMActivityStats -ActivityId $run.activityId
+        Items      = @(Get-JIMActivity -Id $run.activityId -ExecutionItems)
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
 # Setup
 # ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -623,7 +767,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -1420,6 +1564,194 @@ try {
             Add-TestResult -Name "Once the directory is back, the joiner is provisioned as 'cordelia.thistlewood'" `
                 -Passed ($null -ne (Get-LDAPUser -UserIdentifier 'cordelia.thistlewood' -DirectoryConfig $DirectoryConfig)) -Detail "No directory entry"
         }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Collision Remediation (release 4): the target refuses a value JIM generated and staged,
+    # because an account created after the synchronisation already holds it. Unanchored (no
+    # other target holds the value for this person), so JIM corrects it: the next candidate is
+    # written to the Metaverse with a revision-pending record, the next synchronisation carries it
+    # (and re-derives Email and User Principal Name), and the next export provisions it.
+    # Samba AD collides on sAMAccountName; OpenLDAP, whose uid is not unique, collides on the
+    # derived mail through the lab's slapo-unique overlay.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionRemediated")) {
+        Write-TestSection "Test 15: A rejected, unanchored generated value is corrected"
+
+        $collide = if ($isRfcDirectory) { 'Mail' } else { 'AccountName' }
+        $person = Add-CollisionJoiner -EmployeeId "EMP900080" -FirstName "Quillon" -LastName "Ashgrove" -Department "Marketing" -Context "Collision remediated"
+        $base = Get-GeneratedBaseValue -FirstName "Quillon" -LastName "Ashgrove"
+        $rejected = $person.attributes.'Account Name'
+        $expected = Get-NextCandidate -Base $base -Rejected $rejected
+        $clashDn = New-CollidingDirectoryAccount -Collide $collide -Value $rejected -Tag "rm"
+        Write-Host "  JIM staged '$rejected'; created $clashDn holding it ($collide) outside JIM" -ForegroundColor Gray
+
+        $export = Start-DirectoryExportForCollision -Context "Collision remediated"
+        $remediatedItems = @($export.Items | Where-Object { $_.outcomeSummary -match 'GeneratedValueRemediated:' })
+        $erroredItems = @($export.Items | Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' })
+        Add-TestResult -Name "[Remediated] The export records the correction ('Value corrected', GeneratedValueRemediated)" -Passed ($remediatedItems.Count -eq 1) `
+            -Detail "$($remediatedItems.Count) item(s) with GeneratedValueRemediated; summaries: $(($export.Items | ForEach-Object { $_.outcomeSummary }) -join ' | ')"
+        Add-TestResult -Name "[Remediated] The export's TotalGeneratedValuesRemediated stat is 1" -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 1) `
+            -Detail "totalGeneratedValuesRemediated: $($export.Stats.totalGeneratedValuesRemediated)"
+        Add-TestResult -Name "[Remediated] The export Activity has no errors (a Warning at most)" `
+            -Passed ($export.Activity.status -in @('Complete', 'CompleteWithWarning') -and $erroredItems.Count -eq 0 -and -not $export.Activity.errorMessage) `
+            -Detail "Status '$($export.Activity.status)'; errored items: $(($erroredItems | ForEach-Object { "$($_.displayName): $($_.errorType)" }) -join ', '); error: '$($export.Activity.errorMessage)'"
+
+        $revisedAccountName = Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name"
+        Add-TestResult -Name "[Remediated] The Metaverse Account Name is revised from '$rejected' to the next candidate '$expected'" `
+            -Passed ($revisedAccountName -eq $expected) -Detail "Got '$revisedAccountName'"
+        Add-TestResult -Name "[Remediated] A revision-pending record waits for the next synchronisation" `
+            -Passed ((Get-RevisionsPendingCount -MvoId $person.id) -eq 1) -Detail "$(Get-RevisionsPendingCount -MvoId $person.id) record(s)"
+
+        Invoke-HrJoinerOrLeaverSync -Config $config -Context "Collision remediated: drain"
+        Add-TestResult -Name "[Remediated] The next synchronisation drains the revision-pending record" `
+            -Passed ((Get-RevisionsPendingCount -MvoId $person.id) -eq 0) -Detail "$(Get-RevisionsPendingCount -MvoId $person.id) record(s) left"
+        $email = Get-MvoAttributeValue -MvoId $person.id -AttributeName "Email"
+        $upn = Get-MvoAttributeValue -MvoId $person.id -AttributeName "User Principal Name"
+        Add-TestResult -Name "[Remediated] Email and User Principal Name are re-derived from the corrected Account Name" `
+            -Passed ($email -eq "$expected@panoply.local" -and $upn -eq "$expected@panoply.local") -Detail "Email '$email', User Principal Name '$upn'"
+
+        Invoke-Cycle -Config $config | Out-Null
+        $provisioned = Get-LDAPUser -UserIdentifier $expected -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "[Remediated] The next export provisions the account as '$expected'" `
+            -Passed ($null -ne $provisioned -and $provisioned['dn'] -ne $clashDn) -Detail "Directory entry: $(if ($provisioned) { $provisioned['dn'] } else { 'none' })"
+        if ($provisioned) {
+            Add-TestResult -Name "[Remediated] The provisioned account carries the corrected derived mail" `
+                -Passed ($provisioned['mail'] -eq "$expected@panoply.local") -Detail "mail '$($provisioned['mail'])'"
+            if (-not $isRfcDirectory) {
+                Add-TestResult -Name "[Remediated] The provisioned account carries the corrected derived userPrincipalName" `
+                    -Passed ($provisioned['userPrincipalName'] -eq "$expected@panoply.local") -Detail "userPrincipalName '$($provisioned['userPrincipalName'])'"
+            }
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Collision on a derived value (Samba AD): the directory refuses the userPrincipalName, which
+    # is derived (through Email) from the generated Account Name. The rejection is attributed to
+    # the single generated input, so the Account Name is corrected and the UPN follows.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionDerivedUpn")) {
+        Write-TestSection "Test 16: A rejected derived User Principal Name corrects the generated Account Name"
+
+        if ($isRfcDirectory) {
+            Write-Host "  Skipped: OpenLDAP has no userPrincipalName; its derived-value case (mail) is Test 15" -ForegroundColor Yellow
+        }
+        else {
+            $person = Add-CollisionJoiner -EmployeeId "EMP900081" -FirstName "Wynstan" -LastName "Pell" -Department "Legal" -Context "Derived UPN collision"
+            $base = Get-GeneratedBaseValue -FirstName "Wynstan" -LastName "Pell"
+            $rejected = $person.attributes.'Account Name'
+            $expected = Get-NextCandidate -Base $base -Rejected $rejected
+            $clashDn = New-CollidingDirectoryAccount -Collide UserPrincipalName -Value $rejected -Tag "upn"
+            Write-Host "  JIM staged '$rejected'; created $clashDn holding userPrincipalName '$rejected@panoply.local' outside JIM" -ForegroundColor Gray
+
+            $export = Start-DirectoryExportForCollision -Context "Derived UPN collision"
+            Add-TestResult -Name "[Derived UPN] The export records the correction and counts it" `
+                -Passed (@($export.Items | Where-Object { $_.outcomeSummary -match 'GeneratedValueRemediated:' }).Count -eq 1 -and $export.Stats.totalGeneratedValuesRemediated -eq 1) `
+                -Detail "totalGeneratedValuesRemediated: $($export.Stats.totalGeneratedValuesRemediated); summaries: $(($export.Items | ForEach-Object { $_.outcomeSummary }) -join ' | ')"
+            $revisedAccountName = Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name"
+            Add-TestResult -Name "[Derived UPN] The generated Account Name is corrected from '$rejected' to '$expected'" `
+                -Passed ($revisedAccountName -eq $expected) -Detail "Got '$revisedAccountName'"
+
+            Invoke-Cycle -Config $config | Out-Null
+            $upn = Get-MvoAttributeValue -MvoId $person.id -AttributeName "User Principal Name"
+            Add-TestResult -Name "[Derived UPN] The derived User Principal Name follows: '$expected@panoply.local'" `
+                -Passed ($upn -eq "$expected@panoply.local") -Detail "Got '$upn'"
+            $provisioned = Get-LDAPUser -UserIdentifier $expected -DirectoryConfig $DirectoryConfig
+            Add-TestResult -Name "[Derived UPN] The account is provisioned as '$expected' with userPrincipalName '$expected@panoply.local'" `
+                -Passed ($null -ne $provisioned -and $provisioned['userPrincipalName'] -eq "$expected@panoply.local") `
+                -Detail "Directory entry: $(if ($provisioned) { "$($provisioned['dn']) upn '$($provisioned['userPrincipalName'])'" } else { 'none' })"
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Needs Decision (anchored): the Cross-Domain Export CSV target has already accepted the value
+    # for this person, so correcting it would rename an account already in use. The directory's
+    # rejection is parked for an administrator, nothing is renamed, and the run records it.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionNeedsDecision")) {
+        Write-TestSection "Test 17: A rejected value another target already holds waits for a decision"
+
+        $collide = if ($isRfcDirectory) { 'Mail' } else { 'AccountName' }
+        $person = Add-CollisionJoiner -EmployeeId "EMP900082" -FirstName "Nerys" -LastName "Vandal" -Department "Finance" -Context "Needs Decision"
+        $rejected = $person.attributes.'Account Name'
+
+        # The anchor: the second participating target (Scenario 001's Cross-Domain Export CSV, which also exports
+        # Account Name) accepts the value for this person first.
+        $crossDomain = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $crossDomain.activityId -Name "Cross-Domain Export (Needs Decision anchor)" -AllowWarnings
+
+        $clashDn = New-CollidingDirectoryAccount -Collide $collide -Value $rejected -Tag "nd"
+        Write-Host "  JIM staged '$rejected', exported it to Cross-Domain Export; created $clashDn holding it ($collide)" -ForegroundColor Gray
+
+        # Declared before the export: if the run logs the unresolved rejection at Error, this step expects it, and
+        # only lines naming this value inside this step are excused.
+        $stepName = "CollisionNeedsDecision"
+        Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|GeneratedValueCollisionUnresolved" | Out-Null
+        try {
+            $export = Start-DirectoryExportForCollision -Context "Needs Decision"
+        }
+        finally {
+            Complete-JimExpectedError -Step $stepName
+        }
+
+        $unresolved = @($export.Items | Where-Object { $_.errorType -eq 'GeneratedValueCollisionUnresolved' })
+        Add-TestResult -Name "[Needs Decision] The execution item error is GeneratedValueCollisionUnresolved" -Passed ($unresolved.Count -eq 1) `
+            -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
+        if ($unresolved.Count -eq 1) {
+            $message = Invoke-JimDatabaseScalar -Sql "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""Id"" = '$($unresolved[0].id)';"
+            Add-TestResult -Name "[Needs Decision] The error names the rejecting and the anchoring systems" `
+                -Passed ($message -match [regex]::Escape($DirectoryConfig.ConnectedSystemName) -and $message -match 'Cross-Domain Export') -Detail "Message: '$message'"
+        }
+        Add-TestResult -Name "[Needs Decision] TotalGeneratedValuesNeedingDecision counts it, and nothing is remediated" `
+            -Passed ($export.Stats.totalGeneratedValuesNeedingDecision -eq 1 -and $export.Stats.totalGeneratedValuesRemediated -eq 0) `
+            -Detail "needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision); remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+        Add-TestResult -Name "[Needs Decision] No rename: the Metaverse Account Name is still '$rejected'" `
+            -Passed ((Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name") -eq $rejected) `
+            -Detail "Got '$(Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name")'"
+        $exportStatus = Invoke-JimDatabaseScalar -Sql "SELECT string_agg(pe.""Status""::text, ',') FROM ""PendingExports"" pe JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = pe.""ConnectedSystemObjectId"" WHERE cso.""MetaverseObjectId"" = '$($person.id)' AND pe.""ConnectedSystemId"" = $($config.LDAPSystemId);"
+        Add-TestResult -Name "[Needs Decision] The directory export is Parked" -Passed ($exportStatus -eq '5') `
+            -Detail "Pending Export status(es): '$exportStatus' (PendingExportStatus.Parked = 5)"
+        Add-TestResult -Name "[Needs Decision] No revision-pending record is written" `
+            -Passed ((Get-RevisionsPendingCount -MvoId $person.id) -eq 0) -Detail "$(Get-RevisionsPendingCount -MvoId $person.id) record(s)"
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Collision Remediation switched off: the rejection is an ordinary export error, and the
+    # assignment is left as it is. The switch has no API surface yet (PR 9), so it is set in the
+    # database (Set-AccountNameCollisionRemediation) and restored afterwards.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionRemediationOff")) {
+        Write-TestSection "Test 18: With Collision Remediation off, a rejection is an ordinary export error"
+
+        $collide = if ($isRfcDirectory) { 'Mail' } else { 'AccountName' }
+        $person = Add-CollisionJoiner -EmployeeId "EMP900083" -FirstName "Osric" -LastName "Tamworth" -Department "Procurement" -Context "Remediation off"
+        $rejected = $person.attributes.'Account Name'
+        $clashDn = New-CollidingDirectoryAccount -Collide $collide -Value $rejected -Tag "off"
+        Write-Host "  JIM staged '$rejected'; created $clashDn holding it ($collide)" -ForegroundColor Gray
+
+        $stepName = "CollisionRemediationOff"
+        Set-AccountNameCollisionRemediation -Enabled $false
+        Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse" | Out-Null
+        try {
+            $export = Start-DirectoryExportForCollision -Context "Remediation off"
+        }
+        finally {
+            Complete-JimExpectedError -Step $stepName
+            Set-AccountNameCollisionRemediation -Enabled $true
+        }
+
+        $inUse = @($export.Items | Where-Object { $_.errorType -eq 'UniqueValueAlreadyInUse' })
+        Add-TestResult -Name "[Remediation off] The export records an ordinary UniqueValueAlreadyInUse error" -Passed ($inUse.Count -eq 1) `
+            -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
+        Add-TestResult -Name "[Remediation off] Nothing is remediated or parked" `
+            -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0 -and $export.Stats.totalGeneratedValuesNeedingDecision -eq 0) `
+            -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision)"
+        Add-TestResult -Name "[Remediation off] The Metaverse Account Name is unchanged ('$rejected')" `
+            -Passed ((Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name") -eq $rejected) `
+            -Detail "Got '$(Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name")'"
+        $assignmentState = Invoke-JimDatabaseScalar -Sql "SELECT ""State""::text || ':' || ""RemediationCount""::text FROM ""GeneratedValueAssignments"" WHERE ""MetaverseObjectId"" = '$($person.id)' AND ""MetaverseAttributeId"" = $($config.AccountNameMvAttributeId);"
+        Add-TestResult -Name "[Remediation off] The assignment is left unchanged (never remediated)" `
+            -Passed ($assignmentState -match ':0$') -Detail "State:RemediationCount '$assignmentState'"
     }
 
     Assert-NoWorkerErrors -Since $startTime
