@@ -147,9 +147,9 @@ internal static class ConnectionExplanationTestData
         Bullets =
         [
             Bullet((ExplanationSegmentKind.Text, "Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.")),
-            Bullet((ExplanationSegmentKind.Text, "A synchronisation that changes none of its attribute values does not stage it."))
+            Bullet((ExplanationSegmentKind.Text, "Saving a change to the Synchronisation Rule that can bring objects into its scope also stages it, at the next synchronisation of any Connected System."))
         ],
-        Summary = "Jane Smith is not provisioned to Learning Platform.\nReason: in scope of the Synchronisation Rule \"Learning Platform Users Export\", but nothing has been staged yet.\nWhat happens next:\n- Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.\n- A synchronisation that changes none of its attribute values does not stage it.\nEvaluated 4 Oct 2026 10:41 UTC.",
+        Summary = "Jane Smith is not provisioned to Learning Platform.\nReason: in scope of the Synchronisation Rule \"Learning Platform Users Export\", but nothing has been staged yet.\nWhat happens next:\n- Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.\n- Saving a change to the Synchronisation Rule that can bring objects into its scope also stages it, at the next synchronisation of any Connected System.\nEvaluated 4 Oct 2026 10:41 UTC.",
         Scoping = InScopeWithoutCriteria(8, "Learning Platform Users Export", SyncRuleDirection.Export)
     };
 

@@ -549,14 +549,18 @@ public class ScopingExplanationSummariserTests
 
     #region Other reasons
 
+    /// <summary>
+    /// Not marked for an export scope review (#1925): nothing will stage provisioning until the object's values change
+    /// or the rule is saved with a change that can bring objects into scope, and the explanation says both.
+    /// </summary>
     [Test]
-    public void SummariseNotConnected_NotYetProvisioned_SaysWhatStagesProvisioning()
+    public void SummariseNotConnected_NotYetProvisionedAndNotMarkedForReview_SaysWhatStagesProvisioning()
     {
         var rule = Rule();
         rule.Name = "Learning Platform Users Export";
 
         var summary = ScopingExplanationSummariser.SummariseNotConnected("Jane Smith", "Learning Platform", false,
-            NotConnectedReason.NotYetProvisioned, Explain(rule));
+            NotConnectedReason.NotYetProvisioned, Explain(rule), scopeReviewPending: false);
 
         using (Assert.EnterMultipleScope())
         {
@@ -567,7 +571,34 @@ public class ScopingExplanationSummariserTests
                 "Reason: in scope of the Synchronisation Rule \"Learning Platform Users Export\", but nothing has been staged yet.\n" +
                 "What happens next:\n" +
                 "- Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.\n" +
-                "- A synchronisation that changes none of its attribute values does not stage it.\n" +
+                "- Saving a change to the Synchronisation Rule that can bring objects into its scope also stages it, at the next synchronisation of any Connected System.\n" +
+                "Evaluated 4 Oct 2026 10:41 UTC."));
+        }
+    }
+
+    /// <summary>
+    /// Marked for an export scope review (a rule change or a relative date moved its scope, #1925): the next
+    /// synchronisation of any Connected System stages provisioning, so the explanation says that rather than waiting.
+    /// </summary>
+    [Test]
+    public void SummariseNotConnected_NotYetProvisionedAndMarkedForReview_SaysTheNextSynchronisationStagesIt()
+    {
+        var rule = Rule();
+        rule.Name = "Learning Platform Users Export";
+
+        var summary = ScopingExplanationSummariser.SummariseNotConnected("Jane Smith", "Learning Platform", false,
+            NotConnectedReason.NotYetProvisioned, Explain(rule), scopeReviewPending: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.Hint, Is.EqualTo("In scope; staged at the next synchronisation"));
+            Assert.That(summary.BulletsTitle, Is.EqualTo("What happens next"));
+            Assert.That(summary.Summary, Is.EqualTo(
+                "Jane Smith is not provisioned to Learning Platform.\n" +
+                "Reason: in scope of the Synchronisation Rule \"Learning Platform Users Export\"; the next synchronisation stages its provisioning.\n" +
+                "What happens next:\n" +
+                "- This Metaverse Object is marked for an export scope review.\n" +
+                "- The next synchronisation of any Connected System reviews it and stages its provisioning to Learning Platform.\n" +
                 "Evaluated 4 Oct 2026 10:41 UTC."));
         }
     }

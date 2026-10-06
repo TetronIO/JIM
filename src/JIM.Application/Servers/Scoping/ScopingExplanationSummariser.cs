@@ -536,8 +536,11 @@ internal static class ScopingExplanationSummariser
     /// The words for an entry under Not connected: its hint, its bullets with their title, and the plain-text summary
     /// an administrator copies into a message or ticket.
     /// </summary>
+    /// <param name="scopeReviewPending">Whether the object is marked for an export scope review, which decides what a
+    /// Not yet provisioned entry says happens next (#1925): the next synchronisation stages it, or nothing does until
+    /// its values or the rule change.</param>
     internal static NotConnectedSummary SummariseNotConnected(string? objectDisplayName, string connectedSystemName,
-        bool connectedSystemDisabled, NotConnectedReason reason, ScopingExplanation explanation)
+        bool connectedSystemDisabled, NotConnectedReason reason, ScopingExplanation explanation, bool scopeReviewPending = false)
     {
         var objectName = string.IsNullOrWhiteSpace(objectDisplayName) ? GenericObjectName : objectDisplayName;
         var ruleName = explanation.SyncRuleName;
@@ -549,12 +552,19 @@ internal static class ScopingExplanationSummariser
                 "To come into scope",
                 ToComeIntoScope(explanation),
                 $"not in scope of the Synchronisation Rule \"{ruleName}\"."),
+            NotConnectedReason.NotYetProvisioned when scopeReviewPending => (
+                "In scope; staged at the next synchronisation",
+                "What happens next",
+                TextBullets(
+                    "This Metaverse Object is marked for an export scope review.",
+                    $"The next synchronisation of any Connected System reviews it and stages its provisioning to {connectedSystemName}."),
+                $"in scope of the Synchronisation Rule \"{ruleName}\"; the next synchronisation stages its provisioning."),
             NotConnectedReason.NotYetProvisioned => (
                 "In scope; nothing staged yet",
                 "What happens next",
                 TextBullets(
                     "Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.",
-                    "A synchronisation that changes none of its attribute values does not stage it."),
+                    "Saving a change to the Synchronisation Rule that can bring objects into its scope also stages it, at the next synchronisation of any Connected System."),
                 $"in scope of the Synchronisation Rule \"{ruleName}\", but nothing has been staged yet."),
             NotConnectedReason.ProvisioningDisabled => (
                 "In scope; provisioning is off",

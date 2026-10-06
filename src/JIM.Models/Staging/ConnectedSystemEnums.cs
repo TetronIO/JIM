@@ -369,8 +369,9 @@ public enum NotConnectedReason
     RuleMisconfigured = 2,
 
     /// <summary>
-    /// The object is in scope and the rule provisions, but nothing has been staged: synchronisation stages provisioning
-    /// only when the object's attribute values change.
+    /// The object is in scope and the rule provisions, but nothing has been staged yet: either the object is marked for
+    /// an export scope review, which the next synchronisation performs, or it waits for its attribute values or the
+    /// rule's scope to change (#1925).
     /// </summary>
     NotYetProvisioned = 3
 }

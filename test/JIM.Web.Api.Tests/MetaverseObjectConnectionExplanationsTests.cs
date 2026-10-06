@@ -47,6 +47,8 @@ public class MetaverseObjectConnectionExplanationsTests
     private JimApplication _application = null!;
 
     private Guid _mvoId;
+
+    private MetaverseObjectHeader _header = null!;
     private List<ConnectedSystemObject> _joined = null!;
     private List<SyncRule> _rules = null!;
     private List<MetaverseObjectAttributeValue> _mvoValues = null!;
@@ -73,10 +75,11 @@ public class MetaverseObjectConnectionExplanationsTests
         _pendingExports = [];
         _history = [];
 
-        _metaverse.Setup(r => r.GetMetaverseObjectHeaderAsync(_mvoId)).ReturnsAsync(new MetaverseObjectHeader
+        _header = new MetaverseObjectHeader
         {
             Id = _mvoId, TypeId = PersonTypeId, TypeName = "Person", TypePluralName = "People", CachedDisplayName = "Jane Smith"
-        });
+        };
+        _metaverse.Setup(r => r.GetMetaverseObjectHeaderAsync(_mvoId)).ReturnsAsync(() => _header);
         _connectedSystems.Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(_mvoId)).ReturnsAsync(() => _joined);
         _connectedSystems.Setup(r => r.GetSyncRulesForScopingExplanationAsync(PersonTypeId)).ReturnsAsync(() => _rules);
         _metaverse.Setup(r => r.GetMetaverseObjectAttributeValuesAsync(_mvoId, It.IsAny<IReadOnlyCollection<int>>()))
@@ -452,6 +455,27 @@ public class MetaverseObjectConnectionExplanationsTests
         var entry = (await ExplainAsync())!.NotConnected!.Single();
 
         Assert.That(entry.Reason, Is.EqualTo(expected));
+    }
+
+    /// <summary>
+    /// Whether the Metaverse Object is marked for an export scope review (#1925) decides what a Not yet provisioned entry
+    /// says happens next: the next synchronisation stages it, or nothing does until its values or the rule change.
+    /// </summary>
+    [TestCase(true, "In scope; staged at the next synchronisation")]
+    [TestCase(false, "In scope; nothing staged yet")]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_NotYetProvisioned_SaysWhetherAScopeReviewIsPendingAsync(bool scopeReviewPending,
+        string expectedHint)
+    {
+        _header.ScopeReviewPending = scopeReviewPending;
+        ExportRule("Finance App Users Export", provision: true);
+
+        var entry = (await ExplainAsync())!.NotConnected!.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.Reason, Is.EqualTo(NotConnectedReason.NotYetProvisioned));
+            Assert.That(entry.Hint, Is.EqualTo(expectedHint));
+        }
     }
 
     [Test]

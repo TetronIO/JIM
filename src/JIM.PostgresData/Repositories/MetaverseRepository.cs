@@ -1863,6 +1863,7 @@ public class MetaverseRepository : IMetaverseRepository
             Id = entity.Id,
             Created = entity.Created,
             Status = entity.Status,
+            ScopeReviewPending = entity.ScopeReviewPending,
             TypeId = entity.Type.Id,
             TypeName = entity.Type.Name,
             TypePluralName = entity.Type.PluralName,

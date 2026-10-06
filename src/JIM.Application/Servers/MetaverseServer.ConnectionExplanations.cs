@@ -135,7 +135,9 @@ public partial class MetaverseServer
         }
 
         if (includeNotConnected)
-            result.NotConnected = notConnectedRules.Select(r => BuildNotConnectedEntry(r, exportExplanations[r.Id], header.Name)).ToList();
+            result.NotConnected = notConnectedRules
+                .Select(r => BuildNotConnectedEntry(r, exportExplanations[r.Id], header.Name, header.ScopeReviewPending))
+                .ToList();
 
         return result;
     }
@@ -263,7 +265,8 @@ public partial class MetaverseServer
     /// Why an enabled export rule has not connected the Metaverse Object to its Connected System (D5): scoping that
     /// cannot be evaluated, out of scope, or in scope but not provisioning or not yet provisioned.
     /// </summary>
-    private static NotConnectedEntry BuildNotConnectedEntry(SyncRule rule, ScopingExplanation explanation, string? objectDisplayName)
+    private static NotConnectedEntry BuildNotConnectedEntry(SyncRule rule, ScopingExplanation explanation, string? objectDisplayName,
+        bool scopeReviewPending)
     {
         var reason = explanation.Outcome switch
         {
@@ -273,7 +276,7 @@ public partial class MetaverseServer
         };
 
         var summary = ScopingExplanationSummariser.SummariseNotConnected(objectDisplayName, rule.ConnectedSystem.Name,
-            rule.ConnectedSystem.Status == ConnectedSystemStatus.Disabled, reason, explanation);
+            rule.ConnectedSystem.Status == ConnectedSystemStatus.Disabled, reason, explanation, scopeReviewPending);
 
         return new NotConnectedEntry
         {
