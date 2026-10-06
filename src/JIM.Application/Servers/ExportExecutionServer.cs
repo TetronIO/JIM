@@ -1712,9 +1712,9 @@ public class ExportExecutionServer
 
         // Synchronisation Integrity: log summary statistics (count plus CSO ids) at the end of this batch
         // operation, same as every other batch write in this server.
-        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed whose provisioning was " +
-            "never confirmed by an import (their Create was exported but the Metaverse Object was withdrawn before any confirming " +
-            "import); their Delete export has just succeeded, which is the only confirmation such an object can ever get: [{CsoIds}]",
+        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed because their Delete export " +
+            "has just succeeded and no confirming import will follow it (their provisioning was never confirmed by an import, or the " +
+            "export auto-confirmed): [{CsoIds}]",
             removedCount, string.Join(", ", csoIds));
     }
 
@@ -2630,8 +2630,12 @@ public class ExportExecutionServer
 
                 // A Delete that just succeeded against a CSO whose provisioning was
                 // never confirmed by an import is the terminal step in that object's life; see
-                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
-                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale. Issue #1936: so is any
+                // Delete this run auto-confirms, whatever the CSO's status, because auto-confirm is the
+                // confirmation; an object an import once confirmed (a system that ran Bidirectional before
+                // Export Only) was otherwise left behind for ever, its row gone from the file.
+                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export) ||
+                    (autoConfirm && export.ChangeType == PendingExportChangeType.Delete && export.ConnectedSystemObject != null);
 
                 // Capture export data for activity tracking (before deletion or status update)
                 result.ProcessedExportItems.Add(new ProcessedExportItem

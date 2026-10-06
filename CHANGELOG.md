@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
 - 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
 - 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it. It used to linger unseen and stop the Connected System it compared ever being deleted; systems already affected can be deleted again. (#134)

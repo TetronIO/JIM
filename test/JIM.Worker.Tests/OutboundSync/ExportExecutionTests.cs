@@ -2870,6 +2870,78 @@ public class ExportExecutionTests
         Assert.That(received.Count(pe => pe.Id == retained!.Id), Is.EqualTo(2), "the next run must send it again");
     }
 
+    /// <summary>
+    /// Issue #1936: an auto-confirmed Delete is the only confirmation its object will ever get on a target that is
+    /// never imported from, whatever the object's status. A Pending Provisioning object was already removed at that
+    /// point (see <c>IsUnconfirmedProvisioningDeleteSuccess</c>), but one an import had once confirmed (a system that
+    /// ran in Bidirectional mode before Export Only) was left behind for ever, its row gone from the file.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AutoConfirmedDeleteOfAConfirmedObject_RemovesTheConnectedSystemObjectAsync()
+    {
+        var cso = SeedFileDeleteExport(SyncRepo, ConnectedSystemObjectStatus.Normal, out var targetSystem);
+        var connector = CreateSucceedingFileConnector(autoConfirm: true);
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.False, "the deleted object must not outlive its confirmed Delete");
+            Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null);
+            Assert.That(result.ProcessedExportItems.Single().ConnectedSystemObjectRemoved, Is.True);
+        }
+    }
+
+    /// <summary>Where a confirming import owns confirmation, a Delete still waits for it to see the object gone.</summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteOfAConfirmedObjectAwaitingConfirmation_KeepsTheConnectedSystemObjectAsync()
+    {
+        var cso = SeedFileDeleteExport(SyncRepo, ConnectedSystemObjectStatus.Normal, out var targetSystem);
+        var connector = CreateSucceedingFileConnector(autoConfirm: false);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True);
+            Assert.That((await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id))?.Status, Is.EqualTo(PendingExportStatus.Exported));
+        }
+    }
+
+    /// <summary>A file-style Delete export for a Connected System Object with the given status.</summary>
+    private ConnectedSystemObject SeedFileDeleteExport(SyncRepository syncRepo, ConnectedSystemObjectStatus status, out ConnectedSystem targetSystem)
+    {
+        targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = status,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        syncRepo.SeedConnectedSystemObject(cso);
+
+        syncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        });
+
+        return cso;
+    }
+
     /// <summary>A file-style Update export of DisplayName for a Connected System Object holding no values yet.</summary>
     private (ConnectedSystem TargetSystem, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute DisplayNameAttr) SeedFileUpdateExport(
         SyncRepository syncRepo, string displayName)

@@ -15,7 +15,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
 - **Object type support**<br /> Objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
 - **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
-- **Auto-confirm export**<br /> In Export Only mode, exported changes are written directly and automatically confirmed
+- **Auto-confirm export**<br /> An export counts as confirmed as soon as the file is written, and JIM records the values it wrote, so it knows what the file holds without reading it back (see [Export Only mode](#export-only-mode))
 - **Stop on first error**<br /> Optionally halt processing on the first error encountered, useful for debugging data quality issues
 
 ## Settings
@@ -187,6 +187,26 @@ When JIM writes the export file, each attribute value is rendered as text in its
 
 !!! note "Binary is export-only"
     The File Connector cannot import Binary attribute values: schema discovery never infers a Binary type, and a schema-declared Binary attribute fails to parse on import. Binary cells written by an export are therefore one-way; do not use Bidirectional mode for a schema that includes Binary attributes.
+
+## Export Only mode
+
+In Export Only mode JIM writes the file and never reads it back. It knows what each row holds because every export records the values it wrote against the row's Connected System Object. That is what lets JIM clear a value in the file when it is cleared in the Metaverse: it compares the new value with what it last wrote.
+
+Three consequences are worth knowing:
+
+- **Changes made to the file outside JIM go unseen.** JIM compares against what it wrote, not against the file. If another process edits the file, use Bidirectional mode, so a confirming import reads the file after each export.
+- **Exported objects stay Pending Provisioning in the Connector Space.** Only an import moves an object to Normal, and Export Only never imports. This does not hold anything up: changes and deletions are exported as usual, and an object JIM deletes from the file is removed from the Connector Space at the same time.
+- **Nothing is lost if JIM cannot record what it wrote.** The export is left unconfirmed, the next export run writes the same rows again (which changes nothing in the file) and records them, and the export's Activity finishes with a warning saying so.
+
+### Bringing JIM up to date with an existing file
+
+JIM records values only when it writes them. Point a new Export Only Connected System at a file that already has rows, or upgrade from a JIM release that did not record exported values, and JIM does not know what those rows hold: a value cleared in the Metaverse is not cleared from them until the value has changed at least once since. To have JIM learn the whole file at once:
+
+1. Set the Connected System's **Mode** to **Bidirectional**.
+2. Run a **Full Import** for it, then a **Full Synchronisation**, creating those Run Profiles if it has none.
+3. Set **Mode** back to **Export Only**.
+
+The import reads every row into the Connector Space, and moves the objects it finds to Normal. Rows JIM did not write, and objects JIM expected but the file does not have, are reported by that import like any other.
 
 ## Troubleshooting
 
