@@ -1240,6 +1240,15 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// Who made a Metaverse Object's earliest and latest changes: its Created By and Last Updated By. Both null when
+    /// the object has no change history.
+    /// </summary>
+    public async Task<(MvoChangeInitiatorSummary? Earliest, MvoChangeInitiatorSummary? Latest)> GetMetaverseObjectChangeInitiatorsAsync(Guid id)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectChangeInitiatorsAsync(id);
+    }
+
+    /// <summary>
     /// Updates a Metaverse Object and optionally records the update for audit trail.
     /// When additions/removals are provided and change tracking is enabled, a change record is created automatically.
     /// Callers that only update operational metadata (e.g. deletion dates) can omit additions/removals
@@ -1464,24 +1473,9 @@ public partial class MetaverseServer
             }
 
             pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
-            var state = ConnectedSystemObjectConnectionStateResolver.Resolve(cso.Status, pendingExport);
-
-            connections.Add(new MetaverseObjectConnection
-            {
-                ConnectedSystemObjectId = cso.Id,
-                DisplayName = cso.ExternalIdAttributeValue?.ToStringNoName() ?? cso.Id.ToString(),
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemName = cso.ConnectedSystem.Name,
-                ObjectTypeName = cso.Type.Name,
-                JoinType = cso.JoinType,
-                IsSource = isSource,
-                IsTarget = isTarget,
-                State = state,
-                PendingAttributeChangeCount = state == ConnectedSystemObjectConnectionState.UpdatePending
-                    ? pendingExport?.AttributeValueChanges.Count
-                    : null,
-                LastSynchronised = cso.LastUpdated
-            });
+            var row = new MetaverseObjectConnection();
+            PopulateConnectionRow(row, cso, isSource, isTarget, pendingExport);
+            connections.Add(row);
         }
 
         return connections;

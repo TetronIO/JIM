@@ -625,6 +625,39 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// Gets the enabled Synchronisation Rules of a Metaverse Object Type, in both directions, with what explaining a
+    /// Metaverse Object's connections needs (#348): the Connected System's name and status, the Connected System Object
+    /// Type's name, whether the rule provisions, and the complete scoping criteria tree at whatever depth it was built,
+    /// with each criterion's attribute. Untracked, and nothing else of the rule is loaded.
+    /// </summary>
+    /// <remarks>
+    /// The tree is loaded by the same loader synchronisation's rule loads use, so an explanation cannot evaluate a
+    /// different tree from the one synchronisation evaluates. A handful of queries, independent of how many rules or
+    /// criteria there are.
+    /// </remarks>
+    public Task<List<SyncRule>> GetSyncRulesForScopingExplanationAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Gets every value the given Connected System Objects hold for the given attributes (#348), uncapped, so scoping
+    /// can be explained against exactly the values synchronisation compares. Values carry their scalar fields and
+    /// attribute id only.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetConnectedSystemObjectAttributeValuesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
+    /// Gets the Activity history still retained that evidences how the given Connected System Objects were joined
+    /// (#348): Run Profile Execution Items recording their projection or inbound join (with the projecting rule), and the
+    /// synchronisation that staged their provisioning, found through the export that created them or, while the
+    /// creation is still pending, through the Pending Export's queueing item.
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The objects to find history for.</param>
+    /// <param name="pendingProvisioningQueuedBy">For objects whose provisioning is still pending, the Run Profile
+    /// Execution Item that queued it, keyed by object id.</param>
+    public Task<List<JoinHistoryEntry>> GetJoinHistoryAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyDictionary<Guid, Guid> pendingProvisioningQueuedBy);
+
+    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>
@@ -1506,11 +1539,11 @@ public interface IConnectedSystemRepository
     /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
-    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
-    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
-    /// change tracker).
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
+    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
+    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
     /// </summary>
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

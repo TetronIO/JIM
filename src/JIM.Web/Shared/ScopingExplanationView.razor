@@ -1,0 +1,92 @@
+@using JIM.Models.Logic
+@using JIM.Models.Logic.Scoping
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One Synchronisation Rule's scoping evaluated against one object (#348), drawn as the rule's own criteria tree:
+   each group with whether it was met, and each criterion with what the object held. Every word is the server's
+   (ScopingExplanationSummariser), so this tree reads the same as the REST API's and PowerShell's. Shared by the
+   Connections tab's joined rows, their Object Type conflicts and the Not connected entries. *@
+<div class="jim-scoping-explanation" data-testid="jim-scoping-explanation" data-outcome="@Explanation.Outcome">
+    <div class="jim-scoping-explanation-header">
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="ma-0">@Explanation.Direction</MudChip>
+        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@Explanation.SyncRuleName"
+                    Href="@($"/admin/sync-rules/{Explanation.SyncRuleId}")" />
+        <MudChip T="string" Variant="Variant.Text" Color="@OutcomeColour(Explanation.Outcome)" Class="ma-0">@OutcomeLabel(Explanation.Outcome)</MudChip>
+    </div>
+
+    @if (!Explanation.HasCriteria || Explanation.Groups.Count == 0)
+    {
+        <div class="jim-scoping-no-criteria" data-testid="jim-scoping-no-criteria">In scope: no scoping criteria.</div>
+    }
+    else if (Explanation.Groups.Count == 1)
+    {
+        @RenderGroup(Explanation.Groups[0])
+    }
+    else
+    {
+        @* A rule's top-level groups are alternatives: the object is in scope when any one of them is met. *@
+        <div class="jim-scoping-alternatives" data-testid="jim-scoping-alternatives">
+            <div class="jim-scoping-group-heading">Any one of these groups</div>
+            @foreach (var group in Explanation.Groups)
+            {
+                @RenderGroup(group)
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The explanation to draw, as the server built it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ScopingExplanation Explanation { get; set; } = null!;
+
+    private RenderFragment RenderGroup(ScopingGroupExplanation group) => __builder =>
+    {
+        <div class="jim-scoping-group" data-testid="jim-scoping-group" data-path="@group.Path">
+            <div class="jim-scoping-group-heading">@group.Description</div>
+            @foreach (var criterion in group.Criteria)
+            {
+                var (icon, colour, label) = CriterionOutcome(criterion.Outcome);
+                <div class="@($"jim-scoping-criterion jim-scoping-criterion-{criterion.Outcome.ToString().ToLowerInvariant()}")"
+                     data-testid="jim-scoping-criterion" data-path="@criterion.Path" data-outcome="@criterion.Outcome">
+                    <span role="img" aria-label="@label" title="@label" class="jim-scoping-criterion-icon">
+                        <MudIcon Icon="@icon" Color="@colour" Size="Size.Small" aria-hidden="true" />
+                    </span>
+                    <span class="jim-scoping-criterion-text">@criterion.Description</span>
+                    <span class="jim-scoping-criterion-actual">@criterion.ActualDescription</span>
+                </div>
+            }
+            @foreach (var child in group.ChildGroups)
+            {
+                @RenderGroup(child)
+            }
+        </div>
+    };
+
+    private static string OutcomeLabel(ScopingRuleOutcome outcome) => outcome switch
+    {
+        ScopingRuleOutcome.InScope => "In scope",
+        ScopingRuleOutcome.OutOfScope => "Not in scope",
+        _ => "Cannot be evaluated"
+    };
+
+    private static Color OutcomeColour(ScopingRuleOutcome outcome) => outcome switch
+    {
+        ScopingRuleOutcome.InScope => Color.Success,
+        ScopingRuleOutcome.OutOfScope => Color.Warning,
+        _ => Color.Error
+    };
+
+    private static (string Icon, Color Colour, string Label) CriterionOutcome(ScopingCriterionOutcome outcome) => outcome switch
+    {
+        ScopingCriterionOutcome.Met => (Icons.Material.Outlined.CheckCircle, Color.Success, "Met"),
+        ScopingCriterionOutcome.NotMet => (Icons.Material.Outlined.Cancel, Color.Error, "Not met"),
+        ScopingCriterionOutcome.NoValue => (Icons.Material.Outlined.RemoveCircleOutline, Color.Warning, "No value, so not met"),
+        ScopingCriterionOutcome.AttributeMissing => (Icons.Material.Outlined.HelpOutline, Color.Error, "References no attribute"),
+        _ => (Icons.Material.Outlined.ErrorOutline, Color.Error, "Invalid; cannot be evaluated")
+    };
+}
