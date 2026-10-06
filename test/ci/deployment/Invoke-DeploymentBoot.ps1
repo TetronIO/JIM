@@ -14,7 +14,8 @@
       4. Writes a marker to the database and to the File Connector volume, stops JIM and starts it again
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
-      5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host.
+      5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host, and with
+         the TCP keepalives that drop a session whose client has gone.
       6. Backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as written
          (rootless, with jim-podman as Running on Podman says), checks the archive with the page's own check,
          and checks the commands fetched no image, which an air-gapped host could not, and put the key volume
@@ -405,6 +406,17 @@ try {
         $sized += "shm_size ${chosen}mb"
     }
     Write-Step "PostgreSQL runs with the memory the installer sized: $($sized -join ', ')"
+
+    # And with the TCP keepalives that drop a session whose client has gone within two minutes: on Podman every stop of
+    # JIM leaves its sessions so, since the pod's network goes before JIM's services close their connections (#1980).
+    # Read over TCP, since on a local socket, which has none, PostgreSQL reports each of them as 0.
+    $keepalives = Invoke-Runtime @('exec', $containers.database, 'sh', '-c',
+        'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U jim -d jim -v ON_ERROR_STOP=1 -Atc "$1"', 'sh',
+        "SELECT string_agg(name || '=' || setting, ' ' ORDER BY name) FROM pg_settings WHERE name LIKE 'tcp_keepalives%';")
+    if ($keepalives -ne 'tcp_keepalives_count=6 tcp_keepalives_idle=60 tcp_keepalives_interval=10') {
+        throw "PostgreSQL does not run with the TCP keepalives that drop a session whose client has gone: $keepalives"
+    }
+    Write-Step "PostgreSQL drops a session whose client has gone within two minutes: $keepalives"
 
     # 6. The key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped as the page
     # and the upgrade guide have it, and fetch no image. Until #1949 the Docker ones ran an image JIM does not ship,
