@@ -22,6 +22,16 @@ Every statement in the preview is conditional: "would project", "would join", "w
 
 The panel offers the same **Timeline** and **Table** views documented for a recorded [Run Profile Execution Item](activities.md#execution-items) (the Lineage view is not offered, since a preview has no recorded object graph to draw). On the Table view, the current-state and would-be columns read **Current** and **Would be** rather than **Before** and **After**.
 
+## Which exports it shows
+
+The preview shows the exports synchronising this object would stage, which is narrower than every difference between its Metaverse Object and each target:
+
+- **Changes this object brings in**<br /> An export is proposed only for what this object's own Attribute Flow changes on the Metaverse Object (and for a provisioning or deprovisioning its scope causes). A value someone changed directly in another Connected System is not corrected by synchronising this one, so it is not shown.
+- **Drift corrections in this Connected System**<br /> Where an export Synchronisation Rule to this object's own Connected System has [Enforce State](synchronisation-rules.md#export-outbound) on, and the object's values have drifted from what the Metaverse Object says they should be, the preview shows the correction as **Drift would be corrected**, where the synchronisation records **Drift corrected**. This applies to target systems too, where no import rule processes the object.
+- **Export scope review**<br /> If a change to an export Synchronisation Rule has flagged the object's Metaverse Object for review, the preview shows the provisioning or deprovisioning the review would make.
+
+The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips an object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
+
 ## The destructive cascade
 
 When an object falls out of scope of every import Synchronisation Rule with Scoping Criteria, a real synchronisation does not stop at disconnecting it. Sync Preview walks the same chain:

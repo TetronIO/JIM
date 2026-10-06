@@ -124,6 +124,32 @@ public class ConnectedSystem : IAuditable
     public DateTime? ConfigurationLastFullyAppliedAt { get; set; }
 
     /// <summary>
+    /// The watermark a Full Synchronisation of this system loads its objects with, skipping those unchanged since it
+    /// (<see cref="ConnectedSystemObject.IsUnchangedSince"/>), or null when the unchanged-object optimisation is off for
+    /// the run. It is on only while no Synchronisation Rule configuration has changed since configuration was last
+    /// fully applied (<see cref="ConfigurationLastFullyAppliedAt"/>): a configuration change must reach every object.
+    /// One rule for the run and the Full Synchronisation preview (#1530).
+    /// </summary>
+    /// <param name="latestConfigurationChange">The newest Synchronisation Rule or mapping change across every
+    /// Connected System, since another system's priority affects this system's resolution; null when none is recorded.</param>
+    public DateTime? GetUnchangedObjectWatermark(DateTime? latestConfigurationChange) =>
+        GetUnchangedObjectWatermark(LastSyncCompletedAt, ConfigurationLastFullyAppliedAt, latestConfigurationChange);
+
+    /// <summary>
+    /// <see cref="GetUnchangedObjectWatermark(DateTime?)"/> from the two watermarks alone, for a reader that loads
+    /// them without the rest of the Connected System.
+    /// </summary>
+    public static DateTime? GetUnchangedObjectWatermark(DateTime? lastSyncCompletedAt, DateTime? configurationLastFullyAppliedAt,
+        DateTime? latestConfigurationChange)
+    {
+        if (!lastSyncCompletedAt.HasValue || configurationLastFullyAppliedAt == null)
+            return null;
+        if (latestConfigurationChange.HasValue && latestConfigurationChange.Value > configurationLastFullyAppliedAt.Value)
+            return null;
+        return lastSyncCompletedAt;
+    }
+
+    /// <summary>
     /// Maximum number of export batches to process concurrently.
     /// Only applicable when the connector supports parallel export (SupportsParallelExport).
     /// Null or 1 means sequential processing (default). Higher values enable parallel batch export
