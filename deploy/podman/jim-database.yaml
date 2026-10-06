@@ -66,6 +66,15 @@ spec:
         - max_parallel_maintenance_workers=4
         - -c
         - statement_timeout=300000
+        # Drop a session whose client has gone within two minutes, not Linux's two hours: stopping JIM takes its pod's
+        # network away before JIM's services close their connections, which would otherwise leave their sessions
+        # behind at every stop (#1980).
+        - -c
+        - tcp_keepalives_idle=60
+        - -c
+        - tcp_keepalives_interval=10
+        - -c
+        - tcp_keepalives_count=6
         - -c
         - dynamic_shared_memory_type=mmap
         - -c

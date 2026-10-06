@@ -156,12 +156,15 @@ services:
     # so the database never started on one (#1943). The rest assume an SSD, and up to 16 cores.
     # shm_size is /dev/shm, which holds the shared memory of parallel queries; Docker's default is only 64 MB.
     # statement_timeout=300000 (5 minutes) prevents runaway queries
+    # tcp_keepalives_* drop a session whose client has gone within two minutes (probes after 60 seconds idle, six
+    # of them 10 seconds apart), not Linux's two hours: on Podman, stopping JIM takes its pod's network away before
+    # JIM's services close their connections, so every stop would otherwise leave their sessions behind (#1980).
     # log_min_duration_statement (JIM_DB_LOG_MIN_DURATION) logs slow queries for performance analysis
     # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI.
     # The entrypoint wrapper creates a postgres-owned subdirectory before delegating to the
     # standard postgres entrypoint, since the shared volume root is owned by root.
     entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
-    command: postgres -c max_connections=200 -c shared_buffers=${JIM_DB_SHARED_BUFFERS:-1GB} -c effective_cache_size=${JIM_DB_EFFECTIVE_CACHE_SIZE:-2GB} -c maintenance_work_mem=${JIM_DB_MAINTENANCE_WORK_MEM:-256MB} -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=1000 -c work_mem=${JIM_DB_WORK_MEM:-4MB} -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
+    command: postgres -c max_connections=200 -c shared_buffers=${JIM_DB_SHARED_BUFFERS:-1GB} -c effective_cache_size=${JIM_DB_EFFECTIVE_CACHE_SIZE:-2GB} -c maintenance_work_mem=${JIM_DB_MAINTENANCE_WORK_MEM:-256MB} -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=1000 -c work_mem=${JIM_DB_WORK_MEM:-4MB} -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c tcp_keepalives_idle=60 -c tcp_keepalives_interval=10 -c tcp_keepalives_count=6 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
     restart: always
     shm_size: ${JIM_DB_SHM_SIZE:-1280mb}
     volumes:
