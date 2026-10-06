@@ -626,13 +626,14 @@ public partial class SyncRepository
 
     /// <summary>
     /// Issues the batched, VALUES-list UPDATE of the MetaverseObjects rows on the EF connection (so it joins the
-    /// ambient transaction). Only the mutable columns in <see cref="MvoBulkInsertColumns.MetaverseObjectsUpdate"/>
-    /// are written; there is no xmin predicate, so the update is keyed solely on the immutable Id.
+    /// ambient transaction). Only the columns in <see cref="MvoBulkInsertColumns.MetaverseObjectsUpdate"/> are
+    /// written, which leaves out the scope review columns other writers own (see its documentation); there is no
+    /// xmin predicate, so the update is keyed solely on the immutable Id.
     /// </summary>
     private async Task BulkUpdateMvoRowsViaEfAsync(List<MetaverseObject> objects)
     {
-        // Id plus the fourteen mutable columns.
-        const int columnsPerRow = 15;
+        // Id plus the twelve updatable columns.
+        const int columnsPerRow = 13;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
@@ -653,9 +654,7 @@ public partial class SyncRepository
                     "DeletionTriggeredBySystemId" = v."DeletionTriggeredBySystemId",
                     "DeletionTriggeredBySystemName" = v."DeletionTriggeredBySystemName",
                     "DeletionPolicySnapshotJson" = v."DeletionPolicySnapshotJson",
-                    "CachedDisplayName" = v."CachedDisplayName",
-                    "ScopeReviewPending" = v."ScopeReviewPending",
-                    "LastScopeEvaluatedAt" = v."LastScopeEvaluatedAt"
+                    "CachedDisplayName" = v."CachedDisplayName"
                 FROM (VALUES
                 """);
 
@@ -665,7 +664,7 @@ public partial class SyncRepository
                 if (i > 0) sql.Append(',');
                 var o = i * columnsPerRow;
                 // Explicit casts give the VALUES columns a definite type even when a whole chunk is null for a column.
-                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::int,{{{o + 10}}}::text,{{{o + 11}}}::text,{{{o + 12}}}::text,{{{o + 13}}}::boolean,{{{o + 14}}}::timestamptz)");
+                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::int,{{{o + 10}}}::text,{{{o + 11}}}::text,{{{o + 12}}}::text)");
 
                 var mvo = chunk[i];
                 parameters.Add(mvo.Id);
@@ -681,12 +680,10 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(mvo.ScopeReviewPending);
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             sql.Append("""
-                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","DeletionTriggeredBySystemId","DeletionTriggeredBySystemName","DeletionPolicySnapshotJson","CachedDisplayName","ScopeReviewPending","LastScopeEvaluatedAt")
+                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","DeletionTriggeredBySystemId","DeletionTriggeredBySystemName","DeletionPolicySnapshotJson","CachedDisplayName")
                 WHERE m."Id" = v."Id"
                 """);
 

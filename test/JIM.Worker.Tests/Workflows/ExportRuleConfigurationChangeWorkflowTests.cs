@@ -279,6 +279,116 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
 
     #endregion
 
+    #region What the review records
+
+    [Test]
+    public async Task FullSync_AfterScopingCriteriaAreWidened_RecordsAnItemOnlyForTheObjectItProvisionedAsync()
+    {
+        // The review evaluates every object of the type (Alice and Bob are already provisioned), so an item per
+        // object reviewed would bury the one that changed among a type's whole population.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: false, provisioning: true, scopedToEmployees: true);
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Clear();
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        Assert.That(item, Is.Not.Null, "one item, for Carol: " + DescribeItems(activity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item!.DisplayNameSnapshot, Is.EqualTo(ItemNameOf(ctx, "Carol")), "the item names the object it is for");
+            Assert.That(item!.ObjectTypeSnapshot, Is.EqualTo("Person"));
+            Assert.That(item!.SyncOutcomes.Select(o => o.OutcomeType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowed_RecordsTheDeleteOnTheObjectsItemAsync()
+    {
+        // Deprovisioning is the most consequential thing a run stages, so the review must say whose account it is
+        // removing, not only queue the Delete.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        Assert.That(item, Is.Not.Null, "one item, for Carol: " + DescribeItems(activity));
+        var delete = PendingExportsFor(ctx.Directory).Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        var deprovision = item!.SyncOutcomes.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item!.DisplayNameSnapshot, Is.EqualTo(ItemNameOf(ctx, "Carol")));
+            Assert.That(deprovision, Is.Not.Null, "the Delete is recorded on Carol's item");
+            Assert.That(deprovision?.TargetEntityDescription, Is.EqualTo("Directory"), "naming the system it is removed from");
+            Assert.That(delete.QueuedByRunProfileExecutionItemId, Is.EqualTo(item!.Id), "the export run can say what queued it");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowedWithOutcomeTrackingOff_StillRecordsAnItemForTheDisconnectedObjectAsync()
+    {
+        // Whether an object gets an item turns on what the review did to it, not on how much outcome detail the run
+        // records: with tracking off there are no outcomes to go by, and a disconnection records none either.
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false, deprovisionAction: OutboundDeprovisionAction.Disconnect);
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        Assert.That(activity.RunProfileExecutionItems.Select(i => i.DisplayNameSnapshot).ToList(), Is.EqualTo(new[] { ItemNameOf(ctx, "Carol") }),
+            DescribeItems(activity));
+    }
+
+    [Test]
+    public async Task FullSync_WhenAnObjectsOwnChangeTakesItOutOfScope_RecordsTheDeleteOnItsItemAsync()
+    {
+        // Not the review: Bob's own data changes. The Delete his scope exit stages belongs on the item recording that
+        // change, as a provisioning does, so the Activity shows why his account is going.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        await RunFullSyncAsync(ctx.Hr);
+        Assert.That(DeletesFor(ctx), Is.EqualTo(new[] { "Carol" }), "arrange: Carol is deprovisioned by the review");
+
+        await Task.Delay(5);
+        var bobInHr = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id &&
+            c.AttributeValues.Any(av => av.Attribute?.Name == "DisplayName" && av.StringValue == "Bob"));
+        bobInHr.AttributeValues.Single(av => av.Attribute?.Name == "Title").StringValue = "Contractor";
+        bobInHr.LastUpdated = DateTime.UtcNow;
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var bobsItem = activity.RunProfileExecutionItems.SingleOrDefault(i => i.ConnectedSystemObjectId == bobInHr.Id);
+        Assert.That(bobsItem, Is.Not.Null, DescribeItems(activity));
+        var delete = PendingExportsFor(ctx.Directory).Single(pe => pe.ChangeType == PendingExportChangeType.Delete &&
+            SyncRepo.ConnectedSystemObjects[pe.ConnectedSystemObjectId!.Value].MetaverseObjectId == bobInHr.MetaverseObjectId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bobsItem!.SyncOutcomes.Select(o => o.OutcomeType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued));
+            Assert.That(delete.QueuedByRunProfileExecutionItemId, Is.EqualTo(bobsItem!.Id));
+        }
+    }
+
+    /// <summary>
+    /// How an item names a person's Metaverse Object. The fixture's attribute is "DisplayName" rather than the
+    /// built-in "Display Name", so the object has no name of its own here and is named by its id instead.
+    /// </summary>
+    private string ItemNameOf(Context ctx, string displayName) => SyncRepo.MetaverseObjects.Values
+        .Single(mvo => mvo.Type?.Id == ctx.MvType.Id &&
+            mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDisplayName.Id && av.StringValue == displayName))
+        .NameOrId;
+
+    private static string DescribeItems(Activity activity) => "items: [" + string.Join("; ", activity.RunProfileExecutionItems.Select(i =>
+        $"{i.DisplayNameSnapshot ?? "(unnamed)"} {i.ObjectChangeType} {i.ErrorType} [{string.Join(", ", i.SyncOutcomes.Select(o => o.OutcomeType))}]")) + "]";
+
+    #endregion
+
     #region Attribute Flow
 
     [Test]
@@ -548,13 +658,14 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
             .SingleOrDefault(av => av.Attribute?.Name == "DisplayName")?.StringValue)
         .ToList();
 
-    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem)
     {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 
     private async Task RunDeltaSyncAsync(ConnectedSystem connectedSystem)

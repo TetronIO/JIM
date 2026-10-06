@@ -702,6 +702,7 @@ public class ExportEvaluationServer
 
                 // Update the CSO in the database
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
+                workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id));
 
                 // Was that the last connector? (Asked after the removal above, per the engine's contract.)
                 if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))

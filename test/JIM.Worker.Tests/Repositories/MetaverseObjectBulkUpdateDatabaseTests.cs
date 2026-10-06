@@ -236,6 +236,69 @@ public class MetaverseObjectBulkUpdateDatabaseTests
     }
 
     /// <summary>
+    /// A configuration change to an export Synchronisation Rule flags every Metaverse Object of its type for review
+    /// (#1925), from the portal's context, while a synchronisation may already hold some of those objects as it loaded
+    /// them, unflagged. That synchronisation's update of such an object must not write its stale flag back: the object
+    /// was evaluated against the rules the run read before the change, so the flag is the only thing that brings it to
+    /// the next run's review, and losing it means the provisioning or deprovisioning the change asked for never happens.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_FlaggedForScopeReviewAfterLoad_KeepsTheFlagAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var syncCtx = NewContext();
+        var syncRepo = new PostgresDataRepository(syncCtx);
+        var personType = await syncCtx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { TextValue(ids.DepartmentId, "Sales") } };
+        await syncRepo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        // The administrator saves a scope-moving change from another context while the synchronisation holds the object.
+        await using (var portalCtx = NewContext())
+            await new PostgresDataRepository(portalCtx).Sync.FlagMetaverseObjectsOfTypeForScopeReviewAsync(ids.PersonTypeId);
+
+        // The synchronisation's Attribute Flow changes the object it still holds unflagged, and persists it.
+        mvo.AttributeValues.Add(TextValue(ids.JobTitleId, "Engineer"));
+        await syncRepo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        Assert.That(persisted.ScopeReviewPending, Is.True, "the synchronisation wrote back the flag it loaded, losing the review");
+    }
+
+    /// <summary>
+    /// The Temporal Scope Reconciler (#892) flags an object and advances its LastScopeEvaluatedAt from its own context,
+    /// on its own schedule, so it can do so while a synchronisation holds the object as it loaded it. The
+    /// synchronisation's update must leave both columns as the reconciler wrote them.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_ReconcilerMarkedAfterLoad_KeepsTheReconcilersColumnsAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var syncCtx = NewContext();
+        var syncRepo = new PostgresDataRepository(syncCtx);
+        var personType = await syncCtx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { TextValue(ids.DepartmentId, "Sales") } };
+        await syncRepo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        var sweptAt = new DateTime(2026, 10, 6, 9, 0, 0, DateTimeKind.Utc);
+        await using (var reconcilerCtx = NewContext())
+            await new PostgresDataRepository(reconcilerCtx).Metaverse.MarkMetaverseObjectsScopeEvaluatedAsync([mvo.Id], [mvo.Id], sweptAt);
+
+        mvo.AttributeValues.Add(TextValue(ids.JobTitleId, "Engineer"));
+        await syncRepo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ScopeReviewPending, Is.True, "the reconciler's flag was overwritten");
+            Assert.That(persisted.LastScopeEvaluatedAt, Is.EqualTo(sweptAt), "the reconciler's sweep time was overwritten");
+        }
+    }
+
+    /// <summary>
     /// Seeds a Connected System and two import Synchronisation Rules, so attribute values can carry real provenance
     /// foreign keys.
     /// </summary>
