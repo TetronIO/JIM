@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-04-23 |
-| **Last Updated** | 2026-10-05 |
+| **Last Updated** | 2026-10-06 |
 | **Status** | Active |
 
 This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
@@ -150,6 +150,20 @@ Worked examples (export rule on a Person's termination-date attribute):
 - **Leavers terminated within the last year**: an `All` group with the date attribute *on or before* `30 days ago` (`LessThanOrEquals`, 30 Days Ago) and *after* `364 days ago` (`GreaterThan`, 364 Days Ago). The window slides forward on every run.
 - **Accounts expiring soon**: `AccountExpiry` *on or before* `7 days from now` (`LessThanOrEquals`, 7 Days FromNow) scopes in objects due to expire within the coming week.
 
+## Multi-valued attributes
+
+A criterion is evaluated against every value the object holds for its attribute, never one chosen value ([issue #1923](https://github.com/TetronIO/JIM/issues/1923)). Before that fix both paths took `FirstOrDefault`, so the outcome for a multi-valued attribute depended on value order, which nothing defines: the same object could be in scope on one run and out on the next, churning provisioning and deprovisioning.
+
+- **Positive operators** (`Equals`, `StartsWith`, `EndsWith`, `Contains`, and the four ordering comparisons) are met when **any** value satisfies them.
+- **Negated operators** (`NotEquals`, `NotStartsWith`, `NotEndsWith`, `NotContains`; classified by `SearchComparisonOperators.IsNegated`) are met when **every** value satisfies them, which for real values is "no value matches the operator it negates".
+- **No values**: the missing-value rule is unchanged (only an all-empty absolute `Equals` criterion matches). On the export path, asserted-null markers (`NullValue`, #91) are excluded before counting, so they are never treated as values.
+
+`ScopingEvaluationServer.IsMetByValues` applies the any/every choice; both `EvaluateMvoScopingCriterion` and `EvaluateCsoScopingCriterion` route through it, and every caller (sync, export evaluation, the previews, the Temporal Scope Reconciler) inherits the semantics. Evaluating a negated operator as "every value satisfies it", rather than "not any value matches the positive form", is deliberate: for zero or one value it is identical to the previous per-value evaluation, so single-valued attributes are scoped exactly as before, including the edge cases the comparison helpers already define for a value whose typed field is empty.
+
+These are the semantics directory filters use, and they agree with the Predefined Search SQL for the positive operators (`EXISTS`) and for the negated text operators over objects that hold values (`NOT EXISTS`). They do not agree with Predefined Search's `NotEquals`, which is `EXISTS (value <> x)` ("some value differs"), nor with its negated text operators over an object holding no value, which `NOT EXISTS` matches and scoping does not. Two consequences are documented for administrators: ordering comparisons can both be met at once (`[3, 10]` is both `< 5` and `> 5`), and two criteria in an `All` group can be met by different values, so a range on a multi-valued attribute does not require one value inside it. There is no "every value" mode; it was considered alongside forbidding multi-valued attributes in criteria, and both were rejected (forbidding breaks common configurations such as scoping a directory import on `objectClass`; a per-criterion mode adds a field across the editor, REST and PowerShell with no demonstrated need).
+
+Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationMultiValuedTests.cs` covers every operator for every data type over no values, one value, several matching, several non-matching and mixed values, on both paths and under every ordering of the values.
+
 ## Criteria groups and loading
 
 A rule's criteria are a tree: top-level groups (ORed together; the rule is in scope if any top-level group is met), each an `All` or `Any` group of criteria and child groups, nested to any depth. An empty group counts as met, and a rule with no groups is in scope.
@@ -169,4 +183,4 @@ The following behaviours are out of scope for the current implementation. They a
 - Inbound flow: `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`, `src/JIM.Application/Servers/ScopingEvaluationServer.cs`.
 - Outbound flow: `src/JIM.Application/Servers/ExportEvaluationServer.cs`.
 - Deletion rule evaluation: `src/JIM.Application/Servers/SyncEngine.cs`.
-- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.
+- Tests: `test/JIM.Worker.Tests/Synchronisation/ScopingEvaluationTests.cs`, `ScopingEvaluationMultiValuedTests.cs`, `OutOfScopeChangeTypeTests.cs`, `test/JIM.Worker.Tests/SyncEngineTests/SyncEngineOutOfScopeTests.cs`, `DeletionRuleWorkflowTests.cs`, `test/JIM.Worker.Tests/ExportEvaluationTests.cs`.

@@ -84,4 +84,15 @@ public static class SearchComparisonOperators
     /// </summary>
     public static bool IsValid(SearchComparisonType op, AttributeDataType type) =>
         op != SearchComparisonType.NotSet && ValidOperatorsFor(type).Contains(op);
+
+    /// <summary>
+    /// Returns true for the operators that negate another operator (does not equal, does not start with, does not end
+    /// with, does not contain). Over a multi-valued attribute a positive operator is met when any value matches, and a
+    /// negated operator when no value matches the operator it negates (#1923).
+    /// </summary>
+    public static bool IsNegated(SearchComparisonType op) => op is
+        SearchComparisonType.NotEquals or
+        SearchComparisonType.NotStartsWith or
+        SearchComparisonType.NotEndsWith or
+        SearchComparisonType.NotContains;
 }

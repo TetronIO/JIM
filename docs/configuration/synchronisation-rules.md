@@ -78,6 +78,23 @@ Criteria are organised into groups with AND/OR logic and support nested groups f
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
+### Multi-valued attributes in scope
+
+A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:
+
+- **Positive operators**<br /> *equals*, *starts with*, *ends with*, *contains*, and the ordering comparisons (*less than*, *before*, *greater than*, *after* and their *or equal to* forms) are met when **any** value matches.
+- **Negated operators**<br /> *does not equal*, *does not start with*, *does not end with* and *does not contain* are met when **no** value matches.
+- **No values at all**<br /> Handled exactly as for a single-valued attribute: only an *equals* criterion with an empty value matches.
+
+For example, an export rule scoped to `Groups` *contains* `Finance` includes a Metaverse Object whose groups are `All Staff` and `Finance Readers`, and `Groups` *does not contain* `Finance` excludes it. An import rule scoped to `objectClass` *equals* `user` includes a directory user whose classes are `top`, `person`, `organizationalPerson` and `user`.
+
+Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
+
+!!! note "Upgrading from an earlier version"
+    Earlier versions compared only one value of a multi-valued attribute, whichever happened to load first, so the same object could be in scope on one run and out on the next. After upgrading, an object holding several values for an attribute that a criterion uses can move in or out of scope at its next synchronisation. Only rules with a criterion on a multi-valued attribute are affected; the Attributes tab of the Metaverse schema and a Connected System's Schema tab both show which attributes are multi-valued.
+
+    To check before upgrading, build a [Predefined Search](predefined-searches.md) on the rule's Metaverse Object Type with the export rule's positive criterion: it already tests every value, so it lists the Metaverse Objects the rule will include. After upgrading, and before the next synchronisation, [Sync Preview](sync-preview.md) on an affected object shows exactly what synchronising it would do.
+
 ### Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
