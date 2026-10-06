@@ -556,6 +556,86 @@ Describe 'setup.sh size_database' -Skip:$script:NoBash {
     }
 }
 
+Describe 'setup.sh infrastructure API key' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+        $script:Key = 'jim_ak_0123456789abcdef0123456789abcdef'
+
+        # A settings file made from the release's template for the runtime, with the given environment.
+        function New-KeyArrangement {
+            param([string]$Runtime = 'docker', [string]$Environment = '')
+            $dir = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $dir | Out-Null
+            $config = if ($Runtime -eq 'podman') { Join-Path $dir 'jim-config.yaml' } else { Join-Path $dir '.env' }
+            $template = if ($Runtime -eq 'podman') { Join-Path $script:RepositoryRoot 'deploy' 'podman' 'jim-config.yaml' } else { Join-Path $script:RepositoryRoot '.env.example' }
+            Copy-Item $template $config
+            [pscustomobject]@{
+                Dir = $dir
+                Config = $config
+                Arrange = "RUNTIME=$Runtime`nCONFIG_FILE='$config'`n$Environment"
+            }
+        }
+    }
+
+    # Until #1950 only Podman stored the key, so an automated Docker install that set it had no key to use.
+    It 'on Docker, writes a given key to .env, which compose passes to JIM' {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=$script:Key"
+
+        $result = Invoke-SetupFunction 'configure_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Config | Should -Contain "JIM_INFRASTRUCTURE_API_KEY=$script:Key"
+    }
+
+    It 'on Podman, stores a given key in the jim-secrets secret, and not in jim-config.yaml' {
+        # What the installer gives Podman's secret store, which it reads from standard input.
+        $secret = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).yaml"
+        $arrangement = New-KeyArrangement -Runtime podman -Environment @"
+JIM_INFRASTRUCTURE_API_KEY=$script:Key
+JIM_DB_PASSWORD=db-password
+JIM_SSO_SECRET=sso-secret
+as_jim_account() { cat > '$secret'; }
+"@
+
+        $result = Invoke-SetupFunction "configure_infrastructure_api_key`nstore_podman_secrets" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $secret | Should -Contain "  JIM_INFRASTRUCTURE_API_KEY: `"$script:Key`""
+        Get-Content $arrangement.Config | Where-Object { $_ -match '^\s*JIM_INFRASTRUCTURE_API_KEY:' } | Should -BeNullOrEmpty
+    }
+
+    It 'writes nothing when no key is given' {
+        $arrangement = New-KeyArrangement
+        $before = Get-Content -Raw $arrangement.Config
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key; configure_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -Raw $arrangement.Config | Should -BeExactly $before
+    }
+
+    # JIM ignores a key it would not accept, logging only a warning, so automation would find out at its first call.
+    It 'stops, naming the rule, when a given key is <Reason>' -TestCases @(
+        @{ Reason = 'missing the jim_ak_ prefix'; Value = 'abc_0123456789abcdef0123456789abcdef' }
+        @{ Reason = 'shorter than 32 characters'; Value = 'jim_ak_0123456789' }
+    ) {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=$Value"
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM_INFRASTRUCTURE_API_KEY*jim_ak_*32*'
+    }
+
+    It 'accepts a key of exactly 32 characters, as JIM does' {
+        $arrangement = New-KeyArrangement -Environment "JIM_INFRASTRUCTURE_API_KEY=jim_ak_$('a' * 25)"
+
+        $result = Invoke-SetupFunction 'check_infrastructure_api_key' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+    }
+}
+
 Describe 'setup.sh configure_database' -Skip:$script:NoBash {
     It 'sizes the bundled PostgreSQL to the host' {
         $env = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).env"

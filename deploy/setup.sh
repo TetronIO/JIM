@@ -74,6 +74,9 @@
 #     JIM_SETUP_TLS_KEY_FILE  - The certificate's unencrypted PEM private key (required if tls_mode=provided)
 #     JIM_TRUSTED_PROXIES   - Address(es) of a reverse proxy or load balancer in front of JIM. Set it empty
 #                             for none (default: prompt)
+#     JIM_INFRASTRUCTURE_API_KEY - An API key for automation to configure JIM with: JIM creates it, with the
+#                             Administrator role, when it starts, and it expires 24 hours later. It must start
+#                             with jim_ak_ and be at least 32 characters (default: none; the script does not ask)
 #     JIM_SETUP_RUNTIME     - "docker" or "podman", as --runtime (default: the one installed; prompt if both)
 #     JIM_SETUP_PODMAN_ROOTLESS - "true" to run JIM rootless on Podman, as --rootless
 #     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
@@ -1027,7 +1030,7 @@ store_podman_secrets() {
             printf '  JIM_INFRASTRUCTURE_API_KEY: %s\n' "$(yaml_quote "$JIM_INFRASTRUCTURE_API_KEY")"
         fi
     } | as_jim_account podman kube play --replace - >/dev/null || fatal "Failed to store JIM's secrets in Podman"
-    success "Stored the database password and client secret as the Podman secret jim-secrets"
+    success "Stored the database password, client secret${JIM_INFRASTRUCTURE_API_KEY:+ and infrastructure API key} as the Podman secret jim-secrets"
 }
 
 # Stores JIM's certificate and key as the Podman secret jim-tls, which the pod mounts for jim.web.
@@ -1587,6 +1590,26 @@ configure_sso() {
     set_setting "JIM_SSO_CLAIM_TYPE" "$JIM_SSO_CLAIM_TYPE"
     set_setting "JIM_SSO_MV_ATTRIBUTE" "$JIM_SSO_MV_ATTRIBUTE"
     set_setting "JIM_SSO_INITIAL_ADMIN" "$JIM_SSO_INITIAL_ADMIN"
+}
+
+# --- Infrastructure API key ---
+# JIM_INFRASTRUCTURE_API_KEY, from the environment only: an API key JIM creates when it starts, for automation. JIM
+# ignores one it would not accept, logging only a warning, so automation would find out at its first call; the script
+# refuses it instead, before it writes anything.
+check_infrastructure_api_key() {
+    local key="${JIM_INFRASTRUCTURE_API_KEY:-}"
+    [ -n "$key" ] || return 0
+    if [[ "$key" != jim_ak_* ]] || [ ${#key} -lt 32 ]; then
+        fatal "JIM_INFRASTRUCTURE_API_KEY must start with jim_ak_ and be at least 32 characters, or JIM does not create it. Generate one with: echo \"jim_ak_\$(openssl rand -hex 32)\""
+    fi
+}
+
+# Docker reads it from .env; on Podman, set_setting leaves it to the jim-secrets secret (store_podman_secrets). Until
+# #1950 only Podman stored it, so a Docker installation given one had no key to use.
+configure_infrastructure_api_key() {
+    [ -n "${JIM_INFRASTRUCTURE_API_KEY:-}" ] || return 0
+    set_setting "JIM_INFRASTRUCTURE_API_KEY" "$JIM_INFRASTRUCTURE_API_KEY"
+    success "JIM creates the infrastructure API key given in JIM_INFRASTRUCTURE_API_KEY when it starts; it expires 24 hours later"
 }
 
 # --- Configure Docker registry ---
@@ -2723,6 +2746,7 @@ main() {
     fi
 
     check_prerequisites
+    check_infrastructure_api_key
     if [ "$RUNTIME" = "podman" ]; then
         choose_podman_account "$install_dir"
         prepare_podman_account
@@ -2762,6 +2786,7 @@ main() {
 
     configure_database
     configure_sso
+    configure_infrastructure_api_key
     if [ "$RUNTIME" = "docker" ]; then
         configure_registry
     fi
