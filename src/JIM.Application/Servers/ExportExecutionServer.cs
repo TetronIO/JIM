@@ -202,9 +202,10 @@ public class ExportExecutionServer
         // Synchronisation Integrity: log summary statistics at the end of every batch operation.
         Log.Information("ExecuteExportsAsync: Optimistic export apply summary for {SystemName}: " +
             "{AppliedCount} Pending Exports applied, {SkippedCount} skipped (Delete change type), " +
-            "{FailedCount} failed (confirming import will self-heal), {UnresolvedCount} Reference values left unresolved",
+            "{FailedCount} failed, of which {UnrecordedCount} were auto-confirmed and left to be sent again (the rest self-heal on the confirming import), " +
+            "{UnresolvedCount} Reference values left unresolved",
             connectedSystem.Name, result.OptimisticApplyAppliedCount, result.OptimisticApplySkippedCount,
-            result.OptimisticApplyFailedCount, result.OptimisticApplyUnresolvedReferenceCount);
+            result.OptimisticApplyFailedCount, result.UnrecordedExportCount, result.OptimisticApplyUnresolvedReferenceCount);
 
         // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
         // deployment would otherwise get a pair of zeroes on every export.
@@ -1711,9 +1712,9 @@ public class ExportExecutionServer
 
         // Synchronisation Integrity: log summary statistics (count plus CSO ids) at the end of this batch
         // operation, same as every other batch write in this server.
-        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed whose provisioning was " +
-            "never confirmed by an import (their Create was exported but the Metaverse Object was withdrawn before any confirming " +
-            "import); their Delete export has just succeeded, which is the only confirmation such an object can ever get: [{CsoIds}]",
+        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed because their Delete export " +
+            "has just succeeded and no confirming import will follow it (their provisioning was never confirmed by an import, or the " +
+            "export auto-confirmed): [{CsoIds}]",
             removedCount, string.Join(", ", csoIds));
     }
 
@@ -2074,7 +2075,12 @@ public class ExportExecutionServer
     /// attribute values from the target system), and swallowed. It must never fail the batch, the
     /// Pending Export updates, or the Activity (D7).
     /// </summary>
-    private async Task ApplyOptimisticExportUpdatesAsync(
+    /// <returns>
+    /// True when the values were recorded (or there was nothing to record); false when recording failed. The calls
+    /// path does not need the answer, because its confirming import self-heals; an auto-confirmed file export does
+    /// (#1936), because nothing ever imports from its target.
+    /// </returns>
+    private async Task<bool> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
         ISyncRepository repository)
@@ -2150,13 +2156,16 @@ public class ExportExecutionServer
                     "{Count} Pending Exports took {ElapsedMs}ms",
                     successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
             }
+
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             result.OptimisticApplyFailedCount += successfulNonDeleteExports.Count;
             Log.Warning(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply failed for Connected System {ConnectedSystemId} " +
-                "({Count} Pending Exports); the confirming import will self-heal",
+                "({Count} Pending Exports); a confirming import will self-heal, and auto-confirmed exports are left to be sent again",
                 successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
+            return false;
         }
     }
 
@@ -2376,6 +2385,48 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Issue #1936: an auto-confirmed file export whose values could not be recorded on its Connected System Object is
+    /// not confirmed. It is marked <see cref="PendingExportStatus.ExportNotConfirmed"/>, with the changes it sent
+    /// marked <see cref="PendingExportAttributeChangeStatus.ExportedNotConfirmed"/>, which is the state
+    /// <c>IsReadyForExecution</c> treats as "send again" for a Create and an Update alike. The next export run then
+    /// writes the same row again (the File Connector merges into the existing file, so a repeat is harmless) and
+    /// retries the recording. Confirming it regardless would leave JIM's view of the target missing those values,
+    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target.
+    /// </summary>
+    /// <param name="successfulNonDeleteExports">The exports whose values the failed recording covered.</param>
+    /// <param name="exportsToDelete">The auto-confirmed exports about to be deleted; those left unconfirmed are taken out.</param>
+    /// <param name="result">Counts the exports left unconfirmed, for the Activity's warning.</param>
+    private async Task LeaveUnrecordedExportsUnconfirmedAsync(
+        List<PendingExport> successfulNonDeleteExports,
+        List<PendingExport> exportsToDelete,
+        ExportExecutionResult result)
+    {
+        var now = DateTime.UtcNow;
+        foreach (var export in successfulNonDeleteExports)
+        {
+            foreach (var change in export.AttributeValueChanges.Where(c => c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+                change.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+
+            export.Status = PendingExportStatus.ExportNotConfirmed;
+            export.LastAttemptedAt = now;
+        }
+
+        var unrecorded = successfulNonDeleteExports.ToHashSet();
+        exportsToDelete.RemoveAll(unrecorded.Contains);
+
+        using (Diagnostics.Diagnostics.Database.StartSpan("UpdateUnrecordedPendingExports")
+            .SetTag("count", successfulNonDeleteExports.Count))
+        {
+            await SyncRepo.UpdatePendingExportsAsync(successfulNonDeleteExports);
+        }
+
+        result.UnrecordedExportCount += successfulNonDeleteExports.Count;
+        Log.Warning("LeaveUnrecordedExportsUnconfirmedAsync: {Count} auto-confirmed exports to Connected System {ConnectedSystemId} were written, " +
+            "but their values could not be recorded; they are left unconfirmed and will be sent again on the next export run",
+            successfulNonDeleteExports.Count, successfulNonDeleteExports[0].ConnectedSystemId);
+    }
+
+    /// <summary>
     /// Updates the CSO after a successful export.
     /// For Create exports, transitions the CSO from PendingProvisioning to Normal status
     /// and populates the external ID attribute with the system-assigned value.
@@ -2549,6 +2600,7 @@ public class ExportExecutionServer
             var exportsToDelete = new List<PendingExport>();
             var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
             var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
+            var successfulNonDeleteExports = new List<PendingExport>();
 
             for (var i = 0; i < pendingExports.Count; i++)
             {
@@ -2578,8 +2630,12 @@ public class ExportExecutionServer
 
                 // A Delete that just succeeded against a CSO whose provisioning was
                 // never confirmed by an import is the terminal step in that object's life; see
-                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
-                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale. Issue #1936: so is any
+                // Delete this run auto-confirms, whatever the CSO's status, because auto-confirm is the
+                // confirmation; an object an import once confirmed (a system that ran Bidirectional before
+                // Export Only) was otherwise left behind for ever, its row gone from the file.
+                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export) ||
+                    (autoConfirm && export.ChangeType == PendingExportChangeType.Delete && export.ConnectedSystemObject != null);
 
                 // Capture export data for activity tracking (before deletion or status update)
                 result.ProcessedExportItems.Add(new ProcessedExportItem
@@ -2615,12 +2671,15 @@ public class ExportExecutionServer
                 // Update attribute change statuses to ExportedPendingConfirmation
                 UpdateAttributeChangeStatusesAfterExport(export);
 
-                // Issue #1079 (optimistic export apply): deliberately NOT wired up here. This
-                // path's batch loader (GetExecutableExportsAsync) does not include the CSO's
-                // current AttributeValues, unlike the calls-path loader (GetExecutableExportBatchAsync);
-                // widening that include for every file export at scale is a memory-profile trade-off
-                // not taken here. File-connector exports keep today's behaviour: the confirming
-                // import re-materialises the CSO's attribute values as before.
+                // Issue #1936: the values this export wrote are recorded on its CSO after the loop, as the calls
+                // path does (#1079). Here it is not only an optimisation: a target that auto-confirms and is never
+                // imported from (the File Connector's Export Only mode) has no other way to learn what it holds.
+                // GetExecutableExportsAsync already loads each CSO's current values, because the File Connector
+                // writes full rows from them, so recording costs no extra load.
+                if (export.ChangeType == PendingExportChangeType.Delete || export.ConnectedSystemObject == null)
+                    result.OptimisticApplySkippedCount++;
+                else
+                    successfulNonDeleteExports.Add(export);
 
                 if (autoConfirm)
                 {
@@ -2648,16 +2707,6 @@ public class ExportExecutionServer
                 }
             }
 
-            // Batch delete exports that are auto-confirmed
-            if (exportsToDelete.Count > 0)
-            {
-                using (Diagnostics.Diagnostics.Database.StartSpan("DeletePendingExports")
-                    .SetTag("count", exportsToDelete.Count))
-                {
-                    await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
-                }
-            }
-
             // Remove CSOs (and their now-superfluous Pending Exports) whose Delete
             // just confirmed provisioning that was never otherwise confirmed.
             if (unconfirmedProvisioningCsoDeletes.Count > 0)
@@ -2669,6 +2718,26 @@ public class ExportExecutionServer
             if (csosToUpdate.Count > 0)
             {
                 await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
+            }
+
+            // Issue #1936: record the exported values. LAST among the CSO writes, after
+            // BatchUpdateCsosAfterSuccessfulExportAsync, so its external-Id additions are already reflected in each
+            // CSO's AttributeValues (#1079's D9/D11 ordering), and BEFORE the auto-confirmed exports are deleted,
+            // because confirming an export whose values were not recorded would leave nothing to repair it.
+            var valuesRecorded = successfulNonDeleteExports.Count == 0 ||
+                                 await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+
+            if (autoConfirm && !valuesRecorded)
+                await LeaveUnrecordedExportsUnconfirmedAsync(successfulNonDeleteExports, exportsToDelete, result);
+
+            // Batch delete exports that are auto-confirmed
+            if (exportsToDelete.Count > 0)
+            {
+                using (Diagnostics.Diagnostics.Database.StartSpan("DeletePendingExports")
+                    .SetTag("count", exportsToDelete.Count))
+                {
+                    await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
+                }
             }
 
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",

@@ -20,9 +20,10 @@ namespace JIM.Application.Servers.Preview;
 /// Grouping runs at two levels. The coarse level is the transition, object type, Connected System and attribute; the
 /// fine level is the distinct old-to-new value pair within it, which is what turns "38,900 would have Email changed"
 /// into "38,900 would have Email changed from @contoso.com to @fabrikam.com". Value pairs can produce one group per
-/// object, so they are named only while a group has at most <see cref="_maximumValuePairsPerGroup"/> of them; past
-/// that the split stops being a summary and the group collapses back to the attribute level. Collapsing changes how
-/// a population is described, never how many objects it holds.
+/// object, so they are named only while a group has at most <see cref="_maximumValuePairsPerGroup"/> of them, and
+/// only while naming them compresses the group (see <see cref="ValuePairsCompress"/>); otherwise the split stops being
+/// a summary and the group collapses back to the attribute level. Collapsing changes how a population is described,
+/// never how many objects it holds.
 ///
 /// Memory is bounded by the grouping dimensions rather than by the population: at most
 /// <see cref="_maximumDeltasPerGroup"/> deltas are held per coarse group, plus a small per-value-pair reserve
@@ -194,11 +195,21 @@ public class PreviewSummariser
         // A collapsed group carries a pattern only where every delta in it agreed on one. Anything less would be a
         // claim about a population from a majority of it, which is the kind of number this framework exists to
         // refuse.
-        if (accumulator.ValuePairsExceededGuard)
+        if (accumulator.ValuePairsExceededGuard || !ValuePairsCompress(accumulator))
             return [new GroupCandidate(key, null, null, accumulator.PatternKey, accumulator.ObjectCount, accumulator.Kept)];
 
         return accumulator.ValuePairs.Select(entry => BuildCandidate(key, accumulator, entry.Key, entry.Value));
     }
+
+    /// <summary>
+    /// Whether naming a group's value pairs summarises it rather than listing it (#1935). One pair is one row either
+    /// way, so its values are always worth naming. Past that, a split earns its extra rows only while its pairs hold
+    /// at least two objects each on average: five people with five different Job Titles cleared would otherwise read
+    /// as five rows saying what one row says, while the drill-down behind that one row already names every value.
+    /// Decided once the stream has ended, because only then are the group's object and pair counts final.
+    /// </summary>
+    private static bool ValuePairsCompress(GroupAccumulator accumulator) =>
+        accumulator.ValuePairs.Count == 1 || accumulator.ValuePairs.Count * 2 <= accumulator.ObjectCount;
 
     private static GroupCandidate BuildCandidate(GroupKey key, GroupAccumulator accumulator, ValuePairKey pair,
         PairAccumulator pairAccumulator)

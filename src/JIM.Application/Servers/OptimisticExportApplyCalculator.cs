@@ -173,9 +173,11 @@ public static class OptimisticExportApplyCalculator
     /// <summary>
     /// Single-valued set semantics (D4): a complete no-op only when exactly one existing value
     /// matches the new one; otherwise every existing row for the attribute is replaced by the new
-    /// value. An empty payload (clearing the attribute) is deliberately a no-op for apply purposes
-    /// (mirrors the reconciliation empty-change case): the confirming import still reconciles the
-    /// actual clear.
+    /// value. An empty payload clears the attribute, so every existing row is removed, exactly as a
+    /// RemoveAll is (#1936). It was once a no-op, left for the confirming import to reconcile, but a
+    /// target that auto-confirms and is never imported from would then record the old value for ever,
+    /// and every later evaluation would see a difference and stage the clear again. Reconciliation
+    /// agrees with this: it confirms an empty Update when the attribute holds no values.
     /// </summary>
     private static void ApplyUpdate(
         ConnectedSystemObject cso,
@@ -186,7 +188,7 @@ public static class OptimisticExportApplyCalculator
     {
         if (SyncEngine.IsPendingChangeEmpty(change))
         {
-            delta.SkippedChangeCount++;
+            ApplyRemoveAll(existing, index, delta);
             return;
         }
 
