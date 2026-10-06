@@ -4336,10 +4336,23 @@ public abstract class SyncTaskProcessorBase
             // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
             // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
             // clears _mvoIdToRpei and the RPEI collection).
-            await EvaluatePendingExportsAsync();
-            await FlushPendingExportOperationsAsync();
-            await ResolvePendingExportReferenceSnapshotsAsync();
-            await FlushRpeisAsync();
+            //
+            // With automatic change detection off, as the page flush runs it, and for the same reason: deprovisioning
+            // saves through EF one object at a time (a Delete Pending Export, a disconnected CSO), and with detection
+            // on that save would also insert every RPEI queued above on the tracked Activity, so FlushRpeisAsync's
+            // bulk insert then failed the run on a duplicate key.
+            _syncRepo.SetAutoDetectChangesEnabled(false);
+            try
+            {
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+                await ResolvePendingExportReferenceSnapshotsAsync();
+                await FlushRpeisAsync();
+            }
+            finally
+            {
+                _syncRepo.SetAutoDetectChangesEnabled(true);
+            }
 
             // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
             // the batch's writes have persisted; if a write throws, the flag stays set and the object is

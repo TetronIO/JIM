@@ -135,6 +135,56 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         Assert.That(DeletesFor(ctx), Is.EqualTo(new[] { "Carol" }), "Carol left the rule's scope, and its Deprovisioning Action is Delete");
     }
 
+    [TestCase(OutboundDeprovisionAction.Delete)]
+    [TestCase(OutboundDeprovisionAction.Disconnect)]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowed_DeprovisionsWithChangeDetectionOffAsync(OutboundDeprovisionAction action)
+    {
+        // Deprovisioning saves through EF one object at a time (the Delete Pending Export, the disconnected object).
+        // With automatic change detection on, that save also inserts every execution item the review batch has
+        // queued on its Activity, and the batch's own bulk insert then fails on a duplicate key, failing the run.
+        // The page flush has always switched detection off for exactly this; the review must too. Only PostgreSQL
+        // enforces the key, so this store fails the write instead.
+        var syncRepository = new ChangeDetectionAwareSyncRepository();
+        SyncRepo = syncRepository;
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        Jim = new JimApplication(Repository, syncRepository: SyncRepo);
+
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false, deprovisionAction: action);
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        await RunFullSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(syncRepository.SavesWithChangeDetectionOn, Is.Empty);
+            Assert.That(FlaggedForReview(ctx), Is.Empty, "the review completed");
+        }
+    }
+
+    /// <summary>Records each single-object EF save the engine makes while automatic change detection is on.</summary>
+    private sealed class ChangeDetectionAwareSyncRepository : JIM.InMemoryData.SyncRepository
+    {
+        private bool _autoDetectChanges = true;
+
+        public List<string> SavesWithChangeDetectionOn { get; } = [];
+
+        public override void SetAutoDetectChangesEnabled(bool enabled) => _autoDetectChanges = enabled;
+
+        public override Task CreatePendingExportAsync(PendingExport pendingExport)
+        {
+            if (_autoDetectChanges)
+                SavesWithChangeDetectionOn.Add($"{nameof(CreatePendingExportAsync)} ({pendingExport.ChangeType})");
+            return base.CreatePendingExportAsync(pendingExport);
+        }
+
+        public override Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        {
+            if (_autoDetectChanges)
+                SavesWithChangeDetectionOn.Add(nameof(UpdateConnectedSystemObjectAsync));
+            return base.UpdateConnectedSystemObjectAsync(connectedSystemObject);
+        }
+    }
+
     [Test]
     public async Task FullSync_AfterTheExportRuleIsDisabled_DeprovisionsNothingAsync()
     {
@@ -277,8 +327,9 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
     /// <param name="ruleEnabled">Whether the export rule starts enabled.</param>
     /// <param name="scopedToEmployees">Whether the export rule starts scoped to Type = Employee.</param>
     /// <param name="withExportRule">False to build the topology with no export rule at all.</param>
+    /// <param name="deprovisionAction">The export rule's Deprovisioning Action.</param>
     private async Task<Context> SetUpAsync(bool directoryAccounts, bool provisioning, bool ruleEnabled = true,
-        bool scopedToEmployees = false, bool withExportRule = true)
+        bool scopedToEmployees = false, bool withExportRule = true, OutboundDeprovisionAction deprovisionAction = OutboundDeprovisionAction.Delete)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvEmployeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -325,7 +376,7 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         if (withExportRule)
         {
             exportRule = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export",
-                enableProvisioning: provisioning, deprovisionAction: OutboundDeprovisionAction.Delete);
+                enableProvisioning: provisioning, deprovisionAction: deprovisionAction);
             exportRule.Enabled = ruleEnabled;
             AddExportFlow(exportRule, directoryType, "EmployeeId", mvEmployeeId);
             AddExportFlow(exportRule, directoryType, "DisplayName", mvDisplayName);

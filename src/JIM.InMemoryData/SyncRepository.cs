@@ -2448,7 +2448,7 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
-    public void SetAutoDetectChangesEnabled(bool enabled)
+    public virtual void SetAutoDetectChangesEnabled(bool enabled)
     {
         // No-op — no EF change tracker in memory
     }
@@ -2540,7 +2540,7 @@ public class SyncRepository : ISyncRepository
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         => CreateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
 
-    public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+    public virtual Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
         => UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
 
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
@@ -2556,7 +2556,7 @@ public class SyncRepository : ISyncRepository
 
     #region Pending Export — Singular Convenience Methods
 
-    public Task CreatePendingExportAsync(PendingExport pendingExport)
+    public virtual Task CreatePendingExportAsync(PendingExport pendingExport)
         => CreatePendingExportsAsync(new[] { pendingExport });
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)

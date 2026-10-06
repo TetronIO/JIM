@@ -36,6 +36,14 @@ public sealed record SyncRuleScopeState(bool Enabled, bool ProvisionToConnectedS
 
         return !Enabled
                || (!ProvisionToConnectedSystem && saved.ProvisionToConnectedSystem == true)
-               || !Scope.DescribesSameScopeAs(SyncRuleScopingProposal.FromCurrentScope(saved));
+               || ScopeChangedTo(SyncRuleScopingProposal.FromCurrentScope(saved));
     }
+
+    /// <summary>
+    /// Whether <paramref name="savedScope"/> matches different objects from the stored scope. Two scopes that each
+    /// constrain nothing match every object alike, however they are written: the scripted way to scope a rule creates
+    /// an empty group first and its criteria after, one save each, and that first save moves nobody.
+    /// </summary>
+    private bool ScopeChangedTo(SyncRuleScopingProposal savedScope) =>
+        !(Scope.IsUnscoped && savedScope.IsUnscoped) && !Scope.DescribesSameScopeAs(savedScope);
 }
