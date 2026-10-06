@@ -15,8 +15,11 @@
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
       5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host.
-      6. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
-      7. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
+      6. Docker: backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as
+         written, and checks they fetched no image, which an air-gapped host could not, and put the key volume
+         back as it was; then starts JIM again on the restored keys.
+      7. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
+      8. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
 
     On failure it saves each container's log to the output folder before rethrowing.
 
@@ -338,12 +341,61 @@ try {
     }
     Write-Step "PostgreSQL runs with the memory the installer sized: $($sized -join ', ')"
 
-    # 6. What each container runs, for the parity comparison.
+    # 6. Docker: the key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped
+    # as the page and the upgrade guide have it, and fetch no image. Until #1949 they ran an image JIM does not ship,
+    # which an air-gapped host cannot fetch. A marker in the key volume makes the round trip visible whether or not
+    # JIM has written its keys yet, and a file added after the backup must not survive the restore.
+    if ($Runtime -eq 'docker') {
+        $page = Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration' 'backup-recovery.md'
+        $getCommand = Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1'
+        $backup = & $getCommand -Path $page -Heading '2. Back up the encryption keys' -Tab 'Docker'
+        $restore = & $getCommand -Path $page -Heading 'Restoring' -Tab 'Docker'
+        $keys = Invoke-Runtime @('volume', 'inspect', '-f', '{{.Mountpoint}}', 'jim-keys-volume')
+        $keyVolumeState = {
+            Invoke-Native ($elevate + @('sh', '-c',
+                'cd "$1" && find . -printf "%U:%G %m %p\n" | sort && find . -type f -exec sha256sum {} + | sort', 'sh', $keys))
+        }
+        $images = { Invoke-Runtime @('image', 'ls', '--no-trunc', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}') }
+
+        Invoke-Runtime @('exec', $containers.web, 'sh', '-c', "echo $marker > /data/keys/ci-boot-marker") | Out-Null
+        Invoke-Compose @('stop', $containers.web, $containers.worker, $containers.scheduler)
+        $keysBefore = & $keyVolumeState
+        $imagesBefore = (& $images) -split "`n"
+        # In a folder of its own, outside the uploaded output: the archive holds the keys.
+        $backupFolder = Invoke-Native @('mktemp', '-d')
+        Push-Location $backupFolder
+        try {
+            Invoke-Native ($elevate + @('bash', '-ec', $backup)) | Out-Null
+            Invoke-Native ($elevate + @('sh', '-c', 'echo changed > "$1/ci-boot-marker" && echo stray > "$1/ci-stray"', 'sh', $keys)) |
+                Out-Null
+            Invoke-Native ($elevate + @('bash', '-ec', $restore)) | Out-Null
+        }
+        finally {
+            Pop-Location
+            Invoke-Native -AllowFailure ($elevate + @('rm', '-rf', $backupFolder)) | Out-Null
+        }
+
+        $fetched = @((& $images) -split "`n" | Where-Object { $_ -notin $imagesBefore })
+        if ($fetched) {
+            throw "The documented key backup or restore fetched an image, which an air-gapped host cannot: $($fetched -join ', ')"
+        }
+        $keysAfter = & $keyVolumeState
+        if ($keysAfter -cne $keysBefore) {
+            throw "The documented key restore did not put the key volume back as the backup took it.`nBefore:`n$keysBefore`nAfter:`n$keysAfter"
+        }
+        Invoke-Compose @('start', $containers.web, $containers.worker, $containers.scheduler)
+        Wait-Until -Description 'ready over HTTPS on the restored keys' -Condition { Test-ReadyOverHttps }
+        Wait-AllHealthy
+        Write-Step 'the documented key backup and restore put the key volume back, fetching no image'
+    }
+
+    # 7. What each container runs, for the parity comparison.
     Invoke-Runtime (@('inspect') + @($containers.Values)) | Set-Content (Join-Path $OutputPath "$leg.inspect.json")
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host" |
+        $keyBackup = if ($Runtime -eq 'docker') { ', the documented key backup and restore worked offline' } else { '' }
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host$keyBackup" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }
@@ -356,7 +408,7 @@ catch {
     throw
 }
 finally {
-    # 7. Free the port for the next leg.
+    # 8. Free the port for the next leg.
     if (-not $KeepRunning -and (Test-Path $caPath)) {
         Write-Step 'stopping JIM'
         try {
