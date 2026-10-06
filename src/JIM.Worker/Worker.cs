@@ -401,7 +401,8 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations);
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations,
+                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory));
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
                                                             // Stranded-value sweep (#1549): runs only when an earlier Connector Space clear armed
@@ -428,7 +429,8 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations);
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations,
+                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory));
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }

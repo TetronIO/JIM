@@ -23,6 +23,7 @@ using JIM.Models.Sync;
 using JIM.Utilities;
 using JIM.Data.Repositories;
 using JIM.Worker.Models;
+using JIM.Worker.UniqueValues;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -445,6 +446,21 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private readonly List<GenerationOutcome> _pendingExportGeneratedValueAssignmentsToCommit = [];
 
+    /// <summary>
+    /// What a live uniqueness probe session (Unique Value Generation, #242, release 3) is built over: null for every
+    /// caller that does not probe (tests that do not opt in, and any run constructed without one), in which case
+    /// generation checks against JIM's own records only, exactly as before release 3. Owned by this run: handed to
+    /// the session when one is created, and disposed by <see cref="CloseUniquenessProbeSessionAsync"/> either way.
+    /// </summary>
+    private IUniquenessProbeSessionHost? _uniquenessProbeSessionHost;
+
+    /// <summary>
+    /// The run's probe session, created lazily by <see cref="EnsureUniquenessProbeSession"/> the first time the run
+    /// resolves a generation that has probe targets, and closed by <see cref="CloseUniquenessProbeSessionAsync"/> when
+    /// the run ends. Null until then, so a run that never generates a probed value opens nothing.
+    /// </summary>
+    private UniquenessProbeSession? _uniquenessProbeSession;
+
     protected SyncTaskProcessorBase(
         ISyncEngine syncEngine,
         ISyncServer syncServer,
@@ -454,7 +470,8 @@ public abstract class SyncTaskProcessorBase
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
-        UniqueValueReservationSet? uniqueValueReservations = null)
+        UniqueValueReservationSet? uniqueValueReservations = null,
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -471,6 +488,101 @@ public abstract class SyncTaskProcessorBase
         // passes none (every test, and any future caller with no cross-run concurrency to guard) gets a fresh,
         // run-scoped set of its own, which is exactly as safe: nothing else shares it.
         _uniqueValueReservations = uniqueValueReservations ?? new UniqueValueReservationSet();
+        _uniquenessProbeSessionHost = uniquenessProbeSessionHost;
+    }
+
+    /// <summary>
+    /// Creates the run's probe session the first time the run resolves a generation that has probe targets (release 3),
+    /// and hands it to the resolve options so the ProbeGate consults it. A no-op without a host, once the session
+    /// exists, and for requests with nothing to probe. Creating the session opens nothing: it connects to each target
+    /// system only when it first has a candidate to search for.
+    /// </summary>
+    private void EnsureUniquenessProbeSession(IReadOnlyList<GenerationRequest> requests)
+    {
+        if (_uniquenessProbeSessionHost == null || _uniquenessProbeSession != null || _uniqueValueResolveOptions == null)
+            return;
+
+        if (!requests.Any(r => r.ProbeTargets.Count > 0))
+            return;
+
+        _uniquenessProbeSession = new UniquenessProbeSession(_uniquenessProbeSessionHost, _cancellationTokenSource.Token);
+        _uniqueValueResolveOptions.ProbeSession = _uniquenessProbeSession;
+    }
+
+    /// <summary>
+    /// Ends the run's probe session (release 3): call from the <c>finally</c> of <c>PerformFullSyncAsync</c> and
+    /// <c>PerformDeltaSyncAsync</c>. Appends one Activity warning per Connected System that could not be probed for a
+    /// value the run went on to issue, so the Activity completes with a warning rather than in silence, then closes
+    /// every probe connection the run opened. A run that never created a session still releases its host.
+    /// </summary>
+    protected async Task CloseUniquenessProbeSessionAsync()
+    {
+        var session = _uniquenessProbeSession;
+        var host = _uniquenessProbeSessionHost;
+        _uniquenessProbeSession = null;
+        _uniquenessProbeSessionHost = null;
+
+        if (_uniqueValueResolveOptions != null)
+            _uniqueValueResolveOptions.ProbeSession = null;
+
+        if (session == null)
+        {
+            if (host != null)
+                await host.DisposeAsync();
+            return;
+        }
+
+        foreach (var warning in session.GetRunWarnings())
+        {
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warning
+                : $"{_activity.WarningMessage}\n{warning}";
+        }
+
+        // Disposes the host as well: the session owns it once created.
+        await session.DisposeAsync();
+    }
+
+    /// <summary>
+    /// The values an import-mode request's own accounts already hold for its probed attributes (release 3): the same
+    /// person, not a collision, so the ProbeGate accepts them without asking a directory that would find that very
+    /// account. Covers the account being synchronised when it belongs to the object this pass, any join held in
+    /// memory, and the object's saved joins in the target systems; never the account leaving the object. Only worth
+    /// its two queries for an object that is about to generate: one whose assignment the run already knows resolves
+    /// as sticky and probes nothing.
+    /// </summary>
+    private async Task<IReadOnlyCollection<string>> GetImportProbeExemptValuesAsync(
+        MetaverseObject mvo, ConnectedSystemObject cso, bool csoIsJoinedToObject, IReadOnlyList<UniquenessProbeTarget> probeTargets)
+    {
+        var attributeIds = probeTargets.Select(t => t.ConnectedSystemObjectTypeAttributeId).ToHashSet();
+        var leavingCsoId = csoIsJoinedToObject ? (Guid?)null : cso.Id;
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddHeldValues(IEnumerable<ConnectedSystemObjectAttributeValue> attributeValues) =>
+            values.UnionWith(attributeValues
+                .Where(av => attributeIds.Contains(av.AttributeId) && !string.IsNullOrEmpty(av.StringValue))
+                .Select(av => av.StringValue!));
+
+        if (csoIsJoinedToObject)
+            AddHeldValues(cso.AttributeValues);
+
+        foreach (var joined in mvo.ConnectedSystemObjects.Where(c => c.Id != leavingCsoId))
+            AddHeldValues(joined.AttributeValues);
+
+        if (mvo.Id != Guid.Empty)
+        {
+            var systemIds = probeTargets.Select(t => t.ConnectedSystemId).Distinct().ToList();
+            var joinedCsoIds = (await _syncRepo.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync([mvo.Id], systemIds))
+                .Values
+                .Select(c => c.Id)
+                .Where(id => id != leavingCsoId)
+                .ToList();
+
+            if (joinedCsoIds.Count > 0)
+                AddHeldValues(await _syncRepo.GetCsoAttributeValuesByCsoIdsAsync(joinedCsoIds));
+        }
+
+        return values;
     }
 
     /// <summary>
@@ -567,6 +679,30 @@ public abstract class SyncTaskProcessorBase
 
         var targets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, exportRules);
         _generationParticipatingTargets[generation.Id] = targets;
+        return targets;
+    }
+
+    /// <summary>
+    /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), its probe targets (release 3): the
+    /// participating targets the value flows to directly and a system-wide search can answer for. Computed once per
+    /// run, on first need, from the same export rules as <see cref="GetOrComputeGenerationParticipatingTargets"/>.
+    /// </summary>
+    private Dictionary<int, List<UniquenessProbeTarget>>? _generationProbeTargets;
+
+    private List<UniquenessProbeTarget> GetOrComputeGenerationProbeTargets(SyncRuleMapping mapping)
+    {
+        var generation = mapping.Generation!;
+        _generationProbeTargets ??= new Dictionary<int, List<UniquenessProbeTarget>>();
+
+        if (_generationProbeTargets.TryGetValue(generation.Id, out var cached))
+            return cached;
+
+        var exportRules = _exportEvaluationCache != null
+            ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)
+            : Enumerable.Empty<SyncRule>();
+
+        var targets = GeneratedValueParticipation.ComputeProbeTargets(mapping, exportRules);
+        _generationProbeTargets[generation.Id] = targets;
         return targets;
     }
 
@@ -2321,6 +2457,15 @@ public abstract class SyncTaskProcessorBase
                     .Distinct()
                     .ToList();
 
+                // Release 3: the targets this value flows to directly are probed, when this run probes at all. The own
+                // accounts' values are only worth reading for an object about to generate, never a sticky one.
+                var probeTargets = _uniquenessProbeSessionHost != null && !pending.BaseUnavailable
+                    ? GetOrComputeGenerationProbeTargets(pending.Mapping)
+                    : [];
+                var probeExemptValues = probeTargets.Count > 0 && !(mvo.Id != Guid.Empty && resolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
+                    ? await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, probeTargets)
+                    : [];
+
                 requests.Add(new GenerationRequest
                 {
                     Mode = GeneratedValueMode.Import,
@@ -2337,10 +2482,13 @@ public abstract class SyncTaskProcessorBase
                     OwnConnectedSystemObjectIds = csoIsJoinedToObject ? [cso.Id] : [],
                     DisconnectingConnectedSystemObjectId = csoIsJoinedToObject ? null : cso.Id,
                     StickyOnly = pending.BaseUnavailable,
+                    ProbeTargets = probeTargets,
+                    ProbeExemptValues = probeExemptValues,
                     CallerState = mvo
                 });
             }
 
+            EnsureUniquenessProbeSession(requests);
             var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
             for (var i = 0; i < outcomes.Count; i++)
@@ -2637,6 +2785,20 @@ public abstract class SyncTaskProcessorBase
         var requests = new List<GenerationRequest>(marked.Count);
         foreach (var (pendingExport, change) in marked)
         {
+            // Release 3: the generated attribute is itself the target, probed when this run probes and the attribute is
+            // one a system-wide search can answer for. The object's current value is its own, never a collision.
+            var probeTargets = _uniquenessProbeSessionHost != null
+                && !change.PendingGeneration!.BaseUnavailable
+                && GeneratedValueParticipation.IsDirectProbeTarget(change.Attribute)
+                    ? new List<UniquenessProbeTarget> { new(pendingExport.ConnectedSystemId, change.AttributeId) }
+                    : [];
+            var probeExemptValues = probeTargets.Count > 0 && pendingExport.ConnectedSystemObjectId.HasValue && _exportEvaluationCache != null
+                ? _exportEvaluationCache.CsoAttributeValues[(pendingExport.ConnectedSystemObjectId.Value, change.AttributeId)]
+                    .Where(av => !string.IsNullOrEmpty(av.StringValue))
+                    .Select(av => av.StringValue!)
+                    .ToList()
+                : [];
+
             // A joined Connected System Object's existing value is never taken over (product-owner decision):
             // with no assignment, JIM generates and exports, exactly like any export Attribute Flow overwriting
             // a target value.
@@ -2650,6 +2812,8 @@ public abstract class SyncTaskProcessorBase
                 AttributeName = change.Attribute.Name,
                 BaseValue = change.PendingGeneration.BaseValue,
                 StickyOnly = change.PendingGeneration.BaseUnavailable,
+                ProbeTargets = probeTargets,
+                ProbeExemptValues = probeExemptValues,
                 // The Pending Export itself: its Connected System Object id is already known at resolve time
                 // (unlike a Metaverse Object's, since a Connected System Object's id is a client-generated GUID
                 // assigned the moment it is created, whether or not it has been persisted yet), so the commit
@@ -2658,6 +2822,7 @@ public abstract class SyncTaskProcessorBase
             });
         }
 
+        EnsureUniquenessProbeSession(requests);
         var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
         for (var i = 0; i < outcomes.Count; i++)

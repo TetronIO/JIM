@@ -7014,6 +7014,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
@@ -7063,6 +7065,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
@@ -7111,6 +7115,8 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
@@ -7195,6 +7201,8 @@ public partial class ConnectedSystemServer
         ValidateMappingWritability(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
         // inputs/targets); a no-op, with no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
@@ -7344,8 +7352,27 @@ public partial class ConnectedSystemServer
             generation.AttemptLimit = update.AttemptLimit.Value;
         if (update.NeverReuse.HasValue)
             generation.NeverReuse = update.NeverReuse.Value;
+        if (update.Exclusions != null)
+            ReplaceGenerationExclusions(generation, update.Exclusions);
 
         generation.LastUpdated = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Replaces a generated mapping's exclusions with <paramref name="connectedSystemIds"/> (release 3), touching only
+    /// what changes: an exclusion the update keeps stays the same instance, so a tracked mapping's save deletes only
+    /// the exclusions removed and inserts only those added, never deleting and re-adding the same key. A duplicate id
+    /// is carried through as a second exclusion, so <see cref="SyncRuleMappingGenerationValidator"/> refuses it with
+    /// its own message before anything is saved.
+    /// </summary>
+    private static void ReplaceGenerationExclusions(SyncRuleMappingGeneration generation, IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var wanted = connectedSystemIds.ToHashSet();
+        generation.Exclusions.RemoveAll(e => !wanted.Contains(e.ConnectedSystemId));
+
+        var unmatched = generation.Exclusions.Select(e => e.ConnectedSystemId).ToList();
+        foreach (var id in connectedSystemIds.Where(id => !unmatched.Remove(id)))
+            generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion { SyncRuleMappingGenerationId = generation.Id, ConnectedSystemId = id });
     }
 
     /// <summary>
@@ -8853,6 +8880,8 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
@@ -9084,6 +9113,8 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
+        await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);

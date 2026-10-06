@@ -6040,6 +6040,17 @@ html[lang] .jim-password-timeline.mud-timeline {
     cursor: default;
 }
 
+/* "Checked for availability in" (generated Attribute Flow form, #242): an excluded Connected System's row steps back,
+   but its Include switch keeps full strength, since switching it back on is the one thing to do with that row. */
+.jim-availability-row-excluded td:not(.jim-availability-include) {
+    opacity: 0.55;
+}
+
+.jim-availability-table .jim-availability-include {
+    width: 1%;
+    white-space: nowrap;
+}
+
 /* ─── Connection explanations (#348): the Connections tab's row expansions and Not connected section ───
    Every colour is a theme token, so the explanations follow the active theme. Outcomes are carried by icon and words
    as well as colour (each criterion's icon has an accessible label, and the server's text says "is", "has no value",
