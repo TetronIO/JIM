@@ -799,6 +799,64 @@ $fake
     }
 }
 
+Describe 'setup.sh launch_jim, on Docker' -Skip:$script:NoBash {
+    BeforeAll {
+        # A Docker host whose jim.web, if any, last started at the given time. Compose runs in a subshell, so the
+        # start time is kept in a file, which `up` rewrites when it starts jim.web (-UpStartsWeb) and leaves
+        # alone when it finds nothing changed. The fake docker prints each compose command it runs.
+        function Get-LaunchArrangement {
+            param([string]$WebStartedAt, [switch]$UpStartsWeb)
+            $state = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            Set-Content -NoNewline -Path $state -Value $WebStartedAt
+            $onUp = if ($UpStartsWeb) { "echo 2026-10-06T13:00:00Z > '$state'" } else { ':' }
+            @"
+RUNTIME=docker
+USE_BUNDLED_DB=true
+JIM_SETUP_AUTO_START=true
+wait_for_jim() { echo "waited for JIM"; }
+docker() {
+    case "`$1" in
+        inspect) [ -s '$state' ] || return 1; cat '$state' ;;
+        ps) [ -s '$state' ] && echo 0123456789ab ;;
+        compose)
+            echo "ran: docker `$*"
+            case " `$* " in *" up "*) $onUp ;; esac ;;
+    esac
+}
+"@
+        }
+    }
+
+    It 'restarts jim.web when a re-run leaves it running, so that it serves the certificate just installed' {
+        $arrange = Get-LaunchArrangement -WebStartedAt '2026-10-06T12:36:37Z'
+
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*ran: docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web*'
+        $result.Output.IndexOf('restart jim.web') | Should -BeLessThan $result.Output.IndexOf('waited for JIM')
+    }
+
+    It 'does not restart jim.web when starting JIM started it, as a first install does' {
+        $arrange = Get-LaunchArrangement -WebStartedAt '' -UpStartsWeb
+
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*ran: docker compose * up -d*'
+        $result.Output | Should -Not -BeLike '*restart jim.web*'
+    }
+
+    It 'does not restart jim.web again when starting JIM recreated it, as a changed configuration does' {
+        $arrange = Get-LaunchArrangement -WebStartedAt '2026-10-06T12:36:37Z' -UpStartsWeb
+
+        $result = Invoke-SetupFunction "launch_jim '$TestDrive'" $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Not -BeLike '*restart jim.web*'
+    }
+}
+
 Describe 'setup.sh pinned_database_image' -Skip:$script:NoBash {
     It 'reads the PostgreSQL image docker-compose.yml pins, without the JIM_DB_IMAGE syntax around it' {
         $compose = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..' 'docker-compose.yml')).Path
