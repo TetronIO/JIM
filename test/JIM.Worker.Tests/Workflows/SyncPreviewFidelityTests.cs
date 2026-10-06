@@ -182,12 +182,18 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     /// An export scope exit caused by the object's own data: a joined source object's value changes so its Metaverse
     /// Object leaves the export rule's scope, and the rule deprovisions its live target object. The real run records a
     /// Deprovision Queued node for a Delete (#1964) and a Target Disconnected node for a Disconnect (#1966), beneath
-    /// the Attribute Flow that caused it; the preview must propose the same tree.
+    /// the Attribute Flow that caused it; the preview must propose the same tree. A Delete queued for the target under an
+    /// earlier Delete action is withdrawn by a Disconnect while unsent, and leaves nothing to disconnect once sent
+    /// (#1970).
     /// </summary>
-    [TestCase(OutboundDeprovisionAction.Delete, "DeprovisionQueued")]
-    [TestCase(OutboundDeprovisionAction.Disconnect, "TargetDisconnected")]
+    /// <param name="expectedNode">The deprovisioning node the real tree records, or null for none.</param>
+    /// <param name="queuedDeleteStatus">The status of a Delete already queued for the target object, or null for none.</param>
+    [TestCase(OutboundDeprovisionAction.Delete, "DeprovisionQueued", null)]
+    [TestCase(OutboundDeprovisionAction.Disconnect, "TargetDisconnected", null)]
+    [TestCase(OutboundDeprovisionAction.Disconnect, "TargetDisconnected", PendingExportStatus.Pending)]
+    [TestCase(OutboundDeprovisionAction.Disconnect, null, PendingExportStatus.Exported)]
     public async Task PreviewSyncForCsoAsync_ExportScopeExit_TreeMatchesTheRealSyncOutcomeTreeAsync(
-        OutboundDeprovisionAction action, string expectedNode)
+        OutboundDeprovisionAction action, string? expectedNode, PendingExportStatus? queuedDeleteStatus)
     {
         var sourceSystem = await CreateConnectedSystemAsync("HR Source");
         var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
@@ -223,6 +229,14 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.MetaverseObjectId == mvoId && c.Id != cso.Id);
         targetCso.Status = ConnectedSystemObjectStatus.Normal;
         SyncRepo.ClearAllPendingExports();
+        if (queuedDeleteStatus != null)
+        {
+            await SyncRepo.CreatePendingExportAsync(new PendingExport
+            {
+                Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, ConnectedSystemObjectId = targetCso.Id,
+                ChangeType = PendingExportChangeType.Delete, Status = queuedDeleteStatus.Value, SourceMetaverseObjectId = mvoId
+            });
+        }
 
         // The source value changes, taking the Metaverse Object out of the export rule's scope.
         cso.AttributeValues.Single(av => av.Attribute?.Name == "DisplayName").StringValue = "Leaver";
@@ -240,7 +254,11 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         var describedPreview = DescribeTree(preview.OutcomeTree);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(describedReal, Does.Contain(expectedNode), "Report: real tree shape -> " + describedReal);
+            if (expectedNode != null)
+                Assert.That(describedReal, Does.Contain(expectedNode), "Report: real tree shape -> " + describedReal);
+            else
+                Assert.That(describedReal, Does.Not.Contain("TargetDisconnected").And.Not.Contain("DeprovisionQueued"),
+                    "Report: real tree shape -> " + describedReal);
             Assert.That(describedPreview, Is.EqualTo(describedReal),
                 $"The preview's outcome tree must have the same shape as the real one. Preview: {describedPreview} | Real: {describedReal}");
         }

@@ -249,8 +249,9 @@ public interface ISyncEngine
 
     /// <summary>
     /// Decides what an export Synchronisation Rule's OutboundDeprovisionAction means for a CSO that has fallen
-    /// out of the rule's scope: disconnect, stage a Delete export (with the one-Pending-Export-per-CSO collision
-    /// policy choosing reuse, replace or create), or nothing at all for an unrecognised action, which is
+    /// out of the rule's scope: disconnect (withdrawing a Delete queued under an earlier Delete action, or doing
+    /// nothing when that Delete has already been sent), stage a Delete export (with the one-Pending-Export-per-CSO
+    /// collision policy choosing reuse, replace or create), or nothing at all for an unrecognised action, which is
     /// deliberately never defaulted to disconnect.
     /// </summary>
     /// <param name="exportRule">The export Synchronisation Rule the CSO fell out of scope for.</param>

@@ -6970,7 +6970,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var row = await Repository.Database.SyncRules
             .AsNoTracking()
             .Where(sr => sr.Id == syncRuleId)
-            .Select(sr => new { sr.Enabled, sr.ProvisionToConnectedSystem })
+            .Select(sr => new { sr.Enabled, sr.ProvisionToConnectedSystem, sr.OutboundDeprovisionAction })
             .SingleOrDefaultAsync();
         if (row == null)
             return null;
@@ -6980,7 +6980,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var storedRule = new SyncRule { Id = syncRuleId };
         await SyncRuleScopingTreeLoader.LoadUntrackedAsync(Repository.Database, [storedRule]);
 
-        return new SyncRuleScopeState(row.Enabled, row.ProvisionToConnectedSystem == true, SyncRuleScopingProposal.FromCurrentScope(storedRule));
+        return new SyncRuleScopeState(row.Enabled, row.ProvisionToConnectedSystem == true, SyncRuleScopingProposal.FromCurrentScope(storedRule),
+            row.OutboundDeprovisionAction);
     }
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
