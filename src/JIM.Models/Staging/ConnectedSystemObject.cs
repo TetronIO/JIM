@@ -232,6 +232,24 @@ public class ConnectedSystemObject
     public bool IsUnchangedSinceLastSync { get; set; }
 
     /// <summary>
+    /// Whether a Full Synchronisation loading with <paramref name="watermark"/> (see
+    /// <see cref="ConnectedSystem.GetUnchangedObjectWatermark"/>) treats this object as unchanged and skips it: a joined,
+    /// normal object neither created nor updated since. One rule for the run's loader and the Full Synchronisation
+    /// preview (#1530), so the preview never proposes a change for an object the run will not process.
+    /// </summary>
+    /// <remarks>
+    /// An object flagged by the Temporal Scope Reconciler (<see cref="ScopeReviewPending"/>, #892) has moved in or out
+    /// of scope with the clock, and one marked <see cref="DerivedInputChangePending"/> (#1750) has a derived flow whose
+    /// input changed in another system: neither is unchanged, though its own data is.
+    /// </remarks>
+    public bool IsUnchangedSince(DateTime watermark) =>
+        Status == ConnectedSystemObjectStatus.Normal &&
+        MetaverseObjectId.HasValue &&
+        !ScopeReviewPending &&
+        !DerivedInputChangePending &&
+        (LastUpdated == null ? Created <= watermark : LastUpdated.Value <= watermark);
+
+    /// <summary>
     /// Only for use by JIM.Service to determine what attribute values need adding and change-tracking.
     /// </summary>
     [NotMapped]

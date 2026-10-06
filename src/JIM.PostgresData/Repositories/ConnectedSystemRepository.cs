@@ -1479,19 +1479,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var changedCsoIds = new List<Guid>();
             foreach (var cso in allCsos)
             {
-                var isUnchanged =
-                    cso.Status == ConnectedSystemObjectStatus.Normal &&
-                    cso.MetaverseObjectId.HasValue &&
-                    // A CSO flagged by the Temporal Scope Reconciler (#892) has drifted in or out of scope with the
-                    // clock even though its source data is static. It MUST be treated as changed so its attribute and
-                    // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
-                    // set. The flag is cleared once the object has been re-evaluated.
-                    !cso.ScopeReviewPending &&
-                    // Likewise a CSO marked because a Metaverse-Derived Attribute Flow input changed in another
-                    // system's synchronisation (#1750): its own data is unchanged, but its derived flows must be
-                    // re-evaluated, so its attribute values must be loaded. Cleared once it has been processed.
-                    !cso.DerivedInputChangePending &&
-                    (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
+                // A CSO flagged by the Temporal Scope Reconciler (#892), or marked because a Metaverse-Derived
+                // Attribute Flow input changed in another system (#1750), is treated as changed so its attribute and
+                // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
+                // set. Each flag is cleared once the object has been re-evaluated. The rule is shared with the Full
+                // Synchronisation preview (#1530).
+                var isUnchanged = cso.IsUnchangedSince(watermark);
 
                 if (isUnchanged)
                 {
