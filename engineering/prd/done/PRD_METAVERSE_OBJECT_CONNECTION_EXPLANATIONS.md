@@ -1,10 +1,10 @@
 # Metaverse Object Connection Explanations
 
-- **Status:** Doing (Phases 0-5 and layers 1-2 complete)
+- **Status:** Done
 - **Created:** 2026-10-05
 - **Author:** Jay
 - **Issue:** [#348](https://github.com/TetronIO/JIM/issues/348)
-- **Plan:** [`../../plans/doing/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../plans/doing/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
+- **Plan:** [`../../plans/done/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md`](../../plans/done/METAVERSE_OBJECT_CONNECTION_EXPLANATIONS.md)
 - **UI mockups:** [MVO Connections Mocks](https://claude.ai/artifact/4Tj5DYpEMR7c8g9pSoAqD9) (board 1B is the chosen layout; 1A is the rejected alternative)
 
 ## Problem Statement
@@ -259,16 +259,16 @@ PS> $c.Summary   # the same plain text as the portal's Copy summary
 
 ## Acceptance Criteria
 
-- [ ] Explained evaluation agrees with the boolean evaluation for every criterion type, comparison, group nesting, missing value and relative date (shared code path, covered by tests), and synchronisation test suites pass unchanged.
-- [ ] Joined rows expand to show the projecting, provisioning or joining Synchronisation Rule, date joined and Activity link (or "not recorded"), and the current scoping evaluation, labelled as evaluated now.
-- [ ] A separate "Not connected (n)" section, collapsed by default and visually distinct, lists each not-connected entry with its reason chip and a single-line, truncating hint naming the failing attributes.
-- [ ] Expanding an entry shows the "To come into scope" bullet list and the explanation tree (or the what-happens-next list); the bullets are not repeated in the row.
-- [ ] Copy summary on the row copies the plain-text summary without expanding; the same summary, bullets and hint are returned by REST and PowerShell.
-- [ ] An Invalid criterion is reported per rule without breaking the page; credential values never appear.
-- [ ] `Get-JIMMetaverseObjectConnection` and the new REST endpoint return the same information, with tests and docs.
-- [ ] Created By and Last Updated By on the Metaverse Object DTO and `Get-JIMMetaverseObject`.
-- [ ] Each new join records the responsible Synchronisation Rule on the Connected System Object; deleting the rule clears the reference and keeps the name; synchronisation outcomes are unchanged.
-- [ ] Changelog entry and the public docs listed above.
+- [x] Explained evaluation agrees with the boolean evaluation for every criterion type, comparison, group nesting, missing value and relative date (shared code path, covered by tests), and synchronisation test suites pass unchanged.
+- [x] Joined rows expand to show the projecting, provisioning or joining Synchronisation Rule, date joined and Activity link (or "not recorded"), and the current scoping evaluation, labelled as evaluated now.
+- [x] A separate "Not connected (n)" section, collapsed by default and visually distinct, lists each not-connected entry with its reason chip and a single-line, truncating hint naming the failing attributes.
+- [x] Expanding an entry shows the "To come into scope" bullet list and the explanation tree (or the what-happens-next list); the bullets are not repeated in the row.
+- [x] Copy summary on the row copies the plain-text summary without expanding; the same summary, bullets and hint are returned by REST and PowerShell.
+- [x] An Invalid criterion is reported per rule without breaking the page; credential values never appear.
+- [x] `Get-JIMMetaverseObjectConnection` and the new REST endpoint return the same information, with tests and docs.
+- [x] Created By and Last Updated By on the Metaverse Object DTO and `Get-JIMMetaverseObject`.
+- [x] Each new join records the responsible Synchronisation Rule on the Connected System Object; deleting the rule clears the reference and keeps the name; synchronisation outcomes are unchanged.
+- [x] Changelog entry and the public docs listed above.
 
 ## Additional Context
 
