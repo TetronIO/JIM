@@ -69,6 +69,22 @@ Describe 'Build-PodmanFiles' {
         Get-ImageReferences (Join-Path $output 'jim-database.yaml') | Should -Be @($expected)
     }
 
+    It 'gives the bundled PostgreSQL the TCP keepalives docker-compose.yml gives it' {
+        # So that it drops a session whose client has gone within two minutes, which on Podman is every session of
+        # JIM's at each stop, since the pod's network goes before JIM's services close their connections (#1980).
+        $output = New-OutputPath
+        $compose = Get-Content (Join-Path $script:RepoRoot 'docker-compose.yml') -Raw
+        $command = [regex]::Match($compose, '(?m)^\s*command: postgres .*$').Value
+        $expected = @([regex]::Matches($command, 'tcp_keepalives_\w+=\d+') | ForEach-Object Value)
+
+        & $script:ScriptPath -Version 1.2.3 -OutputPath $output
+
+        $expected | Should -Be @('tcp_keepalives_idle=60', 'tcp_keepalives_interval=10', 'tcp_keepalives_count=6')
+        $pod = Get-Content (Join-Path $output 'jim-database.yaml') -Raw
+        @([regex]::Matches($pod, '(?m)^\s*- (tcp_keepalives_\w+=\d+)\s*$') | ForEach-Object { $_.Groups[1].Value }) |
+            Should -Be $expected
+    }
+
     It 'leaves no placeholder in any file' {
         $output = New-OutputPath
 
