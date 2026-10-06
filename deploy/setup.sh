@@ -914,14 +914,18 @@ jim_systemctl() {
     fi
 }
 
-# The same command, as an administrator types it.
+# The same command, as an administrator types it. For the account that runs JIM, it uses the account's own bus, as
+# jim_systemctl does: systemctl --user -M jim@ fails on a minimal RHEL-family host, which lacks systemd-container.
 jim_systemctl_command() {
     if [ -z "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ]; then
         printf 'sudo systemctl'
     elif [ -z "$PODMAN_ACCOUNT" ]; then
         printf 'systemctl'
     elif [ "$(id -u)" -eq 0 ]; then
-        printf 'sudo systemctl --user -M %s@' "$PODMAN_ACCOUNT"
+        local uid
+        uid=$(id -u "$PODMAN_ACCOUNT")
+        printf 'sudo -u %s XDG_RUNTIME_DIR=/run/user/%s DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%s/bus systemctl --user' \
+            "$PODMAN_ACCOUNT" "$uid" "$uid"
     else
         printf 'systemctl --user'
     fi

@@ -79,19 +79,25 @@ Restarting `jim.service` restarts the web, worker and scheduler together; `jim-d
 
 ### Rootless commands {#rootless-commands}
 
-A rootless JIM belongs to the `jim` account: its systemd manager runs JIM, and its Podman holds JIM's containers, images, secrets and volumes, which root's Podman does not see. As root, reach them like this:
+A rootless JIM belongs to the `jim` account: its systemd manager runs JIM, and its Podman holds JIM's containers, images, secrets and volumes, which root's Podman does not see. As root, reach them through two functions, which save typing out the account's settings each time. Define them in each shell you operate JIM from:
 
 ```bash
+# systemctl for the jim account's systemd manager, through the account's own bus.
+jim-systemctl() { sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u jim)/bus systemctl --user "$@"; }
 # Podman as the jim account, from the root folder: rootless Podman fails in a folder the account cannot read,
-# such as your home folder. This function saves typing that out each time.
+# such as your home folder.
 jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+```
 
-sudo systemctl --user -M jim@ status jim.service
+Then, for example:
+
+```bash
+jim-systemctl status jim.service
 jim-podman ps
 jim-podman logs -f jim-web
 ```
 
-Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `systemctl --user -M jim@`.
+Wherever this documentation runs `podman` as root (`sudo podman`) for a rootful JIM, run `jim-podman` for a rootless one; and wherever it runs `systemctl`, run `jim-systemctl`. Use `jim-systemctl` rather than `systemctl --user -M jim@`, which fails on a minimal RHEL-family host that lacks the `systemd-container` package (see [Troubleshooting](troubleshooting.md#rootless-systemctl-fails)).
 
 ### Health checks and restarts
 
@@ -175,10 +181,9 @@ useradd --create-home --comment "JIM (Junctional Identity Manager)" --shell /sbi
 grep '^jim:' /etc/subuid /etc/subgid
 loginctl enable-linger jim
 echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system
-jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
 ```
 
-Then follow the steps above, with three differences:
+Define the `jim-systemctl` and `jim-podman` functions from [Rootless commands](#rootless-commands) in the same shell, then follow the steps above, with three differences:
 
 - In step 1, put the units in the account's folder instead of `/etc/containers/systemd/`:
 
@@ -189,7 +194,7 @@ Then follow the steps above, with three differences:
     ```
 
 - Run each `podman` command as `jim-podman`.
-- Run each `systemctl` command as `systemctl --user -M jim@`.
+- Run each `systemctl` command as `jim-systemctl`.
 
 ## Without systemd {#without-systemd}
 

@@ -122,6 +122,29 @@ jim_systemctl() { echo "asked systemd"; return 1; }
     }
 }
 
+Describe 'setup.sh jim_systemctl_command' -Skip:$script:NoBash {
+    It 'as root, for a rootless installation, reaches the account''s systemd manager through its own bus, which needs no systemd-container (#1955)' {
+        # Root, with the account jim as uid 1002. sudo stands in for the command the administrator would run, and
+        # writes what it was given, one argument a line.
+        $arrange = @'
+PODMAN_ACCOUNT=jim
+id() { if [ "$1" = "-u" ] && [ -z "${2:-}" ]; then echo 0; elif [ "$1" = "-u" ]; then echo 1002; else command id "$@"; fi; }
+sudo() { printf '%s\n' "$@"; }
+'@
+
+        $result = Invoke-SetupFunction 'eval "$(jim_systemctl_command) status jim.service"' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $arguments = @($result.Output -split "`r?`n" | Where-Object { $_ })
+        # systemctl -M jim@ fails on a minimal RHEL-family host, which lacks the systemd-container package.
+        $arguments | Should -Not -Contain '-M'
+        $arguments[0..1] | Should -Be @('-u', 'jim')
+        $arguments | Should -Contain 'XDG_RUNTIME_DIR=/run/user/1002'
+        $arguments | Should -Contain 'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus'
+        $arguments[-4..-1] | Should -Be @('systemctl', '--user', 'status', 'jim.service')
+    }
+}
+
 Describe 'setup.sh size_database' -Skip:$script:NoBash {
     BeforeAll {
         $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path

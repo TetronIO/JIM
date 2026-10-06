@@ -22,7 +22,7 @@ data:
   JIM_DB_LOG_MIN_DURATION: "1000"
 ```
 
-Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`.
+Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootless installation, `jim-systemctl restart jim.service` (see [Rootless commands](podman.md#rootless-commands)).
 
 These settings differ on Podman:
 

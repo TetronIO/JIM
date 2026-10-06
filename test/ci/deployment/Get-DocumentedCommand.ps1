@@ -8,9 +8,10 @@
 .DESCRIPTION
     The documentation gives a command per runtime, in tabs (=== "Docker", === "Podman") under the heading of the
     step it belongs to. This returns the first fenced block under the named tab in the named heading's section,
-    without the indentation the tab gives it. A check that runs the page's own text, rather than a copy of it,
-    fails when the page goes wrong, as the Docker key backup did when it relied on an image an air-gapped host
-    does not have (#1949).
+    without the indentation the tab gives it; with no tab named, the section's first block, for a section that
+    gives one command for every case. A check that runs the page's own text, rather than a copy of it, fails when
+    the page goes wrong, as the Docker key backup did when it relied on an image an air-gapped host does not have
+    (#1949), and the rootless systemctl command did on a host without systemd-container (#1955).
 
 .PARAMETER Path
     The documentation page.
@@ -20,10 +21,13 @@
     matches without it.
 
 .PARAMETER Tab
-    The tab's title, such as Docker.
+    The tab's title, such as Docker. Leave it out for a section without tabs.
 
 .EXAMPLE
     ./test/ci/deployment/Get-DocumentedCommand.ps1 -Path ./docs/administration/backup-recovery.md -Heading 'Restoring' -Tab Docker
+
+.EXAMPLE
+    ./test/ci/deployment/Get-DocumentedCommand.ps1 -Path ./docs/administration/podman.md -Heading 'Rootless commands'
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +37,6 @@ param(
     [Parameter(Mandatory)]
     [string]$Heading,
 
-    [Parameter(Mandatory)]
     [string]$Tab
 )
 
@@ -56,13 +59,13 @@ if ($start -lt 0) {
     throw "$Path has no heading '$Heading'"
 }
 
-$inTab = $false
+$inTab = -not $Tab
 for ($i = $start + 1; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
     if ($line -match '^(#{1,6})\s' -and $Matches[1].Length -le $level) {
         break
     }
-    if ($line -match '^\s*=== "(.*)"\s*$') {
+    if ($Tab -and $line -match '^\s*=== "(.*)"\s*$') {
         $inTab = $Matches[1] -eq $Tab
         continue
     }
@@ -73,5 +76,8 @@ for ($i = $start + 1; $i -lt $lines.Count; $i++) {
         }
         return (@($block) -join "`n")
     }
+}
+if (-not $Tab) {
+    throw "The section '$Heading' of $Path has no command"
 }
 throw "The section '$Heading' of $Path has no command under a `"$Tab`" tab"

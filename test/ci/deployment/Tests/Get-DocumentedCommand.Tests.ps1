@@ -78,6 +78,20 @@ BeforeAll {
     podman run image
     ```
 
+## Rootless helpers
+
+Define these first:
+
+```bash
+helper() { echo "$@"; }
+```
+
+Then:
+
+```bash
+helper status
+```
+
 ## Docker later
 
 === "Docker"
@@ -106,6 +120,12 @@ Describe 'Get-DocumentedCommand' {
             Should -Throw '*Only Podman here*Docker*'
     }
 
+    It 'returns the section''s first block when no tab is named, for a section that gives one command for all' {
+        $command = & $script:ScriptPath -Path $script:Page -Heading 'Rootless helpers'
+
+        $command | Should -BeExactly 'helper() { echo "$@"; }'
+    }
+
     It 'stops when the page has no such heading' {
         { & $script:ScriptPath -Path $script:Page -Heading '3. Back up the logs' -Tab 'Docker' } |
             Should -Throw '*3. Back up the logs*'
@@ -119,5 +139,14 @@ Describe 'Get-DocumentedCommand' {
 
         $backup | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
         $restore | Should -BeLike '*jim-keys-volume*jim-keys-*.tar.gz*'
+    }
+
+    It 'finds the rootless helpers in Running JIM on Podman, whose jim-systemctl the deployment-boot check runs' {
+        $page = Join-Path $script:RepositoryRoot 'docs' 'administration' 'podman.md'
+
+        $helpers = & $script:ScriptPath -Path $page -Heading 'Rootless commands'
+
+        $helpers | Should -Match '(?m)^jim-systemctl\(\) \{'
+        $helpers | Should -Match '(?m)^jim-podman\(\) \{'
     }
 }

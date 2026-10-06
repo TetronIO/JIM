@@ -385,9 +385,11 @@ Installed with --rootless, JIM belongs to the jim account: its own systemd
 manager runs JIM, and its own Podman holds JIM's containers.
 
 ``````bash
-sudo systemctl --user -M jim@ status jim.service
+# systemctl for the jim account's systemd manager, through the account's own bus
+jim-systemctl() { sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/`$(id -u jim)/bus systemctl --user "`$@"; }
 # Podman as the jim account, from the root folder, which the account can read
 jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman "`$@"); }
+jim-systemctl status jim.service
 jim-podman ps
 jim-podman logs jim-web
 ``````
