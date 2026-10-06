@@ -186,10 +186,35 @@ public class DeletePathForeignKeyCoverageTests
                 "delete-history path the rows are already gone."
         });
 
+    /// <summary>
+    /// <c>SyncRepository.DeleteMetaverseObjectsAsync</c> and <c>MetaverseRepository.DeleteMetaverseObjectAsync</c>:
+    /// sever the references to the objects that history and other objects keep, then remove the objects and let
+    /// their own rows (attribute values, generated value assignments, revision-pending records and the rest) go by
+    /// cascade.
+    /// </summary>
+    private static readonly DeleteSurface MetaverseObjectDeletion = new(
+        Name: "deleting Metaverse Objects (SyncRepository.DeleteMetaverseObjectsAsync, MetaverseRepository.DeleteMetaverseObjectAsync)",
+        DeleteRoots: ["MetaverseObjects"],
+        TruncatedTables: [],
+        RemovedTables: [],
+        SeveredForeignKeys: new Dictionary<string, string>
+        {
+            ["FK_ConnectedSystemObjects_MetaverseObjects_MetaverseObjectId"] =
+                "Joined Connected System Objects are kept and disconnected; both deleters null MetaverseObjectId first.",
+            ["FK_MetaverseObjectChanges_MetaverseObjects_MetaverseObjectId"] =
+                "Change history is kept; both deleters stamp DeletedMetaverseObjectId and null MetaverseObjectId first.",
+            ["FK_MetaverseObjectAttributeValues_MetaverseObjects_ReferenceVa~"] =
+                "Other objects' references to the deleted objects are deleted or nulled by " +
+                "MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync.",
+            ["FK_MetaverseObjectChangeAttributeValues_MetaverseObjects_Refer~"] =
+                "Change history reference values are kept; both deleters null ReferenceValueId first."
+        });
+
     private static IEnumerable<TestCaseData> Surfaces()
     {
         yield return new TestCaseData(FactoryReset).SetName("{m}(factory reset)");
         yield return new TestCaseData(ConnectedSystemDeletion).SetName("{m}(Connected System deletion)");
+        yield return new TestCaseData(MetaverseObjectDeletion).SetName("{m}(Metaverse Object deletion)");
     }
 
     private string _connectionString = null!;
