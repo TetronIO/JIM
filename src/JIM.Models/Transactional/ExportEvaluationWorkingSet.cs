@@ -67,4 +67,19 @@ public class ExportEvaluationWorkingSet
     /// outcomes on the Activity.
     /// </summary>
     public IReadOnlyList<CancelledProvisioning> CancelledProvisionings => _cancelledProvisionings;
+
+    private readonly List<OutboundDisconnection> _disconnections = [];
+
+    /// <summary>
+    /// Records an outbound disconnection this run made (a scope exit under a Disconnect Deprovisioning Action broke
+    /// the join to the target system's object). Record only after the broken join is persisted.
+    /// </summary>
+    public void RecordDisconnection(OutboundDisconnection disconnection) =>
+        _disconnections.Add(disconnection);
+
+    /// <summary>
+    /// The outbound disconnections this run has made so far. Unlike a staged Delete, a disconnection leaves nothing
+    /// queued, so this is the only record a caller has that the evaluation changed anything.
+    /// </summary>
+    public IReadOnlyList<OutboundDisconnection> Disconnections => _disconnections;
 }
