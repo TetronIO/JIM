@@ -102,10 +102,11 @@ The same upgrade by hand. On Podman, see [Upgrading on Podman](#upgrading-on-pod
     docker compose pull
     ```
 
-5. **Start the services**, using the same `-f` overrides and `--profile` flags you normally deploy with (for example `--profile with-db` for the bundled PostgreSQL, and `-f docker-compose.yml -f docker-compose.production.yml` in production):
+5. **Start the services** with every compose file and profile you deployed with. Add `-f` for any compose file of your own, such as `-f docker-compose.local.yml`, and leave out `--profile with-db` if you use your own PostgreSQL server:
 
     ```bash
-    docker compose up -d
+    docker compose -f docker-compose.yml -f docker-compose.production.yml \
+      --profile with-db up -d
     ```
 
 6. **Verify**, per [Verifying the upgrade](#verifying) below.
@@ -303,10 +304,18 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
     for f in docker-compose.yml docker-compose.production.yml .env; do cp -p "$f.previous" "$f"; done
     ```
 
-4. **Start the services:**
+4. **Start the services** with every compose file and profile JIM was started with before the upgrade. Add `-f` for any compose file of your own, such as `-f docker-compose.local.yml`, and leave out `--profile with-db` if you use your own PostgreSQL server:
 
     ```bash
-    docker compose up -d
+    cd /opt/jim
+    docker compose -f docker-compose.yml -f docker-compose.production.yml \
+      --profile with-db up -d
+    ```
+
+    Leave out `docker-compose.production.yml` and every container still reports healthy, but `jim.web` publishes no port, so JIM is unreachable. The stopped `jim.web` container records the compose files it was last started with, if you are unsure which they were:
+
+    ```bash
+    docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' jim.web
     ```
 
 5. **Verify** as you would after an upgrade, per [Verifying the upgrade](#verifying), and re-enable your Schedules.

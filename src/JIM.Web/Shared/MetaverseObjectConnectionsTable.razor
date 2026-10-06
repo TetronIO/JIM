@@ -1,7 +1,6 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -9,7 +8,8 @@
 @* The Metaverse Object's Connections tab table (#1519): one row per Connected System Object joined to the
    Metaverse Object, its role, its derived State and a per-row Preview Sync. A component of its own
    (rather than inline markup on Types/View.razor) so the State chip and colour mapping have exactly
-   one definition, reusable on the Connector Space list per D-S7, and so the shape is bUnit-testable. *@
+   one definition, reusable on the Connector Space list per D-S7, and so the shape is bUnit-testable.
+   Each row expands to explain why the connection exists (#348): how it joined and its scoping now. *@
 
 @if (IsLoading)
 {
@@ -24,21 +24,30 @@ else if (IsLoaded && Connections.Count == 0)
 }
 else if (IsLoaded)
 {
-    <MudTable Items="Connections" Hover="true" Dense="@_dense" Outlined="true" Elevation="0" data-testid="jim-mvo-connections-table">
+    <MudTable Items="Connections" Hover="true" Dense="@Dense" Outlined="true" Elevation="0" data-testid="jim-mvo-connections-table">
         <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" />
+            <TableDensityToggle Dense="@Dense" DenseChanged="@DenseChanged" />
             <TableObjectCount Count="@Connections.Count" SingularName="connection" PluralName="connections" ShowSeparator="true" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.DisplayName)">Object</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnection" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">Last synchronised</MudTableSortLabel></MudTh>
+            <MudTh Class="jim-expand-column"></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.DisplayName)">Object</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.LastSynchronised ?? DateTime.MinValue)">Last synchronised</MudTableSortLabel></MudTh>
             <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd Class="jim-expand-column">
+                @{ var expanded = ExpandedIds.Contains(context.ConnectedSystemObjectId); }
+                <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               Size="Size.Small" aria-expanded="@(expanded ? "true" : "false")"
+                               aria-label="@($"Why this Metaverse Object is connected to {context.ConnectedSystemName}")"
+                               OnClick="@(() => ToggleExpanded(context))"
+                               data-testid="jim-mvo-connection-expand" />
+            </MudTd>
             <MudTd DataLabel="Connected System">
                 <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
             </MudTd>
@@ -99,6 +108,16 @@ else if (IsLoaded)
                            data-testid="jim-mvo-connection-preview">Preview Sync</MudButton>
             </MudTd>
         </RowTemplate>
+        <ChildRowContent>
+            @if (ExpandedIds.Contains(context.ConnectedSystemObjectId))
+            {
+                <MudTr>
+                    <td colspan="8" class="jim-connection-detail-cell">
+                        <MetaverseObjectConnectionDetail Connection="context" EvaluatedAt="EvaluatedAt" />
+                    </td>
+                </MudTr>
+            }
+        </ChildRowContent>
     </MudTable>
 }
 
@@ -121,7 +140,32 @@ else if (IsLoaded)
     /// The rows to render.
     /// </summary>
     [Parameter, EditorRequired]
-    public IReadOnlyList<MetaverseObjectConnection> Connections { get; set; } = [];
+    public IReadOnlyList<MetaverseObjectConnectionExplanation> Connections { get; set; } = [];
+
+    /// <summary>
+    /// When the connections' scoping was evaluated: one instant for the whole tab, shown in each expansion.
+    /// </summary>
+    [Parameter]
+    public DateTime? EvaluatedAt { get; set; }
+
+    /// <summary>
+    /// The connections the reader has expanded, by Connected System Object id. The page's, so it belongs to the
+    /// object on screen and is gone with it (see <c>MetaverseObjectViewState</c>); this table adds and removes ids.
+    /// </summary>
+    [Parameter]
+    public ISet<Guid> ExpandedIds { get; set; } = new HashSet<Guid>();
+
+    /// <summary>
+    /// Compact or normal row spacing. The page's, since it holds the reader's preference for this tab's tables.
+    /// </summary>
+    [Parameter]
+    public bool Dense { get; set; } = true;
+
+    /// <summary>
+    /// Raised when the reader toggles the row spacing.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> DenseChanged { get; set; }
 
     /// <summary>
     /// Whether a row's Preview Sync is currently running (disables every row's button, since only one
@@ -136,35 +180,17 @@ else if (IsLoaded)
     [Parameter]
     public EventCallback<MetaverseObjectConnection> OnPreview { get; set; }
 
-    private bool _dense = true;
-    private bool _preferencesLoaded;
-
-    /// <summary>
-    /// Loads the saved row-density preference on first render, per the shared table convention
-    /// (src/JIM.Web/CLAUDE.md, "Row density"), so the table paints at the user's density straight away.
-    /// </summary>
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private void ToggleExpanded(MetaverseObjectConnectionExplanation connection)
     {
-        if (_preferencesLoaded)
-            return;
-
-        try
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() != false;
-            _preferencesLoaded = true;
-            StateHasChanged();
-        }
-        catch (InvalidOperationException)
-        {
-            // JS interop not yet available; the next render retries.
-        }
+        if (!ExpandedIds.Remove(connection.ConnectedSystemObjectId))
+            ExpandedIds.Add(connection.ConnectedSystemObjectId);
     }
 
     /// <summary>
     /// Sort key for the Role column: sources before targets, and a connection that is both sorts with
     /// the sources, so a sort by role reads as "where does this Metaverse Object come from, then where does it go".
     /// </summary>
-    private static string GetRoleSortKey(MetaverseObjectConnection connection) =>
+    private static string GetRoleSortKey(MetaverseObjectConnectionExplanation connection) =>
         (connection.IsSource, connection.IsTarget) switch
         {
             (true, true) => "1 source and target",

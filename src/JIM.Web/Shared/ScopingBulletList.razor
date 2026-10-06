@@ -1,0 +1,45 @@
+@using JIM.Models.Logic.Scoping
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The server's bullets for a Not connected entry (#348): what would bring the object into scope, what happens next,
+   or what would fix the rule. Every word is the server's, so the portal, the REST API and PowerShell say the same;
+   this only gives each typed segment its look (an attribute, a value the rule expects, what the object holds now).
+   Values are shown unquoted here because their look sets them apart; the plain text the summary carries quotes them. *@
+<ul class="jim-scoping-bullets">
+    @foreach (var bullet in Bullets)
+    {
+        <li data-testid="jim-scoping-bullet">
+            @foreach (var segment in bullet.Segments)
+            {
+                @if (segment.Kind == ExplanationSegmentKind.Text)
+                {
+                    @segment.Text
+                }
+                else
+                {
+                    <span class="@SegmentClass(segment.Kind)">@segment.Text</span>
+                }
+            }
+        </li>
+    }
+</ul>
+
+@code {
+    /// <summary>
+    /// The bullets to show, in the server's order.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ExplanationBullet> Bullets { get; set; } = [];
+
+    private static string SegmentClass(ExplanationSegmentKind kind) => kind switch
+    {
+        ExplanationSegmentKind.Attribute => "jim-explanation-attribute",
+        ExplanationSegmentKind.ExpectedValue => "jim-explanation-value",
+        ExplanationSegmentKind.CurrentValue => "jim-explanation-current",
+        ExplanationSegmentKind.NoValue => "jim-explanation-no-value",
+        ExplanationSegmentKind.Hidden => "jim-explanation-hidden",
+        _ => string.Empty
+    };
+}

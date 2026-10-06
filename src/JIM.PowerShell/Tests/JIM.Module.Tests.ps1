@@ -141,6 +141,10 @@ Describe 'Module: JIM' {
             $exportedFunctions | Should -Contain 'Get-JIMAuthConfig'
         }
 
+        It 'Should export Get-JIMMetaverseObjectConnection' {
+            $exportedFunctions | Should -Contain 'Get-JIMMetaverseObjectConnection'
+        }
+
         It 'Should export Get-JIMUserInfo' {
             $exportedFunctions | Should -Contain 'Get-JIMUserInfo'
         }
