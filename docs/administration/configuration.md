@@ -28,6 +28,7 @@ These settings differ on Podman:
 
 - **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing by Hand](podman.md#installing-by-hand) to store or change it.
 - **`DOCKER_REGISTRY`, `JIM_VERSION`, `JIM_WEB_PORT`**<br /> Not used: the pod file, `jim.yaml`, names JIM's images with their registry and version, and the HTTPS port is `PublishPort=` in the `jim.kube` unit.
+- **`JIM_DB_SHM_SIZE`**<br /> Not used: Podman cannot size a pod's `/dev/shm`, so the bundled database pod keeps its parallel query memory in its data folder instead.
 - **`JIM_DB_HOSTNAME`**<br /> `jim-database` for the bundled PostgreSQL, rather than Docker's `jim.database`.
 - **Settings the pod file sets itself**<br /> Leave `JIM_LOG_PATH`, `JIM_LOG_REQUESTS` and the `ASPNETCORE_` settings out of `jim-config.yaml`: Podman would let a value there replace the pod file's.
 
@@ -79,6 +80,29 @@ To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URL
 | `JIM_DB_LOG_SENSITIVE_INFO` | When `true`, includes parameter values in database query logs. **Do not enable in production.**                    | `false`     | `false`                    |
 | `JIM_DB_LOG_MIN_DURATION`  | Slow query log threshold in milliseconds. Queries exceeding this duration are logged. Set to `-1` to disable, `0` to log all queries. | `1000`  | `500`                      |
 | `JIM_DB_IMAGE`             | Docker only: the bundled PostgreSQL's image. Leave it unset: the installer sets it to the image's ID for an air-gapped install on Docker's classic image store, which cannot find the pinned image by its digest (see [By Hand](deployment.md#by-hand)). | *(the image `docker-compose.yml` pins by digest)* | `sha256:662db3da…` |
+
+### Bundled PostgreSQL Memory {#bundled-postgresql-memory}
+
+These size the bundled PostgreSQL's memory, and are ignored with your own PostgreSQL server. The installer sets them from the host's memory when it installs JIM with the bundled PostgreSQL, and when it upgrades an installation whose settings do not already have them. Left unset, the defaults suit the minimum supported host, with 4 GB of memory.
+
+| Variable | PostgreSQL setting | The installer sets it to | Default |
+|----------|--------------------|--------------------------|---------|
+| `JIM_DB_SHARED_BUFFERS` | `shared_buffers`: PostgreSQL's own cache, allocated when it starts | A quarter of the host's memory, at most 8 GB, since JIM's services share the host | `1GB` |
+| `JIM_DB_EFFECTIVE_CACHE_SIZE` | `effective_cache_size`: how much caching PostgreSQL assumes when it plans a query; nothing is allocated | Half of the host's memory | `2GB` |
+| `JIM_DB_MAINTENANCE_WORK_MEM` | `maintenance_work_mem`: memory for maintenance, such as building an index | A sixteenth of the host's memory, at most 2 GB | `256MB` |
+| `JIM_DB_WORK_MEM` | `work_mem`: memory for each sort or hash in a query | The host's memory less `shared_buffers`, divided by 600 (three for each of the 200 connections allowed), and at least 4 MB | `4MB` |
+| `JIM_DB_SHM_SIZE` | Docker only: the database container's `/dev/shm`, which holds the shared memory of parallel queries | `shared_buffers` and a quarter more | `1280mb` |
+
+For example, on a host with 8 GB of memory the installer sets `JIM_DB_SHARED_BUFFERS=2048MB`, `JIM_DB_EFFECTIVE_CACHE_SIZE=4096MB`, `JIM_DB_MAINTENANCE_WORK_MEM=512MB`, `JIM_DB_WORK_MEM=10MB` and `JIM_DB_SHM_SIZE=2560mb`. Give PostgreSQL's units (`kB`, `MB`, `GB`) for the first four, and Docker's (`mb`, `gb`) for `JIM_DB_SHM_SIZE`.
+
+`shared_buffers` is allocated in full when PostgreSQL starts, so a value larger than the host can give stops the database from starting: its log says `could not map anonymous shared memory: Cannot allocate memory`. Size it down, as below.
+
+To change them, for example after adding memory to the host, edit the settings and restart the database:
+
+- **Docker**<br /> Edit `.env`, then `docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d` in `/opt/jim`, which recreates the database container with the new settings.
+- **Podman**<br /> Edit `jim-config.yaml` (quote each value, as in `JIM_DB_SHARED_BUFFERS: "2048MB"`), then `systemctl restart jim-database.service`.
+
+To have the installer size them again instead, delete them from the settings file and run the upgrade (Docker), or set each yourself from the rules above.
 
 ### Connecting to a non-default port
 

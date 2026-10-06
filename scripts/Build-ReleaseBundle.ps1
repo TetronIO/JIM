@@ -411,7 +411,10 @@ Edit /opt/jim/.env: set DOCKER_REGISTRY=ghcr.io/tetronio/ and
 JIM_VERSION=$Version, and the identity provider settings its comments
 describe. For the bundled PostgreSQL, set JIM_DB_HOSTNAME=jim.database (the
 template's localhost is for development) and choose a strong JIM_DB_PASSWORD;
-for your own server, give its name and JIM's credentials there.
+for your own server, give its name and JIM's credentials there. The bundled
+PostgreSQL's memory settings (JIM_DB_SHARED_BUFFERS and those beside it) suit a
+4 GB host unless set; on a larger host, size them as the installer would (the
+Configuration Reference, "Bundled PostgreSQL Memory", gives the rules).
 
 For the bundled PostgreSQL on Docker's classic image store (docker info shows
 Storage Driver: overlay2), Docker drops the registry digest the compose file
@@ -463,8 +466,9 @@ cp podman/quadlet/jim.network podman/quadlet/jim.kube podman/quadlet/jim-databas
 
 Leave out jim-database.kube if you use your own PostgreSQL server. Edit
 /opt/jim/jim-config.yaml: fill in the identity provider settings, and for your
-own PostgreSQL server set JIM_DB_HOSTNAME to its name. To use a port other than
-443, change PublishPort= in /etc/containers/systemd/jim.kube.
+own PostgreSQL server set JIM_DB_HOSTNAME to its name. For the bundled
+PostgreSQL on a host larger than 4 GB, size its memory as for Docker above. To
+use a port other than 443, change PublishPort= in /etc/containers/systemd/jim.kube.
 
 Store the database password and client secret in Podman, from a copy of
 podman/jim-secrets.yaml with both filled in, then delete the copy:

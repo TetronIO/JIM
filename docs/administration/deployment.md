@@ -99,7 +99,7 @@ On Podman, the containers are named `jim-web`, `jim-worker`, `jim-scheduler` and
 | **Started with**   | `--profile with-db` (Docker), or the `jim-database` pod (Podman) | JIM alone                |
 | **Best for**       | Evaluations, small deployments                | Production, existing DBA team               |
 | **Backup**         | Volume snapshots                              | Your existing DB backup tooling             |
-| **Tuning**         | Default settings in compose file              | Full control                                |
+| **Tuning**         | Sized to the host's memory by the installer ([Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)) | Full control |
 
 !!! tip
     Start with bundled PostgreSQL for evaluation. Migrate to external for production workloads where you need backup, high availability, or monitoring integration.
@@ -270,7 +270,7 @@ cp compose/docker-compose.yml compose/docker-compose.production.yml /opt/jim/
 cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
 ```
 
-1. Edit `/opt/jim/.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the version in the bundle's `VERSION` file, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`; for your own server, give its name and JIM's credentials.
+1. Edit `/opt/jim/.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the version in the bundle's `VERSION` file, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`, and on a host with more than 4 GB of memory, size it as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)); for your own server, give its name and JIM's credentials.
     For the bundled PostgreSQL on Docker's classic image store (`docker info` shows `Storage Driver: overlay2` rather than `overlayfs` with the containerd snapshotter), Docker drops the registry digest the compose file pins PostgreSQL by when it loads the image, so run the loaded image by its ID instead, after checking that ID is the one the bundle records:
 
     ```bash
@@ -298,7 +298,7 @@ Then carry on at [After Installing](#after-installing).
 
 `setup.sh` installs JIM on Docker or Podman, whichever the server has, asking which where both are installed (or pass `--runtime docker` or `--runtime podman`). It installs in `/opt/jim` (or `./jim` when not run as root) and asks, in turn:
 
-1. **Database**: the bundled PostgreSQL, whose password it generates, or your own server
+1. **Database**: the bundled PostgreSQL, whose password it generates and whose memory it sizes to the host (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)), or your own server
 2. **Identity provider**: the settings from your client registration
 3. **HTTPS port**: 443 unless you choose another. It checks nothing else on the server already uses the port.
 4. **Certificate**: one it creates, from a certificate authority of its own, or your organisation's certificate and key, which it checks before installing (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))

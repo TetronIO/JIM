@@ -133,25 +133,6 @@ jim-postgres-tune
 jim-db-stop && jim-db
 ```
 
-### Production (Manual)
+### Production
 
-The default PostgreSQL settings in `docker-compose.yml` are tuned for a 64GB / 16-core system. For other environments, use [PGTune](https://pgtune.leopard.in.ua/) to generate settings, then override `command` and `shm_size` in a compose override file.
-
-Key settings to adjust:
-
-- `shared_buffers`<br /> Typically ~25% of available host RAM
-- `effective_cache_size`<br /> Typically ~75% of available host RAM
-- `shm_size` (Docker)<br /> Must be >= `shared_buffers` with ~25% headroom
-
-**Sizing reference:**
-
-| Host RAM | `shared_buffers` | `shm_size` |
-|----------|------------------|------------|
-| 8 GB | 2 GB | 3 GB |
-| 16 GB | 4 GB | 5 GB |
-| 32 GB | 8 GB | 10 GB |
-| 64 GB | 16 GB | 20 GB |
-| 128 GB | 32 GB | 40 GB |
-
-!!! warning
-    If `shm_size` is smaller than `shared_buffers`, PostgreSQL will crash under load. Docker defaults `shm_size` to only 64 MB, which is insufficient for any non-trivial `shared_buffers` value.
+In production, the bundled PostgreSQL's memory comes from settings the installer sizes to the host's memory; see [Bundled PostgreSQL Memory](../administration/configuration.md#bundled-postgresql-memory). Unset, the defaults in `docker-compose.yml` suit a 4 GB host.

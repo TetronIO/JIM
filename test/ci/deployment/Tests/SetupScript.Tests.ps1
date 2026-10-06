@@ -122,6 +122,164 @@ jim_systemctl() { echo "asked systemd"; return 1; }
     }
 }
 
+Describe 'setup.sh size_database' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+
+        # A settings file made from the release's template for the runtime, with any -Existing lines added, on a
+        # host with the given memory (in MB; empty when it cannot be read).
+        function New-SizingArrangement {
+            param([string]$MemoryMB, [string]$Runtime = 'docker', [string[]]$Existing = @(), [string]$Environment = '')
+            $dir = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $dir | Out-Null
+            if ($Runtime -eq 'podman') {
+                $config = Join-Path $dir 'jim-config.yaml'
+                Copy-Item (Join-Path $script:RepositoryRoot 'deploy' 'podman' 'jim-config.yaml') $config
+            }
+            else {
+                $config = Join-Path $dir '.env'
+                Copy-Item (Join-Path $script:RepositoryRoot '.env.example') $config
+            }
+            if ($Existing) {
+                Add-Content -Path $config -Value $Existing
+            }
+            [pscustomobject]@{
+                Config = $config
+                Arrange = "RUNTIME=$Runtime`nCONFIG_FILE='$config'`nhost_memory_mb() { echo '$MemoryMB'; }`n$Environment"
+            }
+        }
+
+        # The settings a file sets, uncommented, as name to value.
+        function Get-Settings {
+            param([string]$Path)
+            $settings = @{}
+            foreach ($line in Get-Content $Path) {
+                if ($line -match '^\s*(JIM_DB_[A-Z_]+)\s*[=:]\s*"?([^"]*)"?\s*$') {
+                    $settings[$Matches[1]] = $Matches[2]
+                }
+            }
+            $settings
+        }
+    }
+
+    It 'sizes PostgreSQL to the host''s memory, and says what it chose' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '1536MB'
+        $settings['JIM_DB_EFFECTIVE_CACHE_SIZE'] | Should -Be '3072MB'
+        $settings['JIM_DB_MAINTENANCE_WORK_MEM'] | Should -Be '384MB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '7MB'
+        $settings['JIM_DB_SHM_SIZE'] | Should -Be '1920mb'
+        $result.Output | Should -BeLike '*6.0 GB*shared_buffers 1536MB*'
+    }
+
+    It 'gives a host of the documented 4 GB minimum settings that start on it' {
+        # A "4 GB" machine reports a little less, the kernel's share taken out.
+        $arrangement = New-SizingArrangement -MemoryMB 3900
+
+        Invoke-SetupFunction 'size_database' $arrangement.Arrange | Out-Null
+
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '975MB'
+        $settings['JIM_DB_EFFECTIVE_CACHE_SIZE'] | Should -Be '1950MB'
+        $settings['JIM_DB_MAINTENANCE_WORK_MEM'] | Should -Be '243MB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '4MB'
+    }
+
+    It 'stops shared_buffers at 8 GB and maintenance_work_mem at 2 GB on a large host, which JIM''s services share' {
+        $arrangement = New-SizingArrangement -MemoryMB 65536
+
+        Invoke-SetupFunction 'size_database' $arrangement.Arrange | Out-Null
+
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '8192MB'
+        $settings['JIM_DB_EFFECTIVE_CACHE_SIZE'] | Should -Be '32768MB'
+        $settings['JIM_DB_MAINTENANCE_WORK_MEM'] | Should -Be '2048MB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '95MB'
+        $settings['JIM_DB_SHM_SIZE'] | Should -Be '10240mb'
+    }
+
+    It 'takes a value set in the environment over its own, for automation' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment 'JIM_DB_SHARED_BUFFERS=2GB'
+
+        Invoke-SetupFunction 'size_database' $arrangement.Arrange | Out-Null
+
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '2GB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '7MB'
+    }
+
+    It 'keeps the settings an installation already has, filling in only the missing ones, when upgrading' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Existing 'JIM_DB_SHARED_BUFFERS=3GB'
+
+        Invoke-SetupFunction 'size_database keep' $arrangement.Arrange | Out-Null
+
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '3GB'
+        $settings['JIM_DB_EFFECTIVE_CACHE_SIZE'] | Should -Be '3072MB'
+    }
+
+    It 'on Podman too, keeps the settings jim-config.yaml already has, quoted as the installer writes them' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Runtime podman -Existing '  JIM_DB_SHARED_BUFFERS: "3GB"'
+
+        Invoke-SetupFunction 'size_database keep' $arrangement.Arrange | Out-Null
+
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '3GB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '7MB'
+    }
+
+    It 'on Podman, writes jim-config.yaml, leaving out the /dev/shm size, which Podman cannot set' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Runtime podman
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $settings = Get-Settings $arrangement.Config
+        $settings['JIM_DB_SHARED_BUFFERS'] | Should -Be '1536MB'
+        $settings['JIM_DB_WORK_MEM'] | Should -Be '7MB'
+        $settings.ContainsKey('JIM_DB_SHM_SIZE') | Should -BeFalse
+    }
+
+    It 'leaves the defaults, saying so, when it cannot read the host''s memory' {
+        $arrangement = New-SizingArrangement -MemoryMB ''
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Settings $arrangement.Config).ContainsKey('JIM_DB_SHARED_BUFFERS') | Should -BeFalse
+        $result.Output | Should -BeLike '*Could not read this host''s memory*'
+    }
+}
+
+Describe 'setup.sh configure_database' -Skip:$script:NoBash {
+    It 'sizes the bundled PostgreSQL to the host' {
+        $env = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).env"
+        Copy-Item (Join-Path $PSScriptRoot '..' '..' '..' '..' '.env.example') $env
+        $arrange = "RUNTIME=docker`nCONFIG_FILE='$env'`nJIM_SETUP_DB_MODE=bundled`nhost_memory_mb() { echo 6144; }`nbundled_database_exists() { return 1; }"
+
+        $result = Invoke-SetupFunction 'configure_database' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $env | Should -Contain 'JIM_DB_SHARED_BUFFERS=1536MB'
+    }
+
+    It 'sizes nothing for your own PostgreSQL server' {
+        $env = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).env"
+        Copy-Item (Join-Path $PSScriptRoot '..' '..' '..' '..' '.env.example') $env
+        $arrange = "RUNTIME=docker`nCONFIG_FILE='$env'`nJIM_SETUP_DB_MODE=external`nJIM_DB_HOSTNAME=db.example.test`nJIM_DB_NAME=jim`nJIM_DB_USERNAME=jim`nJIM_DB_PASSWORD=secret`nhost_memory_mb() { echo 6144; }"
+
+        $result = Invoke-SetupFunction 'configure_database' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $env | Where-Object { $_ -like 'JIM_DB_SHARED_BUFFERS=*' } | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'setup.sh pinned_database_image' -Skip:$script:NoBash {
     It 'reads the PostgreSQL image docker-compose.yml pins, without the JIM_DB_IMAGE syntax around it' {
         $compose = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..' 'docker-compose.yml')).Path
@@ -360,6 +518,62 @@ check_compose_edits() { echo "went on to upgrade"; exit 0; }
 
         $result.Output | Should -BeLike '*from v1.9.0 to v1.10.0*'
         $result.Output | Should -BeLike '*went on to upgrade*'
+    }
+}
+
+Describe 'setup.sh upgrade_installation, sizing the bundled PostgreSQL' -Skip:$script:NoBash {
+    BeforeAll {
+        # A Docker installation of 1.0.0 whose .env sets no database sizes, as every one before #1943, and a 1.1.0
+        # bundle beside it. Everything that would touch Docker or the network is replaced; the upgrade runs through.
+        function New-SizingUpgradeArrangement {
+            param([string]$DatabaseHost)
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path (Join-Path $root 'jim'), (Join-Path $root 'bundle/compose') -Force | Out-Null
+            foreach ($name in 'docker-compose.yml', 'docker-compose.production.yml') {
+                'services: {}' | Set-Content -NoNewline (Join-Path $root "jim/$name")
+                'services: {}' | Set-Content -NoNewline (Join-Path $root "bundle/compose/$name")
+            }
+            "JIM_VERSION=1.0.0`nJIM_DB_HOSTNAME=$DatabaseHost`n" | Set-Content -NoNewline (Join-Path $root 'jim/.env')
+            Copy-Item (Join-Path $PSScriptRoot '..' '..' '..' '..' '.env.example') (Join-Path $root 'bundle/compose/.env.example')
+            "1.1.0`n" | Set-Content -NoNewline (Join-Path $root 'bundle/VERSION')
+            [pscustomobject]@{
+                Env = Join-Path $root 'jim/.env'
+                Arrange = @"
+JIM_INSTALL_DIR='$root/jim'
+BUNDLE_DIR='$root/bundle'
+JIM_SETUP_BACKUP_CONFIRMED=true
+host_memory_mb() { echo 6144; }
+check_prerequisites() { :; }
+check_compose_edits() { :; }
+load_bundle_images() { :; }
+check_database_image() { DATABASE_IMAGE_ID=''; }
+save_installer_copy() { :; }
+docker() { return 0; }
+wait_for_jim() { JIM_READY=true; }
+"@
+            }
+        }
+    }
+
+    It 'sizes the bundled PostgreSQL to the host when .env does not' {
+        # Before #1943 the compose file sized it for a 64 GB host; its defaults now suit a 4 GB one, so an upgrade
+        # sizes it rather than leave a large host on the small defaults.
+        $arrangement = New-SizingUpgradeArrangement -DatabaseHost 'jim.database'
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Env | Should -Contain 'JIM_DB_SHARED_BUFFERS=1536MB'
+        Get-Content $arrangement.Env | Should -Contain 'JIM_DB_SHM_SIZE=1920mb'
+    }
+
+    It 'sizes nothing for your own PostgreSQL server' {
+        $arrangement = New-SizingUpgradeArrangement -DatabaseHost 'db.example.test'
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Env | Where-Object { $_ -like 'JIM_DB_SHARED_BUFFERS=*' } | Should -BeNullOrEmpty
     }
 }
 

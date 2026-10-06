@@ -71,7 +71,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 
 1. Stops if the new release is not newer than the one JIM runs, and asks you to confirm the database and encryption keys are backed up (set `JIM_SETUP_BACKUP_CONFIRMED=true` to answer in advance; a "no" cancels the upgrade).
 2. Stops if `docker-compose.yml` or `docker-compose.production.yml` has been edited since it installed them, because it replaces them. Put changes of your own in a compose file of your own beside them, such as `docker-compose.local.yml`, and start JIM once with it added (`-f docker-compose.local.yml`): the upgrade starts JIM with every compose file it was last started with. Nothing changes when it stops at this step or the one before. It records the files it installs in `compose-files.sha256`; an installation made before it kept that record is upgraded with a warning instead.
-3. Installs the release's compose files, keeping the previous ones and `.env` beside them as `docker-compose.yml.previous`, `docker-compose.production.yml.previous` and `.env.previous`, sets `JIM_VERSION`, and saves the release's `.env.example` beside `.env`, naming any setting it adds that your `.env` does not mention.
+3. Installs the release's compose files, keeping the previous ones and `.env` beside them as `docker-compose.yml.previous`, `docker-compose.production.yml.previous` and `.env.previous`, sets `JIM_VERSION`, and saves the release's `.env.example` beside `.env`, naming any setting it adds that your `.env` does not mention. With the bundled PostgreSQL, it sizes the database's memory to the host where `.env` does not already (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
 4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
 5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
 
@@ -134,7 +134,7 @@ The same upgrade as [the installer's](#with-the-installer), by hand. The procedu
     for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
-4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. Copy the bundle's `setup.sh` over the installation's copy (`/opt/jim/setup.sh` by default), so that looking after JIM uses the new release's installer.
+4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. Upgrading from v0.16.0 or earlier with the bundled PostgreSQL, add its memory settings to `.env`, sized as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)): without them it uses defaults for a 4 GB host. Copy the bundle's `setup.sh` over the installation's copy (`/opt/jim/setup.sh` by default), so that looking after JIM uses the new release's installer.
 
     If your `.env` sets `JIM_DB_IMAGE` (the installer sets it on Docker's classic image store, which cannot find the bundled PostgreSQL by its pinned digest), point it at the new bundle's PostgreSQL image, after checking that image's ID is the one the bundle records. Otherwise JIM carries on running the previous release's PostgreSQL.
 
@@ -194,6 +194,8 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
     ```
 
     If you tuned PostgreSQL in `jim-database.yaml`, carry your settings into the new copy rather than losing them. Compare the release's `jim-config.yaml` with yours for new settings.
+
+    Upgrading from v0.16.0 or earlier with the bundled PostgreSQL: its memory settings now come from `jim-config.yaml`, and without them it uses defaults for a 4 GB host, where the earlier pod file asked for 8 GB of `shared_buffers`. On a larger host, add them to `jim-config.yaml`, sized as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
 
 4. **Start JIM**, restarting the database first so it runs the release's PostgreSQL image:
 

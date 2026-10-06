@@ -63,6 +63,9 @@
 #     JIM_DB_NAME           - Database name (default: jim)
 #     JIM_DB_USERNAME       - Database username (default: jim)
 #     JIM_DB_PASSWORD       - Database password (auto-generated if bundled)
+#     JIM_DB_SHARED_BUFFERS, JIM_DB_EFFECTIVE_CACHE_SIZE, JIM_DB_MAINTENANCE_WORK_MEM, JIM_DB_WORK_MEM,
+#     JIM_DB_SHM_SIZE       - The bundled database's memory settings (default: sized to this host's memory;
+#                             JIM_DB_SHM_SIZE is Docker only)
 #     JIM_SETUP_TLS_MODE    - "generate" (create a CA and server certificate) or "provided" (default: prompt)
 #     JIM_SETUP_TLS_NAMES   - Comma-separated DNS names and IP addresses users reach JIM at, for a generated
 #                             certificate (default: prompt, suggesting this host's name and address)
@@ -1229,6 +1232,82 @@ podman_start_commands() {
     fi
 }
 
+# --- Size the bundled database ---
+# The bundled PostgreSQL's memory settings, which it reads from the settings file. JIM_DB_SHM_SIZE is the database
+# container's /dev/shm on Docker; Podman cannot size a pod's, and its database pod does without (jim-database.yaml).
+DATABASE_MEMORY_SETTINGS=(JIM_DB_SHARED_BUFFERS JIM_DB_EFFECTIVE_CACHE_SIZE JIM_DB_MAINTENANCE_WORK_MEM JIM_DB_WORK_MEM JIM_DB_SHM_SIZE)
+
+# This host's memory in MB, as the kernel reports it; empty when it cannot be read.
+host_memory_mb() {
+    awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo 2>/dev/null || true
+}
+
+# Whether the installation's settings file sets a setting, other than commented out or empty.
+config_sets() {
+    local key="$1"
+    if [ "$RUNTIME" = "podman" ]; then
+        # A value, quoted as update_config_yaml writes it, or bare.
+        grep -Eq "^  ${key}: *(\"[^\"]|[^ \"#])" "$CONFIG_FILE" 2>/dev/null
+    else
+        grep -q "^${key}=." "$CONFIG_FILE" 2>/dev/null
+    fi
+}
+
+# Sizes the bundled PostgreSQL to this host's memory, and writes its settings to the settings file. Until #1943 the
+# compose and pod files fixed them for a 64 GB host, so the database could not start on one with less than about
+# 10 GB. A setting given in the environment is used as given, for automation; with "keep", as an upgrade passes,
+# a setting the installation already has is left alone. The Configuration Reference documents the rules:
+#   shared_buffers        a quarter of memory, at most 8 GB: JIM's own services share the host, and the largest
+#                         deployments JIM has been validated on ran with 8 GB
+#   effective_cache_size  half of memory: the page cache PostgreSQL can expect, beside JIM's services
+#   maintenance_work_mem  a sixteenth of memory, at most 2 GB
+#   work_mem              memory less shared_buffers, over three for each of the 200 connections allowed, and at
+#                         least PostgreSQL's own default, 4 MB
+#   shm_size (Docker)     shared_buffers and a quarter more
+size_database() {
+    local mode="${1:-}"
+    local memory
+    memory=$(host_memory_mb)
+    if ! [[ "$memory" =~ ^[0-9]+$ ]] || [ "$memory" -eq 0 ]; then
+        warn "Could not read this host's memory, so the bundled PostgreSQL keeps its default settings, which suit a 4 GB host. To size it, see ${DOCS_BASE}/administration/configuration/#bundled-postgresql-memory"
+        return
+    fi
+
+    local shared=$((memory / 4))
+    [ "$shared" -le 8192 ] || shared=8192
+    local maintenance=$((memory / 16))
+    [ "$maintenance" -le 2048 ] || maintenance=2048
+    local work=$(((memory - shared) / 600))
+    [ "$work" -ge 4 ] || work=4
+    local -A sized=(
+        [JIM_DB_SHARED_BUFFERS]="${shared}MB"
+        [JIM_DB_EFFECTIVE_CACHE_SIZE]="$((memory / 2))MB"
+        [JIM_DB_MAINTENANCE_WORK_MEM]="${maintenance}MB"
+        [JIM_DB_WORK_MEM]="${work}MB"
+        [JIM_DB_SHM_SIZE]="$((shared + shared / 4))mb"
+    )
+
+    local key value name
+    local -a chosen=()
+    for key in "${DATABASE_MEMORY_SETTINGS[@]}"; do
+        if [ "$RUNTIME" = "podman" ] && [ "$key" = "JIM_DB_SHM_SIZE" ]; then
+            continue
+        fi
+        if [ "$mode" = "keep" ] && config_sets "$key"; then
+            continue
+        fi
+        value="${!key:-${sized[$key]}}"
+        set_setting "$key" "$value"
+        name="${key#JIM_DB_}"
+        chosen+=("${name,,} ${value}")
+    done
+    if [ ${#chosen[@]} -gt 0 ]; then
+        local summary
+        printf -v summary '%s, ' "${chosen[@]}"
+        success "Sized the bundled PostgreSQL for this host's $(awk -v m="$memory" 'BEGIN { printf "%.1f", m / 1024 }') GB of memory: ${summary%, }"
+    fi
+}
+
 # --- Configure database ---
 configure_database() {
     echo
@@ -1300,6 +1379,10 @@ configure_database() {
         set_setting "JIM_DB_HOSTNAME" "jim-database"
     else
         set_setting "JIM_DB_HOSTNAME" "jim.database"
+    fi
+
+    if [ "$db_mode" = "bundled" ]; then
+        size_database
     fi
 }
 
@@ -2250,6 +2333,11 @@ upgrade_installation() {
     # A PostgreSQL image run by its ID is the previous release's: the new compose file's pin replaces it.
     if grep -q '^JIM_DB_IMAGE=' "$CONFIG_FILE"; then
         update_env "JIM_DB_IMAGE" "" "$CONFIG_FILE"
+    fi
+    # The bundled PostgreSQL's memory, where .env does not size it: the compose file's defaults now suit a 4 GB host,
+    # where until #1943 they suited a 64 GB one, so a larger host would otherwise lose its tuning.
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        size_database keep
     fi
 
     local -a profile=()

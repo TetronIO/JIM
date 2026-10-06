@@ -14,8 +14,9 @@
       4. Writes a marker to the database and to the File Connector volume, stops JIM and starts it again
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
-      5. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
-      6. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
+      5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host.
+      6. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
+      7. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
 
     On failure it saves each container's log to the output folder before rethrowing.
 
@@ -308,12 +309,41 @@ try {
     }
     Write-Step 'the database and the File Connector volume kept their data'
 
-    # 5. What each container runs, for the parity comparison.
+    # 5. The bundled PostgreSQL runs with the memory the installer sized for this host (#1943): the settings go from
+    # .env through the compose file's command on Docker, and from jim-config.yaml through the pod's on Podman.
+    $settingsFile = if ($Runtime -eq 'docker') { "$installPath/.env" } else { "$installPath/jim-config.yaml" }
+    $settingsText = Invoke-Native ($elevate + @('cat', $settingsFile))
+    $sized = foreach ($setting in 'shared_buffers', 'effective_cache_size', 'maintenance_work_mem', 'work_mem') {
+        $key = "JIM_DB_$($setting.ToUpperInvariant())"
+        if ($settingsText -notmatch "(?m)^\s*$key\s*[=:]\s*`"?(\d+)MB`"?\s*$") {
+            throw "The installer did not size the database's ${setting}: $key is not set in $settingsFile"
+        }
+        $chosen = [long]$Matches[1]
+        $actual = [long](Invoke-Sql "SELECT pg_size_bytes(current_setting('$setting'));")
+        if ($actual -ne $chosen * 1MB) {
+            throw "PostgreSQL runs with $setting = $actual bytes, not the ${chosen}MB the installer chose"
+        }
+        "$setting ${chosen}MB"
+    }
+    if ($Runtime -eq 'docker') {
+        if ($settingsText -notmatch '(?m)^JIM_DB_SHM_SIZE=(\d+)mb\s*$') {
+            throw "The installer did not size the database's /dev/shm: JIM_DB_SHM_SIZE is not set in $settingsFile"
+        }
+        $chosen = [long]$Matches[1]
+        $actual = [long](Invoke-Runtime @('inspect', '-f', '{{.HostConfig.ShmSize}}', $containers.database))
+        if ($actual -ne $chosen * 1MB) {
+            throw "The database container's /dev/shm is $actual bytes, not the ${chosen}mb the installer chose"
+        }
+        $sized += "shm_size ${chosen}mb"
+    }
+    Write-Step "PostgreSQL runs with the memory the installer sized: $($sized -join ', ')"
+
+    # 6. What each container runs, for the parity comparison.
     Invoke-Runtime (@('inspect') + @($containers.Values)) | Set-Content (Join-Path $OutputPath "$leg.inspect.json")
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start" |
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }
@@ -326,7 +356,7 @@ catch {
     throw
 }
 finally {
-    # 6. Free the port for the next leg.
+    # 7. Free the port for the next leg.
     if (-not $KeepRunning -and (Test-Path $caPath)) {
         Write-Step 'stopping JIM'
         try {

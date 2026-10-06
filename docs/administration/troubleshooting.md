@@ -29,6 +29,16 @@ The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: N
 
 A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait.
 
+### The bundled database restarts with `could not map anonymous shared memory`
+
+The bundled PostgreSQL asks for more memory than the host can give, so it stops as it starts, and JIM never becomes ready. Its log (`docker compose ... --profile with-db logs jim.database`, or on Podman `podman logs jim-database-postgres`) says:
+
+```text
+FATAL:  could not map anonymous shared memory: Cannot allocate memory
+```
+
+Size the database's memory for the host, as [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory) describes, and restart it. Releases up to v0.16.0 do not read those settings, and asked for 8 GB of `shared_buffers`, which a host with less than about 10 GB of memory cannot give: upgrade, or until then override the database's `command` and `shm_size` in a compose file of your own.
+
 ### A service stops with `password authentication failed`
 
 Waiting cannot fix rejected credentials, so the service does not wait for them: it stops straight away, with exit code 1 and PostgreSQL's own error, for example `28P01: password authentication failed for user "jim"`. Check `JIM_DB_USERNAME` and `JIM_DB_PASSWORD` in `.env` against the database server, then start JIM again.
