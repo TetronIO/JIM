@@ -3186,13 +3186,6 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Batch persists all pending MVO creates and updates collected during the current page,
-    /// then persists CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
-    /// CSO updates are flushed AFTER MVO creates so that projected CSOs can pick up the
-    /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
-    /// during page flush, so EF does not detect CSO scalar property changes automatically.
-    /// </summary>
-    /// <summary>
     /// The outcome an object's export consequences nest under in Detailed mode: its AttributeFlow child (the
     /// Metaverse Object is fully formed after Attribute Flow), else its root outcome, else none, in which case they
     /// are recorded at root level. The outcomes were built in memory earlier in the page, so their parent link is the
@@ -3235,12 +3228,17 @@ public abstract class SyncTaskProcessorBase
         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             return;
 
-        var exportRules = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules).ToList();
+        // The first export rule per target system names it and its object type, as the provisioning outcomes do.
+        var exportRuleBySystem = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .GroupBy(rule => rule.ConnectedSystemId)
+            .ToDictionary(group => group.Key, group => group.First());
+
         foreach (var delete in deletes)
         {
-            var targetSystemName = exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == delete.ConnectedSystemId)?.ConnectedSystem?.Name;
-            var targetObjectTypeName = exportRules.FirstOrDefault(rule => rule.ConnectedSystemId == delete.ConnectedSystemId)?.ConnectedSystemObjectType?.Name;
-            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, targetObjectTypeName);
+            exportRuleBySystem.TryGetValue(delete.ConnectedSystemId, out var exportRule);
+            var targetSystemName = exportRule?.ConnectedSystem?.Name;
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
 
             var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
                 ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, SyncOutcomeTypes.ForPendingExport(delete),
@@ -3260,6 +3258,13 @@ public abstract class SyncTaskProcessorBase
         }
     }
 
+    /// <summary>
+    /// Batch persists all pending MVO creates and updates collected during the current page,
+    /// then persists CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    /// CSO updates are flushed AFTER MVO creates so that projected CSOs can pick up the
+    /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
+    /// during page flush, so EF does not detect CSO scalar property changes automatically.
+    /// </summary>
     /// <summary>
     /// Builds the Run Profile Execution Item reporting that an outbound Synchronisation Rule could not act,
     /// because the Metaverse Object's one Connected System Object in this system is of a different Connected
