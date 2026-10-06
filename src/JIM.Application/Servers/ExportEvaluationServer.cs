@@ -674,7 +674,8 @@ public class ExportEvaluationServer
     /// <summary>
     /// Handles deprovisioning based on the Synchronisation Rule's OutboundDeprovisionAction setting.
     /// The verdict comes from the pure engine (#288 extraction); this method is orchestration: apply the
-    /// join-break mutations, persist, and stage the Delete export where the engine says so.
+    /// join-break mutations, withdraw an unsent Delete a Disconnect supersedes, persist, and stage the Delete
+    /// export where the engine says so.
     /// </summary>
     private async Task<PendingExport?> HandleOutboundDeprovisioningAsync(
         MetaverseObject mvo,
@@ -682,15 +683,40 @@ public class ExportEvaluationServer
         SyncRule exportRule,
         ExportEvaluationWorkingSet workingSet)
     {
-        // Verdict call only: the existing Pending Export is resolved inside the staging path, where the
-        // engine is consulted again with it (a pure function, so the second call costs nothing).
-        var decision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport: null);
+        // A Disconnect needs the Pending Export already attached to the CSO: a Delete queued under an earlier Delete
+        // action must be withdrawn, or left alone once sent (#1970). A Delete staged earlier in this run, for another
+        // rule the object also left the scope of, is that rule's decision and stands (Delete beats Disconnect when rules
+        // conflict, as for a deletion, #655), so only a Pending Export from before the run is consulted. For a Delete
+        // action this is a verdict call only: the existing Pending Export is resolved inside the staging path, where
+        // the engine is consulted again with it (a pure function, so the second call costs nothing).
+        var existingPendingExport = exportRule.OutboundDeprovisionAction == OutboundDeprovisionAction.Disconnect &&
+                                    !workingSet.TryGetStagedDeleteExport(cso.Id, out _)
+            ? await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id)
+            : null;
+        var decision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport);
         switch (decision.Action)
         {
+            case OutOfScopeDeprovisioningAction.DeleteAlreadySent:
+                // The account is gone or going from the target system; the join stays until the confirming import
+                // finishes the Delete, so nothing is reported as kept.
+                Log.Information("HandleOutboundDeprovisioningAsync: Not disconnecting CSO {CsoId} from MVO {MvoId}: the rule now says Disconnect, " +
+                    "but the Delete PendingExport {PendingExportId} queued for it has already been sent (status: {Status}); the confirming import finishes it",
+                    cso.Id, mvo.Id, existingPendingExport!.Id, existingPendingExport.Status);
+                return null;
+
             case OutOfScopeDeprovisioningAction.Disconnect:
                 // Break the join between CSO and MVO, but leave CSO in the target system
                 Log.Information("HandleOutboundDeprovisioningAsync: Disconnecting CSO {CsoId} from MVO {MvoId} (OutboundDeprovisionAction=Disconnect)",
                     cso.Id, mvo.Id);
+
+                // The account stays, so a Delete still waiting to be sent must not remove it at the next export.
+                if (decision.ExistingDeleteToWithdraw is { } deleteToWithdraw)
+                {
+                    await SyncRepo.DeletePendingExportAsync(deleteToWithdraw);
+                    Log.Information("HandleOutboundDeprovisioningAsync: Withdrew Delete PendingExport {PendingExportId} (status: {Status}) for CSO {CsoId}, " +
+                        "queued while rule {RuleName} said Delete; the rule now says Disconnect, so the object stays in the target system",
+                        deleteToWithdraw.Id, deleteToWithdraw.Status, cso.Id, exportRule.Name);
+                }
 
                 // Break the join
                 cso.MetaverseObject = null;
