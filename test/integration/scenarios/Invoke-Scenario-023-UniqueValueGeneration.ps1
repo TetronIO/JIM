@@ -13,8 +13,11 @@
     attribute back exactly as any Attribute Flow would, renaming the account), sticky assignments across
     re-runs, Start again, and (release 2, Phase 6) the retired values register: a leaver's generated
     values are retired and never reissued while "Never reuse a value" is on, and are free again with it
-    off. This scenario does NOT include probing, Collision Remediation or Needs Decision (releases 3
-    and 4). A target-side collision in this release is an ordinary export error, which is
+    off, and (release 3, Phase 7) the live probe of the directory: an account created outside JIM is
+    caught by the probe; a bind that cannot see the directory's values, and an unreachable directory,
+    each degrade to the local gates with one Activity warning line and never fail the run. This
+    scenario does NOT include Collision Remediation or Needs Decision (release 4). A target-side
+    collision is still an ordinary export error, which is
     existing export behaviour rather than generation; it gets integration coverage with release 4's
     Collision Remediation, which reworks that path (and needs the harness to accept an intended export
     error, which its end-of-run log scan does not today).
@@ -65,7 +68,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -453,6 +456,148 @@ function Invoke-RawJimApi {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
+# Probing (release 3, Phase 7): accounts and binds JIM's own records know nothing about
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+
+function New-ProbeBrownfieldAccount {
+    <#
+    .SYNOPSIS
+        Creates an account outside JIM, in an OU beside the Connected System's selected container (so the import
+        never brings it into JIM's records) but under the partition root the probe searches. Returns its DN.
+    .DESCRIPTION
+        Samba AD: samba-tool in the container (New-DirectoryOu -ViaServer, New-DirectoryUser). Active Directory:
+        the same helpers' LDAP path. OpenLDAP: an inetOrgPerson added over LDAP as the directory administrator.
+        The runner's Samba AD lightweight reset removes OU=Legacy again.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$AccountName,
+        [Parameter(Mandatory=$true)][string]$FirstName,
+        [Parameter(Mandatory=$true)][string]$LastName
+    )
+
+    $ouDn = if ($isRfcDirectory) { "ou=Legacy,$($DirectoryConfig.BaseDN)" } else { "OU=Legacy,$($DirectoryConfig.BaseDN)" }
+    $ou = New-DirectoryOu -DirectoryConfig $DirectoryConfig -Dn $ouDn -ViaServer
+    if (-not $ou.Success) {
+        throw "Failed to create the out-of-scope OU '$ouDn': $($ou.Output)"
+    }
+
+    if ($isRfcDirectory) {
+        $dn = "uid=$AccountName,$ouDn"
+        $ldif = (@(
+            "dn: $dn", "objectClass: inetOrgPerson", "uid: $AccountName", "cn: $FirstName $LastName",
+            "sn: $LastName", "givenName: $FirstName", "displayName: $FirstName $LastName",
+            "description: Created outside JIM", "userPassword: Legacy@Acct123!"
+        ) -join "`n") + "`n"
+        $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
+        if ($result.Outcome -eq 'Failed') {
+            throw "Failed to create the brownfield account '$dn': $($result.Output)"
+        }
+        return $dn
+    }
+
+    $dn = "CN=$FirstName $LastName,$ouDn"
+    $user = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $dn -SamAccountName $AccountName -Password 'Legacy@Acct123!' `
+        -Attributes ([ordered]@{ givenName = $FirstName; sn = $LastName; description = 'Created outside JIM' })
+    if (-not $user.Success) {
+        throw "Failed to create the brownfield account '$dn': $($user.Output)"
+    }
+    return $dn
+}
+
+function ConvertTo-DirectoryEntrySnapshot {
+    <#
+    .SYNOPSIS
+        One directory entry's attributes as sorted "name=value" lines, so two reads can be compared exactly.
+    #>
+    param([Parameter(Mandatory=$true)][System.Collections.IDictionary]$Entry)
+    $lines = foreach ($name in ($Entry.Keys | Sort-Object)) {
+        foreach ($value in @($Entry[$name])) { "$($name.ToLowerInvariant())=$value" }
+    }
+    return @($lines)
+}
+
+function Get-JimRecordsHoldingValue {
+    <#
+    .SYNOPSIS
+        How many rows anywhere in JIM's own records (Metaverse values, Connector Space values, generated value
+        assignments, the retired values register) hold a value, compared case-insensitively. Read from the
+        database because no single API read covers all four.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Value)
+    if ($Value -notmatch '^[A-Za-z0-9.\-]+$') { throw "Get-JimRecordsHoldingValue: '$Value' is not a plain account-name value" }
+    $lower = $Value.ToLowerInvariant()
+    $sql = "SELECT (SELECT count(*) FROM ""MetaverseObjectAttributeValues"" WHERE lower(""StringValue"") = '$lower') + " +
+           "(SELECT count(*) FROM ""ConnectedSystemObjectAttributeValues"" WHERE lower(""StringValue"") = '$lower') + " +
+           "(SELECT count(*) FROM ""GeneratedValueAssignments"" WHERE lower(""Value"") = '$lower') + " +
+           "(SELECT count(*) FROM ""RetiredGeneratedValues"" WHERE lower(""Value"") = '$lower');"
+    $raw = docker exec (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -t -A -c $sql 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Get-JimRecordsHoldingValue: psql failed: $raw" }
+    return [int]("$raw".Trim())
+}
+
+function Set-DirectoryBindAccount {
+    <#
+    .SYNOPSIS
+        Points the directory Connected System's Username and Password settings at another account.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Username, [Parameter(Mandatory=$true)][string]$Password)
+    $ldapDefinition = Get-JIMConnectorDefinition | Where-Object { $_.name -eq "JIM LDAP Connector" } | Select-Object -First 1
+    $ldapDefinition = Get-JIMConnectorDefinition -Id $ldapDefinition.id
+    $usernameSetting = $ldapDefinition.settings | Where-Object { $_.name -eq "Username" }
+    $passwordSetting = $ldapDefinition.settings | Where-Object { $_.name -eq "Password" }
+    Set-JIMConnectedSystem -Id $config.LDAPSystemId -SettingValues @{
+        $usernameSetting.id = @{ stringValue = $Username }
+        $passwordSetting.id = @{ stringValue = $Password }
+    } | Out-Null
+}
+
+function Assert-SingleProbeWarning {
+    <#
+    .SYNOPSIS
+        Asserts an HR synchronisation completed with exactly one probe warning line naming the directory, and
+        nothing else wrong (no other warning, no object error). Returns the warning line.
+    #>
+    param([Parameter(Mandatory=$true)][string]$ActivityId, [Parameter(Mandatory=$true)][string]$Context)
+
+    $activity = Get-JIMActivity -Id $ActivityId
+    Add-TestResult -Name "[$Context] The HR synchronisation completed with a warning, not a failure" -Passed ($activity.status -eq 'CompleteWithWarning') `
+        -Detail "Status '$($activity.status)'; warning: '$($activity.warningMessage)'"
+
+    $allowed = $true
+    $allowedDetail = ""
+    try {
+        Assert-ActivitySuccess -ActivityId $ActivityId -Name "HR CSV Delta Sync ($Context)" `
+            -AllowedWarningMessagePattern (Get-UniquenessProbeWarningPattern -ConnectedSystemName $DirectoryConfig.ConnectedSystemName)
+    }
+    catch {
+        $allowed = $false
+        $allowedDetail = "$_"
+    }
+    Add-TestResult -Name "[$Context] The only warning is the probe warning for $($DirectoryConfig.ConnectedSystemName), and no object failed" -Passed $allowed -Detail $allowedDetail
+
+    $lines = @("$($activity.warningMessage)" -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    Add-TestResult -Name "[$Context] Exactly one probe warning line for the run, not one per object" -Passed ($lines.Count -eq 1) `
+        -Detail "$($lines.Count) lines: $($lines -join ' | ')"
+    return $(if ($lines.Count -gt 0) { $lines[0] } else { "" })
+}
+
+function Wait-DirectoryAnswering {
+    <#
+    .SYNOPSIS
+        Waits until the directory answers a search again (after it was paused), up to a minute.
+    #>
+    $deadline = (Get-Date).AddSeconds(60)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $null = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(objectClass=*)" -Scope base -Attributes @('dn')
+            return
+        }
+        catch { Start-Sleep -Seconds 2 }
+    }
+    throw "The directory did not answer within 60 seconds of being unpaused"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
 # Setup
 # ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -478,7 +623,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -1012,7 +1157,7 @@ try {
     # ─────────────────────────────────────────────────────────────────────────────────────
     # Never reuse (release 2, Phase 6): a leaver's generated values are retired, and a new
     # joiner with the same name is not given the leaver's Account Name; with "Never reuse a
-    # value" off, nothing is retired and the same joiner gets it. Last in the order because a
+    # value" off, nothing is retired and the same joiner gets it. After every step that checks the invariant, because a
     # retired value leaves a gap in a base's {base, base1, ...} set, which the Joiners and Gates
     # steps' invariant does not allow for.
     # ─────────────────────────────────────────────────────────────────────────────────────
@@ -1114,6 +1259,166 @@ try {
         }
         finally {
             Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod ([TimeSpan]::FromDays(7)) | Out-Null
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Probe brownfield (release 3, Phase 7): an account created outside JIM, in an OU outside
+    # the import scope, holds exactly the value JIM would generate for a new joiner. JIM's own
+    # records cannot know about it, so only the live probe of the directory can catch it.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("ProbeBrownfield")) {
+        Write-TestSection "Test 12: The probe catches an account JIM's own records do not hold"
+
+        $brownfieldValue = 'thaddeus.quorne'
+        $brownfieldDn = New-ProbeBrownfieldAccount -AccountName $brownfieldValue -FirstName "Thaddeus" -LastName "Quorne"
+        Write-Host "  Created out-of-scope account outside JIM: $brownfieldDn" -ForegroundColor Gray
+        $brownfieldBefore = Get-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $brownfieldDn
+        Assert-NotNull -Value $brownfieldBefore -Message "The brownfield account '$brownfieldDn' reads back"
+        $snapshotBefore = ConvertTo-DirectoryEntrySnapshot -Entry $brownfieldBefore
+
+        Add-HrCsvJoiner -EmployeeId "EMP900070" -FirstName "Thaddeus" -LastName "Quorne" -Department "Marketing"
+        $import = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $import.activityId -Name "HR CSV Full Import (probe brownfield)"
+        $probeSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+        $probeSyncActivity = Get-JIMActivity -Id $probeSync.activityId
+        Add-TestResult -Name "The HR synchronisation that probed the directory completed with no warning" `
+            -Passed ($probeSyncActivity.status -eq 'Complete') `
+            -Detail "Status '$($probeSyncActivity.status)'; warning: '$($probeSyncActivity.warningMessage)'"
+
+        $thaddeus = Get-PersonByEmployeeId -EmployeeId "EMP900070"
+        Assert-NotNull -Value $thaddeus -Message "Thaddeus Quorne was projected"
+        Add-TestResult -Name "The joiner is given '$($brownfieldValue)1', because the probe found '$brownfieldValue' in use in the directory" `
+            -Passed ($thaddeus.attributes.'Account Name' -eq "$($brownfieldValue)1") -Detail "Got '$($thaddeus.attributes.'Account Name')'"
+
+        # Before anything imports from the directory again: the local gates had nothing to go on.
+        $heldByJim = Get-JimRecordsHoldingValue -Value $brownfieldValue
+        Add-TestResult -Name "JIM's own records never held '$brownfieldValue' (only the probe could have caught it)" -Passed ($heldByJim -eq 0) `
+            -Detail "$heldByJim row(s) in the Metaverse, Connector Space, assignments or retired register hold it"
+
+        Invoke-Cycle -Config $config | Out-Null
+
+        $provisioned = Get-LDAPUser -UserIdentifier "$($brownfieldValue)1" -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "The joiner is provisioned to the directory as '$($brownfieldValue)1'" `
+            -Passed ($null -ne $provisioned -and $provisioned['dn'] -ne $brownfieldDn) -Detail "Directory entry: $(if ($provisioned) { $provisioned['dn'] } else { 'none' })"
+
+        $brownfieldAfter = Get-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $brownfieldDn
+        $snapshotAfter = if ($brownfieldAfter) { ConvertTo-DirectoryEntrySnapshot -Entry $brownfieldAfter } else { @() }
+        $differences = @(Compare-Object -ReferenceObject $snapshotBefore -DifferenceObject $snapshotAfter | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" })
+        Add-TestResult -Name "Every attribute of the brownfield account is unchanged" -Passed ($null -ne $brownfieldAfter -and $differences.Count -eq 0) `
+            -Detail $(if ($null -eq $brownfieldAfter) { "The account no longer exists" } else { $differences -join '; ' })
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Probe restricted bind (Samba AD only): the Connected System binds as an account denied
+    # List Contents on every OU, so the probe's search completes but cannot return the control
+    # value JIM knows is there. The directory is undetermined for the run: one warning line, the
+    # joiner's value comes from the local gates, and nothing fails.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("ProbeRestrictedBind")) {
+        Write-TestSection "Test 13: A bind that cannot see the directory's values degrades to the local gates"
+
+        if ($DirectoryConfig.DirectoryType -ne 'SambaAD') {
+            Write-Host "  Skipped: the restricted bind is built with samba-tool, so it runs on Samba AD only" -ForegroundColor Yellow
+        }
+        else {
+            $restrictedSam = 'svc-jim-restricted'
+            $restrictedDn = "CN=$restrictedSam,CN=Users,$($DirectoryConfig.BaseDN)"
+            $restrictedPassword = 'Probe-Lab@4821!'
+            $adminCredential = "Administrator%$($DirectoryConfig.BindPassword)"
+
+            $restrictedUser = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $restrictedDn -SamAccountName $restrictedSam -Password $restrictedPassword
+            if (-not $restrictedUser.Success) { throw "Failed to create '$restrictedDn': $($restrictedUser.Output)" }
+
+            $sidRead = Invoke-DirectoryContainerCommand -DirectoryConfig $DirectoryConfig `
+                -Command @('samba-tool', 'user', 'show', $restrictedSam, '--attributes=objectSid', '-H', 'ldap://localhost', '-U', $adminCredential)
+            if ($sidRead.Output -notmatch 'objectSid: (S-1-5-[0-9-]+)') { throw "Could not read the objectSid of '$restrictedSam': $($sidRead.Output)" }
+            $restrictedSid = $Matches[1]
+
+            # An explicit List Contents deny on every OU. An inherited deny on reading sAMAccountName is not enough:
+            # each user's explicit General Information read for Authenticated Users wins over an inherited deny.
+            $ous = @(Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(objectClass=organizationalUnit)" -Attributes @('dn'))
+            foreach ($ou in $ous) {
+                $deny = Invoke-DirectoryContainerCommand -DirectoryConfig $DirectoryConfig `
+                    -Command @('samba-tool', 'dsacl', 'set', '-H', 'ldap://localhost', '-U', $adminCredential, "--objectdn=$($ou.dn)", "--sddl=(D;;LC;;;$restrictedSid)")
+                if ($deny.ExitCode -ne 0) { throw "Failed to deny List Contents on '$($ou.dn)' to '$restrictedSam': $($deny.Output)" }
+            }
+            Write-Host "  Denied List Contents to $restrictedSam on $($ous.Count) OU(s)" -ForegroundColor Gray
+
+            # The arrangement itself: the restricted account binds, but cannot see an account JIM holds.
+            $knownAccountName = (Get-PersonByEmployeeId -EmployeeId "EMP900070").attributes.'Account Name'
+            $restrictedSearch = Invoke-DirectoryLdapTool -DirectoryConfig $DirectoryConfig -Tool ldapsearch -Arguments @(
+                '-x', '-H', (Get-DirectoryToolUri -DirectoryConfig $DirectoryConfig), '-D', $restrictedDn, '-w', $restrictedPassword,
+                '-LLL', '-b', $DirectoryConfig.BaseDN, "(sAMAccountName=$knownAccountName)", 'dn')
+            Add-TestResult -Name "The restricted account binds but cannot see '$knownAccountName' (arrangement)" `
+                -Passed ($restrictedSearch.ExitCode -eq 0 -and $restrictedSearch.Output -notmatch '(?m)^dn:') `
+                -Detail "ldapsearch exit $($restrictedSearch.ExitCode): $($restrictedSearch.Output)"
+
+            Add-HrCsvJoiner -EmployeeId "EMP900071" -FirstName "Marisol" -LastName "Fenwick" -Department "Finance"
+            $import = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $import.activityId -Name "HR CSV Full Import (restricted bind)"
+
+            Set-DirectoryBindAccount -Username $restrictedDn -Password $restrictedPassword
+            try {
+                $restrictedSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            }
+            finally {
+                Set-DirectoryBindAccount -Username $DirectoryConfig.JimBindDN -Password $DirectoryConfig.JimBindPassword
+            }
+
+            $warningLine = Assert-SingleProbeWarning -ActivityId $restrictedSync.activityId -Context "Restricted bind"
+            Add-TestResult -Name "The warning says the probe did not return a value JIM knows is there (the control value path)" `
+                -Passed ($warningLine -match 'did not return a .+ value JIM knows is there') -Detail "Warning: '$warningLine'"
+
+            $marisol = Get-PersonByEmployeeId -EmployeeId "EMP900071"
+            Add-TestResult -Name "The joiner is given 'marisol.fenwick2' by the local gates" `
+                -Passed ($null -ne $marisol -and $marisol.attributes.'Account Name' -eq 'marisol.fenwick2') `
+                -Detail "Got '$(if ($marisol) { $marisol.attributes.'Account Name' })'"
+
+            Invoke-Cycle -Config $config | Out-Null
+            Add-TestResult -Name "With the lab account restored, the joiner is provisioned as 'marisol.fenwick2'" `
+                -Passed ($null -ne (Get-LDAPUser -UserIdentifier 'marisol.fenwick2' -DirectoryConfig $DirectoryConfig)) -Detail "No directory entry"
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Probe unreachable (container labs): the directory container is paused for one HR
+    # synchronisation. Changing the port instead does not work: saving the Connected System
+    # tests its connectivity, and the failure is logged at Error in jim.web.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("ProbeUnreachable")) {
+        Write-TestSection "Test 14: An unreachable directory does not fail the run"
+
+        if (-not $DirectoryConfig.ContainerName) {
+            Write-Host "  Skipped: needs a directory container to pause" -ForegroundColor Yellow
+        }
+        else {
+            Add-HrCsvJoiner -EmployeeId "EMP900072" -FirstName "Cordelia" -LastName "Thistlewood" -Department "Procurement"
+            $import = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $import.activityId -Name "HR CSV Full Import (unreachable directory)"
+
+            docker pause $DirectoryConfig.ContainerName | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to pause '$($DirectoryConfig.ContainerName)'" }
+            try {
+                $unreachableSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            }
+            finally {
+                docker unpause $DirectoryConfig.ContainerName | Out-Null
+            }
+            Wait-DirectoryAnswering
+
+            $warningLine = Assert-SingleProbeWarning -ActivityId $unreachableSync.activityId -Context "Unreachable directory"
+            Add-TestResult -Name "The warning says JIM could not connect to the directory" `
+                -Passed ($warningLine -match 'for values already in use\. Connecting to it ') -Detail "Warning: '$warningLine'"
+
+            $cordelia = Get-PersonByEmployeeId -EmployeeId "EMP900072"
+            Add-TestResult -Name "The joiner is given 'cordelia.thistlewood' by the local gates" `
+                -Passed ($null -ne $cordelia -and $cordelia.attributes.'Account Name' -eq 'cordelia.thistlewood') `
+                -Detail "Got '$(if ($cordelia) { $cordelia.attributes.'Account Name' })'"
+
+            Invoke-Cycle -Config $config | Out-Null
+            Add-TestResult -Name "Once the directory is back, the joiner is provisioned as 'cordelia.thistlewood'" `
+                -Passed ($null -ne (Get-LDAPUser -UserIdentifier 'cordelia.thistlewood' -DirectoryConfig $DirectoryConfig)) -Detail "No directory entry"
         }
     }
 
