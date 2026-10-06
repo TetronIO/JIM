@@ -102,12 +102,21 @@ function Set-JIMSyncRuleMapping {
         Whether a value whose assignment is deleted is retired and never issued again by this flow.
         Always treated as true for a Sequence token, whatever is supplied.
 
+    .PARAMETER ExcludeConnectedSystemId
+        Generated import mappings only: replaces the IDs of the Connected Systems left out of the value's
+        availability checks. Values already in use in an excluded Connected System do not stop JIM choosing
+        them. Each must be a Connected System the value is exported to unchanged, otherwise the update is
+        refused naming the Connected System. Pass @() to clear every exclusion, so every Connected System is
+        checked again; omit to leave the exclusions unchanged. Refused for a generated value on an export
+        Synchronisation Rule, which is checked only in its own Connected System.
+
     .PARAMETER PassThru
         Returns the updated mapping.
 
     .OUTPUTS
         None by default. The updated mapping when -PassThru is supplied. A generated mapping's
-        Generation property carries its uniqueness token settings; Generation.SequenceSkippedAhead
+        Generation property carries its uniqueness token settings, Generation.Exclusions and
+        Generation.Participants (see Get-JIMSyncRuleMapping); Generation.SequenceSkippedAhead
         is present only when -SequenceStart raised the target attribute's counter on this save.
         Warnings lists any non-blocking warnings the save raised (empty when there were none); each is
         written with Write-Warning whether or not -PassThru is supplied. Derived describes a mapping that
@@ -151,6 +160,17 @@ function Set-JIMSyncRuleMapping {
         Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
 
         Clears a generated Sequence mapping's fixed width, so numbers are no longer zero-padded.
+
+    .EXAMPLE
+        Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4, 7
+
+        Leaves Connected Systems 4 and 7 out of a generated value's availability checks, replacing any
+        exclusions it had.
+
+    .EXAMPLE
+        Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @()
+
+        Clears a generated value's exclusions, so every Connected System it is exported to is checked again.
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -217,6 +237,9 @@ function Set-JIMSyncRuleMapping {
 
         [bool]$NeverReuse,
 
+        # Exclusions (release 3): replaces them; @() clears them, and is sent as an empty JSON array.
+        [int[]]$ExcludeConnectedSystemId,
+
         [switch]$PassThru
     )
 
@@ -256,6 +279,9 @@ function Set-JIMSyncRuleMapping {
         if ($PSBoundParameters.ContainsKey('Separator')) { $generation.separator = $Separator }
         if ($PSBoundParameters.ContainsKey('AttemptLimit')) { $generation.attemptLimit = $AttemptLimit }
         if ($PSBoundParameters.ContainsKey('NeverReuse')) { $generation.neverReuse = $NeverReuse }
+        # Always a JSON array: @() keeps a single ID from serialising as a bare number, and an empty list
+        # from being dropped, since [] is what tells the API to clear the exclusions.
+        if ($PSBoundParameters.ContainsKey('ExcludeConnectedSystemId')) { $generation.exclusions = @($ExcludeConnectedSystemId) }
         if ($generation.Count -gt 0) { $body.generation = $generation }
 
         if ($body.Count -eq 0) {
