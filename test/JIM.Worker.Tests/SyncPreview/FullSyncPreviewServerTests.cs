@@ -445,4 +445,69 @@ public class FullSyncPreviewServerTests
     }
 
     #endregion
+
+    #region Streaming (#1530)
+
+    [Test]
+    public async Task StreamFullSyncPreviewAsync_ProjectingPopulation_YieldsThePopulationThenEachObjectAsync()
+    {
+        var (cso1, cso2, _) = ArrangePopulationFixture();
+
+        var items = await ReadAllAsync(Jim.SyncPreview.StreamFullSyncPreviewAsync(cso1.ConnectedSystemId));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.Kind), Is.EqualTo(new[]
+            {
+                FullSyncPreviewItemKind.Population, FullSyncPreviewItemKind.Evaluated, FullSyncPreviewItemKind.Evaluated
+            }), "the population first, then each object, and no truncation when nothing bounded the walk");
+            Assert.That(items[0].TotalObjectCount, Is.EqualTo(2));
+            Assert.That(items.Skip(1).Select(i => i.ConnectedSystemObjectId), Is.EquivalentTo(new Guid?[] { cso1.Id, cso2.Id }));
+            Assert.That(items.Skip(1).Select(i => i.Category), Is.All.EqualTo(FullSyncPreviewCategory.WouldProject));
+            Assert.That(items.Skip(1).All(i => i.Preview!.Inbound!.WouldProject), Is.True, "each object carries its own result");
+            Assert.That(items.Skip(1).Select(i => i.ObjectTypeName), Is.All.EqualTo("SOURCE_USER"));
+            Assert.That(items.Skip(1).Select(i => i.DisplayName), Is.EquivalentTo(new[] { cso1.NameOrId, cso2.NameOrId }),
+                "each object is named as everywhere else names it, for the row that shows it");
+        }
+    }
+
+    [Test]
+    public async Task StreamFullSyncPreviewAsync_ObjectCap_EndsWithTheTruncationAsync()
+    {
+        var (cso1, _, _) = ArrangePopulationFixture();
+
+        var items = await ReadAllAsync(Jim.SyncPreview.StreamFullSyncPreviewAsync(cso1.ConnectedSystemId,
+            new FullSyncPreviewStreamOptions { MaxObjects = 1 }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.Kind), Is.EqualTo(new[]
+            {
+                FullSyncPreviewItemKind.Population, FullSyncPreviewItemKind.Evaluated, FullSyncPreviewItemKind.Truncated
+            }));
+            Assert.That(items[^1].TruncationReason, Is.EqualTo(FullSyncPreviewTruncationReason.ObjectCapReached));
+        }
+    }
+
+    [Test]
+    public void FullSyncPreviewStreamOptions_ByDefault_EvaluatesTheWholePopulation()
+    {
+        var options = new FullSyncPreviewStreamOptions();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.MaxObjects, Is.Null, "a partial count read as a whole one is how a change gets approved as safe");
+            Assert.That(options.TimeBudget, Is.Null);
+        }
+    }
+
+    private static async Task<List<FullSyncPreviewItem>> ReadAllAsync(IAsyncEnumerable<FullSyncPreviewItem> stream)
+    {
+        var items = new List<FullSyncPreviewItem>();
+        await foreach (var item in stream)
+            items.Add(item);
+        return items;
+    }
+
+    #endregion
 }

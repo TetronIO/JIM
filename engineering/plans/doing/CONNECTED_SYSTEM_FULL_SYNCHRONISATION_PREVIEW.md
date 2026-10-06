@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete; Phase 2 in progress)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -137,11 +137,11 @@ Scenario: Previewing and running from a script
 - The unchanged-object optimisation, found by the runtime check: while no configuration has changed since it was last fully applied, the run skips every object unchanged since the last synchronisation, drift included, and the walk proposed corrections for them. The rule moved onto the models (`ConnectedSystemObject.IsUnchangedSince`, `ConnectedSystem.GetUnchangedObjectWatermark`), read by the PostgreSQL loader, the run and the walk alike; the walk counts what it skips in `FullSyncPreviewResult.UnchangedObjectCount`. The in-memory repository ignores the watermark, so the workflow tests assert against the rule and the runtime check pairs preview and run.
 - Runtime check on the full stack: preview and real Full Synchronisation of a target with a drifted value agree (one Update, Add and Remove on the attribute, one Drift Correction item counting it), and a source object's preview no longer proposes the target's correction. The per-object preview evaluates an object as if processed, which the docs now say.
 
-### Phase 2: streaming walk and single-pass counting
+### Phase 2: streaming walk and single-pass counting ✅
 
-- The walk streams per-object results; no cap by default; samples kept as a consumer for the existing engine API.
+- Streaming walk ✅: `SyncPreviewServer.StreamFullSyncPreviewAsync` yields `FullSyncPreviewItem`s in the order the run meets them (the population, a refusal on a derived flow cycle, each object evaluated or skipped as obsolete or unchanged, the export scope review, and a truncation when a bound stopped it), with no bound by default (`FullSyncPreviewStreamOptions`). The read-only scope and rollback-only transaction live as long as the enumeration. `PreviewFullSyncAsync` is now one consumer of it (counts and bounded samples), its semantics unchanged.
 - Single-pass counting ✅: an adapter that can only count by evaluating supplies an `IPreviewImpactCounter` (`CreateImpactCounterAsync`; `PreviewImpactCounter.PerDelta` or `PerSubject`), which the framework feeds during the one evaluation pass and records only when the whole stream completes. Wider than first planned: eight adapters counted by streaming their own deltas, not just the deletion adapter, and all eight adopted it, each with an equivalence test (its counter fed its own deltas equals its `CountImpactAsync`). Runtime: a 1,108-object deletion preview went from 3.8s to 2.1s with identical counts.
-- Evaluated-object count recorded on the preview (migration).
+- Evaluated-object count: moved to Phase 3. The stream reports every unchanged object, so the adapter can state "N objects would not change" exactly; whether that needs a column on the preview or fits the existing per-group counts is the adapter's decision, and a column with no reader would be schema built ahead of its need.
 
 ### Phase 3: adapter and transitions
 
