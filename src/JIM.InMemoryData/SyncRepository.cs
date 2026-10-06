@@ -2396,6 +2396,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
     }
 
+    public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
+    {
+        (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
+            ? (cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt)
+            : null;
+        return Task.FromResult(watermarks);
+    }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         var enabled = _syncRules.Values

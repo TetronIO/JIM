@@ -1177,6 +1177,14 @@ public interface ISyncRepository
     Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
 
     /// <summary>
+    /// A Connected System's two synchronisation watermarks (<see cref="ConnectedSystem.LastSyncCompletedAt"/> and
+    /// <see cref="ConnectedSystem.ConfigurationLastFullyAppliedAt"/>), read on their own, or null when the system does
+    /// not exist. The Full Synchronisation preview (#1530) decides from them, as the run does, whether the
+    /// unchanged-object optimisation applies (<see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?, DateTime?, DateTime?)"/>).
+    /// </summary>
+    Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
+
+    /// <summary>
     /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
     /// they provision.
     /// <para>

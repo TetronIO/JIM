@@ -115,13 +115,14 @@ Have these ready, whichever way you install:
 - **A DNS name for the JIM server**, such as `jim.example.com`, with a DNS record pointing at the server. JIM's address is `https://jim.example.com`, on the standard HTTPS port, 443.
 - **A client registration for JIM at your identity provider**, with these redirect URIs: `https://jim.example.com/signin-oidc` and `https://jim.example.com/signout-callback-oidc`. You need its authority URL, client ID and secret, API scope, and the claim value of the first administrator; the [SSO Setup Guide](sso-setup.md) covers each provider.
 - **A certificate for JIM's name**, from your organisation's certificate authority, or let the installer create one (see [TLS and Reverse Proxy](#tls-and-reverse-proxy)).
-- **PostgreSQL 18**: the bundled container needs nothing. For your own server, create JIM's database and user first:
+- **PostgreSQL 18**: the bundled container needs nothing. For your own server, connected as a superuser such as `postgres`, create JIM's user, then its database, owned by that user:
 
     ```sql
-    CREATE DATABASE jim;
     CREATE USER jim WITH ENCRYPTED PASSWORD 'your_secure_password';
-    GRANT ALL PRIVILEGES ON DATABASE jim TO jim;
+    CREATE DATABASE jim OWNER jim;
     ```
+
+    JIM's user must own the database: since PostgreSQL 15, only a database's owner can create tables in its `public` schema, and `GRANT ALL PRIVILEGES ON DATABASE` does not allow it. A database JIM's user does not own stops JIM on its first start; [Troubleshooting](troubleshooting.md#the-worker-stops-with-permission-denied-for-schema-public) shows how to correct one.
 
 ---
 
@@ -306,7 +307,7 @@ Then carry on at [After Installing](#after-installing).
 
 On Docker, it keeps `.env`, which holds the database password and your identity provider's client secret, readable by root only.
 
-On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld and, on Ubuntu 24.04, to let JIM's containers use the network under AppArmor; rootless, it also lets unprivileged programs use port 443.
+On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld and, on Ubuntu 24.04, to add the AppArmor rules that let JIM's containers use the network and signal their own processes; rootless, it also lets unprivileged programs use port 443.
 
 It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do. If JIM is not ready within ten minutes, it names each of JIM's containers that is not running properly (the bundled database's included), with the end of its log, and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
@@ -799,7 +800,7 @@ Use this checklist before going live:
 - [ ] Log level set appropriately (`Information` for production)
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
-- [ ] Docker restart policy is `unless-stopped` (set by production override), or on Podman, `jim.service` starts at boot (`sudo systemctl is-enabled jim.service` reports `generated`; rootless, `sudo systemctl --user -M jim@ is-enabled jim.service`)
+- [ ] Docker restart policy is `unless-stopped` (set by production override), or on Podman, `jim.service` starts at boot (`sudo systemctl is-enabled jim.service` reports `generated`; rootless, `jim-systemctl is-enabled jim.service`, as [Rootless commands](podman.md#rootless-commands) defines it)
 - [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 

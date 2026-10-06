@@ -4,7 +4,8 @@
 # Installed in /etc/containers/systemd/ (rootful, the default), or in ~/.config/containers/systemd/ of the account
 # that runs JIM (rootless). After editing it, reload systemd and restart JIM:
 #   rootful:   systemctl daemon-reload && systemctl restart jim.service
-#   rootless:  systemctl --user -M jim@ daemon-reload && systemctl --user -M jim@ restart jim.service
+#   rootless:  jim-systemctl daemon-reload && jim-systemctl restart jim.service, with jim-systemctl as defined in
+#              https://docs.junctional.io/administration/podman/#rootless-commands
 
 [Unit]
 Description=JIM (Junctional Identity Manager)
