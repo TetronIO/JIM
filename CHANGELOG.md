@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The commands for operating a rootless Podman JIM now work on a minimal RHEL-family host such as AlmaLinux 9; `systemctl --user -M jim@`, which the documentation and installer gave, fails there without `systemd-container`. Use the documented `jim-systemctl` instead. (#1955)
 - 🐛 The bundled PostgreSQL now starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum and 8 GB recommendation included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
 - 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; in every earlier release it failed on every line, because each file was listed under the build machine's folders. The bundle also no longer carries a development notes file. (#1942)
+- 🐛 Running `setup.sh` again over a Docker installation now restarts `jim.web` when it has to, so JIM serves the certificate that run issued instead of the previous one. (#1956)
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 
 ## [0.16.0] - 2026-09-29
