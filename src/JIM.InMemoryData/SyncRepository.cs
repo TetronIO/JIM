@@ -164,7 +164,14 @@ public class SyncRepository : ISyncRepository
     /// deletes it. In production both sides read one database; here the rule deletion is written to the DbContext
     /// only, so a test mirrors it into this store.
     /// </summary>
-    public void RemoveSyncRule(int syncRuleId) => _syncRules.Remove(syncRuleId);
+    public void RemoveSyncRule(int syncRuleId)
+    {
+        _syncRules.Remove(syncRuleId);
+
+        // The database nulls the join record's rule reference on delete and keeps the name (#348).
+        foreach (var cso in _csos.Values.Where(c => c.JoinSyncRuleId == syncRuleId))
+            cso.JoinSyncRuleId = null;
+    }
 
     /// <summary>
     /// Test support: removes a previously seeded CSO, for scenarios that need the object gone again
@@ -630,6 +637,9 @@ public class SyncRepository : ISyncRepository
         MetaverseObjectId = cso.MetaverseObjectId,
         JoinType = cso.JoinType,
         DateJoined = cso.DateJoined,
+        JoinMethod = cso.JoinMethod,
+        JoinSyncRuleId = cso.JoinSyncRuleId,
+        JoinSyncRuleName = cso.JoinSyncRuleName,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
         DerivedInputChangePending = cso.DerivedInputChangePending,
@@ -960,6 +970,9 @@ public class SyncRepository : ISyncRepository
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
                 stored.DateJoined = cso.DateJoined;
+                stored.JoinMethod = cso.JoinMethod;
+                stored.JoinSyncRuleId = cso.JoinSyncRuleId;
+                stored.JoinSyncRuleName = cso.JoinSyncRuleName;
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
@@ -1024,9 +1037,14 @@ public class SyncRepository : ISyncRepository
         {
             if (_csos.TryGetValue(cso.Id, out var stored))
             {
+                // The join state as PostgreSQL's join-state flush writes it (CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate).
                 stored.MetaverseObjectId = cso.MetaverseObjectId;
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
+                stored.DateJoined = cso.DateJoined;
+                stored.JoinMethod = cso.JoinMethod;
+                stored.JoinSyncRuleId = cso.JoinSyncRuleId;
+                stored.JoinSyncRuleName = cso.JoinSyncRuleName;
                 stored.Status = cso.Status;
                 BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
@@ -1544,7 +1562,7 @@ public class SyncRepository : ISyncRepository
     /// single-threaded, so no locking is required here; this method exists purely to give tests a
     /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
     /// </summary>
-    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
     {
         if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
             return Task.FromResult(false);
@@ -1552,6 +1570,9 @@ public class SyncRepository : ISyncRepository
         cso.MetaverseObjectId = metaverseObjectId;
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
         cso.DateJoined = dateJoined;
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.ExportMatching;
+        cso.JoinSyncRuleId = joinSyncRuleId;
+        cso.JoinSyncRuleName = joinSyncRuleName;
         cso.Status = ConnectedSystemObjectStatus.Normal;
         BumpRowVersion(cso);
         return Task.FromResult(true);
@@ -2689,8 +2710,7 @@ public class SyncRepository : ISyncRepository
         {
             cso.MetaverseObjectId = null;
             cso.MetaverseObject = null;
-            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-            cso.DateJoined = null;
+            cso.ClearJoinRecord();
             BumpRowVersion(cso);
             UpdateMvoIndex(cso);
         }

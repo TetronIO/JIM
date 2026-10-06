@@ -28,7 +28,8 @@ internal static class CsoBulkColumns
         "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
         "Status", "MetaverseObjectId", "JoinType", "DateJoined",
         "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt",
-        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending"
+        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending",
+        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
     ];
 
     /// <summary>
@@ -55,7 +56,19 @@ internal static class CsoBulkColumns
     internal static readonly string[] ConnectedSystemObjectsUpdate =
     [
         "LastUpdated", "Status", "MetaverseObjectId", "JoinType", "DateJoined",
-        "ExternalIdAttributeId", "SecondaryExternalIdAttributeId", "PartitionId"
+        "ExternalIdAttributeId", "SecondaryExternalIdAttributeId", "PartitionId",
+        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
+    ];
+
+    /// <summary>
+    /// The join state of a Connected System Object: which Metaverse Object it is joined to, how and when, and the
+    /// Synchronisation Rule responsible (#348). Written together by the synchronisation page flush, which persists
+    /// joins, projections and released joins without rewriting the rest of the row; a join column left out of this
+    /// list would be lost on every join made during synchronisation.
+    /// </summary>
+    internal static readonly string[] ConnectedSystemObjectsJoinStateUpdate =
+    [
+        "MetaverseObjectId", "JoinType", "DateJoined", "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName"
     ];
 
     /// <summary>

@@ -26,6 +26,12 @@ public class MetaverseObjectHeader
     public MetaverseObjectStatus Status { get; set; }
 
     /// <summary>
+    /// Whether the object is marked for an export scope review: the next synchronisation of any Connected System
+    /// re-evaluates it against the export Synchronisation Rules (a rule change or a relative date moved its scope).
+    /// </summary>
+    public bool ScopeReviewPending { get; set; }
+
+    /// <summary>
     /// Performance cache of the Display Name attribute value, used for efficient sorting at scale.
     /// </summary>
     public string? CachedDisplayName { get; set; }

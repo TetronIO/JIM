@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
@@ -26,6 +27,11 @@ namespace JIM.Worker.Tests.Repositories;
 public class ExportMatchingClaimDatabaseTests
 {
     private string _connectionString = null!;
+
+    /// <summary>The export Synchronisation Rule whose matching claims the object, recorded on the join (#348).</summary>
+    private int _exportRuleId;
+
+    private const string ExportRuleName = "Yellowstone Users Export";
 
     private JimDbContext NewContext()
     {
@@ -78,8 +84,17 @@ public class ExportMatchingClaimDatabaseTests
         csType.Attributes.Add(employeeIdAttr);
 
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
-        seed.AddRange(connectorDefinition, system, csType, mvType);
+        var exportRule = new SyncRule
+        {
+            Name = ExportRuleName,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystem = system,
+            ConnectedSystemObjectType = csType,
+            MetaverseObjectType = mvType
+        };
+        seed.AddRange(connectorDefinition, system, csType, mvType, exportRule);
         await seed.SaveChangesAsync();
+        _exportRuleId = exportRule.Id;
 
         var firstMvo = new MetaverseObject { Type = mvType };
         var secondMvo = new MetaverseObject { Type = mvType };
@@ -112,7 +127,7 @@ public class ExportMatchingClaimDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined);
+        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName);
 
         Assert.That(claimed, Is.True, "The first claim on an unclaimed CSO must succeed");
 
@@ -124,6 +139,9 @@ public class ExportMatchingClaimDatabaseTests
         Assert.That(row.DateJoined, Is.Not.Null);
         Assert.That(row.DateJoined!.Value, Is.EqualTo(dateJoined).Within(TimeSpan.FromSeconds(1)),
             "Npgsql round-trips DateTime as UTC; allow a small tolerance for timestamp precision");
+        Assert.That(row.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching), "the claim must record how it joined (#348)");
+        Assert.That(row.JoinSyncRuleId, Is.EqualTo(_exportRuleId), "the claim must record the matching rule (#348)");
+        Assert.That(row.JoinSyncRuleName, Is.EqualTo(ExportRuleName));
     }
 
     /// <summary>
@@ -139,13 +157,13 @@ public class ExportMatchingClaimDatabaseTests
 
         await using var firstCtx = NewContext();
         var firstRepository = new PostgresDataRepository(firstCtx);
-        var firstClaimed = await firstRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, firstDateJoined);
+        var firstClaimed = await firstRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, firstDateJoined, _exportRuleId, ExportRuleName);
         Assert.That(firstClaimed, Is.True, "Precondition: the first claim must succeed");
 
         await using var secondCtx = NewContext();
         var secondRepository = new PostgresDataRepository(secondCtx);
         var secondClaimed = await secondRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(
-            csoId, secondMvoId, DateTime.UtcNow.AddSeconds(1));
+            csoId, secondMvoId, DateTime.UtcNow.AddSeconds(1), _exportRuleId, "Another Rule");
 
         Assert.That(secondClaimed, Is.False, "A second claim on an already-claimed CSO must fail");
 
@@ -155,6 +173,8 @@ public class ExportMatchingClaimDatabaseTests
             "The CSO must remain claimed by the first Metaverse Object");
         Assert.That(row.DateJoined!.Value, Is.EqualTo(firstDateJoined).Within(TimeSpan.FromSeconds(1)),
             "The failed second claim must not overwrite the first claim's DateJoined");
+        Assert.That(row.JoinSyncRuleName, Is.EqualTo(ExportRuleName),
+            "The failed second claim must not overwrite the first claim's join record");
     }
 
     /// <summary>
@@ -177,7 +197,7 @@ public class ExportMatchingClaimDatabaseTests
         // in the same run (e.g. AttemptExportMatchingAsync's candidate lookup).
         var trackedCso = await ctx.ConnectedSystemObjects.SingleAsync(c => c.Id == csoId);
 
-        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined);
+        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName);
         Assert.That(claimed, Is.True);
 
         // Fix up the tracked instance exactly as CreateOrUpdatePendingExportWithNoNetChangeAsync does,
