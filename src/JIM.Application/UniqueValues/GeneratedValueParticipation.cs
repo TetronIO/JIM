@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Staging;
 
 namespace JIM.Application.UniqueValues;
 
@@ -53,4 +55,45 @@ public static class GeneratedValueParticipation
             .Distinct()
             .ToList();
     }
+
+    /// <summary>
+    /// A generated import mapping's probe targets (release 3, plan Phase 7 item 3): the participating targets of
+    /// <see cref="ComputeParticipatingTargets"/> (enabled, single-source, direct flows of the generated attribute,
+    /// minus the generation's exclusions) whose target attribute <see cref="IsDirectProbeTarget"/> accepts. A value
+    /// reaching a target through an export expression is not a participating target at all; a Distinguished Name,
+    /// an external id, a non-text attribute, or an attribute whose definition is not loaded is participating but not
+    /// probed. Collision Remediation (release 4) covers what is not probed.
+    /// </summary>
+    public static List<UniquenessProbeTarget> ComputeProbeTargets(SyncRuleMapping generatedMapping, IEnumerable<SyncRule> exportRules)
+    {
+        if (!generatedMapping.TargetMetaverseAttributeId.HasValue || generatedMapping.Generation == null)
+            return [];
+
+        var attributeId = generatedMapping.TargetMetaverseAttributeId.Value;
+        var excludedSystemIds = generatedMapping.Generation.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet();
+
+        return exportRules
+            .Where(sr => sr.Enabled && !excludedSystemIds.Contains(sr.ConnectedSystemId))
+            .SelectMany(sr => sr.AttributeFlowRules
+                .Where(m => m.Enabled
+                    && m.TargetConnectedSystemAttributeId.HasValue
+                    && m.Sources.Count == 1
+                    && m.Sources[0].MetaverseAttributeId == attributeId
+                    && IsDirectProbeTarget(m.TargetConnectedSystemAttribute))
+                .Select(m => new UniquenessProbeTarget(sr.ConnectedSystemId, m.TargetConnectedSystemAttributeId!.Value)))
+            .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
+    /// Whether a value generated for, or flowed directly to, <paramref name="attribute"/> is probed: a loaded, text
+    /// attribute that is neither the external id nor the secondary external id (for an LDAP directory, the
+    /// Distinguished Name, unique only within its container, so a partition-wide search would report false
+    /// collisions). Export mode asks this of the generated attribute itself.
+    /// </summary>
+    public static bool IsDirectProbeTarget(ConnectedSystemObjectTypeAttribute? attribute) =>
+        attribute != null
+        && attribute.Type == AttributeDataType.Text
+        && !attribute.IsExternalId
+        && !attribute.IsSecondaryExternalId;
 }
