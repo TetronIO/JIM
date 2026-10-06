@@ -438,6 +438,12 @@ public class SyncExportTaskProcessor
                     _initiatedByType,
                     _initiatedById,
                     _initiatedByName);
+
+                // A corrected value was not written to the Connected System: the record is of the queued change the
+                // correction made, not of an export (#242, release 4).
+                if (remediated)
+                    change.ChangeType = ObjectChangeType.PendingExport;
+
                 executionItem.ConnectedSystemObjectChange = change;
             }
 

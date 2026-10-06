@@ -57,6 +57,10 @@ public class ConnectedSystemServerGeneratedMappingSaveTests
         _csRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        // The stored generation settings, read on every save of a generated flow to tell whether a Needs Decision is
+        // released (#242, release 4): none stored, so nothing is compared or released.
+        _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(() => new Dictionary<int, SyncRuleMappingGeneration>());
 
         _initiator = TestUtilities.GetInitiatedBy();
     }

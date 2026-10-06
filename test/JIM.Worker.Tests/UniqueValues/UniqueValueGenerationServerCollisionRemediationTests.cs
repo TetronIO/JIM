@@ -86,6 +86,30 @@ public class UniqueValueGenerationServerCollisionRemediationTests
         Assert.That(outcome.Value, Is.EqualTo("joe.bloggs1"), "a remediation draws a new value; the object's own assignment is what is being replaced");
     }
 
+    [Test]
+    public async Task RegenerateAsync_ConcurrentRemediationsOfTheSameBase_DrawDistinctValuesAsync()
+    {
+        // Two parallel export batches of one run, each remediating a different object rejected for the same value: they
+        // share the run's options (and so the process-wide reservation set), and must never both issue one value.
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var generation = UniqueValueTestHelpers.Generation();
+        var options = UniqueValueTestHelpers.Options();
+
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+            new UniqueValueGenerationServer(repo).RegenerateAsync(
+                UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: "joe.bloggs") with { RejectedValues = ["joe.bloggs"] },
+                options))));
+
+        var values = outcomes.Select(o => o.Value).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes.All(o => o.Kind == GenerationOutcomeKind.Generated), Is.True);
+            Assert.That(values, Is.Unique, "the reservation set keeps concurrent batches from issuing the same value");
+            Assert.That(values, Does.Not.Contain("joe.bloggs"));
+        }
+    }
+
     // ---- Anchoring (plan decision 10) ----
 
     [Test]

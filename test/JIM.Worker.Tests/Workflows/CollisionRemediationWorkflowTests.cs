@@ -96,6 +96,27 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Export_UnanchoredGeneratedValueRejected_RecordsTheCarryingAttributeSetFromTheRejectedValueAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+
+        var activity = await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+
+        var change = ExecutionItems(activity).Single().ConnectedSystemObjectChange;
+        Assert.That(change, Is.Not.Null);
+        var row = change!.AttributeChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.PendingExport), "nothing was written to the Connected System");
+            Assert.That(row.AttributeName, Is.EqualTo("sAMAccountName"));
+            Assert.That(row.ValueChanges.Single(v => v.ValueChangeType == ValueChangeType.Remove).StringValue, Is.EqualTo("joe.bloggs"));
+            Assert.That(row.ValueChanges.Single(v => v.ValueChangeType == ValueChangeType.Add).StringValue, Is.EqualTo("joe.bloggs1"));
+        }
+    }
+
+    [Test]
     public async Task Export_UnanchoredGeneratedValueRejected_MarksTheDerivedValuesHostForReDerivationAsync()
     {
         var ctx = await SetUpAsync();
