@@ -664,12 +664,48 @@ Describe 'New-JIMSyncRuleMapping: Unique Value Generation (#242)' {
             $validateSet.ValidValues | Should -Be @('OnlyIfTaken', 'Sequence', 'Random')
         }
 
-        It 'Does not add -ExcludeConnectedSystemId: exclusions are deferred from every surface in release 1' {
-            $command.Parameters.Keys | Should -Not -Contain 'ExcludeConnectedSystemId'
+        It 'ExcludeConnectedSystemId is offered on the import generated parameter set only' {
+            $setNames = $command.Parameters['ExcludeConnectedSystemId'].ParameterSets.Keys
+            $setNames | Should -Be @('ImportGenerated')
+        }
+
+        It 'ExcludeConnectedSystemId cannot be combined with an export generated mapping' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                { New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 -Generate -ExcludeConnectedSystemId 4 -Confirm:$false } |
+                    Should -Throw -ErrorId 'AmbiguousParameterSet,New-JIMSyncRuleMapping'
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
         }
     }
 
     Context 'Request body composition: import' {
+
+        It 'Sends -ExcludeConnectedSystemId as generation.exclusions, a JSON array even for one ID' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Random -ExcludeConnectedSystemId 4 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    ($Body | ConvertTo-Json -Depth 10 -Compress) -match '"exclusions":\[4\]'
+                }
+            }
+        }
+
+        It 'Sends no exclusions when -ExcludeConnectedSystemId is omitted' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Random -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.generation.ContainsKey('exclusions') }
+            }
+        }
 
         It 'Creates a generated import mapping with no base expression' {
             InModuleScope JIM {
@@ -816,8 +852,62 @@ Describe 'Set-JIMSyncRuleMapping: Unique Value Generation (#242)' {
             @{ Name = 'Separator' }
             @{ Name = 'AttemptLimit' }
             @{ Name = 'NeverReuse' }
+            @{ Name = 'ExcludeConnectedSystemId' }
         ) {
             $command.Parameters[$Name] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Exclusions' {
+
+        It 'Replaces the exclusions with the IDs given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4, 7 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and ($Body | ConvertTo-Json -Depth 10 -Compress) -match '"exclusions":\[4,7\]'
+                }
+            }
+        }
+
+        It 'Sends a single ID as a JSON array' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    ($Body | ConvertTo-Json -Depth 10 -Compress) -match '"exclusions":\[4\]'
+                }
+            }
+        }
+
+        It 'Clears the exclusions with @(), sent as an empty JSON array' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @() -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    ($Body | ConvertTo-Json -Depth 10 -Compress) -match '"exclusions":\[\]'
+                }
+            }
+        }
+
+        It 'Leaves the exclusions alone when the parameter is omitted' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -AttemptLimit 50 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.generation.ContainsKey('exclusions') }
+            }
         }
     }
 
@@ -881,6 +971,36 @@ Describe 'Set-JIMSyncRuleMapping: Unique Value Generation (#242)' {
                 Should -Invoke Invoke-JIMApi -Times 0 -Exactly
                 $err | Should -Not -BeNullOrEmpty
             }
+        }
+    }
+}
+
+Describe 'Get-JIMSyncRuleMapping: generated value exclusions and participants (#242)' {
+
+    It 'Documents Generation.Exclusions and Generation.Participants in its help' {
+        $help = Get-Help Get-JIMSyncRuleMapping -Full
+        $outputs = ($help.returnValues | Out-String)
+        $outputs | Should -Match 'Generation\.Exclusions'
+        $outputs | Should -Match 'Generation\.Participants'
+    }
+
+    It 'Passes the participants through from the API' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    id         = 12
+                    generation = [PSCustomObject]@{
+                        exclusions   = @(4)
+                        participants = @([PSCustomObject]@{ connectedSystemName = 'Active Directory'; check = 'JimRecordsAndProbe'; reason = 'None' })
+                    }
+                }
+            }
+
+            $mapping = Get-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12
+
+            $mapping.Generation.Exclusions | Should -Be @(4)
+            $mapping.Generation.Participants[0].Check | Should -Be 'JimRecordsAndProbe'
         }
     }
 }

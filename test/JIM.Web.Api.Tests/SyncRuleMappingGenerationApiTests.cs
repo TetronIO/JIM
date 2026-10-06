@@ -104,6 +104,9 @@ public class SyncRuleMappingGenerationApiTests
         _mockConnectedSystemRepo
             .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleMapping>());
+        // The generated-value participants every mapping response carries (release 3): no export rules here.
+        _mockConnectedSystemRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() => []);
         // A sole contributor short-circuits AutoAssignImportMappingPriorityAsync before it reads anything else.
         _mockConnectedSystemRepo
             .Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()))

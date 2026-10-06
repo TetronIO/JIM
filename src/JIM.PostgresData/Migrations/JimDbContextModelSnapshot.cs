@@ -3843,6 +3843,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SupportsSecondaryExternalId")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("SupportsUniquenessProbe")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")
                         .HasColumnType("boolean");
 

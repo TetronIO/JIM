@@ -1585,6 +1585,16 @@ public interface ISyncRepository
     Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues);
 
     /// <summary>
+    /// Up to <paramref name="maximumCount"/> distinct, non-empty text values Connected System Objects in
+    /// <see cref="ConnectedSystemObjectStatus.Normal"/> status hold for <paramref name="connectedSystemObjectTypeAttributeId"/>
+    /// (Unique Value Generation, #242, release 3): the live probe's control values, values JIM knows the target holds,
+    /// so a search that does not return one is exposed as unable to see what it is looking for. Obsolete objects (gone
+    /// from the target) and objects pending provisioning (not in the target yet) are skipped. Which values come back
+    /// is unspecified; empty when JIM holds none (typically a first load) or <paramref name="maximumCount"/> is zero.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetConnectedSystemAttributeSampleValuesAsync(int connectedSystemObjectTypeAttributeId, int maximumCount);
+
+    /// <summary>
     /// The numeric counterpart of <see cref="GetConnectedSystemAttributeValueHoldersAsync"/>, matching either
     /// <c>IntValue</c> or <c>LongValue</c>.
     /// </summary>
