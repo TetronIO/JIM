@@ -126,4 +126,23 @@ public class ExportOutcomeMessageTests
 
         Assert.That(message, Does.EndWith("; 1 Pending Export left empty was removed."));
     }
+
+    [Test]
+    public void ForUnrecorded_SeveralExports_SaysTheyWillBeSentAgainAndWhereToLook()
+    {
+        var message = ExportOutcomeMessage.ForUnrecorded(1_250);
+
+        Assert.That(message, Is.EqualTo(
+            "1,250 exports were written, but JIM could not record the values they wrote, so they were left unconfirmed " +
+            "and the next export run will send them again. The service log names the cause."));
+    }
+
+    [Test]
+    public void ForUnrecorded_OneExport_UsesTheSingular()
+    {
+        var message = ExportOutcomeMessage.ForUnrecorded(1);
+
+        Assert.That(message, Does.StartWith("1 export was written, but JIM could not record the values it wrote, so it was left unconfirmed " +
+            "and the next export run will send it again."));
+    }
 }

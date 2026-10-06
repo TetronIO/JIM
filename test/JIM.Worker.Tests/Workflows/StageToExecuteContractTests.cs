@@ -324,6 +324,64 @@ public class StageToExecuteContractTests : WorkflowTestBase
             connectorCallLogs: [provisioningConnector.ExportedItems, deleteConnector.ExportedItems]);
     }
 
+    /// <summary>
+    /// Defect 4 (#1936): a target only ever written by auto-confirmed file exports (the File Connector's Export Only
+    /// mode) is never imported from, so the values its exports wrote must be recorded on its Connected System Object
+    /// at export. Without that the object held only its External ID, a value later cleared at the source matched the
+    /// "nothing" JIM thought the target held, and no change was ever staged: the file kept the old value for ever.
+    /// </summary>
+    [Test]
+    public async Task Defect4_AutoConfirmedFileExport_ValueClearedAtSource_StagesAndExportsTheClearAsync()
+    {
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, "Export Only User", "EMP0004");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
+
+        var provisioningConnector = new StubFileExportConnector(supportsAutoConfirmExport: true);
+        var provisioningActivity = await RunExportAsync(topology.Target, provisioningConnector);
+        AssertExportExecutedCleanly("Defect4 (provisioning)", provisioningActivity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, "arrange: auto-confirm must have confirmed the Create away");
+            Assert.That(targetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetDisplayNameAttr.Id)?.StringValue,
+                Is.EqualTo("Export Only User"), "the value the export wrote must be recorded on the Connected System Object");
+        }
+
+        sourceCso.AttributeValues.RemoveAll(av => av.AttributeId == topology.SourceDisplayNameAttr.Id);
+        sourceCso.LastUpdated = DateTime.UtcNow;
+        await RunFullSyncAsync(topology.Source, "Clearing Full Sync");
+
+        var stagedClear = PendingExportsFor(targetCso.Id).SingleOrDefault();
+        Assert.That(stagedClear, Is.Not.Null, "clearing the value at the source must stage a change that clears it in the target");
+        var clearChange = stagedClear!.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stagedClear.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(clearChange, Is.Not.Null, "the staged change must be for the cleared attribute");
+            Assert.That(clearChange?.StringValue, Is.Null, "and must carry no value");
+        }
+
+        var clearingConnector = new StubFileExportConnector(supportsAutoConfirmExport: true);
+        var clearingActivity = await RunExportAsync(topology.Target, clearingConnector);
+        AssertExportExecutedCleanly("Defect4 (clear)", clearingActivity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, "the clear is auto-confirmed like any other export");
+            Assert.That(targetCso.AttributeValues.Any(av => av.AttributeId == targetDisplayNameAttr.Id), Is.False,
+                "the recorded value must be gone once the clear is exported");
+        }
+
+        AssertContract("Defect4",
+            stagedBeforeExecution: [],
+            executedActivities: [provisioningActivity, clearingActivity],
+            expectedCreates: 1, expectedUpdates: 1, expectedDeletes: 0,
+            connectorCallLogs: [provisioningConnector.ExportedItems, clearingConnector.ExportedItems]);
+    }
+
     #endregion
 
     #region The wider matrix
