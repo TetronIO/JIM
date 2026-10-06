@@ -131,6 +131,14 @@ public class ExportExecutionResult
     public int OptimisticApplyFailedCount { get; set; }
 
     /// <summary>
+    /// Number of auto-confirmed file exports that reached the target but whose values could not be recorded on
+    /// their Connected System Objects (issue #1936). Unlike <see cref="OptimisticApplyFailedCount"/>, nothing
+    /// self-heals these: an auto-confirmed target is never imported from, so its exports are left
+    /// <c>ExportNotConfirmed</c> to be sent again on the next export run, and the run reports them as a warning.
+    /// </summary>
+    public int UnrecordedExportCount { get; set; }
+
+    /// <summary>
     /// Number of Reference attribute values applied with <c>UnresolvedReferenceValue</c> populated
     /// but <c>ReferenceValueId</c> left null, because the referenced Connected System Object could
     /// not be resolved this run (D5). These rows still confirm and still diff clean on the

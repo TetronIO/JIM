@@ -89,4 +89,17 @@ internal static class ExportOutcomeMessage
         return $"{subject} withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow authorised {pronoun} " +
                $"any more, or the object was no longer joined{removal}";
     }
+
+    /// <summary>
+    /// The sentence appended to the Activity's warning when auto-confirmed exports were written but JIM could not record
+    /// the values they wrote (#1936). A warning, not a failure: the target holds the right values, and nothing is lost,
+    /// because the exports are left unconfirmed and the next export run sends them again.
+    /// </summary>
+    /// <param name="exports">How many exports were left unconfirmed.</param>
+    internal static string ForUnrecorded(int exports) =>
+        exports == 1
+            ? "1 export was written, but JIM could not record the values it wrote, so it was left unconfirmed and the next export run " +
+              "will send it again. The service log names the cause."
+            : $"{exports:N0} exports were written, but JIM could not record the values they wrote, so they were left unconfirmed and the " +
+              "next export run will send them again. The service log names the cause.";
 }

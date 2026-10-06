@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
@@ -322,6 +323,109 @@ public class StageToExecuteContractTests : WorkflowTestBase
             executedActivities: [provisioningActivity, deleteActivity],
             expectedCreates: 1, expectedUpdates: 0, expectedDeletes: 1,
             connectorCallLogs: [provisioningConnector.ExportedItems, deleteConnector.ExportedItems]);
+    }
+
+    /// <summary>
+    /// Defect 4 (#1936): a target only ever written by auto-confirmed file exports (the File Connector's Export Only
+    /// mode) is never imported from, so the values its exports wrote must be recorded on its Connected System Object
+    /// at export. Without that the object held only its External ID, a value later cleared at the source matched the
+    /// "nothing" JIM thought the target held, and no change was ever staged: the file kept the old value for ever.
+    /// </summary>
+    [Test]
+    public async Task Defect4_AutoConfirmedFileExport_ValueClearedAtSource_StagesAndExportsTheClearAsync()
+    {
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, "Export Only User", "EMP0004");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
+
+        var provisioningConnector = new StubFileExportConnector(supportsAutoConfirmExport: true);
+        var provisioningActivity = await RunExportAsync(topology.Target, provisioningConnector);
+        AssertExportExecutedCleanly("Defect4 (provisioning)", provisioningActivity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, "arrange: auto-confirm must have confirmed the Create away");
+            Assert.That(targetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetDisplayNameAttr.Id)?.StringValue,
+                Is.EqualTo("Export Only User"), "the value the export wrote must be recorded on the Connected System Object");
+        }
+
+        sourceCso.AttributeValues.RemoveAll(av => av.AttributeId == topology.SourceDisplayNameAttr.Id);
+        sourceCso.LastUpdated = DateTime.UtcNow;
+        await RunFullSyncAsync(topology.Source, "Clearing Full Sync");
+
+        var stagedClear = PendingExportsFor(targetCso.Id).SingleOrDefault();
+        Assert.That(stagedClear, Is.Not.Null, "clearing the value at the source must stage a change that clears it in the target");
+        var clearChange = stagedClear!.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stagedClear!.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(clearChange, Is.Not.Null, "the staged change must be for the cleared attribute");
+            Assert.That(clearChange?.StringValue, Is.Null, "and must carry no value");
+        }
+
+        var clearingConnector = new StubFileExportConnector(supportsAutoConfirmExport: true);
+        var clearingActivity = await RunExportAsync(topology.Target, clearingConnector);
+        AssertExportExecutedCleanly("Defect4 (clear)", clearingActivity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, "the clear is auto-confirmed like any other export");
+            Assert.That(targetCso.AttributeValues.Any(av => av.AttributeId == targetDisplayNameAttr.Id), Is.False,
+                "the recorded value must be gone once the clear is exported");
+        }
+
+        AssertContract("Defect4",
+            stagedBeforeExecution: [],
+            executedActivities: [provisioningActivity, clearingActivity],
+            expectedCreates: 1, expectedUpdates: 1, expectedDeletes: 0,
+            connectorCallLogs: [provisioningConnector.ExportedItems, clearingConnector.ExportedItems]);
+    }
+
+    /// <summary>
+    /// Defect 4's failure half (#1936): where an auto-confirmed export's values cannot be recorded, confirming it anyway
+    /// would bring the defect straight back, with nothing left to repair it. The export must instead stay unconfirmed,
+    /// the run must say so on its Activity, and the next export run must send it again.
+    /// </summary>
+    [Test]
+    public async Task Defect4_AutoConfirmedFileExportWhoseValuesCannotBeRecorded_WarnsAndSendsItAgainAsync()
+    {
+        // Replaced rather than disposed: the base fixture's application shares its repository with the one built here,
+        // and disposing the application disposes that repository.
+        SyncRepo = new ThrowingOnApplySyncRepository();
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        Jim = new JimApplication(Repository, syncRepository: SyncRepo);
+
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        await CreateSourceCsoAsync(topology, "Unrecorded User", "EMP0005");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        var connector = new StubFileExportConnector(supportsAutoConfirmExport: true);
+
+        var firstActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly("Defect4 failure (first export)", firstActivity);
+
+        var retained = PendingExportsFor(targetCso.Id).SingleOrDefault();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstActivity.WarningMessage, Is.Not.Null.And.Not.Empty, "the run must say it could not record what it wrote");
+            Assert.That(retained, Is.Not.Null, "an export whose values were not recorded must not be confirmed away");
+            Assert.That(retained?.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
+        }
+
+        var secondActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly("Defect4 failure (second export)", secondActivity);
+
+        Assert.That(connector.ExportedItems.Count(pe => pe.Id == retained!.Id), Is.EqualTo(2), "the next export run must send it again");
+    }
+
+    /// <summary>A repository whose recording of exported values always fails.</summary>
+    private sealed class ThrowingOnApplySyncRepository : JIM.InMemoryData.SyncRepository
+    {
+        public override Task ApplyExportedAttributeValuesAsync(
+            List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds) =>
+            throw new InvalidOperationException("Simulated failure recording exported values");
     }
 
     #endregion
