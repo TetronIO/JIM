@@ -1449,5 +1449,5 @@ if ($failed -gt 0) {
 
 Write-Host ""
 Write-Host "✓ Unique Value Generation behaves as designed: tokens, gates, priority hand-over, stability," -ForegroundColor Green
-Write-Host "  Start again, surface parity and the retired values register all hold." -ForegroundColor Green
+Write-Host "  Start again, surface parity, the retired values register and the directory probe all hold." -ForegroundColor Green
 exit 0
