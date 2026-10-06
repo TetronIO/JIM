@@ -94,39 +94,30 @@ public class ScopingEvaluationServer
         // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
         EnsureOperatorValidForType(criterion, criterion.MetaverseAttribute.Type, criterion.MetaverseAttribute.Name);
 
-        // Get the MVO attribute value (excluding asserted-null markers, #91: scoping must evaluate against a real
-        // value or genuine absence, so an asserted null is treated as "no value present" like an absent row)
-        var mvoAttributeValue = mvo.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == criterion.MetaverseAttribute.Id && !av.NullValue);
+        // Evaluate every value the object holds for the attribute, never just whichever loaded first (#1923): value
+        // order is not defined, so comparing one value let a multi-valued attribute's outcome flip between runs.
+        // Asserted-null markers are excluded (#91: scoping must evaluate against a real value or genuine absence, so an
+        // asserted null is treated as "no value present" like an absent row).
+        var mvoAttributeValues = mvo.AttributeValues
+            .Where(av => av.AttributeId == criterion.MetaverseAttribute.Id && !av.NullValue)
+            .ToList();
 
-        // Handle null/missing attribute values
-        if (mvoAttributeValue == null)
-        {
-            // Only Equals against an all-null absolute criterion should match a missing value.
-            // A relative date criterion always resolves to a real boundary, so it never matches a missing value here.
-            return criterion.ComparisonType == SearchComparisonType.Equals &&
-                   criterion.ValueMode == DateCriteriaValueMode.Absolute &&
-                   criterion.StringValue == null &&
-                   criterion.IntValue == null &&
-                   criterion.LongValue == null &&
-                   criterion.DecimalValue == null &&
-                   criterion.DateTimeValue == null &&
-                   criterion.BoolValue == null &&
-                   criterion.GuidValue == null;
-        }
+        if (mvoAttributeValues.Count == 0)
+            return MatchesMissingValue(criterion);
 
-        // Evaluate based on attribute type
-        return criterion.MetaverseAttribute.Type switch
+        var attributeType = criterion.MetaverseAttribute.Type;
+        var criterionDate = ResolveCriterionDate(criterion, nowUtc);
+        return IsMetByValues(mvoAttributeValues, criterion.ComparisonType, mvoAttributeValue => attributeType switch
         {
             AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(mvoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(mvoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
             AttributeDataType.Decimal => EvaluateDecimalComparison(mvoAttributeValue.DecimalValue, criterion.DecimalValue, criterion.ComparisonType),
-            AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
+            AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, criterionDate, criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(mvoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(mvoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
             _ => false
-        };
+        });
     }
 
     #endregion
@@ -206,39 +197,53 @@ public class ScopingEvaluationServer
         // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
         EnsureOperatorValidForType(criterion, criterion.ConnectedSystemAttribute.Type, criterion.ConnectedSystemAttribute.Name);
 
-        // Get the CSO attribute value
-        var csoAttributeValue = cso.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == criterion.ConnectedSystemAttribute.Id);
+        // Evaluate every value the object holds for the attribute, never just whichever loaded first (#1923).
+        var csoAttributeValues = cso.AttributeValues
+            .Where(av => av.AttributeId == criterion.ConnectedSystemAttribute.Id)
+            .ToList();
 
-        // Handle null/missing attribute values
-        if (csoAttributeValue == null)
-        {
-            // Only Equals against an all-null absolute criterion should match a missing value.
-            // A relative date criterion always resolves to a real boundary, so it never matches a missing value here.
-            return criterion.ComparisonType == SearchComparisonType.Equals &&
-                   criterion.ValueMode == DateCriteriaValueMode.Absolute &&
-                   criterion.StringValue == null &&
-                   criterion.IntValue == null &&
-                   criterion.LongValue == null &&
-                   criterion.DecimalValue == null &&
-                   criterion.DateTimeValue == null &&
-                   criterion.BoolValue == null &&
-                   criterion.GuidValue == null;
-        }
+        if (csoAttributeValues.Count == 0)
+            return MatchesMissingValue(criterion);
 
-        // Evaluate based on attribute type
-        return criterion.ConnectedSystemAttribute.Type switch
+        var attributeType = criterion.ConnectedSystemAttribute.Type;
+        var criterionDate = ResolveCriterionDate(criterion, nowUtc);
+        return IsMetByValues(csoAttributeValues, criterion.ComparisonType, csoAttributeValue => attributeType switch
         {
             AttributeDataType.Text => EvaluateStringComparison(csoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(csoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(csoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
             AttributeDataType.Decimal => EvaluateDecimalComparison(csoAttributeValue.DecimalValue, criterion.DecimalValue, criterion.ComparisonType),
-            AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
+            AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, criterionDate, criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(csoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(csoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
             _ => false
-        };
+        });
     }
+
+    /// <summary>
+    /// Applies a criterion across every value an attribute holds (#1923). A positive operator is met when any value
+    /// matches it; a negated operator when every value satisfies it, which is to say when no value matches the operator
+    /// it negates. Neither depends on value order. For a single value both reduce to evaluating that value, so
+    /// single-valued attributes are scoped exactly as before.
+    /// </summary>
+    private static bool IsMetByValues<TValue>(List<TValue> values, SearchComparisonType comparisonType, Func<TValue, bool> isMetByValue) =>
+        SearchComparisonOperators.IsNegated(comparisonType) ? values.All(isMetByValue) : values.Any(isMetByValue);
+
+    /// <summary>
+    /// The missing-value rule: an object holding no value for the attribute matches only an Equals criterion whose
+    /// absolute value is empty. A relative date criterion always resolves to a real boundary, so it never matches a
+    /// missing value.
+    /// </summary>
+    private static bool MatchesMissingValue(SyncRuleScopingCriteria criterion) =>
+        criterion.ComparisonType == SearchComparisonType.Equals &&
+        criterion.ValueMode == DateCriteriaValueMode.Absolute &&
+        criterion.StringValue == null &&
+        criterion.IntValue == null &&
+        criterion.LongValue == null &&
+        criterion.DecimalValue == null &&
+        criterion.DateTimeValue == null &&
+        criterion.BoolValue == null &&
+        criterion.GuidValue == null;
 
     /// <summary>
     /// Throws <see cref="InvalidOperationException"/> if the criterion's comparison operator is not applicable

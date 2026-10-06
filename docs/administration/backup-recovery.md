@@ -54,11 +54,13 @@ External PostgreSQL: use your existing database backup tooling against the JIM d
 
 === "Docker"
 
+    From a container of JIM's own image, which is already on the server, so the command needs no internet connection, an air-gapped host's included:
+
     ```bash
-    docker run --rm \
+    docker run --rm --user 0 --entrypoint tar \
       -v jim-keys-volume:/keys:ro \
       -v "$(pwd)":/backup \
-      alpine tar czf /backup/jim-keys-2026-07-09.tar.gz -C /keys .
+      "$(docker inspect -f '{{.Config.Image}}' jim.web)" czf /backup/jim-keys-2026-07-09.tar.gz -C /keys .
     ```
 
 === "Podman"
@@ -81,11 +83,13 @@ Restore both artefacts from the **same backup set**, then start the services.
 
     === "Docker"
 
+        Restore onto an installation that has started once, so that its containers and volumes exist, with JIM stopped (`docker compose stop jim.web jim.worker jim.scheduler` in `/opt/jim`). The command empties the key volume and unpacks the backup into it, from a container of JIM's own image, which is already on the server:
+
         ```bash
-        docker run --rm \
+        docker run --rm --user 0 --entrypoint sh \
           -v jim-keys-volume:/keys \
           -v "$(pwd)":/backup \
-          alpine sh -c "rm -rf /keys/* && tar xzf /backup/jim-keys-2026-07-09.tar.gz -C /keys"
+          "$(docker inspect -f '{{.Config.Image}}' jim.web)" -c "rm -rf /keys/* && tar xzf /backup/jim-keys-2026-07-09.tar.gz -C /keys"
         ```
 
     === "Podman"

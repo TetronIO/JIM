@@ -91,6 +91,8 @@ What prevents this from looping is value-level change detection, not a special c
 - **Full Sync** re-evaluates every CSO against the Synchronisation Rules. Use this after changing Synchronisation Rule configuration or for periodic reconciliation.
 - **Delta Sync** processes only CSOs that have changed since the last sync. This is faster and is the normal operational mode.
 
+One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/synchronisation-rules.md#when-a-change-to-an-export-rule-takes-effect).
+
 ## 📤 Phase 3: Export
 
 Export sends pending changes from the connector space to the target Connected System. Each Pending Export represents a create, update, or delete operation.

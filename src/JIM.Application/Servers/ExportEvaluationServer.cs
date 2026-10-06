@@ -100,7 +100,17 @@ public class ExportEvaluationServer
         Log.Debug("BuildExportEvaluationCacheAsync: Cached {RuleCount} export rules across {TypeCount} MVO types for {SystemCount} target systems (CSO data loaded per-page)",
             exportRules.Count, exportRulesByMvoTypeId.Count, targetSystemIds.Count);
 
-        return new ExportEvaluationCache(exportRulesByMvoTypeId, emptyCsoLookup, emptyCsoAttributeValues, targetSystemIds);
+        // Taken over every export rule, disabled ones included: re-enabling a rule is one of the changes the scope
+        // review drain must not clear flags across (#1925).
+        var exportRulesReadWatermark = allSyncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Export)
+            .Select(sr => (DateTime?)(sr.LastUpdated ?? sr.Created))
+            .Max();
+
+        return new ExportEvaluationCache(exportRulesByMvoTypeId, emptyCsoLookup, emptyCsoAttributeValues, targetSystemIds)
+        {
+            ExportRulesReadWatermark = exportRulesReadWatermark
+        };
     }
 
     /// <summary>
@@ -693,6 +703,7 @@ public class ExportEvaluationServer
 
                 // Update the CSO in the database
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
+                workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id));
 
                 // Was that the last connector? (Asked after the removal above, per the engine's contract.)
                 if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
