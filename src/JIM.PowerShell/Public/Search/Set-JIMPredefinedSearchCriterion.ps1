@@ -167,14 +167,13 @@ function Set-JIMPredefinedSearchCriterion {
 
         $attributeId = $MetaverseAttributeId
         if ($PSCmdlet.ParameterSetName -eq 'ByName') {
-            Write-Verbose "Looking up Metaverse attribute: $MetaverseAttributeName"
-            $attributes = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes"
-            $attribute = $attributes | Where-Object { $_.name -eq $MetaverseAttributeName } | Select-Object -First 1
-            if (-not $attribute) {
-                Write-Error "Metaverse attribute '$MetaverseAttributeName' not found."
+            try {
+                $attributeId = (Resolve-JIMMetaverseAttribute -Name $MetaverseAttributeName).id
+            }
+            catch {
+                Write-Error $_
                 return
             }
-            $attributeId = $attribute.id
             Write-Verbose "Resolved '$MetaverseAttributeName' to attribute ID $attributeId"
         }
 
