@@ -118,10 +118,8 @@ function Get-JIMConnectedSystem {
 
             'List' {
                 Write-Verbose "Getting all Connected Systems"
-                $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems"
-
-                # Handle paginated response - check if 'items' property exists (not if it's truthy)
-                $systems = if ($null -ne $response.items) { $response.items } else { $response }
+                # The list endpoint is paginated, so read every page; one read would stop at the server's default page size.
+                $systems = Get-JIMPagedItems -Endpoint "/api/v1/synchronisation/connected-systems"
 
                 # Filter by name if specified
                 if ($Name) {
