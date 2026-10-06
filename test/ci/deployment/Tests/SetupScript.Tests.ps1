@@ -213,6 +213,81 @@ Describe 'setup.sh size_database' -Skip:$script:NoBash {
         $settings['JIM_DB_WORK_MEM'] | Should -Be '7MB'
     }
 
+    It 'says which settings it was given, rather than chose for the host' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment 'JIM_DB_SHARED_BUFFERS=1GB'
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.Output | Should -BeLike '*shared_buffers 1GB (given)*'
+        $result.Output | Should -BeLike '*effective_cache_size 3072MB,*'
+        $result.Output | Should -Not -BeLike '*3072MB (given)*'
+    }
+
+    It 'stops before writing anything when the host cannot give the shared_buffers it was given' {
+        # The host #1948 was found on: 8GB given, on 5.7 GB.
+        $arrangement = New-SizingArrangement -MemoryMB 5836 -Environment 'JIM_DB_SHARED_BUFFERS=8GB'
+        $before = Get-Content -Raw $arrangement.Config
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM_DB_SHARED_BUFFERS*8GB*5.7 GB*'
+        $result.Output | Should -BeLike '*#bundled-postgresql-memory*'
+        $result.Output | Should -Not -Match '\[OK\]'
+        Get-Content -Raw $arrangement.Config | Should -BeExactly $before
+    }
+
+    It 'counts a shared_buffers given without a unit in 8 kB pages, as PostgreSQL does' {
+        # 1048576 pages of 8 kB is 8 GB.
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment 'JIM_DB_SHARED_BUFFERS=1048576'
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM_DB_SHARED_BUFFERS*1048576*'
+    }
+
+    It 'warns, naming the size it would choose, when a given shared_buffers is more than half the host''s memory' {
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment 'JIM_DB_SHARED_BUFFERS=4GB'
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Settings $arrangement.Config)['JIM_DB_SHARED_BUFFERS'] | Should -Be '4GB'
+        $result.Output | Should -Match '\[WARN\][^\n]*JIM_DB_SHARED_BUFFERS[^\n]*4GB[^\n]*1536MB'
+    }
+
+    It 'does not warn about a given shared_buffers of half the host''s memory, fractional or not' {
+        foreach ($given in '3GB', '1.5GB', '3072MB') {
+            $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment "JIM_DB_SHARED_BUFFERS='$given'"
+
+            $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Not -Match '\[WARN\]' -Because "$given is half the host's memory or less"
+        }
+    }
+
+    It 'warns that it could not check a given shared_buffers it cannot read, such as a unit in the wrong case' {
+        # PostgreSQL's units are case-sensitive, and refuse 8gb.
+        $arrangement = New-SizingArrangement -MemoryMB 6144 -Environment 'JIM_DB_SHARED_BUFFERS=8gb'
+
+        $result = Invoke-SetupFunction 'size_database' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match '\[WARN\][^\n]*JIM_DB_SHARED_BUFFERS[^\n]*8gb[^\n]*case'
+    }
+
+    It 'checks nothing an upgrade keeps, a given shared_buffers included, since it writes none of it' {
+        $arrangement = New-SizingArrangement -MemoryMB 5836 -Existing 'JIM_DB_SHARED_BUFFERS=1GB' -Environment 'JIM_DB_SHARED_BUFFERS=8GB'
+
+        $result = Invoke-SetupFunction 'size_database keep' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Settings $arrangement.Config)['JIM_DB_SHARED_BUFFERS'] | Should -Be '1GB'
+        $result.Output | Should -Not -Match '\[WARN\]'
+    }
+
     It 'keeps the settings an installation already has, filling in only the missing ones, when upgrading' {
         $arrangement = New-SizingArrangement -MemoryMB 6144 -Existing 'JIM_DB_SHARED_BUFFERS=3GB'
 
