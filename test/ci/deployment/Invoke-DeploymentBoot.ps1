@@ -27,7 +27,13 @@
       8. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
       9. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
 
-    On failure it saves each container's log to the output folder before rethrowing.
+    Before stopping JIM in step 4, and again before step 8, it checks that no container restarted, and that the
+    kernel logged no AppArmor denial under a container's or a runtime's profile and no process killed for a fault
+    since the leg began (Select-KernelFault.ps1). A service that crashes is restarted and soon passes its health
+    check again, so readiness alone cannot show a crash (#1953).
+
+    It saves the kernel's log for the leg to the output folder, and on failure each container's log too, before
+    rethrowing.
 
 .PARAMETER BundlePath
     The extracted release bundle, which holds setup.sh.
@@ -233,6 +239,38 @@ function Wait-AllHealthy {
     }
 }
 
+# What the kernel and the audit system logged since the leg began: AppArmor's denials go to one or the other,
+# depending on whether auditd runs.
+function Get-KernelLog {
+    $log = Invoke-Native ($elevate + @('journalctl', '--no-pager', '--quiet', '--output', 'short-iso',
+        '--since', "@$legStarted", '_TRANSPORT=kernel', '+', '_TRANSPORT=audit'))
+    @($log -split "`n" | Where-Object { $_ })
+}
+
+# No container restarted, and the kernel logged nothing against them, since the leg began. A service that crashes is
+# restarted by its runtime and soon passes its health check again, so readiness alone hid JIM's .NET services aborting
+# on every start under rootful Podman on Ubuntu 24.04, until #1953.
+function Assert-NoCrash {
+    param([Parameter(Mandatory)][string]$Stage)
+    $restarts = @(foreach ($name in $containers.Values) {
+        $count = [int](Invoke-Runtime @('inspect', '-f', '{{.RestartCount}}', $name))
+        if ($count -gt 0) { "$name restarted $count times" }
+    })
+    $faults = @(Get-KernelLog | & (Join-Path $PSScriptRoot 'Select-KernelFault.ps1'))
+    if ($restarts.Count -gt 0 -or $faults.Count -gt 0) {
+        $found = $restarts + @($faults | Select-Object -First 10)
+        if ($faults.Count -gt 10) {
+            $found += "... and $($faults.Count - 10) more in $leg-kernel.log"
+        }
+        throw "JIM's containers crashed, or the kernel denied them, by the end of $Stage`:`n$($found -join "`n")"
+    }
+    Write-Step "no container restarted by the end of $Stage, and the kernel logged no AppArmor denial or fault against them"
+}
+
+function Save-KernelLog {
+    Get-KernelLog | Set-Content (Join-Path $OutputPath "$leg-kernel.log")
+}
+
 function Invoke-Sql {
     param([string]$Sql)
     Invoke-Runtime @('exec', $containers.database, 'psql', '-U', 'jim', '-d', 'jim', '-v', 'ON_ERROR_STOP=1', '-Atc', $Sql)
@@ -252,6 +290,7 @@ function Save-Diagnostics {
             Invoke-Native -AllowFailure ($elevate + @('journalctl', "_UID=$uid", '--no-pager', '-n', '200')) |
                 Set-Content (Join-Path $OutputPath "$leg-journal.log")
         }
+        Save-KernelLog
     }
     catch {
         Write-Warning "Could not save the containers' logs: $_"
@@ -259,6 +298,8 @@ function Save-Diagnostics {
 }
 
 $caPath = Join-Path $OutputPath "$leg-ca.crt"
+# Whole seconds, as journalctl --since takes them; a second early rather than late.
+$legStarted = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 1
 try {
     # 1. Install, as a customer does, answering every question in advance.
     Write-Step "installing from $BundlePath"
@@ -282,7 +323,8 @@ try {
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
         'JIM_SETUP_OPEN_FIREWALL=false'
-        # On Ubuntu, GitHub's runners among them, the installer must add a network rule to Podman's AppArmor profiles.
+        # On Ubuntu 24.04, GitHub's runners among them, the installer must add the network and signal rules that
+        # rootful Podman's AppArmor profiles need.
         'JIM_SETUP_FIX_APPARMOR=true'
     )
     $installLog = Join-Path $OutputPath "$leg-install.log"
@@ -309,6 +351,9 @@ try {
     Invoke-Sql "CREATE TABLE ci_boot_marker (token text); INSERT INTO ci_boot_marker VALUES ('$marker');" | Out-Null
     Invoke-Runtime @('exec', $containers.worker, 'sh', '-c', "echo $marker > /connector-files/ci-boot-marker") | Out-Null
     $webIdBefore = Invoke-Runtime @('inspect', '-f', '{{.Id}}', $containers.web)
+    # The first start, which prepares the database, is where the services work hardest; the restart below replaces
+    # the containers, and their restart counts with them.
+    Assert-NoCrash -Stage 'the first start'
 
     Write-Step 'stopping and starting JIM'
     if ($Runtime -eq 'docker') {
@@ -519,12 +564,15 @@ try {
     }
     Write-Step 'the documented database restore put back the database the backup took, over a newer release''s changes'
 
+    Assert-NoCrash -Stage 'the leg'
+    Save-KernelLog
+
     # 8. What each container runs, for the parity comparison.
     Invoke-Runtime (@('inspect') + @($containers.Values)) | Set-Content (Join-Path $OutputPath "$leg.inspect.json")
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host, the documented key backup and restore worked offline, the documented database restore rolled back a newer release's changes" |
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, none restarted and none denied by the kernel, data kept through a stop and start, PostgreSQL sized to the host, the documented key backup and restore worked offline, the documented database restore rolled back a newer release's changes" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }

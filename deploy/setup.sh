@@ -78,7 +78,8 @@
 #     JIM_SETUP_PODMAN_ROOTLESS - "true" to run JIM rootless on Podman, as --rootless
 #     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
 #     JIM_SETUP_FIX_APPARMOR   - "true" or "false": on a host whose AppArmor profiles for Podman stop JIM using
-#                             the network (Ubuntu 24.04), add the rule it needs (default: prompt). Podman only.
+#                             the network, or stop its containers' processes signalling one another (Ubuntu
+#                             24.04), add the rules it needs (default: prompt). Podman only.
 #     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
 #                             prompt). Podman only.
 #     JIM_SETUP_BACKUP_CONFIRMED - "true", with --upgrade: the database and encryption keys are backed up, so the
@@ -117,6 +118,12 @@ PODMAN_MIN_VERSION="4.4"
 PODMAN_FILES=(jim.yaml jim-database.yaml jim-config.yaml)
 QUADLET_FILES=(jim.kube jim-database.kube jim.network)
 DEFAULT_PODMAN_ACCOUNT="jim"
+
+# AppArmor's policy folder and the kernel's interface to it, and the file of the rule that lets a rootful container's
+# processes signal one another (see configure_apparmor).
+APPARMOR_DIR="/etc/apparmor.d"
+APPARMOR_FS="/sys/kernel/security/apparmor"
+APPARMOR_SIGNAL_RULES="abstractions/base.d/jim-podman"
 
 # Where this script is, when it runs from a file rather than from a pipe (curl ... | bash). Run from an extracted
 # release bundle, it installs from the bundle instead of downloading; run from an installation, its options act
@@ -1142,53 +1149,147 @@ configure_firewall() {
 }
 
 # Ubuntu 24.04 gives crun and podman AppArmor profiles of their own. A container that sets no-new-privileges, as
-# JIM's do, cannot leave them for its own profile, so AppArmor stacks the two, and the stack allows no network
-# at all: JIM could reach neither its database nor its identity provider. A network rule in each profile's
-# local override, the place Ubuntu provides for site changes, restores it; the container keeps its own
-# profile. Rootless containers, and hosts without these profiles or already with the rule, are unaffected.
-apparmor_blocks_network() {
+# JIM's do, cannot leave them for its own profile, so AppArmor stacks the two: a rootful container's processes run
+# under Podman's profile for containers stacked with crun's, such as containers-default-0.57.4-apparmor1//&crun.
+# The stack breaks two things, each fixed in the place AppArmor provides for site additions; the containers keep
+# their own profile. Rootless containers, which Podman confines with no profile, and hosts without these profiles or
+# already with both rules, are unaffected.
+#
+# - The network: the stack allows none, so JIM could reach neither its database nor its identity provider. A network
+#   rule in the local overrides of crun's and podman's profiles restores it.
+# - Signals: Ubuntu's base abstraction, which every profile includes, lets a profile signal itself, and the stacked
+#   label is not itself, so a process cannot signal its own threads or the other processes in its container. The
+#   .NET runtime then aborts, and JIM's services crash and restart over and over (#1953); PostgreSQL cannot signal
+#   its own processes either. A rule in the base abstraction's folder for site additions lets a profile signal itself
+#   stacked with crun's or podman's too, and allows nothing between different profiles.
+apparmor_enabled() {
+    [ "$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)" = "Y" ]
+}
+
+# Whether this host stacks a rootful JIM's containers' profiles with the profiles of Podman's runtimes.
+apparmor_stacks_podman() {
     [ -z "$PODMAN_ACCOUNT" ] || return 1
-    [ "$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)" = "Y" ] || return 1
+    apparmor_enabled || return 1
+    [ -f "${APPARMOR_DIR}/crun" ] || [ -f "${APPARMOR_DIR}/podman" ]
+}
+
+apparmor_blocks_network() {
     local profile
     for profile in crun podman; do
-        if [ -f "/etc/apparmor.d/${profile}" ] \
-            && ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/${profile}" "/etc/apparmor.d/local/${profile}"; then
+        if [ -f "${APPARMOR_DIR}/${profile}" ] \
+            && ! grep -qsE '^[[:space:]]*network[[:space:],]' "${APPARMOR_DIR}/${profile}" "${APPARMOR_DIR}/local/${profile}"; then
             return 0
         fi
     done
     return 1
 }
 
+# A signal rule for the stacked label in any file of the base abstraction's folder counts, so one added by hand does.
+apparmor_blocks_signals() {
+    ! grep -qsE '^[[:space:]]*signal[[:space:]].*peer=@\{profile_name\}//&' "${APPARMOR_DIR}/abstractions/base.d/"*
+}
+
+# Whether a process runs under the loaded AppArmor profile, alone or stacked with another.
+apparmor_profile_in_use() {
+    { cat /proc/[0-9]*/attr/apparmor/current /proc/[0-9]*/attr/current 2>/dev/null || true; } | grep -qF -e "$1"
+}
+
 configure_apparmor() {
-    apparmor_blocks_network || return 0
+    apparmor_stacks_podman || return 0
+    local network="" signals=""
+    if apparmor_blocks_network; then
+        network="true"
+    fi
+    if apparmor_blocks_signals; then
+        signals="true"
+    fi
+    [ -n "${network}${signals}" ] || return 0
 
     local fix="${JIM_SETUP_FIX_APPARMOR:-}"
     if [ -z "$fix" ]; then
         echo
-        info "This host's AppArmor profiles for Podman stop JIM's containers using the network."
-        echo "  A network rule in their local overrides, /etc/apparmor.d/local/crun and podman, fixes it."
-        if prompt_yn "Add the rule?" "y"; then
+        info "This host's AppArmor profiles for Podman stop JIM's containers working:"
+        if [ -n "$network" ]; then
+            echo "  - They block the network. A network rule in their local overrides, ${APPARMOR_DIR}/local/crun and podman, fixes it."
+        fi
+        if [ -n "$signals" ]; then
+            echo "  - They stop a container's processes signalling one another, so JIM's services crash and restart. A rule"
+            echo "    letting each profile signal itself under Podman's, in ${APPARMOR_DIR}/${APPARMOR_SIGNAL_RULES}, fixes it."
+        fi
+        if prompt_yn "Add the rules?" "y"; then
             fix="true"
         else
             fix="false"
         fi
     fi
     if [ "$fix" != "true" ]; then
-        fatal "Without it JIM cannot reach its database or identity provider. Add a line reading network, to /etc/apparmor.d/local/crun and /etc/apparmor.d/local/podman, then reload both with apparmor_parser -r; or install JIM rootless (--rootless). See ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor"
+        local -a missing=()
+        if [ -n "$network" ]; then
+            missing+=("a network rule, without which JIM cannot reach its database or identity provider (a line reading network, in ${APPARMOR_DIR}/local/crun and ${APPARMOR_DIR}/local/podman, reloaded with apparmor_parser -r)")
+        fi
+        if [ -n "$signals" ]; then
+            missing+=("a signal rule, without which JIM's services crash and restart (a line reading signal peer=@{profile_name}//&{crun,podman}, in ${APPARMOR_DIR}/${APPARMOR_SIGNAL_RULES})")
+        fi
+        local joined
+        printf -v joined '%s; and ' "${missing[@]}"
+        fatal "JIM needs ${joined%; and }. Add them as ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor shows, or install JIM rootless (--rootless)."
     fi
 
-    local profile
-    for profile in crun podman; do
-        [ -f "/etc/apparmor.d/${profile}" ] || continue
-        mkdir -p /etc/apparmor.d/local
-        if ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/local/${profile}"; then
-            echo "network," >> "/etc/apparmor.d/local/${profile}" \
-                || fatal "Failed to write /etc/apparmor.d/local/${profile}"
+    if [ -n "$network" ]; then
+        local profile
+        for profile in crun podman; do
+            [ -f "${APPARMOR_DIR}/${profile}" ] || continue
+            mkdir -p "${APPARMOR_DIR}/local"
+            if ! grep -qsE '^[[:space:]]*network[[:space:],]' "${APPARMOR_DIR}/local/${profile}"; then
+                echo "network," >> "${APPARMOR_DIR}/local/${profile}" \
+                    || fatal "Failed to write ${APPARMOR_DIR}/local/${profile}"
+            fi
+            apparmor_parser -r "${APPARMOR_DIR}/${profile}" \
+                || fatal "Failed to reload the AppArmor profile ${APPARMOR_DIR}/${profile}"
+        done
+        success "Allowed JIM's containers to use the network under the AppArmor profiles for Podman (${APPARMOR_DIR}/local/crun and podman)"
+    fi
+    if [ -n "$signals" ]; then
+        allow_stacked_signals
+    fi
+}
+
+# Adds the signal rule, and has Podman load its profile for containers afresh, with the rule.
+allow_stacked_signals() {
+    local file="${APPARMOR_DIR}/${APPARMOR_SIGNAL_RULES}"
+    mkdir -p "$(dirname "$file")" || fatal "Failed to create $(dirname "$file")"
+    cat > "$file" <<EOF || fatal "Failed to write ${file}"
+# Written by JIM's installer; see ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor
+#
+# The base abstraction lets a profile signal itself. A rootful Podman container that sets no-new-privileges runs
+# under its profile stacked with crun's, which is not itself, so its processes could not signal one another or their
+# own threads. This lets a profile signal itself stacked with crun's or podman's too, and allows nothing more.
+  signal peer=@{profile_name}//&{crun,podman},
+EOF
+
+    # Every profile on the host includes the base abstraction, so a rule AppArmor could not compile would stop each of
+    # them loading.
+    local error
+    if ! error=$(printf 'include <tunables/global>\nprofile jim-check {\n  include <abstractions/base>\n}\n' \
+            | apparmor_parser -QK 2>&1 >/dev/null); then
+        rm -f "$file"
+        fatal "AppArmor cannot compile the signal rule in ${file}, so the installer took it back out: ${error}"
+    fi
+
+    # Podman loads its profile for containers, which includes the base abstraction, when a container first needs it,
+    # and keeps it loaded until the server restarts. Unloaded, it is loaded afresh, with the rule, by the next container
+    # to start. Unloading a profile a process runs under would leave that process unconfined, so one in use stays.
+    local name in_use=""
+    while read -r name _; do
+        [[ "$name" == containers-default* ]] || continue
+        if apparmor_profile_in_use "$name" || ! printf '%s' "$name" > "${APPARMOR_FS}/.remove"; then
+            in_use="true"
         fi
-        apparmor_parser -r "/etc/apparmor.d/${profile}" \
-            || fatal "Failed to reload the AppArmor profile /etc/apparmor.d/${profile}"
-    done
-    success "Allowed JIM's containers to use the network under the AppArmor profiles for Podman (/etc/apparmor.d/local/crun and podman)"
+    done < <(cat "${APPARMOR_FS}/profiles" 2>/dev/null)
+    success "Allowed the processes in each of JIM's containers to signal one another under the AppArmor profiles for Podman (${file})"
+    if [ -n "$in_use" ]; then
+        warn "Containers running now use Podman's AppArmor profile without the rule, so it applies to JIM once this server restarts. Restart the server after installing; until then JIM's services may crash and restart."
+    fi
 }
 
 # Starts JIM's pods, under systemd where it can.
