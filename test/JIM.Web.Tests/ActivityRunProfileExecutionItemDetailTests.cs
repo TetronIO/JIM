@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Reflection;
+using JIM.Models.Activities;
+using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Causality;
 using JIM.Web.Pages;
@@ -96,6 +98,58 @@ public class ActivityRunProfileExecutionItemDetailTests
         // ...independently of the object identity, which is unaffected and still resolves.
         Assert.That(context.CsoConnectedSystemId, Is.EqualTo(objectSystem.Id));
         Assert.That(context.CsoConnectedSystemName, Is.EqualTo(objectSystem.Name));
+    }
+
+    [Test]
+    public void ResolveIdentityId_ExportScopeReviewItem_IsTheMetaverseObjectTheItemNames()
+    {
+        // A review item has no Connected System Object and no outcome targeting its Metaverse Object (its outcomes
+        // target the accounts the review provisioned or deprovisioned), so the id it carries is the only way to find
+        // the object it is about (#1971).
+        var metaverseObjectId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = metaverseObjectId,
+            SyncOutcomes =
+            [
+                new ActivityRunProfileExecutionItemSyncOutcome
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                    TargetEntityId = Guid.NewGuid()
+                }
+            ]
+        };
+
+        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(metaverseObjectId));
+    }
+
+    [Test]
+    public void ResolveIdentityId_ItemWithoutAMetaverseObjectId_IsTheObjectItsIdentityOutcomeTargets()
+    {
+        var projectedId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.Projected,
+            SyncOutcomes =
+            [
+                new ActivityRunProfileExecutionItemSyncOutcome
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                    TargetEntityId = projectedId
+                }
+            ]
+        };
+
+        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(projectedId));
+    }
+
+    private static Guid? InvokeResolveIdentityId(ActivityRunProfileExecutionItem item)
+    {
+        var method = typeof(ActivityRunProfileExecutionItemDetail)
+            .GetMethod("ResolveIdentityId", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.That(method, Is.Not.Null, "Expected private static method 'ResolveIdentityId' to exist on the page.");
+        return (Guid?)method!.Invoke(null, [item]);
     }
 
     private static void SetPrivateField(ActivityRunProfileExecutionItemDetail target, string fieldName, object? value)

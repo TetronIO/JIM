@@ -103,7 +103,7 @@ A **Full Import** Activity that ran deletion detection carries how many Connecte
 
 Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; empty on every other kind, including a Full Import that imported zero objects and so skipped deletion detection entirely.
 
-When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
+When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`. An item recorded by an export scope review (`ObjectChangeType` `ExportScopeReview`) has no Connected System Object; its `MetaverseObjectId` names the Metaverse Object it is about.
 
 When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).
 

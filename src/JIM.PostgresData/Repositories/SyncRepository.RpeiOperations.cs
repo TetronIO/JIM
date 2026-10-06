@@ -958,6 +958,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(rpei.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (rpei.MetaverseObjectId.HasValue)
+                await writer.WriteAsync(rpei.MetaverseObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
