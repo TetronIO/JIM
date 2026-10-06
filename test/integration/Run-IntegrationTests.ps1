@@ -4102,7 +4102,14 @@ $dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
 # accompanied by an error aborts immediately rather than polling forever.
 $errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
-$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
+# Error lines a scenario step provokes on purpose are declared by the step (Add-JimExpectedError) into this
+# file; the watcher's jobs and the end-of-run scan both read it, so a declared line inside its step's window
+# neither aborts a Run Profile wait nor fails the run. Created empty so a stale file from a re-run cannot excuse
+# anything.
+$expectedErrorsPath = Join-Path $scriptRoot "results" "expected-errors-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').jsonl"
+Set-Content -Path $expectedErrorsPath -Value '' -NoNewline -Encoding UTF8
+$env:JIM_EXPECTED_ERRORS_PATH = $expectedErrorsPath
+$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
@@ -4206,12 +4213,13 @@ finally {
 
     # Belt-and-braces: one-shot scan in case the live watcher missed shutdown-race lines.
     try {
-        Assert-NoWorkerErrors -Since $step5Start
+        Assert-NoWorkerErrors -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
     }
     catch {
         Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
         $scenarioExitCode = 1
     }
+    Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
 
     # Invariant sweep across EVERY Connected System, not just the ones the scenario asserts on: a defect is
     # happiest in the system nobody is looking at (see Assert-SyncStateInvariants). Always run, whatever the
