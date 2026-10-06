@@ -376,8 +376,8 @@ public class PredefinedSearchQueryDatabaseTests
     }
 
     /// <summary>
-    /// The Synchronisation Rules documentation suggests a Predefined Search to see which Metaverse Objects an export
-    /// rule's criteria cover; that advice holds only while the SQL translator and the scoping evaluator agree. Runs every
+    /// The Predefined Search documentation tells administrators a search with an export rule's criteria lists the
+    /// Metaverse Objects that rule covers; that holds only while the SQL translator and the scoping evaluator agree. Runs every
     /// operator through both over the same persisted objects and requires identical results.
     /// </summary>
     [TestCase(SearchComparisonType.Equals)]

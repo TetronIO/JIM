@@ -90,11 +90,6 @@ For example, an export rule scoped to `Groups` *contains* `Finance` includes a M
 
 Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
 
-!!! note "Upgrading from an earlier version"
-    Earlier versions compared only one value of a multi-valued attribute, whichever happened to load first, so the same object could be in scope on one run and out on the next. After upgrading, an object holding several values for an attribute that a criterion uses can move in or out of scope at its next synchronisation. Only rules with a criterion on a multi-valued attribute are affected; the Attributes tab of the Metaverse schema and a Connected System's Schema tab both show which attributes are multi-valued.
-
-    To check before upgrading, build a [Predefined Search](predefined-searches.md) on the rule's Metaverse Object Type with the export rule's positive criterion: it already tests every value, so it lists the Metaverse Objects the rule will include. After upgrading, and before the next synchronisation, [Sync Preview](sync-preview.md) on an affected object shows exactly what synchronising it would do.
-
 ### Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
