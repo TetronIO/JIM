@@ -575,7 +575,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
         => throw new PreviewWriteAttemptedException(nameof(TryClaimConnectedSystemObjectForJoinAsync));
 
     public Task CreatePendingExportAsync(PendingExport pendingExport)

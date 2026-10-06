@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
 - ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
 - ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
+- ✨ A Metaverse Object's Connections tab now explains each connection: expand a row to see how it joined, the Synchronisation Rule responsible, and whether each relevant rule's scoping still includes it. JIM records the joining rule from now on. (#348)
+- ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
+- ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 
 ### Changed
@@ -45,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
 - 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it. It used to linger unseen and stop the Connected System it compared ever being deleted; systems already affected can be deleted again. (#134)
 - 🐛 REST: a Connected System's deletion preview now fills in `mvosWithOtherConnectorsCount` and `mvosWithGracePeriodCount`, which always read 0. (#134)
+- 🐛 Predefined Search criteria groups nested more than two deep are now applied; the deeper groups were ignored, so such searches returned objects their criteria excluded. The portal now shows and edits groups at any depth. (#1929)
+- 🐛 PowerShell: `-MetaverseAttributeName` on the Predefined Search and scoping criterion cmdlets, and `Get-JIMHistoryCount -ConnectedSystemName`, now find what they name; they always reported it not found. `Get-JIMConnectedSystem` now lists every system, not just 25. (#1967)
 - 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
 - 🐛 Trusting an intermediate certificate authority or a server's own certificate now works for SQL Server, as for LDAPS and SCIM; it used to report "Certificate trusted." and still be refused, and the card kept saying untrusted. (#1914)
 - 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)

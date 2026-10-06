@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystemObject
@@ -127,6 +128,56 @@ public class ConnectedSystemObject
     /// When this Connected System Object was joined to the Metaverse.
     /// </summary>
     public DateTime? DateJoined { get; set; }
+
+    /// <summary>
+    /// How this object was joined (#348); null when it is not joined or the join predates recording.
+    /// </summary>
+    public ConnectedSystemObjectJoinMethod? JoinMethod { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule that projected, provisioned or joined this object (#348). Null when the object is not
+    /// joined, when the join predates recording, when no rule made the join (see
+    /// <see cref="ConnectedSystemObjectJoinMethod.InboundMatching"/>), or when the rule has since been deleted, in which
+    /// case <see cref="JoinSyncRuleName"/> still names it.
+    /// </summary>
+    public int? JoinSyncRuleId { get; set; }
+
+    /// <summary>
+    /// The joining Synchronisation Rule's name when the join was made (#348), kept when the rule is deleted.
+    /// </summary>
+    public string? JoinSyncRuleName { get; set; }
+
+    /// <summary>
+    /// Records how this object was joined and the Synchronisation Rule responsible, if any (#348). Every join site calls
+    /// this, and <see cref="JoinType"/> follows from the method, so the record cannot describe a different join from
+    /// the one made.
+    /// </summary>
+    public void RecordJoin(ConnectedSystemObjectJoinMethod method, SyncRule? syncRule, DateTime dateJoined)
+    {
+        JoinType = method switch
+        {
+            ConnectedSystemObjectJoinMethod.Projection => ConnectedSystemObjectJoinType.Projected,
+            ConnectedSystemObjectJoinMethod.Provisioning => ConnectedSystemObjectJoinType.Provisioned,
+            ConnectedSystemObjectJoinMethod.InboundMatching or ConnectedSystemObjectJoinMethod.ExportMatching => ConnectedSystemObjectJoinType.Joined,
+            _ => throw new ArgumentOutOfRangeException(nameof(method), method, "Unknown join method.")
+        };
+        JoinMethod = method;
+        DateJoined = dateJoined;
+        JoinSyncRuleId = syncRule is { Id: > 0 } ? syncRule.Id : null;
+        JoinSyncRuleName = syncRule?.Name;
+    }
+
+    /// <summary>
+    /// Clears the join record when the object stops being joined (#348).
+    /// </summary>
+    public void ClearJoinRecord()
+    {
+        JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        DateJoined = null;
+        JoinMethod = null;
+        JoinSyncRuleId = null;
+        JoinSyncRuleName = null;
+    }
 
     /// <summary>
     /// Set by the Temporal Scope Reconciler when this object's relative-date (inbound) scope membership

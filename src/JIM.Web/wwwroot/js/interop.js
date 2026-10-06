@@ -75,6 +75,27 @@ window.jimInterop = {
         element.focus();
         element.setSelectionRange(start, end);
     },
+    // Focuses a textarea or input and selects all its text, so Ctrl+C copies it at once: the Copy summary fallback,
+    // offered when the browser refuses the clipboard. A dialog's focus trap takes focus as the dialog opens, which can
+    // happen after this call, so focus is reclaimed the first time it moves elsewhere within the dialog; only while
+    // the dialog is opening, so tabbing away afterwards is never undone.
+    selectAllAndKeepFocus: function (element) {
+        if (!element) return;
+        var select = function () {
+            element.focus();
+            element.setSelectionRange(0, element.value.length);
+        };
+        select();
+        var container = element.closest('[role="dialog"], .mud-dialog') || element.parentElement;
+        if (!container) return;
+        var reclaim = function (e) {
+            if (e.target === element) return;
+            container.removeEventListener('focusin', reclaim);
+            select();
+        };
+        container.addEventListener('focusin', reclaim);
+        setTimeout(function () { container.removeEventListener('focusin', reclaim); }, 1000);
+    },
     // Keyboard movement through a picker's list of buttons (the Attribute Flow dialog's Insert attribute menu): the
     // filter box is first, then every enabled item matching itemSelector, in DOM order. ArrowDown and ArrowUp move
     // between them (ArrowUp from the first item returns to the filter), and Enter in the filter chooses the first

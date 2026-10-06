@@ -1,0 +1,204 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities
+@inject IJSRuntime JsRuntime
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Connections tab's Not connected section (#348): every enabled export Synchronisation Rule for the Metaverse
+   Object's type whose Connected System holds no object joined to it, each with why. Collapsed and low-lit by default,
+   below the joined table, because the joined connections are what most visits are about; it stays visible when empty,
+   since "connected everywhere it could be" is an answer too. Each entry's row carries the reason and a one-line hint,
+   and Copy summary; the bullets and the scoping tree are in its expansion only. Every word is the server's. *@
+<div class="jim-not-connected-section">
+    <button type="button" class="jim-not-connected-toggle" aria-expanded="@(Open ? "true" : "false")"
+            @onclick="ToggleOpenAsync" data-testid="jim-not-connected-toggle">
+        <MudIcon Icon="@(Open ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" aria-hidden="true" />
+        <span class="jim-not-connected-title">Not connected</span>
+        <span class="jim-not-connected-count" data-testid="jim-not-connected-count">@Entries.Count.ToString("N0")</span>
+        <span class="jim-not-connected-caption">
+            Connected Systems an enabled export Synchronisation Rule targets where this Metaverse Object has no object
+        </span>
+        @if (EvaluatedAt.HasValue)
+        {
+            var evaluatedAt = EvaluatedAt.Value;
+            <span class="jim-not-connected-caption jim-nowrap">Evaluated now, @evaluatedAt.ToLocalTime().ToFriendlyDate()</span>
+        }
+    </button>
+
+    @if (Open)
+    {
+        @if (Entries.Count == 0)
+        {
+            <div class="jim-not-connected-empty" data-testid="jim-not-connected-empty">
+                Connected to every Connected System an enabled export Synchronisation Rule targets.
+            </div>
+        }
+        else
+        {
+            <MudTable Items="Entries" Dense="@Dense" Elevation="0" Class="jim-not-connected-table">
+                <HeaderContent>
+                    <MudTh Class="jim-expand-column"></MudTh>
+                    <MudTh Class="jim-nowrap">Connected System</MudTh>
+                    <MudTh Class="jim-nowrap">Synchronisation Rule</MudTh>
+                    <MudTh Class="jim-fill-column">Reason</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Class="jim-expand-column">
+                        @{ var expanded = ExpandedRuleIds.Contains(context.SyncRuleId); }
+                        <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       Size="Size.Small" aria-expanded="@(expanded ? "true" : "false")"
+                                       aria-label="@($"Why this Metaverse Object is not in {context.ConnectedSystemName}")"
+                                       OnClick="@(() => ToggleExpanded(context))"
+                                       data-testid="jim-not-connected-expand" data-rule-id="@context.SyncRuleId" />
+                    </MudTd>
+                    <MudTd DataLabel="Connected System" Class="jim-nowrap">
+                        <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Synchronisation Rule" Class="jim-nowrap">
+                        <MudLink Href="@($"/admin/sync-rules/{context.SyncRuleId}")">@context.SyncRuleName</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Reason" Class="jim-fill-column">
+                        <div class="jim-one-line-list">
+                            <MudChip T="string" Variant="Variant.Text" Color="@ReasonColour(context.Reason)" Class="ma-0"
+                                     data-testid="jim-not-connected-reason" data-reason="@context.Reason">@ReasonLabel(context.Reason)</MudChip>
+                            <span class="jim-one-line-list-value mud-text-secondary" title="@context.Hint"
+                                  data-testid="jim-not-connected-hint">@context.Hint</span>
+                        </div>
+                    </MudTd>
+                    <MudTd Class="jim-nowrap">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy"
+                                   OnClick="@(() => CopySummaryAsync(context))"
+                                   aria-label="@($"Copy a summary of why this Metaverse Object is not in {context.ConnectedSystemName}")"
+                                   data-testid="jim-not-connected-copy">Copy summary</MudButton>
+                    </MudTd>
+                </RowTemplate>
+                <ChildRowContent>
+                    @if (ExpandedRuleIds.Contains(context.SyncRuleId))
+                    {
+                        <MudTr>
+                            <td colspan="5" class="jim-connection-detail-cell">
+                                <div class="jim-connection-detail" data-testid="jim-not-connected-detail">
+                                    <section class="jim-connection-detail-section">
+                                        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@context.BulletsTitle</MudText>
+                                        <ScopingBulletList Bullets="context.Bullets" />
+                                    </section>
+                                    @if (ShowsScopingTree(context.Reason))
+                                    {
+                                        <section class="jim-connection-detail-section">
+                                            <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">Scoping</MudText>
+                                            <ScopingExplanationView Explanation="context.Scoping" />
+                                        </section>
+                                    }
+                                </div>
+                            </td>
+                        </MudTr>
+                    }
+                </ChildRowContent>
+            </MudTable>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The not-connected entries, as the server built them, in its order (by Connected System, then rule).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<NotConnectedEntry> Entries { get; set; } = [];
+
+    /// <summary>
+    /// When the entries were evaluated: one instant for the whole tab.
+    /// </summary>
+    [Parameter]
+    public DateTime? EvaluatedAt { get; set; }
+
+    /// <summary>
+    /// Whether the section is open. Collapsed by default; the page holds it, so it belongs to the object on screen.
+    /// </summary>
+    [Parameter]
+    public bool Open { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>
+    /// The entries the reader has expanded, by Synchronisation Rule id (one entry per rule). The page's, so it belongs
+    /// to the object on screen and is gone with it; this section adds and removes ids.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ISet<int> ExpandedRuleIds { get; set; } = new HashSet<int>();
+
+    /// <summary>
+    /// Compact or normal row spacing, following the joined table's toggle above.
+    /// </summary>
+    [Parameter]
+    public bool Dense { get; set; } = true;
+
+    private async Task ToggleOpenAsync()
+    {
+        Open = !Open;
+        await OpenChanged.InvokeAsync(Open);
+    }
+
+    private void ToggleExpanded(NotConnectedEntry entry)
+    {
+        if (!ExpandedRuleIds.Remove(entry.SyncRuleId))
+            ExpandedRuleIds.Add(entry.SyncRuleId);
+    }
+
+    /// <summary>
+    /// The tree explains failing or unevaluable criteria; for the in-scope reasons it would only list criteria the
+    /// object already meets, so the bullets (what happens next, what would connect it) stand alone.
+    /// </summary>
+    private static bool ShowsScopingTree(NotConnectedReason reason) =>
+        reason is NotConnectedReason.NotInScope or NotConnectedReason.RuleMisconfigured;
+
+    /// <summary>
+    /// Copies the server's plain-text summary. Over plain HTTP the browser refuses the clipboard, and a copy can fail
+    /// for other reasons too; either way the summary is offered in a dialog, selected, to copy by hand.
+    /// </summary>
+    private async Task CopySummaryAsync(NotConnectedEntry entry)
+    {
+        bool copied;
+        try
+        {
+            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", entry.Summary);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            copied = false;
+        }
+
+        if (copied)
+        {
+            Snackbar.Add("Summary copied to the clipboard.", Severity.Success);
+            return;
+        }
+
+        var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, entry.Summary } };
+        await DialogService.ShowAsync<CopyTextDialog>("Copy summary", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
+    }
+
+    private static string ReasonLabel(NotConnectedReason reason) => reason switch
+    {
+        NotConnectedReason.NotInScope => "Not in scope",
+        NotConnectedReason.ProvisioningDisabled => "Rule doesn't provision",
+        NotConnectedReason.RuleMisconfigured => "Rule misconfigured",
+        NotConnectedReason.NotYetProvisioned => "Not yet provisioned",
+        _ => reason.ToString()
+    };
+
+    private static Color ReasonColour(NotConnectedReason reason) => reason switch
+    {
+        NotConnectedReason.NotInScope => Color.Warning,
+        NotConnectedReason.RuleMisconfigured => Color.Error,
+        NotConnectedReason.NotYetProvisioned => Color.Info,
+        _ => Color.Default
+    };
+}

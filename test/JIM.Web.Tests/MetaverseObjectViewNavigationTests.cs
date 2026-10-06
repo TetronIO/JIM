@@ -15,6 +15,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -42,6 +43,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
     private static readonly Guid AlphaId = Guid.NewGuid();
     private static readonly Guid BravoId = Guid.NewGuid();
+    private const int NotConnectedRuleId = 92;
 
     private Mock<IMetaverseRepository> _metaverse = null!;
     private Mock<IConnectedSystemRepository> _connectedSystems = null!;
@@ -81,6 +83,29 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
             .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(It.IsAny<Guid>()))
             .ReturnsAsync([]);
 
+        // One enabled export rule, with no criteria and provisioning off, on a Connected System neither person is
+        // joined to: each person's Connections tab lists it under Not connected, as the same entry.
+        var learningPlatform = new ConnectedSystem { Id = 90, Name = "Learning Platform", Status = ConnectedSystemStatus.Active };
+        _connectedSystems
+            .Setup(r => r.GetSyncRulesForScopingExplanationAsync(It.IsAny<int>()))
+            .ReturnsAsync(() =>
+            [
+                new SyncRule
+                {
+                    Id = NotConnectedRuleId,
+                    Name = "Learning Platform Users Export",
+                    Direction = SyncRuleDirection.Export,
+                    Enabled = true,
+                    ConnectedSystemId = learningPlatform.Id,
+                    ConnectedSystem = learningPlatform,
+                    ConnectedSystemObjectTypeId = 91,
+                    ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 91, Name = "user" }
+                }
+            ]);
+        _connectedSystems
+            .Setup(r => r.GetJoinHistoryAsync(It.IsAny<List<Guid>>(), It.IsAny<IReadOnlyDictionary<Guid, Guid>>()))
+            .ReturnsAsync([]);
+
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object, sync.Object));
 
         var authorisation = AddAuthorization();
@@ -96,6 +121,9 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
     private void SetupObject(Guid id, int connectorCount, string? createdBy)
     {
+        _metaverse
+            .Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "Person", TypePluralName = "People" });
         _metaverse
             .Setup(r => r.GetMetaverseObjectDetailAsync(id, MvoAttributeLoadStrategy.CappedMva))
             .ReturnsAsync(new MvoDetailResult
@@ -246,6 +274,44 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
                 Assert.That(ConnectionsBadge(page), Is.EqualTo("1"), "the badge counts the object on screen");
             }
         });
+    }
+
+    /// <summary>
+    /// What the reader opens on the Connections tab is about the person on screen: the same Not connected entry for
+    /// the next person (the same rule, so the same key) starts closed, as does the section.
+    /// </summary>
+    [Test]
+    public void ConnectionsTab_NavigatingToAnotherObject_DoesNotCarryOverWhatTheReaderOpened()
+    {
+        SetupConnections(AlphaId, "Alpha HR");
+        SetupConnections(BravoId, "Bravo HR");
+        var page = RenderObject(AlphaId, "connections");
+        page.WaitForElement("[data-testid='jim-not-connected-toggle']").Click();
+        page.WaitForElement("[data-testid='jim-not-connected-expand']").Click();
+        page.WaitForElement("[data-testid='jim-not-connected-detail']");
+
+        ShowObject(page, BravoId, "connections");
+
+        page.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ConnectedSystemNames(page), Is.EqualTo(new[] { "Bravo HR" }));
+                Assert.That(page.Find("[data-testid='jim-not-connected-toggle']").GetAttribute("aria-expanded"), Is.EqualTo("false"));
+                Assert.That(page.FindAll("[data-testid='jim-not-connected-detail']"), Is.Empty);
+            }
+        });
+    }
+
+    [Test]
+    public void ConnectionsTab_Opened_ListsTheNotConnectedEntriesFromTheServer()
+    {
+        SetupConnections(AlphaId, "Alpha HR");
+        var page = RenderObject(AlphaId, "connections");
+
+        page.WaitForAssertion(() => Assert.That(
+            page.FindComponent<MetaverseObjectNotConnectedSection>().Instance.Entries.Select(e => e.SyncRuleId),
+            Is.EqualTo(new[] { NotConnectedRuleId })));
     }
 
     [Test]

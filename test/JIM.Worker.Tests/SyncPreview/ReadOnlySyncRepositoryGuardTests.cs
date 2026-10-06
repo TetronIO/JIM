@@ -52,7 +52,7 @@ public class ReadOnlySyncRepositoryGuardTests
     {
         // The export matching claim is the one write hiding inside an otherwise read-shaped flow; a preview
         // that reached it would join a live CSO to an MVO as a side effect of looking.
-        Assert.That(() => _guard.TryClaimConnectedSystemObjectForJoinAsync(Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow),
+        Assert.That(() => _guard.TryClaimConnectedSystemObjectForJoinAsync(Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow, 1, "Rule"),
             Throws.InstanceOf<PreviewWriteAttemptedException>());
     }
 
