@@ -351,3 +351,66 @@ public enum ContainerScopeStatementKind
     /// </summary>
     Exclude = 1
 }
+
+/// <summary>
+/// Why a Metaverse Object has no Connected System Object in a Connected System an enabled export Synchronisation
+/// Rule targets (#348). One reason per rule; provisioning already under way and Object Type conflicts always involve
+/// a joined object, so they are reported on the joined connection instead.
+/// </summary>
+public enum NotConnectedReason
+{
+    /// <summary>The object fails the rule's scoping criteria.</summary>
+    NotInScope = 0,
+
+    /// <summary>The object is in scope, but the rule does not provision new objects and none exists to join.</summary>
+    ProvisioningDisabled = 1,
+
+    /// <summary>The rule's scoping cannot be evaluated: synchronisation would reach an invalid criterion.</summary>
+    RuleMisconfigured = 2,
+
+    /// <summary>
+    /// The object is in scope and the rule provisions, but nothing has been staged yet: either the object is marked for
+    /// an export scope review, which the next synchronisation performs, or it waits for its attribute values or the
+    /// rule's scope to change (#1925).
+    /// </summary>
+    NotYetProvisioned = 3
+}
+
+/// <summary>
+/// How a Connected System Object came to be joined to its Metaverse Object (#348), recorded when the join is made.
+/// </summary>
+public enum ConnectedSystemObjectJoinMethod
+{
+    /// <summary>The object was projected: a new Metaverse Object was created from it.</summary>
+    Projection = 1,
+
+    /// <summary>The object was created by provisioning from the Metaverse Object.</summary>
+    Provisioning = 2,
+
+    /// <summary>
+    /// During inbound synchronisation, Object Matching Rules found the existing Metaverse Object: an import
+    /// Synchronisation Rule's, or, where the Connected System has no import rule for the object type, the Connected
+    /// System's own (then no rule is recorded).
+    /// </summary>
+    InboundMatching = 3,
+
+    /// <summary>
+    /// An export Synchronisation Rule about to provision found the object already present and joined it instead.
+    /// </summary>
+    ExportMatching = 4
+}
+
+/// <summary>
+/// Where the Synchronisation Rule named on a Connected System Object's join record came from (#348).
+/// </summary>
+public enum JoinRecordSource
+{
+    /// <summary>Recorded on the Connected System Object when it was joined; the rule may be none, when no rule made the join.</summary>
+    Recorded = 0,
+
+    /// <summary>Recovered from Activity history, for an object joined before joins were recorded.</summary>
+    Derived = 1,
+
+    /// <summary>Neither recorded nor recoverable: the join predates recording and its history has gone.</summary>
+    NotRecorded = 2
+}

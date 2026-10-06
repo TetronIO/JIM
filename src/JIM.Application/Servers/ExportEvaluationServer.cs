@@ -695,8 +695,7 @@ public class ExportEvaluationServer
                 // Break the join
                 cso.MetaverseObject = null;
                 cso.MetaverseObjectId = null;
-                cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                cso.DateJoined = null;
+                cso.ClearJoinRecord();
 
                 // Remove from MVO's collection
                 mvo.ConnectedSystemObjects.Remove(cso);
@@ -2439,7 +2438,7 @@ public class ExportEvaluationServer
                     // provisioning below by clearing matchedCso.
                     var dateJoined = DateTime.UtcNow;
                     var matchedCsoId = matchedCso.Id;
-                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined);
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined, exportRule.Id, exportRule.Name);
 
                     // Whether the claim won or lost, this Connected System Object must not be offered to
                     // any other Metaverse Object evaluated later on this page: a win means it is now
@@ -2459,8 +2458,7 @@ public class ExportEvaluationServer
                         // stale values back over the claimed row.
                         matchedCso.MetaverseObjectId = mvo.Id;
                         matchedCso.Status = ConnectedSystemObjectStatus.Normal;
-                        matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
-                        matchedCso.DateJoined = dateJoined;
+                        matchedCso.RecordJoin(ConnectedSystemObjectJoinMethod.ExportMatching, exportRule, dateJoined);
 
                         Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId}: joined instead of provisioning",
                             matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
@@ -2831,13 +2829,12 @@ public class ExportEvaluationServer
             ConnectedSystemId = exportRule.ConnectedSystemId,
             TypeId = exportRule.ConnectedSystemObjectType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
-            JoinType = ConnectedSystemObjectJoinType.Provisioned,
             MetaverseObjectId = mvo.Id,
-            DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
             ExternalIdAttributeId = externalIdAttribute?.Id ?? 0,
             SecondaryExternalIdAttributeId = secondaryExternalIdAttribute?.Id
         };
+        cso.RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, exportRule, cso.Created);
 
         // Note: We don't add the CSO to the MVO's collection here because:
         // 1. The MVO might be loaded with tracking, which could interfere with the save
