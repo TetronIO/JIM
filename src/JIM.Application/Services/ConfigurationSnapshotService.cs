@@ -103,10 +103,35 @@ public class ConfigurationSnapshotService
     // -- Synchronisation Rule ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Builds a scoped snapshot of a Synchronisation Rule. <paramref name="hashKey"/> is the per-instance keyed-hash key,
-    /// used for the one secret a rule can carry: the static initial password (#1273).
+    /// Builds a scoped snapshot of a Synchronisation Rule as <see cref="CreateSnapshot(SyncRule, byte[])"/> does, naming
+    /// each Connected System a generated Attribute Flow excludes from its availability checks (#1947). An exclusion
+    /// carries only the Connected System's id: neither the rule an edit surface saves nor <c>GetSyncRuleAsync</c> loads
+    /// the navigation, and widening that shared include graph would cost every Synchronisation Rule load. The names are
+    /// read here instead, in one lookup, and only for a rule excluding a system whose name it does not already hold. A
+    /// Connected System that no longer exists keeps its id. Every change capture path uses this overload.
     /// </summary>
-    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey)
+    public async Task<ConfigurationSnapshot> CreateSnapshotAsync(SyncRule rule, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var needsNames = rule.AttributeFlowRules
+            .Where(m => m.Generation != null)
+            .SelectMany(m => m.Generation!.Exclusions)
+            .Any(e => e.ConnectedSystem == null);
+        var connectedSystemNames = needsNames ? await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync() : null;
+        return CreateSnapshot(rule, hashKey, connectedSystemNames);
+    }
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Synchronisation Rule. <paramref name="hashKey"/> is the per-instance keyed-hash key,
+    /// used for the one secret a rule can carry: the static initial password (#1273). An excluded Connected System is
+    /// named only where the exclusion's navigation is loaded; change capture uses
+    /// <see cref="CreateSnapshotAsync(SyncRule, byte[])"/>, which looks the names up. The preflight can use this one: it
+    /// diffs ids, and reports an exclusion by its kind rather than its name.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey) => CreateSnapshot(rule, hashKey, connectedSystemNames: null);
+
+    private ConfigurationSnapshot CreateSnapshot(SyncRule rule, byte[] hashKey, IReadOnlyDictionary<int, string>? connectedSystemNames)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
@@ -127,7 +152,7 @@ public class ConfigurationSnapshotService
         AddReference(children, "connectedSystemObjectTypeId", rule.ConnectedSystemObjectTypeId, rule.ConnectedSystemObjectType?.Name, "Connected System Object Type");
         AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
         children.Add(BuildInitialPassword(rule.InitialPassword, hashKey));
-        children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules));
+        children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules, connectedSystemNames));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
 
@@ -193,7 +218,7 @@ public class ConfigurationSnapshotService
         return ConfigurationSnapshotNode.ObjectNode("initialPassword", children, "Initial Password", initialPassword.Id);
     }
 
-    private ConfigurationSnapshotNode BuildAttributeFlowRules(List<SyncRuleMapping> mappings)
+    private ConfigurationSnapshotNode BuildAttributeFlowRules(List<SyncRuleMapping> mappings, IReadOnlyDictionary<int, string>? connectedSystemNames)
     {
         var items = new List<ConfigurationSnapshotNode>();
         foreach (var mapping in mappings.OrderBy(m => m.Id))
@@ -221,7 +246,7 @@ public class ConfigurationSnapshotService
             Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
 
             if (mapping.Generation != null)
-                children.Add(BuildGeneration(mapping.Generation));
+                children.Add(BuildGeneration(mapping.Generation, connectedSystemNames));
 
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
@@ -240,7 +265,7 @@ public class ConfigurationSnapshotService
     /// governs, not appear out of nowhere because they were never captured.
     /// </para>
     /// </summary>
-    private ConfigurationSnapshotNode BuildGeneration(SyncRuleMappingGeneration generation)
+    private ConfigurationSnapshotNode BuildGeneration(SyncRuleMappingGeneration generation, IReadOnlyDictionary<int, string>? connectedSystemNames)
     {
         var children = new List<ConfigurationSnapshotNode>();
         AddEnum(children, "tokenKind", generation.TokenKind, "Uniqueness token");
@@ -256,17 +281,18 @@ public class ConfigurationSnapshotService
         Add(children, "attemptLimit", Render(generation.AttemptLimit), "Attempt limit");
         Add(children, "neverReuse", Render(generation.NeverReuse), "Never reuse a value");
         Add(children, "collisionRemediation", Render(generation.CollisionRemediation), "Collision Remediation");
-        children.Add(BuildGenerationExclusions(generation.Exclusions));
+        children.Add(BuildGenerationExclusions(generation.Exclusions, connectedSystemNames));
         return ConfigurationSnapshotNode.ObjectNode("generation", children, "Generated value", generation.Id);
     }
 
-    private ConfigurationSnapshotNode BuildGenerationExclusions(List<SyncRuleMappingGenerationExclusion> exclusions)
+    private ConfigurationSnapshotNode BuildGenerationExclusions(List<SyncRuleMappingGenerationExclusion> exclusions, IReadOnlyDictionary<int, string>? connectedSystemNames)
     {
         var items = new List<ConfigurationSnapshotNode>();
         foreach (var exclusion in exclusions.OrderBy(e => e.ConnectedSystemId))
         {
             var children = new List<ConfigurationSnapshotNode>();
-            AddReference(children, "connectedSystemId", exclusion.ConnectedSystemId, exclusion.ConnectedSystem?.Name, "Connected System");
+            var name = exclusion.ConnectedSystem?.Name ?? connectedSystemNames?.GetValueOrDefault(exclusion.ConnectedSystemId);
+            AddReference(children, "connectedSystemId", exclusion.ConnectedSystemId, name, "Connected System");
             // Keyed by the Connected System id: the composite key (SyncRuleMappingGenerationId, ConnectedSystemId)
             // has a constant first element within this collection, so the Connected System id is what distinguishes
             // an item and lets the diff engine match it across versions.

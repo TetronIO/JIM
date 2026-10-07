@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -232,6 +233,57 @@ public class GeneratedValueExclusionPersistenceDatabaseTests
         }
 
         Assert.That(await ReadExclusionsAsync(ids), Is.EqualTo(new[] { ids.PayrollSystemId }));
+    }
+
+    // An exclusion holds only its Connected System's id, so the change history named the system by its id until capture
+    // looked the name up (#1947). Covers every capture path a rule takes: the single-mapping settings update, the
+    // whole-rule save, and the delete's tombstone.
+    [Test]
+    public async Task ChangeHistory_ExclusionRecordedThroughEachCapturePath_NamesTheExcludedConnectedSystemAsync()
+    {
+        var ids = await SeedAsync();
+        var initiator = await LoadInitiatorAsync(ids);
+
+        await UpdateExclusionsAsync(ids, initiator, [ids.AdSystemId]);
+        Assert.That(ExcludedConnectedSystemNames(await ReadLatestSnapshotAsync(ids)), Is.EqualTo(new[] { "Active Directory" }),
+            "the single-mapping settings update");
+
+        await using (var ctx = NewContext())
+        {
+            var rule = await LoadRuleTrackedAsync(ctx, ids.ImportRuleId);
+            rule.AttributeFlowRules.Single(m => m.Id == ids.MappingId).Generation!.Exclusions
+                .Add(new SyncRuleMappingGenerationExclusion { ConnectedSystemId = ids.PayrollSystemId });
+            Assert.That(await CreateApplication(ctx).ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator), Is.True);
+        }
+        Assert.That(ExcludedConnectedSystemNames(await ReadLatestSnapshotAsync(ids)), Is.EqualTo(new[] { "Active Directory", "Payroll" }),
+            "the whole-rule save");
+
+        await using (var ctx = NewContext())
+        {
+            var application = CreateApplication(ctx);
+            var rule = await application.ConnectedSystems.GetSyncRuleAsync(ids.ImportRuleId);
+            await application.ConnectedSystems.DeleteSyncRuleAsync(rule!, initiator);
+        }
+        await using (var ctx = NewContext())
+        {
+            var tombstone = await ctx.Activities
+                .Where(a => a.TargetType == ActivityTargetType.SynchronisationRule
+                            && a.TargetOperationType == ActivityTargetOperationType.Delete
+                            && a.ConfigurationChangeSnapshot != null)
+                .Select(a => a.ConfigurationChangeSnapshot)
+                .SingleAsync();
+            Assert.That(ExcludedConnectedSystemNames(tombstone), Is.EqualTo(new[] { "Active Directory", "Payroll" }), "the delete");
+        }
+    }
+
+    private static string?[] ExcludedConnectedSystemNames(string? snapshotJson)
+    {
+        var snapshot = ConfigurationSnapshotService.Deserialise(snapshotJson)!;
+        var flow = snapshot.Root.Children!.Single(c => c.Key == "attributeFlowRules").Children!.Single();
+        var generation = flow.Children!.Single(c => c.Key == "generation");
+        return generation.Children!.Single(c => c.Key == "exclusions").Children!
+            .Select(exclusion => exclusion.Children!.Single(c => c.Key == "connectedSystemId").DisplayValue)
+            .ToArray();
     }
 
     [Test]
