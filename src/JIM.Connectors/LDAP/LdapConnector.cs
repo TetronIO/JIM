@@ -606,8 +606,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
         LdapConnection ConnectTo(string server) => CreateConnection(
-            new LdapDirectoryIdentifier(server, directoryServerPortValue),
-            credential, authTypeEnumValue, connectionTimeout, useSsl, logger);
+            server, directoryServerPortValue, credential, authTypeEnumValue, connectionTimeout, useSsl, logger);
 
         return new ConnectionPlan(
             ConnectTo,
@@ -714,14 +713,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// in OpenLDAP/Generic directories where each paged search needs its own connection.
     /// </summary>
     private LdapConnection CreateConnection(
-        LdapDirectoryIdentifier identifier,
+        string server,
+        int port,
         NetworkCredential credential,
         AuthType authType,
         TimeSpan timeout,
         bool useSsl,
         ILogger logger)
     {
-        var connection = new LdapConnection(identifier, credential, authType);
+        // The platform LDAP client on Linux does not bound its TCP connect by the timeout, so a server behind a
+        // firewall that drops packets would hold this bind for the operating system's SYN retries, over two minutes,
+        // whatever the Connection Timeout says (#2003). Every connection is built here, so asking first makes the
+        // setting mean what it says for imports, exports, discovery, settings validation and domain controller pinning.
+        LdapConnectorUtilities.EnsureAcceptsConnections(server, port, timeout, logger);
+
+        var connection = new LdapConnection(new LdapDirectoryIdentifier(server, port), credential, authType);
         connection.SessionOptions.ProtocolVersion = 3;
         connection.Timeout = timeout;
 

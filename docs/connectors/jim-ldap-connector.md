@@ -190,7 +190,7 @@ See [PowerShell: Connected Systems](../powershell/connected-systems.md) for the 
 | Preferred Domain Controller | Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. Use the **Discover...** action beside the field to list the forest's domain controllers rather than typing one blind; see [Discovering Domain Controllers](#discovering-domain-controllers) below. When left blank, JIM automatically discovers and pins the domain controller it reaches via Host; see [Domain Controller Discovery and Pinning](#domain-controller-discovery-and-pinning) below. For LDAPS, use a name present in the domain controller's certificate. | *(blank; auto-discover)* | `dc01.corp.local` |
 | Port | Port for the LDAP connection. Use 389 for LDAP or 636 for LDAPS. | `389` | `636` |
 | Use Secure Connection (LDAPS)? | Enable LDAPS (SSL/TLS) for encrypted communication. Certificate validation is always applied; see [Certificate validation](#certificate-validation). | `false` | `true` |
-| Connection Timeout | Time in seconds to wait before giving up on a connection attempt. | `10` | `30` |
+| Connection Timeout | Time in seconds to wait before giving up on a connection attempt, including a server that does not answer at all (for example, behind a firewall that drops traffic). Where the host name resolves to several addresses, each address gets this long. | `10` | `30` |
 
 ### Discovering Domain Controllers
 
@@ -654,6 +654,7 @@ If JIM cannot connect to the directory server:
 - Verify the hostname or IP address is correct and reachable from the JIM container (`ping` or `nslookup` from within the container).
 - Check that the port is correct (389 for LDAP, 636 for LDAPS) and not blocked by a firewall.
 - Increase the Connection Timeout if the directory server is slow to respond.
+- If connections succeed but each takes about two minutes, the host name probably resolves to several addresses and one of them does not answer, often a domain controller in another site behind a firewall. JIM logs a warning naming that address. Point **Host** (or, for Active Directory, **Preferred Domain Controller**) at a server JIM can reach directly.
 
 !!! tip "LDAPS failures show you the certificate"
     The LDAP client library reports a rejected certificate the same way it reports an unreachable server, so its own message ("The LDAP server is unavailable") tells you nothing. JIM therefore looks at the certificate itself when an LDAPS connection fails, and shows it to you: its subject, the names it was issued for, its issuer, its validity dates and its thumbprint, alongside which check it failed and what to do about it.
