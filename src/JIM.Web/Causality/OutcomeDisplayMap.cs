@@ -30,7 +30,8 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated] =
             new OutcomeDisplay("Connected System Object updated", CausalityTone.Info, Icons.Material.Filled.Edit),
         [ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted] =
-            new OutcomeDisplay("Connected System Object deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            new OutcomeDisplay("Connected System Object deleted", CausalityTone.Error, Icons.Material.Filled.Delete,
+                "have their Connected System Object deleted"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected] =
             new OutcomeDisplay("Deletion detected", CausalityTone.Warning, Icons.Material.Filled.RemoveCircle),
 
@@ -43,12 +44,15 @@ public static class OutcomeDisplayMap
         // Sync outcomes; inbound
         [ActivityRunProfileExecutionItemSyncOutcomeType.Projected] =
             new OutcomeDisplay("Projected to the Metaverse", CausalityTone.Primary, Icons.Material.Filled.AirlineStops,
+                "project a new Metaverse Object",
                 SpeculativeLabel: "A Metaverse Object would be projected"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.Joined] =
             new OutcomeDisplay("Joined to Metaverse Object", CausalityTone.Secondary, Icons.Material.Filled.Link,
+                "join an existing Metaverse Object",
                 SpeculativeLabel: "Would join an existing Metaverse Object"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow] =
             new OutcomeDisplay("Attributes flowed", CausalityTone.Secondary, Icons.Material.Filled.SyncAlt,
+                "have a value changed",
                 SpeculativeLabel: "Attributes would flow"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected] =
             new OutcomeDisplay("Disconnected", CausalityTone.Warning, Icons.Material.Filled.LinkOff),
@@ -60,6 +64,7 @@ public static class OutcomeDisplayMap
         // the two surfaces agree; nothing is destroyed or recalled, so it is not a Warning.
         [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] =
             new OutcomeDisplay("Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
+                "leave import scope and keep their Metaverse Object join",
                 SpeculativeLabel: "Would leave scope and keep its Metaverse Object join"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] =
             new OutcomeDisplay("Metaverse Object deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove,
@@ -74,11 +79,13 @@ public static class OutcomeDisplayMap
             new OutcomeDisplay("Metaverse Object deletion cancelled", CausalityTone.Success, Icons.Material.Filled.HourglassDisabled),
         [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] =
             new OutcomeDisplay("Drift corrected", CausalityTone.Warning, Icons.Material.Filled.CompareArrows,
+                "be corrected where they were changed outside JIM",
                 SpeculativeLabel: "Drift would be corrected"),
 
         // Sync outcomes; outbound (Pending Export creation during sync)
         [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] =
             new OutcomeDisplay("Provisioned", CausalityTone.Primary, Icons.Material.Filled.SwitchAccessShortcut,
+                "be provisioned to a target Connected System",
                 SpeculativeLabel: "A Connected System Object would be provisioned"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated] =
             new OutcomeDisplay("Export queued", CausalityTone.Info, Icons.Material.Filled.Schedule,
@@ -96,6 +103,7 @@ public static class OutcomeDisplayMap
         // distinct from AutoDelete's "this will be removed".
         [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] =
             new OutcomeDisplay("Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend,
+                "have their provisioning to a target Connected System cancelled",
                 SpeculativeLabel: "Provisioning to its target Connected System would be cancelled"),
         // The Disconnect sibling of DeprovisionQueued (#1966): the object in the target system is left in place but
         // no longer managed, so Warning rather than DeprovisionQueued's Error, and the same link-off icon as the
@@ -249,6 +257,16 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] =
             new OutcomeDisplay("Updated in the target system", CausalityTone.Info, Icons.Material.Filled.CloudUpload,
                 "be updated in their target Connected System"),
+
+        // The Full Synchronisation preview (#1530). An object left as it is is the reassurance, not a change: the verdict
+        // does not state it (the panel says how many in a line of its own) and it sorts after everything that matters.
+        // A failure no more specific transition names is an Error, as WouldFailAttributeFlow is.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] =
+            new OutcomeDisplay("No change", CausalityTone.Success, Icons.Material.Filled.CheckCircleOutline,
+                "not change", StatedInVerdict: false),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] =
+            new OutcomeDisplay("Fails with an error", CausalityTone.Error, Icons.Material.Filled.ErrorOutline,
+                "fail with an error"),
 
         // Unique Value Generation (#242). Primary on Assigned: a positive act JIM took, matching the tone
         // Projected and Provisioned use for their own "JIM did this" outcomes. Fingerprint reads as

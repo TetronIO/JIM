@@ -126,7 +126,12 @@ public class SyncOutcomeTypeOrdinalTests
 
         // A scope exit under a Disconnect Deprovisioning Action broke the join to the object in the target system and
         // left it in place (#1966): the Disconnect sibling of DeprovisionQueued (25), with nothing exported.
-        [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = 55
+        [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = 55,
+
+        // Full Synchronisation preview (#1530): an object the run would leave as it is, and one it would fail with an
+        // error no more specific transition names.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = 56,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = 57
     };
 
     [Test]

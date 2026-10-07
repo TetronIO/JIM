@@ -41,6 +41,14 @@ public class SyncPreviewResult
     public OutboundPreviewResult OutboundDecisions { get; set; } = new();
 
     /// <summary>
+    /// The drift corrections the synchronisation would make to this object, one per drifted attribute (#1530): where an
+    /// export rule to the object's own Connected System enforces state and the object's value has moved away from what
+    /// the Metaverse Object says it should be. Their changes are also folded into <see cref="Outbound"/>'s update for the
+    /// object, as the run merges them; these say which of its attributes are corrections, and from what.
+    /// </summary>
+    public List<SyncPreviewDriftCorrection> DriftCorrections { get; set; } = [];
+
+    /// <summary>
     /// Conditions that would prevent the real sync (PRD requirement 16); distinct from
     /// <see cref="Warnings"/> so a consumer renders blockers and advisories differently without string
     /// parsing.

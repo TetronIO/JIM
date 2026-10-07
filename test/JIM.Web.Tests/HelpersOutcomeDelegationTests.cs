@@ -224,7 +224,9 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = Icons.Material.Filled.ChangeCircle,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = Icons.Material.Filled.CompareArrows,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = Icons.Material.Filled.CloudUpload,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = Icons.Material.Filled.LinkOff
+            [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = Icons.Material.Filled.LinkOff,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = Icons.Material.Filled.CheckCircleOutline,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = Icons.Material.Filled.ErrorOutline
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

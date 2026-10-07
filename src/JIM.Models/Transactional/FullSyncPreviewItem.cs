@@ -31,6 +31,11 @@ public class FullSyncPreviewItem
     public Guid? MetaverseObjectId { get; init; }
 
     /// <summary>
+    /// The Metaverse Object Type of an export scope review item's object.
+    /// </summary>
+    public int? MetaverseObjectTypeId { get; init; }
+
+    /// <summary>
     /// The object's name as an administrator would recognise it, for a row that names it.
     /// </summary>
     public string? DisplayName { get; init; }

@@ -400,6 +400,12 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// How many Connected System Objects a Full Synchronisation preview of the system would walk (#1530), read where the
+    /// walk reads them.
+    /// </summary>
+    internal Task<int> GetFullSyncPopulationAsync(int connectedSystemId) => SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystemId);
+
+    /// <summary>
     /// Streams what a Full Synchronisation of one Connected System would do (#1530), one object at a time and in the
     /// order the synchronisation would meet them, so a caller can evaluate the whole population without holding it:
     /// the population first, then every Connected System Object (evaluated, or skipped as the run would skip it), then
@@ -602,6 +608,7 @@ public class SyncPreviewServer
                 {
                     Kind = FullSyncPreviewItemKind.ExportScopeReview,
                     MetaverseObjectId = mvo.Id,
+                    MetaverseObjectTypeId = mvo.Type?.Id,
                     DisplayName = mvo.NameOrId,
                     ObjectTypeName = mvo.Type?.Name,
                     Preview = reviewed
@@ -764,6 +771,7 @@ public class SyncPreviewServer
                 if (joinedMvo != null)
                 {
                     inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
+                    DescribeMetaverseObject(inbound, joinedMvo);
                     AddDriftCorrectionRoot(result, ProposeDriftCorrections(result, cso, CloneForPreview(joinedMvo), context));
                 }
             }
@@ -824,6 +832,7 @@ public class SyncPreviewServer
             }
             workingMvo = CloneForPreview(joinedMvo);
             flaggedForScopeReview = joinedMvo.ScopeReviewPending;
+            DescribeMetaverseObject(inbound, joinedMvo);
         }
         else
         {
@@ -836,6 +845,7 @@ public class SyncPreviewServer
                 inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
                 workingMvo = CloneForPreview(matchedMvo);
                 flaggedForScopeReview = matchedMvo.ScopeReviewPending;
+                DescribeMetaverseObject(inbound, matchedMvo);
             }
             else
             {
@@ -989,6 +999,10 @@ public class SyncPreviewServer
 
         _syncEngine.ApplyPendingAttributeChanges(workingMvo);
 
+        // A projection is named as Attribute Flow names it; there is nothing for it to be called before.
+        if (inbound.WouldProject)
+            DescribeMetaverseObject(inbound, workingMvo);
+
         // The outbound chain over the prospective Metaverse Object state, against the context's shared cache. As the
         // run would: exports are evaluated only when Attribute Flow changed the object (the run queues no export
         // evaluation otherwise), or for scope alone when the object is flagged for export scope review, which the run
@@ -1132,6 +1146,23 @@ public class SyncPreviewServer
             if (change.Attribute == null && attributesById.TryGetValue(change.AttributeId, out var attribute))
                 change.Attribute = attribute;
         }
+
+        // Which of the object's attributes are corrections, and from what, so a preview can state each one (#1530): the
+        // value the object holds now, and what the correction writes.
+        var correctiveChanges = drift.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges).ToList();
+        result.DriftCorrections.AddRange(drift.DriftedAttributes.Select(drifted => new SyncPreviewDriftCorrection
+        {
+            AttributeId = drifted.Attribute.Id,
+            AttributeName = drifted.Attribute.Name,
+            CurrentValue = PreviewValueRenderer.Join(cso.AttributeValues
+                .Where(value => value.AttributeId == drifted.Attribute.Id)
+                .Select(value => value.ToStringNoName())),
+            CorrectedValue = PreviewValueRenderer.Join(correctiveChanges
+                .Where(change => change.AttributeId == drifted.Attribute.Id)
+                .Select(PreviewValueRenderer.Render)),
+            SyncRuleId = drifted.ExportRule.Id,
+            SyncRuleName = drifted.ExportRule.Name
+        }));
 
         foreach (var correction in drift.CorrectiveExports)
         {
@@ -1497,6 +1528,8 @@ public class SyncPreviewServer
         // pending-change lists, and none of that may touch the shared instance.
         var workingMvo = CloneForPreview(joinedMvo);
         var mvoDisplayName = ObjectNaming.FirstPresent(joinedMvo.Name);
+        if (result.Inbound != null)
+            DescribeMetaverseObject(result.Inbound, joinedMvo);
 
         // The same first-applicable-scoping-rule attribution the real run's DisconnectedOutOfScope root
         // carries (#1085): the CSO fell out of scope of every rule with Scoping Criteria, so when several
@@ -1600,6 +1633,7 @@ public class SyncPreviewServer
                 // object's item, so they are proposed without one.
                 var changedAttributes = workingMvo.PendingAttributeValueAdditions.Concat(workingMvo.PendingAttributeValueRemovals).ToList();
                 var removedAttributes = workingMvo.PendingAttributeValueRemovals.ToHashSet();
+                RecordMetaverseChanges(result, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals);
                 _syncEngine.ApplyPendingAttributeChanges(workingMvo);
                 if (refreshCacheForWorkingMvo)
                     await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
@@ -1724,6 +1758,8 @@ public class SyncPreviewServer
         MetaverseObject? joinedMvo = null;
         if (cso.MetaverseObjectId is { } joinedMvoId)
             joinedMvo = (await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([joinedMvoId])).SingleOrDefault();
+        if (joinedMvo != null)
+            DescribeMetaverseObject(result.Inbound, joinedMvo);
         var workingCso = ObsoletionPreviewClone.Of(cso, joinedMvo, []);
 
         var teardown = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
@@ -1743,6 +1779,9 @@ public class SyncPreviewServer
                 Task.FromResult(DecideDeletionForPreview(mvo, disconnectingSystemId, remainingConnectedSystemIds, context)),
             recordPreRecallAttributeSnapshot: _ => { },
             resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
+
+        if (teardown.MvoAttributeChange is { } recall)
+            RecordMetaverseChanges(result, recall.Additions, recall.Removals);
 
         result.OutcomeTree.AddRange(teardown.ExecutionItems
             .SelectMany(item => item.SyncOutcomes)
@@ -1795,18 +1834,9 @@ public class SyncPreviewServer
     /// <summary>
     /// The first node of <paramref name="outcomeType"/> in a tree, depth first.
     /// </summary>
-    private static SyncOutcomeNode? FindNode(IEnumerable<SyncOutcomeNode> nodes, ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
-    {
-        foreach (var node in nodes)
-        {
-            if (node.OutcomeType == outcomeType)
-                return node;
-            if (FindNode(node.Children, outcomeType) is { } found)
-                return found;
-        }
-
-        return null;
-    }
+    private static SyncOutcomeNode? FindNode(IEnumerable<SyncOutcomeNode> nodes, ActivityRunProfileExecutionItemSyncOutcomeType outcomeType) =>
+        nodes.Select(node => node.OutcomeType == outcomeType ? node : FindNode(node.Children, outcomeType))
+            .FirstOrDefault(found => found != null);
 
     /// <summary>
     /// What an immediate deletion of a Metaverse Object does downstream, nested under its deletion node as the run nests it
@@ -2252,6 +2282,28 @@ public class SyncPreviewServer
     /// <summary>
     /// Maps one pending Metaverse attribute value change into the inbound summary's display shape.
     /// </summary>
+    /// <summary>
+    /// Names the Metaverse Object a preview's inbound summary is about (#1530): its type, and its name as it stands.
+    /// </summary>
+    private static void DescribeMetaverseObject(SyncPreviewInboundSummary inbound, MetaverseObject mvo)
+    {
+        inbound.MetaverseObjectTypeId = mvo.Type?.Id;
+        inbound.MetaverseObjectTypeName = mvo.Type?.Name;
+        inbound.MetaverseObjectDisplayName = ObjectNaming.FirstPresent(mvo.Name);
+    }
+
+    /// <summary>
+    /// Records a departing object's recall in the inbound summary (#1530), additions then removals as Attribute Flow's
+    /// are, so the values withdrawn (and any surviving contributor's taking their place) can be stated per attribute.
+    /// </summary>
+    private static void RecordMetaverseChanges(SyncPreviewResult result, IEnumerable<MetaverseObjectAttributeValue> additions,
+        IEnumerable<MetaverseObjectAttributeValue> removals)
+    {
+        result.Inbound ??= new SyncPreviewInboundSummary();
+        result.Inbound.AttributeFlowChanges.AddRange(additions.Select(addition => BuildAttributeFlowChange(addition, isAddition: true)));
+        result.Inbound.AttributeFlowChanges.AddRange(removals.Select(removal => BuildAttributeFlowChange(removal, isAddition: false)));
+    }
+
     private static SyncPreviewAttributeFlowChange BuildAttributeFlowChange(MetaverseObjectAttributeValue value, bool isAddition)
     {
         return new SyncPreviewAttributeFlowChange
