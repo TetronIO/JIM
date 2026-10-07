@@ -797,3 +797,40 @@ Describe 'Start-JIMRunProfile -Wait progress polling' {
         }
     }
 }
+
+Describe 'Start-JIMRunProfile -PreviewActivityId' {
+
+    It 'Sends the preview in the execute request body so the run records it' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = $null
+            $previewActivityId = [guid]::NewGuid()
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ activityId = [guid]::NewGuid(); taskId = [guid]::NewGuid() }
+            }
+
+            Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 2 -PreviewActivityId $previewActivityId
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and $Endpoint -like '*/connected-systems/1/run-profiles/2/execute'
+            }
+            $script:capturedBody.previewActivityId | Should -Be $previewActivityId
+        }
+    }
+
+    It 'Posts no body when no preview was read, as before' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $script:capturedBody = 'not called'
+            Mock Invoke-JIMApi {
+                $script:capturedBody = $Body
+                [PSCustomObject]@{ activityId = [guid]::NewGuid(); taskId = [guid]::NewGuid() }
+            }
+
+            Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 2
+
+            $script:capturedBody | Should -BeNullOrEmpty
+        }
+    }
+}

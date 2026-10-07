@@ -35,6 +35,13 @@ function Start-JIMRunProfile {
         Maximum time in seconds to wait for completion when using -Wait.
         If not specified, waits indefinitely until completion.
 
+    .PARAMETER PreviewActivityId
+        The Full Synchronisation preview this run was started after reading. Recorded on the
+        run's Activity so "previewed, then run" is auditable rather than a claim. Only a
+        Full Synchronisation Run Profile can cite one, and it must be a completed Full
+        Synchronisation preview of the same Connected System; anything else is refused and
+        the run is not queued.
+
     .PARAMETER PassThru
         If specified, returns the execution result object.
 
@@ -60,6 +67,12 @@ function Start-JIMRunProfile {
         Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { $_.name -eq "Full Import" } | Start-JIMRunProfile -Wait
 
         Executes the "Full Import" Run Profile and waits for completion.
+
+    .EXAMPLE
+        Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 3 -PreviewActivityId '0198c5e2-7d41-7c3a-9b1e-2f6a8d4c5b10'
+
+        Executes the Full Synchronisation Run Profile ID 3 and records on its Activity that it
+        was started after reading that Full Synchronisation preview.
 
     .EXAMPLE
         Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 600
@@ -96,6 +109,8 @@ function Start-JIMRunProfile {
 
         [ValidateRange(1, [int]::MaxValue)]
         [int]$Timeout,
+
+        [guid]$PreviewActivityId,
 
         [switch]$PassThru
     )
@@ -135,7 +150,15 @@ function Start-JIMRunProfile {
         Write-Verbose "Executing Run Profile ID $RunProfileId for Connected System ID $ConnectedSystemId"
 
         try {
-            $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles/$RunProfileId/execute" -Method 'POST'
+            $executeParams = @{
+                Endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles/$RunProfileId/execute"
+                Method   = 'POST'
+            }
+            # The body is optional on the endpoint; send one only when there is a preview to record.
+            if ($PSBoundParameters.ContainsKey('PreviewActivityId')) {
+                $executeParams.Body = @{ previewActivityId = $PreviewActivityId }
+            }
+            $response = Invoke-JIMApi @executeParams
 
             Write-Verbose "Run Profile queued. ActivityId: $($response.activityId), TaskId: $($response.taskId)"
 

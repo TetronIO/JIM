@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-4 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -157,9 +157,13 @@ Scenario: Previewing and running from a script
 - The verdict's sentence forms for the run outcomes this preview states (Projected, Joined, Provisioned, Drift corrected and others) were added, which the behaviour-toggle and scoping previews' verdicts gain too.
 - Estimate: the population, one row each (most objects of a repeat run would not change). The duration estimate the confirmation shows moved to Phase 5, beside the dialog that displays it, and #1520's figures still set the threshold.
 
-### Phase 4: run link
+### Phase 4: run link ✅
 
-- Execute endpoint body, server validation, Activity link; tests.
+- `SynchronisationWorkerTask.PreviewActivityId`, transient like the deletion task's, checked in `TaskingServer.CreateWorkerTaskAsync` (where portal, REST and scheduler all queue a run) and copied onto the run's Activity. Refused, and the run not queued, when the Run Profile is not a Full Synchronisation, the id is not a Full Synchronisation preview of the same Connected System, or the preview has not completed (still running, failed, cancelled, or blocked at validation and so evaluated nothing).
+- The execute endpoint takes an optional body (`{ "previewActivityId": ... }`); a POST with no body queues the run as before. `Start-JIMRunProfile -PreviewActivityId` (brought forward from Phase 6) sends it.
+- A gap found by the real-PostgreSQL test: a Full Synchronisation preview's Activity was never attached to its Connected System, so every genuine citation would have been refused and the panel could not have reattached. Fixed, with a sweep test that every surface's preview Activity names the object it previewed.
+- The Activity page already shows "Informed by a preview" for any Activity carrying the link, a run's included.
+- Runtime: on the stack, body-less execute calls still queue; an unknown id, a deletion preview, another system's preview and a Delta Synchronisation citation are each refused with a 400 naming why; `Start-JIMRunProfile -PreviewActivityId` queued a Full Synchronisation whose stored Activity names the preview (a deletion preview relabelled in the database stood in, as nothing starts a Full Synchronisation preview until Phase 6).
 
 ### Phase 5: portal
 
@@ -168,7 +172,7 @@ Scenario: Previewing and running from a script
 
 ### Phase 6: REST and PowerShell
 
-- Start endpoint; `New-JIMConfigurationChangePreview -FullSynchronisation` (optional `-MaxObjects`); `Start-JIMRunProfile -PreviewActivityId`; Pester tests; docs.
+- Start endpoint; `New-JIMConfigurationChangePreview -FullSynchronisation` (optional `-MaxObjects`); Pester tests; docs, including the preview-then-run example for `Start-JIMRunProfile -PreviewActivityId` (the parameter landed in Phase 4).
 
 ### Phase 7: verification and close-out
 

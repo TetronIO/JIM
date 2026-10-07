@@ -188,6 +188,33 @@ public class ConfigurationChangePreviewServerTests
         }
     }
 
+    private static IEnumerable<ConfigurationChangePreviewSurface> EverySurface() =>
+        Enum.GetValues<ConfigurationChangePreviewSurface>().Where(s => s != ConfigurationChangePreviewSurface.NotSet);
+
+    [TestCaseSource(nameof(EverySurface))]
+    public async Task StartPreviewAsync_EverySurface_AttachesTheActivityToTheObjectItPreviewedAsync(ConfigurationChangePreviewSurface surface)
+    {
+        // A preview is found again from the object it previewed (a panel reattaching to it, a change citing it), through
+        // the per-target-type id column. A surface added without its column gets an Activity that attaches to nothing,
+        // so every lookup for it misses: the Full Synchronisation preview (#1530) shipped that way at first.
+        _adapter = new FakePreviewAdapter { Surface = surface };
+        var request = new ConfigurationChangePreviewRequest
+        {
+            Surface = surface,
+            TargetId = 42,
+            TargetName = "Previewed object",
+            ProposedConfiguration = new FakeProposal("proposal", 0),
+            InitiatedByType = ActivityInitiatorType.User,
+            InitiatedById = Guid.CreateVersion7(),
+            InitiatedByName = "Ada Lovelace"
+        };
+
+        await NewServer().StartPreviewAsync(request);
+
+        int?[] idColumns = [_activity!.ConnectedSystemId, _activity.SyncRuleId, _activity.MetaverseObjectTypeId, _activity.MetaverseAttributeId];
+        Assert.That(idColumns, Has.Member(42), $"a {surface} preview's Activity names no object it previewed");
+    }
+
     [Test]
     public async Task GetPreviewStalenessAsync_MeasuresFromWhenThePreviewStartedAsync()
     {

@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Preview;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -124,7 +125,17 @@ namespace JIM.Application.Servers
 
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
+
+                // The preview the administrator read before starting the run (#1530) is checked here, where every run is
+                // queued, so no path records a link the others would refuse.
+                if (synchronisationWorkerTask.PreviewActivityId is { } previewActivityId &&
+                    await GetPreviewCitationRefusalAsync(previewActivityId, synchronisationWorkerTask.ConnectedSystemId, runProfile) is { } refusal)
+                {
+                    return WorkerTaskCreationResult.Failed(refusal);
+                }
+
                 var activity = NewRunProfileExecutionActivity(synchronisationWorkerTask.ConnectedSystemId, connectedSystem?.Name, runProfile);
+                activity.PreviewActivityId = synchronisationWorkerTask.PreviewActivityId;
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -383,6 +394,38 @@ namespace JIM.Application.Servers
             ConnectedSystemRunProfileId = runProfile?.Id,
             ConnectedSystemRunType = runProfile?.RunType ?? ConnectedSystemRunType.NotSet
         };
+
+        /// <summary>
+        /// Why a run of <paramref name="runProfile"/> cannot record <paramref name="previewActivityId"/> as the preview that
+        /// informed it, or null when it can (#1530). The link is what the run's audit trail is read for ("did they look
+        /// first, and what were they told?"), so it is refused rather than recorded whenever it would say something
+        /// untrue: a preview of another system or another kind of change, one that never finished, or one that stopped at
+        /// validation and so said nothing about what the run would do.
+        /// </summary>
+        private async Task<string?> GetPreviewCitationRefusalAsync(Guid previewActivityId, int connectedSystemId, ConnectedSystemRunProfile runProfile)
+        {
+            // A Full Synchronisation preview describes a Full Synchronisation. Any other run processes something else (a
+            // Delta Synchronisation only what has changed), so the preview would overstate or misstate it.
+            if (runProfile.RunType != ConnectedSystemRunType.FullSynchronisation)
+                return $"Run Profile '{runProfile.Name}' is not a Full Synchronisation, so it cannot record a Full Synchronisation preview as the one that informed it.";
+
+            if (!await Application.ConfigurationChangePreviews.IsConnectedSystemPreviewAsync(previewActivityId,
+                    ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation, connectedSystemId))
+                return $"Activity {previewActivityId} is not a Full Synchronisation preview of this Connected System.";
+
+            // A preview still running, failed or cancelled has seen an arbitrary part of the population; recording it would
+            // state a partial answer as the whole one.
+            var preview = await Application.ConfigurationChangePreviews.GetPreviewAsync(previewActivityId);
+            if (preview is not { IsComplete: true })
+                return $"The Full Synchronisation preview {previewActivityId} has not completed, so it cannot be recorded as the one that informed this run.";
+
+            // Validation that blocks stops a preview before it evaluates anything, which settles its later stages as not
+            // applicable rather than complete.
+            if (preview.ImpactCountsStatus != ConfigurationChangePreviewStageStatus.Complete)
+                return $"The Full Synchronisation preview {previewActivityId} was blocked by validation and evaluated nothing, so it cannot be recorded as the one that informed this run.";
+
+            return null;
+        }
 
         /// <summary>
         /// The Activity a Temporal Scope Reconciliation sweep (issue #892) is recorded under: a system-wide maintenance
