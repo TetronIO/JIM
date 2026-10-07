@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -23,6 +23,7 @@ A Full Synchronisation after a configuration change is the moment configuration 
 2. **Evaluate the whole population by default.** Every other preview refuses to show partial counts, because a partial count read as a whole one is how a change gets approved as safe. Above a size threshold the administrator sees an estimate and confirms before it starts. A cap stays available to scripts.
 3. **Close the target-system gap in the same work**, rather than hiding the action on target systems.
 4. **Prove the fidelity question with tests first** (done, below), and fix the engine where it is real.
+5. **"N objects would not change" is a group of its own (2026-10-07)**, not a column on the preview: the adapter yields a would-not-change delta per unchanged object, so the count is exact in the existing per-group counts, the drill-down shows a sample of them, and REST and PowerShell carry it with no new fields. The verdict and the "What would change" grid leave that group out and show it as the "would not change" line.
 
 ## Finding: the whole-system walk does not answer "what would this run do"
 
@@ -137,15 +138,16 @@ Scenario: Previewing and running from a script
 - The unchanged-object optimisation, found by the runtime check: while no configuration has changed since it was last fully applied, the run skips every object unchanged since the last synchronisation, drift included, and the walk proposed corrections for them. The rule moved onto the models (`ConnectedSystemObject.IsUnchangedSince`, `ConnectedSystem.GetUnchangedObjectWatermark`), read by the PostgreSQL loader, the run and the walk alike; the walk counts what it skips in `FullSyncPreviewResult.UnchangedObjectCount`. The in-memory repository ignores the watermark, so the workflow tests assert against the rule and the runtime check pairs preview and run.
 - Runtime check on the full stack: preview and real Full Synchronisation of a target with a drifted value agree (one Update, Add and Remove on the attribute, one Drift Correction item counting it), and a source object's preview no longer proposes the target's correction. The per-object preview evaluates an object as if processed, which the docs now say.
 
-### Phase 2: streaming walk and single-pass counting
+### Phase 2: streaming walk and single-pass counting ✅
 
-- The walk streams per-object results; no cap by default; samples kept as a consumer for the existing engine API.
-- Framework counts from the delta stream for adapters that declare it; the deletion adapter adopts it (one pass instead of two).
-- Evaluated-object count recorded on the preview (migration).
+- Streaming walk ✅: `SyncPreviewServer.StreamFullSyncPreviewAsync` yields `FullSyncPreviewItem`s in the order the run meets them (the population, a refusal on a derived flow cycle, each object evaluated or skipped as obsolete or unchanged, the export scope review, and a truncation when a bound stopped it), with no bound by default (`FullSyncPreviewStreamOptions`). The read-only scope and rollback-only transaction live as long as the enumeration. `PreviewFullSyncAsync` is now one consumer of it (counts and bounded samples), its semantics unchanged.
+- Single-pass counting ✅: an adapter that can only count by evaluating supplies an `IPreviewImpactCounter` (`CreateImpactCounterAsync`; `PreviewImpactCounter.PerDelta` or `PerSubject`), which the framework feeds during the one evaluation pass and records only when the whole stream completes. Wider than first planned: eight adapters counted by streaming their own deltas, not just the deletion adapter, and all eight adopted it, each with an equivalence test (its counter fed its own deltas equals its `CountImpactAsync`). Runtime: a 1,108-object deletion preview went from 3.8s to 2.1s with identical counts.
+- Evaluated-object count: moved to Phase 3 and decided there (decision 5): no column; the stream reports every unchanged object, and the adapter counts them as a group of their own.
 
 ### Phase 3: adapter and transitions
 
 - Surface, proposal, adapter, estimate, validation, delta mapping; adapter tests and an equivalence test against the real run's Pending Exports and outcomes.
+- The would-not-change group (decision 5): a would-not-change delta per object the run skips or leaves as it is, kept out of the verdict and the change grid.
 
 ### Phase 4: run link
 

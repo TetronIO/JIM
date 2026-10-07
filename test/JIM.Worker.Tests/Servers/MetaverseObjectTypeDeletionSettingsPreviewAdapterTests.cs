@@ -163,6 +163,17 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
     #region Stage 2: counts
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        GivenCandidate("Ada", disconnectedDaysAgo: 10);
+        GivenCandidate("Grace", disconnectedDaysAgo: 20);
+        GivenCandidate("Katherine", disconnectedDaysAgo: 3);
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(NewAdapter(),
+            Context(Proposal(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, TimeSpan.FromDays(7))));
+    }
+
+    [Test]
     public async Task CountImpactAsync_GracePeriodShortened_CountsTheObjectsItWouldDeleteNowAsync()
     {
         // 30-day grace today: nothing disconnected less than 30 days ago is eligible. Shorten it to 7 and the

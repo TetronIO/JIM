@@ -367,6 +367,15 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local", firstName: "ada.lovelace@corp.local");
+        GivenJoinedCso(email: "alan@corp.local", currentMetaverseEmail: "alan@corp.local", firstName: "alan.turing@corp.local");
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(NewAdapter(), Context(ProposalWritingEmailFrom(CsFirstNameAttributeId)));
+    }
+
+    [Test]
     public async Task EstimateCostAsync_CountsThePopulationTheWalkWouldReadAsync()
     {
         GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local");

@@ -454,6 +454,19 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     }
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Engineering");
+        GivenJoinedCso("Sales");
+        GivenJoinedCso("Sales");
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(NewAdapter(),
+            Context(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete }));
+    }
+
+    [Test]
     public async Task CountImpactAsync_CountsAgreeWithTheDeltasAsync()
     {
         GivenExportRule();
