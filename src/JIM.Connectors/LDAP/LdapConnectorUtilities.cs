@@ -8,6 +8,7 @@ using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Globalization;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -985,40 +986,105 @@ internal static class LdapConnectorUtilities
 
     /// <summary>
     /// The LDAP result code for a server that cannot be reached (LDAP_SERVER_DOWN), which the platform LDAP client
-    /// raises for a refused or failed connection.
+    /// raises for a refused or failed connection, and which the connector's retry policy treats as transient.
     /// </summary>
     private const int LdapServerDownErrorCode = 81;
 
     /// <summary>
     /// Throws an <see cref="LdapException"/> unless <paramref name="server"/> accepts a TCP connection on
-    /// <paramref name="port"/> within <paramref name="timeout"/>.
+    /// <paramref name="port"/>, waiting no longer than <paramref name="timeout"/> on each address it resolves to (#2003).
     /// <para>
-    /// The platform LDAP client on Linux does not bound its TCP connect by the connection's timeout: against an address
-    /// a firewall silently drops, a bind waits out the operating system's SYN retries, measured at over two minutes.
-    /// That is acceptable for a Connected System's own connection, whose failure fails the operation anyway, but not
-    /// for an optional second connection whose caller has a fixed budget and a fallback (the uniqueness probe's
-    /// Global Catalog, #1940), so such a caller asks this first. A server that accepts the connection but does not
-    /// answer LDAP is still bounded by the connection's own timeout.
+    /// The platform LDAP client on Linux applies a connection's timeout to operations but not to its TCP connect, and
+    /// offers no public way to bound the connect. Against a server behind a firewall that silently drops packets, a
+    /// bind therefore waits out the operating system's SYN retries: 134 seconds, measured, with a timeout of 5. Every
+    /// connection the connector opens asks this first, so the Connection Timeout bounds the connect as it says it does.
+    /// A server that accepts the connection but does not answer LDAP is still bounded by the connection's own timeout.
+    /// </para>
+    /// <para>
+    /// The timeout bounds each address rather than the name, as the LDAP client's own network timeout would. A domain
+    /// name commonly resolves to every domain controller in the domain, and the client tries them in turn and connects
+    /// once one answers; bounding the name as a whole would fail a name that connects today.
+    /// </para>
+    /// <para>
+    /// A caller with a fixed budget and a fallback of its own (the uniqueness probe's Global Catalog, #1940) passes
+    /// <paramref name="failOnUnansweredAddress"/>: the check then fails at the first address that does not answer,
+    /// rather than going on to one that does, because the LDAP client would wait minutes on that address before
+    /// reaching the next. A refused or unreachable address costs the LDAP client nothing, so it is still passed over.
     /// </para>
     /// </summary>
-    internal static void EnsureAcceptsConnections(string server, int port, TimeSpan timeout)
+    internal static void EnsureAcceptsConnections(string server, int port, TimeSpan timeout, ILogger logger, bool failOnUnansweredAddress = false)
     {
-        using var client = new TcpClient();
-        using var cancellation = new CancellationTokenSource(timeout);
+        IPAddress[] addresses;
         try
         {
-            // Synchronous by design: every caller is already on a worker thread doing synchronous LDAP work.
-            client.ConnectAsync(server, port, cancellation.Token).AsTask().GetAwaiter().GetResult();
+            // Not bounded here, just as it is not in the LDAP client: name resolution has the resolver's own timeouts.
+            addresses = Dns.GetHostAddresses(server);
         }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        catch (Exception ex) when (ex is SocketException or ArgumentException)
         {
-            throw new LdapException(LdapServerDownErrorCode, string.Create(CultureInfo.InvariantCulture,
-                $"{server} did not accept a connection on port {port} within {timeout.TotalSeconds:0} seconds"));
+            throw new LdapException(LdapServerDownErrorCode, $"{server} could not be resolved: {ex.Message.TrimEnd('.')}");
         }
-        catch (SocketException ex)
+
+        EnsureAcceptsConnections(server, addresses, port, timeout, logger, failOnUnansweredAddress);
+    }
+
+    /// <inheritdoc cref="EnsureAcceptsConnections(string, int, TimeSpan, ILogger)"/>
+    /// <param name="server">The server as configured, for messages.</param>
+    /// <param name="addresses">The addresses <paramref name="server"/> resolves to, in the order they are tried.</param>
+    /// <param name="port">The port to connect to.</param>
+    /// <param name="timeout">How long to wait on each address.</param>
+    /// <param name="logger">Logger for the calling operation.</param>
+    /// <param name="failOnUnansweredAddress">Fail at the first address that does not answer, rather than going on to
+    /// the next.</param>
+    internal static void EnsureAcceptsConnections(string server, IReadOnlyList<IPAddress> addresses, int port, TimeSpan timeout, ILogger logger, bool failOnUnansweredAddress = false)
+    {
+        var failures = new List<(IPAddress Address, string Reason, bool Unanswered)>();
+        foreach (var address in addresses)
         {
-            throw new LdapException(LdapServerDownErrorCode, $"{server} did not accept a connection on port {port}: {ex.Message.TrimEnd('.')}");
+            using var client = new TcpClient(address.AddressFamily);
+            using var cancellation = new CancellationTokenSource(timeout);
+            try
+            {
+                // Synchronous by design: every caller is already on a worker thread doing synchronous LDAP work.
+                client.ConnectAsync(address, port, cancellation.Token).AsTask().GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                if (failOnUnansweredAddress)
+                {
+                    throw new LdapException(LdapServerDownErrorCode, address.ToString() == server
+                        ? string.Create(CultureInfo.InvariantCulture, $"{server} did not accept a connection on port {port} within {timeout.TotalSeconds:0} seconds")
+                        : string.Create(CultureInfo.InvariantCulture, $"{server} did not accept a connection on port {port}: {address} did not answer within {timeout.TotalSeconds:0} seconds, and the LDAP client would wait minutes on it before trying another address"));
+                }
+
+                failures.Add((address, string.Create(CultureInfo.InvariantCulture, $"no answer within {timeout.TotalSeconds:0} seconds"), true));
+                continue;
+            }
+            catch (SocketException ex)
+            {
+                failures.Add((address, ex.Message.TrimEnd('.'), false));
+                continue;
+            }
+
+            // A refused or unreachable address costs the LDAP client nothing, but one that did not answer costs it the
+            // operating system's full connect timeout each time it is tried before this one. The connection will still
+            // succeed, slowly, and nothing else would tell an administrator why.
+            var unanswered = failures.Where(f => f.Unanswered).Select(f => f.Address.ToString()).ToList();
+            if (unanswered.Count > 0)
+            {
+                logger.Warning("EnsureAcceptsConnections: {Server} resolves to more than one address, and {Unanswered} did not answer on port {Port} within {TimeoutSeconds} seconds before {Address} accepted. The LDAP client tries the addresses in the same order and waits about two minutes on each that does not answer, so connections will be slow until those addresses answer or stop being returned. Point the Connected System at a server JIM can reach (for Active Directory, the Preferred Domain Controller setting).",
+                    LogSanitiser.Sanitise(server), string.Join(", ", unanswered), port, timeout.TotalSeconds, address);
+            }
+
+            return;
         }
+
+        if (failures.Count == 0)
+            throw new LdapException(LdapServerDownErrorCode, $"{server} did not resolve to any address");
+
+        // The address is only worth naming where it is not what the administrator typed.
+        var detail = string.Join("; ", failures.Select(f => f.Address.ToString() == server ? f.Reason : $"{f.Reason} ({f.Address})"));
+        throw new LdapException(LdapServerDownErrorCode, $"{server} did not accept a connection on port {port}: {detail}");
     }
 
     /// <summary>

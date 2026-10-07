@@ -618,7 +618,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
         LdapConnection ConnectToEndpoint(string server, int port, TimeSpan timeout) => CreateConnection(
-            new LdapDirectoryIdentifier(server, port), credential, authTypeEnumValue, timeout, useSsl, logger);
+            server, port, credential, authTypeEnumValue, timeout, useSsl, logger);
 
         LdapConnection ConnectTo(string server) => ConnectToEndpoint(server, directoryServerPortValue, connectionTimeout);
 
@@ -730,14 +730,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// in OpenLDAP/Generic directories where each paged search needs its own connection.
     /// </summary>
     private LdapConnection CreateConnection(
-        LdapDirectoryIdentifier identifier,
+        string server,
+        int port,
         NetworkCredential credential,
         AuthType authType,
         TimeSpan timeout,
         bool useSsl,
         ILogger logger)
     {
-        var connection = new LdapConnection(identifier, credential, authType);
+        // The platform LDAP client on Linux does not bound its TCP connect by the timeout, so a server behind a
+        // firewall that drops packets would hold this bind for the operating system's SYN retries, over two minutes,
+        // whatever the Connection Timeout says (#2003). Every connection is built here, so asking first makes the
+        // setting mean what it says for imports, exports, discovery, settings validation and domain controller pinning.
+        LdapConnectorUtilities.EnsureAcceptsConnections(server, port, timeout, logger);
+
+        var connection = new LdapConnection(new LdapDirectoryIdentifier(server, port), credential, authType);
         connection.SessionOptions.ProtocolVersion = 3;
         connection.Timeout = timeout;
 
@@ -1526,10 +1533,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             (server, timeout) =>
             {
                 // A single attempt, unlike the import connection: the probe falls back to the domain at once rather
-                // than spend the batch's time on retries, and does not ask again this run. The TCP check first bounds
-                // a dropped port by the timeout, which the LDAP client's own connect does not honour on Linux.
+                // than spend the batch's time on retries, and does not ask again this run. Every connection already
+                // checks that its server accepts one within the timeout (#2003), but on each address in turn, so an
+                // ordinary connection still reaches a domain controller that answers after one that does not. The
+                // Global Catalog has a fixed share of the probe's budget, and the LDAP client would wait minutes on a
+                // silent address before trying the next, so here the check gives up at the first that does not answer.
                 var connectionTimeout = timeout < plan.ConnectionTimeout ? timeout : plan.ConnectionTimeout;
-                LdapConnectorUtilities.EnsureAcceptsConnections(server, globalCatalogPort, connectionTimeout);
+                LdapConnectorUtilities.EnsureAcceptsConnections(server, globalCatalogPort, connectionTimeout, logger, failOnUnansweredAddress: true);
                 _probeGlobalCatalogConnection = plan.FactoryForEndpoint(server, globalCatalogPort, connectionTimeout);
                 return new LdapOperationExecutor(_probeGlobalCatalogConnection);
             }));

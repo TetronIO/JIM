@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Diagnostics;
 using System.DirectoryServices.Protocols;
+using System.Net;
+using System.Net.Sockets;
 using JIM.Connectors.LDAP;
 using JIM.Models.Staging;
 using Moq;
@@ -48,49 +51,55 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
     }
 
     /// <summary>
-    /// A firewall that drops Global Catalog traffic rather than refusing it leaves the platform LDAP client waiting on
-    /// the operating system's TCP retries (over two minutes, measured against a black-holed address), whatever its own
-    /// timeout says; the probe's whole batch gets thirty seconds. Whichever way an unroutable address fails here
-    /// (dropped, or refused as unreachable), it has to fail as a directory fault, and inside the time allowed.
+    /// The Connection Timeout bounds each address a name resolves to (#2003), so an ordinary connection still reaches a
+    /// domain controller that answers after one that does not. The Global Catalog cannot afford that: it has a third of
+    /// the probe's thirty seconds, and the LDAP client would then wait about two minutes on the silent address before
+    /// trying the next. So the probe's check gives up at the first address that does not answer, and the probe falls
+    /// back to the domain within its budget.
     /// </summary>
     [Test]
-    public void EnsureAcceptsConnections_ServerDoesNotAnswer_FailsAsADirectoryFaultWithinTheTimeout()
+    public void EnsureAcceptsConnections_FailOnUnansweredAddress_GivesUpAtAnAddressThatDoesNotAnswer()
     {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var listener = Listen(out var port);
+        var addresses = new[] { IPAddress.Parse(BlackHoledAddress), IPAddress.Loopback };
+        var stopwatch = Stopwatch.StartNew();
 
-        Assert.That(() => LdapConnectorUtilities.EnsureAcceptsConnections("10.255.255.1", 3268, TimeSpan.FromSeconds(1)),
-            Throws.InstanceOf<LdapException>());
-        Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(10)));
-    }
-
-    [Test]
-    public void EnsureAcceptsConnections_PortRefused_FailsAsADirectoryFault()
-    {
-        // Bind and release a loopback port, so nothing is listening on it.
-        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-
-        Assert.That(() => LdapConnectorUtilities.EnsureAcceptsConnections("127.0.0.1", port, TimeSpan.FromSeconds(5)),
-            Throws.InstanceOf<LdapException>());
-    }
-
-    [Test]
-    public void EnsureAcceptsConnections_Listening_Returns()
-    {
-        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        listener.Start();
+        LdapException? thrown = null;
         try
         {
-            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-
-            Assert.That(() => LdapConnectorUtilities.EnsureAcceptsConnections("127.0.0.1", port, TimeSpan.FromSeconds(5)), Throws.Nothing);
+            LdapConnectorUtilities.EnsureAcceptsConnections("gc.corp.local", addresses, port, TimeSpan.FromSeconds(1), Logger(), failOnUnansweredAddress: true);
         }
-        finally
+        catch (LdapException ex)
         {
-            listener.Stop();
+            thrown = ex;
         }
+
+        stopwatch.Stop();
+
+        // Where the black-holed address is refused as unreachable rather than dropped, the LDAP client would not wait on
+        // it either, so passing over it to the address that accepts is right.
+        if (thrown == null)
+            Assert.Ignore("This network refuses the black-holed address outright, so a silent address cannot be exercised here.");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown.ErrorCode, Is.EqualTo(81));
+            Assert.That(thrown.Message, Does.Contain(BlackHoledAddress), "the failure names the address that did not answer");
+            Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(10)));
+        }
+    }
+
+    /// <summary>
+    /// A refused address costs the LDAP client nothing, so it does not stop the Global Catalog being used.
+    /// </summary>
+    [Test]
+    public void EnsureAcceptsConnections_FailOnUnansweredAddress_PassesOverARefusedAddress()
+    {
+        using var listener = Listen(out var port);
+        var addresses = new[] { IPAddress.Parse("127.0.0.2"), IPAddress.Loopback };
+
+        Assert.That(() => LdapConnectorUtilities.EnsureAcceptsConnections("gc.corp.local", addresses, port, TimeSpan.FromSeconds(5), Logger(), failOnUnansweredAddress: true),
+            Throws.Nothing);
     }
 
     [Test]
@@ -363,6 +372,18 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
             Assert.That(globalCatalog.OpenAttempts, Is.EqualTo(1));
             Assert.That(globalCatalog.Requests, Has.Count.EqualTo(3));
         }
+    }
+
+    private const string BlackHoledAddress = "10.255.255.1";
+
+    private static ILogger Logger() => new LoggerConfiguration().CreateLogger();
+
+    private static TcpListener Listen(out int port)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        return listener;
     }
 
     private static UniquenessProbeRequest Request(IReadOnlyList<string> candidates, string? controlValue, string attributeName = "userPrincipalName") => new()
