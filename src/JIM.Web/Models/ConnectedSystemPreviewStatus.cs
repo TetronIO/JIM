@@ -4,11 +4,12 @@
 namespace JIM.Web.Models;
 
 /// <summary>
-/// Where a Connected System's deletion impact preview stands, as the delete dialog and the Danger Zone state it (#134).
+/// Where a Connected System's latest preview of one kind stands: its deletion impact, as the delete dialog and the Danger
+/// Zone state it (#134), or a Full Synchronisation, as the Connected System page states it (#1530).
 /// </summary>
-public enum DeletionImpactPreviewStatus
+public enum ConnectedSystemPreviewStatus
 {
-    /// <summary>No deletion preview has been run for the system.</summary>
+    /// <summary>No preview of this kind has been run for the system.</summary>
     NotPreviewed = 0,
 
     /// <summary>A preview is still evaluating.</summary>

@@ -29,7 +29,7 @@
                        Color="Color.Secondary"
                        DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility"
-                       Disabled="@(_startingPreview || _previewState.Status == DeletionImpactPreviewStatus.Running)"
+                       Disabled="@(_startingPreview || _previewState.Status == ConnectedSystemPreviewStatus.Running)"
                        OnClick="StartPreviewAsync"
                        data-testid="jim-preview-deletion-impact">
                 @(_previewActivityId.HasValue ? "Run again" : "Preview deletion impact")
@@ -45,7 +45,7 @@
     {
         var previewActivityId = _previewActivityId.Value;
 
-        @if (_previewState.Status == DeletionImpactPreviewStatus.Stale)
+        @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-6" data-testid="jim-deletion-impact-stale">
                 @_previewState.StaleReason since this preview ran, so it may no longer be accurate. Run it again before deleting; a
@@ -110,7 +110,7 @@
     // The deletion impact preview on show (#134): the one started here, or the latest one found on arrival, so a
     // preview keeps running and is reattached to when the administrator navigates away and comes back.
     private Guid? _previewActivityId;
-    private DeletionImpactPreviewState _previewState = new(DeletionImpactPreviewStatus.NotPreviewed);
+    private ConnectedSystemPreviewState _previewState = new(ConnectedSystemPreviewStatus.NotPreviewed);
     private bool _previewSettled;
     private bool _startingPreview;
 
@@ -133,8 +133,8 @@
             ? await jim.ConfigurationChangePreviews.GetPreviewStalenessAsync(preview.ActivityId)
             : null;
 
-        _previewState = DeletionImpactPreviewState.From(preview, staleness);
-        _previewSettled = _previewState.Status is not (DeletionImpactPreviewStatus.Running or DeletionImpactPreviewStatus.NotPreviewed);
+        _previewState = ConnectedSystemPreviewState.From(preview, staleness);
+        _previewSettled = _previewState.Status is not (ConnectedSystemPreviewStatus.Running or ConnectedSystemPreviewStatus.NotPreviewed);
         if (attachToLatest && preview != null)
             _previewActivityId = preview.ActivityId;
     }
@@ -168,7 +168,7 @@
                 return;
 
             _previewActivityId = activityId;
-            _previewState = new DeletionImpactPreviewState(DeletionImpactPreviewStatus.Running, activityId);
+            _previewState = new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.Running, activityId);
             _previewSettled = false;
         }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
@@ -204,7 +204,7 @@
     private void DiscardPreview()
     {
         _previewActivityId = null;
-        _previewState = new DeletionImpactPreviewState(DeletionImpactPreviewStatus.NotPreviewed);
+        _previewState = new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.NotPreviewed);
         _previewSettled = false;
     }
 
