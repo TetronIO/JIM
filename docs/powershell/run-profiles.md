@@ -302,16 +302,16 @@ Every parameter set requires both a Connected System identifier (`-ConnectedSyst
 
 ```powershell
 # By Connected System ID and Run Profile ID (default)
-Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PassThru]
+Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 
 # By Connected System name and Run Profile name
-Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PassThru]
+Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 
 # By Connected System ID and Run Profile name
-Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PassThru]
+Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 
 # By Connected System name and Run Profile ID
-Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PassThru]
+Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-Timeout <int>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 ### Parameters
@@ -324,6 +324,7 @@ Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-
 | `RunProfileName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Run Profile to execute. Must be an exact match. |
 | `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying live progress: current phase, object counts, throughput and estimated time remaining. Polls the lightweight Activity progress endpoint every 2 seconds. |
 | `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the Activity ID for manual follow-up. |
+| `PreviewActivityId` | `guid` | No | | The Full Synchronisation preview read before starting this run. Recorded on the run's Activity, which then shows that the run was informed by it. Only a Full Synchronisation Run Profile can cite one, and it must be a completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is not queued. |
 | `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
 
 ### Output

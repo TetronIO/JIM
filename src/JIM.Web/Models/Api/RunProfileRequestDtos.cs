@@ -101,3 +101,16 @@ public class UpdateRunProfileRequest
     /// </summary>
     public RunProfileSafeguardsDto? Safeguards { get; set; }
 }
+
+/// <summary>
+/// Optional request body for executing a Run Profile. Posting no body at all queues the run as before.
+/// </summary>
+public class ExecuteRunProfileRequest
+{
+    /// <summary>
+    /// Optional: the Activity id of the Full Synchronisation preview read before starting this run, recorded on the
+    /// run's Activity so its audit trail says what the run was expected to do. Must be a completed Full Synchronisation preview of this Connected
+    /// System, and the Run Profile must be a Full Synchronisation; anything else is refused with a 400.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+}
