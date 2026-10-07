@@ -4529,8 +4529,7 @@ function Start-JimErrorWatcher {
 
     .PARAMETER DockerCommand
         The docker executable the watcher runs, by name or full path. Defaults to `docker` found on PATH. Exists so a
-        test can pass a stand-in by path: a background job's process does not reliably inherit a PATH changed in the
-        calling session.
+        test can run a stand-in by its path without changing PATH for the whole test session.
 
     .PARAMETER ExpectedErrorsPath
         The expected error declarations file (Add-JimExpectedError). Defaults to

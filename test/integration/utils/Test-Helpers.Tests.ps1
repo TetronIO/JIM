@@ -1191,8 +1191,9 @@ Describe 'Expected error declarations' {
     Context 'Start-JimErrorWatcher' {
         BeforeAll {
             # A stand-in docker, so the watcher's background jobs (separate processes, out of Mock's reach) read known
-            # lines: one declared, one not. Passed by path through -DockerCommand rather than put on PATH, which a
-            # job's process does not reliably inherit (it did locally and not on the CI runner).
+            # lines: one declared, one not. Passed by path through -DockerCommand. Written with LF line endings
+            # whatever this file's checkout uses: .ps1 files check out as CRLF (.gitattributes), and a "#!/bin/sh`r"
+            # first line names an interpreter that does not exist, so the script fails with "No such file or directory".
             $script:fakeBin = Join-Path $TestDrive 'fakebin'
             New-Item -ItemType Directory -Path $script:fakeBin -Force | Out-Null
             $fakeDocker = Join-Path $script:fakeBin 'docker'
@@ -1201,7 +1202,7 @@ Describe 'Expected error declarations' {
 #!/bin/sh
 echo "$stamp [12:00:30 ERR] Export parked: GeneratedValueCollisionUnresolved for Joe Bloggs"
 echo "$stamp [12:00:31 ERR] Unhandled exception in the export run"
-"@ | Set-Content -Path $fakeDocker -NoNewline
+"@ -replace "`r", '' | Set-Content -Path $fakeDocker -NoNewline
             chmod +x $fakeDocker
             $script:originalPath = $env:PATH
         }
