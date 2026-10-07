@@ -1190,8 +1190,9 @@ Describe 'Expected error declarations' {
 
     Context 'Start-JimErrorWatcher' {
         BeforeAll {
-            # A stand-in docker on PATH, so the watcher's background jobs (separate processes, out of Mock's reach)
-            # read known lines: one declared, one not.
+            # A stand-in docker, so the watcher's background jobs (separate processes, out of Mock's reach) read known
+            # lines: one declared, one not. Passed by path through -DockerCommand rather than put on PATH, which a
+            # job's process does not reliably inherit (it did locally and not on the CI runner).
             $script:fakeBin = Join-Path $TestDrive 'fakebin'
             New-Item -ItemType Directory -Path $script:fakeBin -Force | Out-Null
             $fakeDocker = Join-Path $script:fakeBin 'docker'
@@ -1210,21 +1211,21 @@ echo "$stamp [12:00:31 ERR] Unhandled exception in the export run"
         }
 
         It 'writes only the undeclared line to the sentinel' -Skip:($IsWindows) {
-            $env:PATH = "$($script:fakeBin)$([System.IO.Path]::PathSeparator)$($script:originalPath)"
             $env:JIM_EXPECTED_ERRORS_PATH = $script:declarationsPath
             try {
                 Add-JimExpectedError -Step 'NeedsDecision' -Pattern 'GeneratedValueCollisionUnresolved' | Out-Null
                 $sentinel = Join-Path $TestDrive 'sentinel.log'
 
-                $handle = Start-JimErrorWatcher -SentinelPath $sentinel -Since (Get-Date).AddMinutes(-1) -Containers 'jim.worker'
+                $handle = Start-JimErrorWatcher -SentinelPath $sentinel -Since (Get-Date).AddMinutes(-1) -Containers 'jim.worker' `
+                    -DockerCommand (Join-Path $script:fakeBin 'docker')
                 $handle.Jobs | Wait-Job -Timeout 30 | Out-Null
+                $jobOutput = @($handle.Jobs | Receive-Job -Keep 2>&1 | ForEach-Object { [string]$_ })
                 $lines = @(Stop-JimErrorWatcher -Handle $handle)
 
-                $lines.Count | Should -Be 1
+                $lines.Count | Should -Be 1 -Because "the watcher job reported: $($jobOutput -join ' | ')"
                 $lines[0] | Should -Match 'Unhandled exception'
             }
             finally {
-                $env:PATH = $script:originalPath
                 Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
             }
         }

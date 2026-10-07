@@ -4527,6 +4527,11 @@ function Start-JimErrorWatcher {
     .PARAMETER Containers
         Container names to tail. Defaults to jim.web, jim.worker, jim.scheduler.
 
+    .PARAMETER DockerCommand
+        The docker executable the watcher runs, by name or full path. Defaults to `docker` found on PATH. Exists so a
+        test can pass a stand-in by path: a background job's process does not reliably inherit a PATH changed in the
+        calling session.
+
     .PARAMETER ExpectedErrorsPath
         The expected error declarations file (Add-JimExpectedError). Defaults to
         JIM_EXPECTED_ERRORS_PATH. An Error line a scenario step declared, logged
@@ -4550,7 +4555,10 @@ function Start-JimErrorWatcher {
         [string[]]$Containers = (Get-JimServiceContainers),
 
         [Parameter(Mandatory=$false)]
-        [string]$ExpectedErrorsPath = $env:JIM_EXPECTED_ERRORS_PATH
+        [string]$ExpectedErrorsPath = $env:JIM_EXPECTED_ERRORS_PATH,
+
+        [Parameter(Mandatory=$false)]
+        [string]$DockerCommand = 'docker'
     )
 
     # Ensure sentinel file exists and is empty
@@ -4572,7 +4580,7 @@ function Start-JimErrorWatcher {
     $jobs = @()
     foreach ($container in $Containers) {
         $job = Start-Job -Name "jim-err-watcher-$container" -ScriptBlock {
-            param($containerName, $since, $sentinel, $allowPattern, $errorPattern, $expectedErrorsPath, $helperDefinitions)
+            param($containerName, $since, $sentinel, $allowPattern, $errorPattern, $expectedErrorsPath, $helperDefinitions, $dockerCommand)
 
             # The job is a separate process: recreate the expected-error helpers it needs from their definitions.
             foreach ($name in $helperDefinitions.Keys) {
@@ -4585,7 +4593,7 @@ function Start-JimErrorWatcher {
             # the moment it arrives. --timestamps gives each line docker's own
             # time, which places it inside or outside a step's expected-error
             # window (Add-JimExpectedError).
-            & docker logs --timestamps --since $since -f $containerName 2>&1 | ForEach-Object {
+            & $dockerCommand logs --timestamps --since $since -f $containerName 2>&1 | ForEach-Object {
                 $line = [string]$_
                 if ($null -eq $_) { return }
                 if ($line -match $errorPattern) {
@@ -4602,7 +4610,7 @@ function Start-JimErrorWatcher {
                     [System.IO.File]::AppendAllText($sentinel, "[$stamp] [$containerName] $line`n")
                 }
             }
-        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern, (Get-JimErrorLinePattern), $ExpectedErrorsPath, $helperDefinitions
+        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern, (Get-JimErrorLinePattern), $ExpectedErrorsPath, $helperDefinitions, $DockerCommand
 
         $jobs += $job
     }
