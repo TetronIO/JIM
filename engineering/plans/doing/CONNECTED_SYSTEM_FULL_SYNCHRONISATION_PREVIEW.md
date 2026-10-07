@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Doing (Phases 1-5 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -165,10 +165,13 @@ Scenario: Previewing and running from a script
 - The Activity page already shows "Informed by a preview" for any Activity carrying the link, a run's included.
 - Runtime: on the stack, body-less execute calls still queue; an unknown id, a deletion preview, another system's preview and a Delta Synchronisation citation are each refused with a 400 naming why; `Start-JIMRunProfile -PreviewActivityId` queued a Full Synchronisation whose stored Activity names the preview (a deletion preview relabelled in the database stood in, as nothing starts a Full Synchronisation preview until Phase 6).
 
-### Phase 5: portal
+### Phase 5: portal ✅
 
-- The duration estimate for the threshold confirmation: the last completed Full Synchronisation's duration where there is one, else the object count against #1520's rate.
-- Drift notice button, Run Profiles row action, inline panel on the Connected System page with reattach, threshold confirmation, "would not change" line, Run Full Synchronisation from the panel, drill-down columns, object view through the Sync Preview panel. bUnit tests where the logic lives.
+- Two decisions taken with the user (2026-10-07): the large-system confirmation is the existing large-preview dialog, extended with the duration, rather than a second prompt inline in the panel; and the duration is never faster than a reference rate (`FullSynchronisationDurationEstimate`, a conservative 50 objects a second until #1520 measures the real one), slower where the system's last completed Full Synchronisation was, because a routine run skips unchanged objects and so overstates a full evaluation. `PreviewCostEstimate.EstimatedDuration` carries it; the starter hands the dialog the whole estimate.
+- The panel: would-not-change groups leave the grid for one line under it, drillable per object type; a preview where every object would not change says the run would change nothing, naming the system; a `HeaderActions` slot; selectable drill-down rows (`OnObjectSelected`); Now and After the synchronisation columns; and a projected object's provisioning row links the object being projected (it linked a non-existent object in the target system).
+- `ConnectedSystemFullSynchronisationPreview`, on the Details tab: started by a one-shot request from the drift notice or a Run Profile's Preview action (Full Synchronisation rows only), reattached on arrival until a Full Synchronisation completes after it, stale warning, Run Full Synchronisation (citing the preview only while current, judged again at the click), and one object's own Sync Preview from a drill-down row (`SyncPreviewServer.GetFullSynchronisationRowSubjectAsync`: the synchronised object, or for a target row the synchronised object of the same identity). The deletion preview's state model became the shared `ConnectedSystemPreviewState`.
+- Runtime on the stack (uppercasing Job Title on the APAC import rule): drift notice offers the preview; the Run Profiles action starts it; it reads 990 EMEA accounts updated per title value and 128 objects unchanged; drill-down and object view work; Run Full Synchronisation queued a run whose Activity names the genuine preview; after it, the panel no longer reattaches, and a new preview says the run would change nothing. Reverting showed one gap to follow up: the preview does not list the staged exports a run would withdraw (the reverted titles' uppercase exports), though its end state is right.
+- Public docs (Connected Systems: Previewing a Full Synchronisation) and the changelog entry land here, as the feature becomes reachable; REST and PowerShell follow in Phase 6.
 
 ### Phase 6: REST and PowerShell
 

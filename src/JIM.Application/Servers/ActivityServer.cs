@@ -405,6 +405,15 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// The newest completed Full Synchronisation of a Connected System, or null when it has never completed one: how long
+    /// one takes there, and whether one has run since a preview of it (#1530).
+    /// </summary>
+    public async Task<Activity?> GetLatestCompletedFullSynchronisationAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Activity.GetLatestCompletedFullSynchronisationAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity,
     /// ordered by creation date ascending.
     /// </summary>

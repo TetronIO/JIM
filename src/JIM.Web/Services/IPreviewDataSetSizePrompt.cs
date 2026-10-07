@@ -16,13 +16,13 @@ public interface IPreviewDataSetSizePrompt
     /// <summary>
     /// Presents the estimated cost and the choice.
     /// </summary>
-    /// <param name="estimatedDeltaRows">
-    /// The estimated object-level rows the preview would produce. Stated to the administrator, because a choice
-    /// offered without a size is not an informed one.
+    /// <param name="estimate">
+    /// What the preview would cost: the object-level rows it would produce, and how long it would take where the
+    /// surface can say. Stated to the administrator, because a choice offered without a size is not an informed one.
     /// </param>
     /// <returns>
     /// The chosen persistence, or null when the administrator backed out. Null means *do not run the preview*: they
     /// were shown a cost and declined it, which is not the same as accepting the recommendation.
     /// </returns>
-    Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(long estimatedDeltaRows);
+    Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(PreviewCostEstimate estimate);
 }

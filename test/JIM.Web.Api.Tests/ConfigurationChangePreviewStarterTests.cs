@@ -93,6 +93,18 @@ public class ConfigurationChangePreviewStarterTests
     }
 
     [Test]
+    public async Task StartAsync_EstimateWithADuration_StatesItInThePromptAsync()
+    {
+        // A Full Synchronisation preview of a large system can run for half an hour (#1530). How long it will take is
+        // part of the cost the administrator is agreeing to, so the one confirmation before it starts says so.
+        _adapter.Estimate = new PreviewCostEstimate(200_000, EstimatedDuration: TimeSpan.FromMinutes(35));
+
+        await NewStarter().StartAsync(NewRequest());
+
+        Assert.That(_prompt.EstimateStated?.EstimatedDuration, Is.EqualTo(TimeSpan.FromMinutes(35)));
+    }
+
+    [Test]
     public async Task StartAsync_AdministratorBacksOutOfThePrompt_StartsNothingAsync()
     {
         // Backing out of the question is not the same as accepting the recommendation: they were shown a cost and
@@ -187,15 +199,17 @@ public class ConfigurationChangePreviewStarterTests
     {
         public int TimesAsked { get; private set; }
 
-        public long RowsStated { get; private set; }
+        public long RowsStated => EstimateStated?.EstimatedDeltaRows ?? 0;
+
+        public PreviewCostEstimate? EstimateStated { get; private set; }
 
         public ConfigurationChangePreviewDeltaPersistence? Answer { get; set; } =
             ConfigurationChangePreviewDeltaPersistence.Capped;
 
-        public Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(long estimatedDeltaRows)
+        public Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(PreviewCostEstimate estimate)
         {
             TimesAsked++;
-            RowsStated = estimatedDeltaRows;
+            EstimateStated = estimate;
             return Task.FromResult(Answer);
         }
     }

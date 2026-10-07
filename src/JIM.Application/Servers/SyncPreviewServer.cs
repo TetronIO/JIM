@@ -189,6 +189,27 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// The object of the Connected System being synchronised that a Full Synchronisation preview row is about (#1530):
+    /// what the run would do to that object is the whole chain the row is one consequence of, and its own preview shows
+    /// it. A row about the synchronised object is that object; a row about an object in a target system is the
+    /// synchronised object joined to the same Metaverse Object. Null where the row leads to no object of this system.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the preview synchronises.</param>
+    /// <param name="objectConnectedSystemId">The Connected System the row's object is in.</param>
+    /// <param name="connectedSystemObjectId">The row's Connected System Object, if it names one.</param>
+    /// <param name="metaverseObjectId">The row's Metaverse Object, if it names one.</param>
+    public async Task<ConnectedSystemObject?> GetFullSynchronisationRowSubjectAsync(int connectedSystemId, int? objectConnectedSystemId,
+        Guid? connectedSystemObjectId, Guid? metaverseObjectId)
+    {
+        if (objectConnectedSystemId == connectedSystemId && connectedSystemObjectId is { } ownObjectId)
+            return await SyncRepo.GetConnectedSystemObjectAsync(connectedSystemId, ownObjectId);
+
+        return metaverseObjectId is { } identityId
+            ? await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(identityId, connectedSystemId)
+            : null;
+    }
+
+    /// <summary>
     /// Previews what a synchronisation of one Connected System Object would do now: the inbound chain
     /// (scope, join or projection, Attribute Flow) followed by the outbound decisions the prospective
     /// Metaverse Object state would produce, composed into the preview result with a speculative outcome

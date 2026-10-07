@@ -674,6 +674,146 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
     #region Helpers
 
+    #region Full Synchronisation preview (#1530)
+
+    [Test]
+    public void Panel_WouldNotChangeGroups_AreOneLineUnderTheGridNotRowsInIt()
+    {
+        // Most objects of a repeat Full Synchronisation would not change. Listed in the grid they would outnumber, and
+        // sort beside, the changes the administrator came to read; stated once, the count is still exact.
+        GivenPreview(p =>
+        {
+            Complete(p);
+            p.ImpactCounts = """[{"TransitionType":22,"ObjectCount":31},{"TransitionType":56,"ObjectCount":11794}]""";
+        });
+        GivenGroups(Group(31), UnchangedGroup(11_594, "user"), UnchangedGroup(200, "group"));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Find("[data-testid=jim-preview-unchanged]").TextContent, Does.Contain("11,794"),
+                "the exact count of objects, from the impact counts");
+            Assert.That(panel.FindAll("tbody td").Any(td => td.TextContent.Contains("11,594", StringComparison.Ordinal)), Is.False,
+                "would-not-change groups are not rows of the What would change grid");
+            Assert.That(panel.FindAll("tbody td").Any(td => td.TextContent.Contains("31", StringComparison.Ordinal)), Is.True);
+        }
+    }
+
+    [Test]
+    public void Panel_WouldNotChangeLine_OpensItsObjects()
+    {
+        GivenPreview(p =>
+        {
+            Complete(p);
+            p.ImpactCounts = """[{"TransitionType":22,"ObjectCount":31},{"TransitionType":56,"ObjectCount":200}]""";
+        });
+        GivenGroups(Group(31), UnchangedGroup(200, "user"));
+        GivenDeltas(Delta("x", "y", null));
+
+        var panel = RenderPanel();
+        panel.Find("[data-testid=jim-preview-unchanged-open]").Click();
+
+        panel.WaitForAssertion(() => Assert.That(panel.FindAll("[data-testid=jim-preview-drilldown-heading]"), Has.Count.EqualTo(1),
+            "its objects are a drill-down like any group's"));
+    }
+
+    [Test]
+    public void Panel_FullSynchronisationThatWouldChangeNothing_SaysSoForTheSystem()
+    {
+        GivenPreview(p =>
+        {
+            Complete(p);
+            p.Surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation;
+            p.ImpactCounts = """[{"TransitionType":56,"ObjectCount":200}]""";
+        }, a => a.TargetName = "Yellowstone HR");
+        GivenGroups(UnchangedGroup(200, "user"));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Find("[data-testid=jim-preview-nothing]").TextContent, Does.Contain("Yellowstone HR"),
+                "every object would not change, so the preview's answer is that the run would change nothing");
+            Assert.That(panel.FindAll("tbody td"), Is.Empty, "there is no change to list");
+        }
+    }
+
+    [Test]
+    public void Panel_HeaderActions_AreRenderedInTheHeader()
+    {
+        GivenPreview(Complete);
+
+        var panel = Render<ConfigurationChangePreviewPanel>(p => p
+            .Add(x => x.ActivityId, ActivityId)
+            .Add(x => x.HeaderActions, builder => builder.AddMarkupContent(0, "<button data-testid=\"host-action\">Run</button>")));
+        panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.FindAll("[data-testid=host-action]"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Panel_ObjectSelectedHandler_IsRaisedForTheDrillDownRowSelected()
+    {
+        // A Full Synchronisation preview opens what the run would do to one object from its row (#1530).
+        GivenPreview(Complete);
+        GivenGroups(Group(1, attributeName: "Email"));
+        var delta = Delta("old@example.com", "new@example.com", null);
+        GivenDeltas(delta);
+        ConfigurationChangePreviewDelta? selected = null;
+
+        var panel = Render<ConfigurationChangePreviewPanel>(p => p
+            .Add(x => x.ActivityId, ActivityId)
+            .Add(x => x.OnObjectSelected, d => selected = d));
+        panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("new@example.com"), TimeSpan.FromSeconds(2));
+        panel.FindAll("tbody td").First(td => td.TextContent.Contains("new@example.com", StringComparison.Ordinal)).Click();
+
+        Assert.That(selected?.Id, Is.EqualTo(delta.Id));
+    }
+
+    [Test]
+    public void Panel_ProvisionedRowOfAProjection_LinksTheObjectInThePreviewedSystem()
+    {
+        // A projected object's provisioning names the object being projected, in the system the preview synchronises:
+        // the account in the target system does not exist yet, so the row's system cannot be where the object is.
+        GivenPreview(p =>
+        {
+            Complete(p);
+            p.Surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation;
+        }, a => a.ConnectedSystemId = 3);
+        var group = Group(1);
+        group.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+        group.ConnectedSystemId = 9;
+        group.ConnectedSystemName = "Active Directory";
+        GivenGroups(group);
+        var sourceObjectId = Guid.CreateVersion7();
+        var delta = Delta("x", "y", null, connectedSystemId: 9, connectedSystemObjectId: sourceObjectId);
+        delta.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+        GivenDeltas(delta);
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Active Directory");
+        panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
+
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
+        Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/3/connector-space/{sourceObjectId}"));
+    }
+
+    private static ConfigurationChangePreviewGroup UnchangedGroup(int objectCount, string objectTypeName) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        ActivityId = ActivityId,
+        TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange,
+        MetaverseObjectTypeName = objectTypeName,
+        ConnectedSystemId = 3,
+        ConnectedSystemName = "Yellowstone HR",
+        ObjectCount = objectCount
+    };
+
+    #endregion
+
     private IRenderedComponent<ConfigurationChangePreviewPanel> RenderPanel()
     {
         var panel = Render<ConfigurationChangePreviewPanel>(p => p.Add(x => x.ActivityId, ActivityId));
