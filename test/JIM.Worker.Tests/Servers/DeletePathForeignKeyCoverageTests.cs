@@ -164,21 +164,16 @@ public class DeletePathForeignKeyCoverageTests
                 "Activities are retained for audit; step 2a nulls the reference to the deleted system.",
             ["FK_Activities_ConnectedSystemRunProfiles_ConnectedSystemRunPro~"] =
                 "Activities are retained for audit; step 2a nulls the reference to the deleted Run Profiles.",
-            ["FK_Activities_SyncRules_SyncRuleId"] =
-                "Activities are retained for audit; step 2a nulls the reference to the deleted Synchronisation Rules.",
-            ["FK_MetaverseObjectChanges_SyncRules_SyncRuleId"] =
-                "Metaverse Object change history is retained; step 2b nulls the reference to the deleted " +
-                "Synchronisation Rules.",
             ["FK_MetaverseObjectAttributeValues_ConnectedSystems_Contributed~"] =
-                "The contributed value is retained and only its contributor cleared; step 2c nulls it. Attribute " +
+                "The contributed value is retained and only its contributor cleared; step 2b nulls it. Attribute " +
                 "recall is a sync-engine concern, deliberately out of scope for bulk system deletion.",
             ["FK_MetaverseObjectAttributeValues_ConnectedSystemObjects_Unres~"] =
                 "The metaverse value is retained and only the now-unresolvable staged reference cleared; step 7b " +
                 "nulls it.",
             ["FK_ExampleDataTemplateAttributes_ConnectedSystemAttributes_Con~"] =
-                "Example Data Templates are retained; step 2d nulls the reference to this system's schema attributes.",
+                "Example Data Templates are retained; step 2c nulls the reference to this system's schema attributes.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectTypes_Del~"] =
-                "On the preserve-history path the change rows are kept; step 2e nulls DeletedObjectTypeId before " +
+                "On the preserve-history path the change rows are kept; step 2d nulls DeletedObjectTypeId before " +
                 "step 13 removes the Object Types. On the delete-history path the rows are already gone.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectAttribute~"] =
                 "On the preserve-history path the change rows are kept; step 5 nulls " +
