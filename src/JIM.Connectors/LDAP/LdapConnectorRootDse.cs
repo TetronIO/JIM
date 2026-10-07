@@ -31,6 +31,14 @@ internal class LdapConnectorRootDse
     public long? LastChangeNumber { get; set; }
 
     /// <summary>
+    /// For directories with a changelog: the changeTime of the change numbered <see cref="LastChangeNumber"/>, when
+    /// the changelog held that change and recorded one. The next Delta Import reads that change back and compares,
+    /// to prove the number still names the same change rather than one written after a restore reused it. Null when
+    /// there was no such entry or time to record, and on a record from before JIM kept this; the check is then skipped.
+    /// </summary>
+    public string? LastChangeTime { get; set; }
+
+    /// <summary>
     /// Where the directory says its changelog is (the rootDSE's <c>changelog</c> attribute), or null when it
     /// advertises none, in which case the conventional <c>cn=changelog</c> is tried. Recorded so that a later
     /// import and Schema Discovery read the same place.
@@ -55,6 +63,14 @@ internal class LdapConnectorRootDse
     /// Format: Generalised time (e.g., "20260326183000.000000Z").
     /// </summary>
     public string? LastAccesslogTimestamp { get; set; }
+
+    /// <summary>
+    /// For OpenLDAP: whether <see cref="LastAccesslogTimestamp"/> is the reqStart of a write the accesslog logged
+    /// (true), and so names an entry the next Delta Import can read back to prove the accesslog still reaches it, or
+    /// a timestamp generated because the accesslog was empty (false), which names none. Null with no watermark, and
+    /// on a record from before JIM kept this; either way the next Delta Import has no entry to check.
+    /// </summary>
+    public bool? LastAccesslogTimestampIsLogged { get; set; }
 
     /// <summary>
     /// The detected directory server type, determined from rootDSE capabilities during connection.

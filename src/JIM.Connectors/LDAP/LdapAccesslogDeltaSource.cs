@@ -86,10 +86,13 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         if (string.IsNullOrEmpty(rootDse.LastAccesslogTimestamp))
         {
             rootDse.LastAccesslogTimestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+            rootDse.LastAccesslogTimestampIsLogged = false;
             _logger.Information("LdapAccesslogDeltaSource: The accesslog at {AccesslogDn} is readable but empty; using the generated timestamp {Timestamp} as the watermark so the next Delta Import has a baseline",
                 AccesslogDn, rootDse.LastAccesslogTimestamp);
+            return Task.CompletedTask;
         }
 
+        rootDse.LastAccesslogTimestampIsLogged = true;
         return Task.CompletedTask;
     }
 
@@ -100,6 +103,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     private void LeaveWatermarkEmpty(LdapConnectorRootDse rootDse, string reason)
     {
         rootDse.LastAccesslogTimestamp = null;
+        rootDse.LastAccesslogTimestampIsLogged = null;
         _logger.Warning("LdapAccesslogDeltaSource: No watermark was taken from {AccesslogDn}: {Reason}. The next Delta Import will have no baseline and will perform a Full Import.",
             AccesslogDn, reason);
     }
@@ -274,9 +278,63 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     #region Continuity, readiness and baseline
 
     /// <inheritdoc />
-    /// <remarks>A timestamp watermark carries no server identity to verify, so nothing can invalidate it here.</remarks>
+    /// <remarks>
+    /// The watermark is the reqStart of the last write the last import read, which is also the RDN of that write's
+    /// accesslog entry, so whether the accesslog still reaches back to it is one base read away (#2008). When the
+    /// entry is gone, the accesslog was purged past it (olcAccessLogPurge removes entries older than its maximum age,
+    /// so this happens when Delta Imports stop for longer than that) or the directory was restored to before it;
+    /// either way the writes between it and the oldest entry still held may be gone too, and a timestamp watermark
+    /// cannot otherwise tell. When nothing was written in that time nothing was lost, but no read can tell that
+    /// apart, so the run is refused all the same. A generated watermark names no entry and is not checked; nor is a
+    /// record from before JIM kept which kind it is. Where cn=accesslog itself is missing or refused, the readiness
+    /// check that runs next names that, so this one says nothing.
+    /// </remarks>
     public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
     {
+        if (previous.LastAccesslogTimestampIsLogged != true || string.IsNullOrEmpty(previous.LastAccesslogTimestamp))
+            return;
+
+        var watermark = previous.LastAccesslogTimestamp;
+        if (IsStillLogged(watermark) != false || ProbeAccesslog().Outcome != LdapDeltaSourceOutcome.Available)
+            return;
+
+        _logger.Warning("LdapAccesslogDeltaSource: Refusing the Delta Import; the accesslog no longer holds the entry the last import ended at ({Watermark})",
+            LogSanitiser.Sanitise(watermark));
+
+        throw new CannotPerformDeltaImportException(
+            $"The directory's accesslog no longer holds the change the last import ended at (reqStart {watermark}), so the changes logged after it " +
+            "may be gone too. The usual cause is that the accesslog's purge (olcAccessLogPurge) removed entries older than its maximum age because " +
+            "Delta Imports did not run for longer than that; it also happens when the directory is restored from a backup or snapshot. If nothing " +
+            "was written in that time nothing was lost, but JIM cannot tell, and a Delta Import would silently miss any changes that were. Run a " +
+            "Full Import, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than the longest " +
+            "gap between Delta Imports.");
+    }
+
+    /// <summary>
+    /// Whether the accesslog entry named by a watermark is still there: true when the directory answers it, false
+    /// when it answers that there is no such entry (or answers with none), and null when it refuses the read, which
+    /// says nothing about the entry. A fault on the way to the directory propagates: it is an error, not evidence.
+    /// </summary>
+    private bool? IsStillLogged(string watermark)
+    {
+        var request = new SearchRequest($"reqStart={watermark},{AccesslogDn}", "(objectClass=*)", SearchScope.Base, "1.1");
+
+        try
+        {
+            return ((SearchResponse)_executor.SendRequest(request)).Entries.Count > 0;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            return false;
+        }
+        catch (DirectoryOperationException)
+        {
+            return null;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -292,35 +350,37 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     public Task<IReadOnlyList<LdapDeltaSourceFinding>> VerifyReadinessAsync(LdapConnectorRootDse rootDse, IReadOnlyCollection<string> namingContexts, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<LdapDeltaSourceFinding>>([ProbeAccesslog()]);
+    }
 
+    /// <summary>What reading the cn=accesslog entry itself says about the accesslog; see <see cref="VerifyReadinessAsync"/>.</summary>
+    private LdapDeltaSourceFinding ProbeAccesslog()
+    {
         var request = new SearchRequest(AccesslogDn, "(objectClass=*)", SearchScope.Base, "1.1");
 
-        LdapDeltaSourceFinding finding;
         try
         {
             var response = (SearchResponse)_executor.SendRequest(request);
-            finding = response.Entries.Count > 0
+            return response.Entries.Count > 0
                 ? Available()
                 : NotFound("the directory answered the read with no entry");
         }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
         {
-            finding = NotFound("the directory answered noSuchObject");
+            return NotFound("the directory answered noSuchObject");
         }
         catch (DirectoryOperationException ex)
         {
-            finding = Refused(DirectorysWords(ex));
+            return Refused(DirectorysWords(ex));
         }
         catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
         {
-            finding = NotFound("the directory answered noSuchObject");
+            return NotFound("the directory answered noSuchObject");
         }
         catch (LdapException ex)
         {
-            finding = Undetermined($"the directory could not be reached ({DirectorysWords(ex)})");
+            return Undetermined($"the directory could not be reached ({DirectorysWords(ex)})");
         }
-
-        return Task.FromResult<IReadOnlyList<LdapDeltaSourceFinding>>([finding]);
     }
 
     /// <inheritdoc />
