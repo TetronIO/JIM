@@ -4216,6 +4216,257 @@ WHERE "Id" = '$safeMvoId';
     }
 }
 
+function Get-JimExpectedErrorsPath {
+    <#
+    .SYNOPSIS
+        Resolves where expected error declarations are recorded: the given path, or JIM_EXPECTED_ERRORS_PATH.
+    #>
+    param([string]$Path)
+
+    if (-not [string]::IsNullOrWhiteSpace($Path)) { return $Path }
+    return $env:JIM_EXPECTED_ERRORS_PATH
+}
+
+function Add-JimExpectedError {
+    <#
+    .SYNOPSIS
+        Declares an Error line a scenario step provokes on purpose, so the error watcher and the end-of-run log scan
+        ignore it.
+
+    .DESCRIPTION
+        Some steps exist to make JIM log an Error: a target refusing a generated value with Collision Remediation
+        switched off, an export JIM parks for a decision (Unique Value Generation, #242, release 4). Without a
+        declaration the live watcher (Start-JimErrorWatcher) writes that line to its sentinel, which aborts every
+        Start-JIMRunProfile -Wait that follows, and Assert-NoWorkerErrors fails the run at the end.
+
+        A declaration is a regular expression scoped to a step: it excuses an Error line only when the line matches
+        AND was logged between this call and Complete-JimExpectedError for the same step (plus its grace period).
+        Every other Error line still fails the run, including the same text logged outside the step. Declare as
+        narrowly as the line allows: name the error type and, where it appears, the object or system.
+
+        Declarations are appended to a JSON-lines file, because the watcher's tailing jobs are separate processes
+        and the end-of-run scan runs in the runner after the scenario has returned: both read the file. The runner
+        sets JIM_EXPECTED_ERRORS_PATH for the scenario; with neither that nor -Path, this throws rather than leave
+        the line undeclared and the run failing for a reason that would read as a product fault.
+
+    .PARAMETER Step
+        The scenario step the declaration belongs to; Complete-JimExpectedError closes it by this name.
+
+    .PARAMETER Pattern
+        Regular expression the Error line must match. Must be valid and non-empty.
+
+    .PARAMETER Path
+        The declarations file. Defaults to JIM_EXPECTED_ERRORS_PATH.
+
+    .OUTPUTS
+        The declaration recorded.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Step,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Pattern,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Pattern)) {
+        throw "An expected error pattern must not be empty: it would excuse every Error line."
+    }
+    try {
+        [void][regex]::new($Pattern)
+    }
+    catch {
+        throw "The expected error pattern '$Pattern' is not a valid regular expression: $($_.Exception.Message)"
+    }
+
+    $resolved = Get-JimExpectedErrorsPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($resolved)) {
+        throw "Cannot declare an expected error for step '$Step': no -Path given and JIM_EXPECTED_ERRORS_PATH is not set (run the scenario through Run-IntegrationTests.ps1)."
+    }
+
+    $directory = Split-Path -Parent $resolved
+    if ($directory -and -not (Test-Path $directory)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    # One second earlier than now: docker's timestamps and this clock are the same host's, but a line logged in the
+    # instant before the call must not fall outside the window.
+    $declaration = [PSCustomObject]@{
+        Step    = $Step
+        Pattern = $Pattern
+        From    = (Get-Date).ToUniversalTime().AddSeconds(-1).ToString('o')
+        Until   = $null
+    }
+    [System.IO.File]::AppendAllText($resolved, ($declaration | ConvertTo-Json -Compress) + "`n")
+
+    return (ConvertTo-JimExpectedErrorDeclaration -Record $declaration)
+}
+
+function Complete-JimExpectedError {
+    <#
+    .SYNOPSIS
+        Closes a step's expected error declarations: lines logged after the grace period are errors again.
+
+    .PARAMETER Step
+        The step named in Add-JimExpectedError.
+
+    .PARAMETER GraceSeconds
+        How long after this call a matching line is still excused, for a line the worker writes just after the
+        step's last Activity reports completion. Default 5.
+
+    .PARAMETER Path
+        The declarations file. Defaults to JIM_EXPECTED_ERRORS_PATH.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Step,
+
+        [Parameter(Mandatory = $false)]
+        [int]$GraceSeconds = 5,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Path
+    )
+
+    $resolved = Get-JimExpectedErrorsPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($resolved) -or -not (Test-Path $resolved)) {
+        return
+    }
+
+    $until = (Get-Date).ToUniversalTime().AddSeconds($GraceSeconds).ToString('o')
+    $records = @(Get-Content -Path $resolved | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+        $record = $_ | ConvertFrom-Json
+        if ($record.Step -eq $Step -and -not $record.Until) {
+            $record.Until = $until
+        }
+        $record
+    })
+
+    # Rewrite whole; the tailing jobs only ever read this file, and a reader racing the rewrite at worst sees the
+    # declaration still open for one line.
+    $content = ($records | ForEach-Object { ($_ | ConvertTo-Json -Compress) }) -join "`n"
+    [System.IO.File]::WriteAllText($resolved, $content + "`n")
+}
+
+function ConvertTo-JimExpectedErrorDeclaration {
+    <#
+    .SYNOPSIS
+        Normalises a stored declaration: From and Until as UTC DateTime (Until null while the step is open).
+    #>
+    param([Parameter(Mandatory = $true)]$Record)
+
+    $toUtc = {
+        param($value)
+        if ($null -eq $value -or ($value -is [string] -and [string]::IsNullOrWhiteSpace($value))) { return $null }
+        if ($value -is [datetime]) { return $value.ToUniversalTime() }
+        if ($value -is [datetimeoffset]) { return $value.UtcDateTime }
+        return [datetime]::Parse([string]$value, [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+    }
+
+    return [PSCustomObject]@{
+        Step    = [string]$Record.Step
+        Pattern = [string]$Record.Pattern
+        From    = & $toUtc $Record.From
+        Until   = & $toUtc $Record.Until
+    }
+}
+
+function Get-JimExpectedErrors {
+    <#
+    .SYNOPSIS
+        Reads the expected error declarations; empty when there are none.
+
+    .PARAMETER Path
+        The declarations file. Defaults to JIM_EXPECTED_ERRORS_PATH.
+    #>
+    param([Parameter(Mandatory = $false)][string]$Path)
+
+    $resolved = Get-JimExpectedErrorsPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($resolved) -or -not (Test-Path $resolved)) {
+        return @()
+    }
+
+    return @(Get-Content -Path $resolved -ErrorAction SilentlyContinue |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { ConvertTo-JimExpectedErrorDeclaration -Record ($_ | ConvertFrom-Json) })
+}
+
+function Test-JimExpectedErrorLine {
+    <#
+    .SYNOPSIS
+        Whether an Error line is excused by a declaration: it matches the pattern and was logged inside the step's
+        window.
+
+    .PARAMETER Line
+        The log line (with or without docker's timestamp prefix).
+
+    .PARAMETER Timestamp
+        When docker says the line was logged (UTC). A line without one is never excused.
+
+    .PARAMETER Declarations
+        From Get-JimExpectedErrors.
+
+    .OUTPUTS
+        [bool]
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Line,
+
+        [Parameter(Mandatory = $false)]
+        [Nullable[datetime]]$Timestamp,
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [object[]]$Declarations = @()
+    )
+
+    if ($null -eq $Timestamp -or -not $Declarations) {
+        return $false
+    }
+
+    $at = ([datetime]$Timestamp).ToUniversalTime()
+    foreach ($declaration in $Declarations) {
+        if ($null -eq $declaration -or -not $declaration.Pattern) { continue }
+        if ($declaration.From -and $at -lt $declaration.From) { continue }
+        if ($declaration.Until -and $at -gt $declaration.Until) { continue }
+        if ($Line -match $declaration.Pattern) { return $true }
+    }
+    return $false
+}
+
+function Split-DockerLogTimestamp {
+    <#
+    .SYNOPSIS
+        Splits the RFC 3339 timestamp `docker logs --timestamps` prefixes from a line.
+
+    .OUTPUTS
+        PSCustomObject with Timestamp (UTC DateTime, or null when the line carries none) and Text.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Line
+    )
+
+    if ($Line -match '^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?Z (.*)$') {
+        # Docker writes nanoseconds; DateTime holds ticks (100ns), so keep at most seven fractional digits.
+        $fraction = if ($Matches[2]) { $Matches[2].Substring(0, [Math]::Min(8, $Matches[2].Length)) } else { '' }
+        $timestamp = [datetime]::ParseExact("$($Matches[1])$($fraction)Z",
+            [string[]]@("yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"),
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+        return [PSCustomObject]@{ Timestamp = $timestamp; Text = $Matches[3] }
+    }
+
+    return [PSCustomObject]@{ Timestamp = $null; Text = $Line }
+}
+
 function Get-JimErrorLinePattern {
     <#
     .SYNOPSIS
@@ -4276,6 +4527,16 @@ function Start-JimErrorWatcher {
     .PARAMETER Containers
         Container names to tail. Defaults to jim.web, jim.worker, jim.scheduler.
 
+    .PARAMETER DockerCommand
+        The docker executable the watcher runs, by name or full path. Defaults to `docker` found on PATH. Exists so a
+        test can run a stand-in by its path without changing PATH for the whole test session.
+
+    .PARAMETER ExpectedErrorsPath
+        The expected error declarations file (Add-JimExpectedError). Defaults to
+        JIM_EXPECTED_ERRORS_PATH. An Error line a scenario step declared, logged
+        inside that step's window, is not written to the sentinel, so it neither
+        aborts a Run Profile wait nor fails the run.
+
     .OUTPUTS
         PSCustomObject with Jobs, SentinelPath, StartTime, AllowPattern.
     #>
@@ -4290,7 +4551,13 @@ function Start-JimErrorWatcher {
         [string]$AllowPattern = '',
 
         [Parameter(Mandatory=$false)]
-        [string[]]$Containers = (Get-JimServiceContainers)
+        [string[]]$Containers = (Get-JimServiceContainers),
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedErrorsPath = $env:JIM_EXPECTED_ERRORS_PATH,
+
+        [Parameter(Mandatory=$false)]
+        [string]$DockerCommand = 'docker'
     )
 
     # Ensure sentinel file exists and is empty
@@ -4304,27 +4571,45 @@ function Start-JimErrorWatcher {
     # a 1-second cushion so we don't miss any line racing the watcher start.
     $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
+    $helperDefinitions = @{}
+    foreach ($name in 'Get-JimExpectedErrorsPath', 'ConvertTo-JimExpectedErrorDeclaration', 'Get-JimExpectedErrors', 'Test-JimExpectedErrorLine', 'Split-DockerLogTimestamp') {
+        $helperDefinitions[$name] = (Get-Command -Name $name -CommandType Function).Definition
+    }
+
     $jobs = @()
     foreach ($container in $Containers) {
         $job = Start-Job -Name "jim-err-watcher-$container" -ScriptBlock {
-            param($containerName, $since, $sentinel, $allowPattern, $errorPattern)
+            param($containerName, $since, $sentinel, $allowPattern, $errorPattern, $expectedErrorsPath, $helperDefinitions, $dockerCommand)
+
+            # The job is a separate process: recreate the expected-error helpers it needs from their definitions.
+            foreach ($name in $helperDefinitions.Keys) {
+                Set-Item -Path "function:$name" -Value ([scriptblock]::Create($helperDefinitions[$name]))
+            }
 
             # `docker logs -f ... 2>&1` merges stderr into stdout so the pipeline
             # sees every log line regardless of which stream the sink uses. The
             # pipeline is line-buffered, so each match is written to the sentinel
-            # the moment it arrives.
-            & docker logs --since $since -f $containerName 2>&1 | ForEach-Object {
-                $line = $_
-                if ($null -eq $line) { return }
+            # the moment it arrives. --timestamps gives each line docker's own
+            # time, which places it inside or outside a step's expected-error
+            # window (Add-JimExpectedError).
+            & $dockerCommand logs --timestamps --since $since -f $containerName 2>&1 | ForEach-Object {
+                $line = [string]$_
+                if ($null -eq $_) { return }
                 if ($line -match $errorPattern) {
                     if ($allowPattern -and ($line -match $allowPattern)) { return }
+                    # Re-read per error line, not once: the scenario declares as it goes.
+                    $declarations = @(Get-JimExpectedErrors -Path $expectedErrorsPath)
+                    if ($declarations.Count -gt 0) {
+                        $parsed = Split-DockerLogTimestamp -Line $line
+                        if (Test-JimExpectedErrorLine -Line $parsed.Text -Timestamp $parsed.Timestamp -Declarations $declarations) { return }
+                    }
                     $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
                     # Open/append/close per line so the sentinel is durable even
                     # if the watcher is killed mid-stream.
                     [System.IO.File]::AppendAllText($sentinel, "[$stamp] [$containerName] $line`n")
                 }
             }
-        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern, (Get-JimErrorLinePattern)
+        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern, (Get-JimErrorLinePattern), $ExpectedErrorsPath, $helperDefinitions, $DockerCommand
 
         $jobs += $job
     }
@@ -4905,9 +5190,14 @@ function Assert-NoWorkerErrors {
     .PARAMETER Containers
         Containers to scan. Defaults to jim.web, jim.worker, jim.scheduler.
 
+    .PARAMETER ExpectedErrorsPath
+        The expected error declarations file (Add-JimExpectedError). Defaults to
+        JIM_EXPECTED_ERRORS_PATH. A line a step declared, logged inside that
+        step's window, is ignored; the count of lines ignored is reported.
+
     .OUTPUTS
-        Throws if any Error/Fatal line is found (outside the allowlist). Returns
-        quietly on success.
+        Throws if any Error/Fatal line is found (outside the allowlist and the
+        declared expected errors). Returns quietly on success.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -4917,24 +5207,41 @@ function Assert-NoWorkerErrors {
         [string]$AllowPattern = '',
 
         [Parameter(Mandatory=$false)]
-        [string[]]$Containers = (Get-JimServiceContainers)
+        [string[]]$Containers = (Get-JimServiceContainers),
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedErrorsPath = $env:JIM_EXPECTED_ERRORS_PATH
     )
 
     $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $allErrors = @()
+    $expectedCount = 0
     $errorPattern = Get-JimErrorLinePattern
+    $declarations = @(Get-JimExpectedErrors -Path $ExpectedErrorsPath)
 
     foreach ($container in $Containers) {
         # 2>&1 merges stderr (where some log sinks write) into stdout so the
-        # Select-String below sees every log line, not just stdout.
-        $output = docker logs --since $sinceString $container 2>&1
-        $errorLines = $output | Where-Object { $_ -match $errorPattern }
+        # Select-String below sees every log line, not just stdout. --timestamps
+        # places each line inside or outside a step's expected-error window.
+        $output = docker logs --timestamps --since $sinceString $container 2>&1
+        $errorLines = @($output | ForEach-Object { [string]$_ } | Where-Object { $_ -match $errorPattern })
         if ($AllowPattern) {
-            $errorLines = $errorLines | Where-Object { $_ -notmatch $AllowPattern }
+            $errorLines = @($errorLines | Where-Object { $_ -notmatch $AllowPattern })
         }
         foreach ($line in $errorLines) {
+            if ($declarations.Count -gt 0) {
+                $parsed = Split-DockerLogTimestamp -Line $line
+                if (Test-JimExpectedErrorLine -Line $parsed.Text -Timestamp $parsed.Timestamp -Declarations $declarations) {
+                    $expectedCount++
+                    continue
+                }
+            }
             $allErrors += "[$container] $line"
         }
+    }
+
+    if ($expectedCount -gt 0) {
+        Write-Host "  Ignored $expectedCount Error line(s) declared as expected by a scenario step" -ForegroundColor DarkGray
     }
 
     if ($allErrors.Count -gt 0) {

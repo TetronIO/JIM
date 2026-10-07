@@ -323,6 +323,41 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The stored generation settings of the given mappings' generated flows, read before a save flushes anything so
+    /// <see cref="ReleaseNeedsDecisionIfGenerationChangedAsync"/> can tell what the save changed (Unique Value Generation,
+    /// #242, release 4). No repository call when none of them is a saved generated flow.
+    /// </summary>
+    private Task<Dictionary<int, SyncRuleMappingGeneration>> ReadStoredGenerationsAsync(IEnumerable<SyncRuleMapping> mappings)
+    {
+        var ids = mappings.Where(m => m.Generation is { Id: > 0 }).Select(m => m.Generation!.Id).Distinct().ToList();
+        return ids.Count == 0
+            ? Task.FromResult(new Dictionary<int, SyncRuleMappingGeneration>())
+            : Application.Repository.ConnectedSystems.GetSyncRuleMappingGenerationsAsync(ids);
+    }
+
+    /// <summary>
+    /// Releases the Needs Decision of every generated flow among <paramref name="mappings"/> whose generation
+    /// configuration the save changed (FR 16; Unique Value Generation, #242, release 4), mirroring
+    /// <c>ReleaseParkedInitialPasswordsIfDeliveryChangedAsync</c>: the change is the administrator's answer, so the
+    /// assignments return to Committed and their parked exports to Pending, for the next export run to try under the new
+    /// configuration. Gated on an actual change, so an unrelated edit does not set them retrying against settings the
+    /// target has already answered.
+    /// </summary>
+    private async Task ReleaseNeedsDecisionIfGenerationChangedAsync(IEnumerable<SyncRuleMapping> mappings, Dictionary<int, SyncRuleMappingGeneration> previous)
+    {
+        foreach (var generation in mappings
+                     .Select(m => m.Generation)
+                     .OfType<SyncRuleMappingGeneration>()
+                     .Where(g => previous.TryGetValue(g.Id, out var stored) && !SyncRuleMappingGeneration.WouldGenerateTheSameAs(stored, g)))
+        {
+            var released = await Application.UniqueValues.ReleaseNeedsDecisionForMappingAsync(generation.Id);
+            if (released > 0)
+                Log.Information("ReleaseNeedsDecisionIfGenerationChangedAsync: the generation configuration of flow {GenerationId} changed, so " +
+                    "{Count} generated value(s) waiting on a decision were released for the next export to try again", generation.Id, released);
+        }
+    }
+
+    /// <summary>
     /// Validates a single generated mapping's settings (Unique Value Generation, #242, Phase 3 point 1) via
     /// <see cref="SyncRuleMappingGenerationValidator"/>, and refuses the save with every problem found joined
     /// into one message, the same way <see cref="ValidateMappingTypeCompatibility"/> and

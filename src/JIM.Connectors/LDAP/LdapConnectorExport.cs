@@ -134,7 +134,7 @@ internal class LdapConnectorExport
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process Pending Export {Id} ({ChangeType})", pendingExport.Id, pendingExport.ChangeType);
+                LogExportFailure(ex, "LdapConnectorExport.Execute", pendingExport);
 
                 // Return failure result - ExportExecutionServer is responsible for updating
                 // ErrorCount, Status, and retry timing. The connector should
@@ -679,8 +679,7 @@ internal class LdapConnectorExport
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process Pending Export {Id} ({ChangeType})",
-                        pendingExport.Id, pendingExport.ChangeType);
+                    LogExportFailure(ex, "LdapConnectorExport.ExecuteAsync", pendingExport);
                     results[index] = FailureFor(ex);
                 }
                 finally
@@ -1959,6 +1958,20 @@ internal class LdapConnectorExport
 
         return response.ResultCode is ResultCode.ConstraintViolation or ResultCode.NoSuchObject
                                       or ResultCode.UnwillingToPerform;
+    }
+
+    /// <summary>
+    /// Logs an export the directory refused. A value already in use is a per-object data conflict the export run reports
+    /// on the object (and may correct, Unique Value Generation's Collision Remediation), so it is logged at Warning; every
+    /// other failure stays an Error, as it always was.
+    /// </summary>
+    private void LogExportFailure(Exception ex, string caller, PendingExport pendingExport)
+    {
+        if (LdapUniquenessRejectionClassifier.TryClassify(ex, out _))
+            _logger.Warning(ex, "{Caller}: Pending Export {Id} ({ChangeType}) was rejected because a value it carries is already in use",
+                caller, pendingExport.Id, pendingExport.ChangeType);
+        else
+            _logger.Error(ex, "{Caller}: Failed to process Pending Export {Id} ({ChangeType})", caller, pendingExport.Id, pendingExport.ChangeType);
     }
 
     /// <summary>

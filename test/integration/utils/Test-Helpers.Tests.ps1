@@ -1030,3 +1030,205 @@ Describe 'Assert-ActivitySuccess -AllowedWarningMessagePattern' {
             Should -Throw '*did not complete successfully*'
     }
 }
+
+Describe 'Expected error declarations' {
+    # A scenario step that provokes an Error line on purpose (a target refusing a value, an export JIM parks for a
+    # decision) declares it, by pattern, for the duration of the step; the live error watcher and the end-of-run log
+    # scan then ignore that line and only that line (Unique Value Generation, #242, release 4).
+    BeforeEach {
+        $script:declarationsPath = Join-Path $TestDrive "expected-errors-$([guid]::NewGuid().ToString('N')).jsonl"
+    }
+
+    Context 'Add-JimExpectedError, Complete-JimExpectedError and Get-JimExpectedErrors' {
+        It 'records an open declaration for the step' {
+            $before = (Get-Date).ToUniversalTime()
+
+            Add-JimExpectedError -Step 'NeedsDecision' -Pattern 'GeneratedValueCollisionUnresolved' -Path $script:declarationsPath | Out-Null
+            $declarations = @(Get-JimExpectedErrors -Path $script:declarationsPath)
+
+            $declarations.Count | Should -Be 1
+            $declarations[0].Step | Should -Be 'NeedsDecision'
+            $declarations[0].Pattern | Should -Be 'GeneratedValueCollisionUnresolved'
+            $declarations[0].From | Should -BeLessOrEqual $before
+            $declarations[0].Until | Should -BeNullOrEmpty
+        }
+
+        It 'closes only the named step''s declarations, with a grace period' {
+            Add-JimExpectedError -Step 'One' -Pattern 'a' -Path $script:declarationsPath | Out-Null
+            Add-JimExpectedError -Step 'Two' -Pattern 'b' -Path $script:declarationsPath | Out-Null
+            $closedAt = (Get-Date).ToUniversalTime()
+
+            Complete-JimExpectedError -Step 'One' -Path $script:declarationsPath -GraceSeconds 5
+            $declarations = @(Get-JimExpectedErrors -Path $script:declarationsPath)
+
+            ($declarations | Where-Object Step -eq 'One').Until | Should -BeGreaterOrEqual $closedAt.AddSeconds(4)
+            ($declarations | Where-Object Step -eq 'Two').Until | Should -BeNullOrEmpty
+        }
+
+        It 'refuses a pattern that is not a valid regular expression' {
+            { Add-JimExpectedError -Step 'Bad' -Pattern '(unclosed' -Path $script:declarationsPath } | Should -Throw '*regular expression*'
+        }
+
+        It 'refuses an empty pattern, which would excuse every error line' {
+            { Add-JimExpectedError -Step 'Bad' -Pattern '' -Path $script:declarationsPath } | Should -Throw
+        }
+
+        It 'reads the path from JIM_EXPECTED_ERRORS_PATH when none is given' {
+            $env:JIM_EXPECTED_ERRORS_PATH = $script:declarationsPath
+            try {
+                Add-JimExpectedError -Step 'FromEnvironment' -Pattern 'x' | Out-Null
+                @(Get-JimExpectedErrors).Count | Should -Be 1
+            }
+            finally {
+                Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
+            }
+        }
+
+        It 'refuses to declare when there is nowhere to record it, rather than silently not excusing the line' {
+            Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
+            { Add-JimExpectedError -Step 'Nowhere' -Pattern 'x' } | Should -Throw '*JIM_EXPECTED_ERRORS_PATH*'
+        }
+
+        It 'returns nothing when no declaration file exists' {
+            @(Get-JimExpectedErrors -Path (Join-Path $TestDrive 'missing.jsonl')).Count | Should -Be 0
+        }
+    }
+
+    Context 'Test-JimExpectedErrorLine' {
+        BeforeAll {
+            $script:t0 = [datetime]::new(2026, 10, 6, 12, 0, 0, [DateTimeKind]::Utc)
+            $script:closed = [PSCustomObject]@{ Step = 'Closed'; Pattern = 'GeneratedValueCollisionUnresolved'; From = $script:t0; Until = $script:t0.AddMinutes(1) }
+            $script:open = [PSCustomObject]@{ Step = 'Open'; Pattern = 'value already in use'; From = $script:t0.AddMinutes(5); Until = $null }
+            $script:line = '[12:00:30 ERR] Export of Joe Bloggs parked: GeneratedValueCollisionUnresolved'
+        }
+
+        It 'excuses a matching line inside the step''s window' {
+            Test-JimExpectedErrorLine -Line $script:line -Timestamp $script:t0.AddSeconds(30) -Declarations @($script:closed) | Should -BeTrue
+        }
+
+        It 'does not excuse the same line before or after the window' {
+            Test-JimExpectedErrorLine -Line $script:line -Timestamp $script:t0.AddSeconds(-30) -Declarations @($script:closed) | Should -BeFalse
+            Test-JimExpectedErrorLine -Line $script:line -Timestamp $script:t0.AddMinutes(2) -Declarations @($script:closed) | Should -BeFalse
+        }
+
+        It 'does not excuse a line no declaration matches' {
+            Test-JimExpectedErrorLine -Line '[12:00:30 ERR] Unhandled exception' -Timestamp $script:t0.AddSeconds(30) -Declarations @($script:closed) | Should -BeFalse
+        }
+
+        It 'keeps an open window open' {
+            Test-JimExpectedErrorLine -Line '[ERR] the value already in use' -Timestamp $script:t0.AddHours(3) -Declarations @($script:closed, $script:open) | Should -BeTrue
+        }
+
+        It 'excuses nothing with no declarations' {
+            Test-JimExpectedErrorLine -Line $script:line -Timestamp $script:t0 -Declarations @() | Should -BeFalse
+        }
+
+        It 'treats a line with no timestamp as outside every window' {
+            Test-JimExpectedErrorLine -Line $script:line -Timestamp $null -Declarations @($script:closed, $script:open) | Should -BeFalse
+        }
+    }
+
+    Context 'Split-DockerLogTimestamp' {
+        It 'separates the RFC 3339 timestamp docker logs --timestamps prefixes' {
+            $parsed = Split-DockerLogTimestamp -Line '2026-10-06T12:00:30.123456789Z [12:00:30 ERR] boom'
+
+            $parsed.Timestamp | Should -Be ([datetime]::new(2026, 10, 6, 12, 0, 30, [DateTimeKind]::Utc).AddTicks(1234567))
+            $parsed.Timestamp.Kind | Should -Be ([DateTimeKind]::Utc)
+            $parsed.Text | Should -Be '[12:00:30 ERR] boom'
+        }
+
+        It 'returns the line unchanged with no timestamp when there is none' {
+            $parsed = Split-DockerLogTimestamp -Line '[12:00:30 ERR] boom'
+
+            $parsed.Timestamp | Should -BeNullOrEmpty
+            $parsed.Text | Should -Be '[12:00:30 ERR] boom'
+        }
+    }
+
+    Context 'Assert-NoWorkerErrors' {
+        BeforeEach {
+            Mock Write-Host {}
+            $script:now = (Get-Date).ToUniversalTime()
+            $stamp = $script:now.ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+            $script:logLines = @(
+                "$stamp [12:00:30 INF] fine",
+                "$stamp [12:00:30 ERR] Export parked: GeneratedValueCollisionUnresolved for Joe Bloggs"
+            )
+            Mock docker { $script:logLines }
+        }
+
+        It 'fails on an undeclared Error line' {
+            { Assert-NoWorkerErrors -Since $script:now.AddMinutes(-1) -Containers 'jim.worker' -ExpectedErrorsPath $script:declarationsPath } |
+                Should -Throw '*1 Error/Fatal*'
+        }
+
+        It 'passes when the line is declared for a step covering it' {
+            Add-JimExpectedError -Step 'NeedsDecision' -Pattern 'GeneratedValueCollisionUnresolved' -Path $script:declarationsPath | Out-Null
+
+            { Assert-NoWorkerErrors -Since $script:now.AddMinutes(-1) -Containers 'jim.worker' -ExpectedErrorsPath $script:declarationsPath } |
+                Should -Not -Throw
+        }
+
+        It 'still fails when the declaration''s step closed before the line was logged' {
+            [System.IO.File]::WriteAllText($script:declarationsPath, (@{
+                Step = 'Earlier'; Pattern = 'GeneratedValueCollisionUnresolved'
+                From = $script:now.AddMinutes(-10).ToString('o'); Until = $script:now.AddMinutes(-5).ToString('o')
+            } | ConvertTo-Json -Compress) + "`n")
+
+            { Assert-NoWorkerErrors -Since $script:now.AddMinutes(-20) -Containers 'jim.worker' -ExpectedErrorsPath $script:declarationsPath } |
+                Should -Throw '*1 Error/Fatal*'
+        }
+
+        It 'asks docker for timestamped lines' {
+            Add-JimExpectedError -Step 'NeedsDecision' -Pattern 'GeneratedValueCollisionUnresolved' -Path $script:declarationsPath | Out-Null
+
+            Assert-NoWorkerErrors -Since $script:now.AddMinutes(-1) -Containers 'jim.worker' -ExpectedErrorsPath $script:declarationsPath
+
+            Should -Invoke docker -ParameterFilter { $args -contains '--timestamps' }
+        }
+    }
+
+    Context 'Start-JimErrorWatcher' {
+        BeforeAll {
+            # A stand-in docker, so the watcher's background jobs (separate processes, out of Mock's reach) read known
+            # lines: one declared, one not. Passed by path through -DockerCommand. Written with LF line endings
+            # whatever this file's checkout uses: .ps1 files check out as CRLF (.gitattributes), and a "#!/bin/sh`r"
+            # first line names an interpreter that does not exist, so the script fails with "No such file or directory".
+            $script:fakeBin = Join-Path $TestDrive 'fakebin'
+            New-Item -ItemType Directory -Path $script:fakeBin -Force | Out-Null
+            $fakeDocker = Join-Path $script:fakeBin 'docker'
+            $stamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+            @"
+#!/bin/sh
+echo "$stamp [12:00:30 ERR] Export parked: GeneratedValueCollisionUnresolved for Joe Bloggs"
+echo "$stamp [12:00:31 ERR] Unhandled exception in the export run"
+"@ -replace "`r", '' | Set-Content -Path $fakeDocker -NoNewline
+            chmod +x $fakeDocker
+            $script:originalPath = $env:PATH
+        }
+
+        AfterAll {
+            $env:PATH = $script:originalPath
+        }
+
+        It 'writes only the undeclared line to the sentinel' -Skip:($IsWindows) {
+            $env:JIM_EXPECTED_ERRORS_PATH = $script:declarationsPath
+            try {
+                Add-JimExpectedError -Step 'NeedsDecision' -Pattern 'GeneratedValueCollisionUnresolved' | Out-Null
+                $sentinel = Join-Path $TestDrive 'sentinel.log'
+
+                $handle = Start-JimErrorWatcher -SentinelPath $sentinel -Since (Get-Date).AddMinutes(-1) -Containers 'jim.worker' `
+                    -DockerCommand (Join-Path $script:fakeBin 'docker')
+                $handle.Jobs | Wait-Job -Timeout 30 | Out-Null
+                $jobOutput = @($handle.Jobs | Receive-Job -Keep 2>&1 | ForEach-Object { [string]$_ })
+                $lines = @(Stop-JimErrorWatcher -Handle $handle)
+
+                $lines.Count | Should -Be 1 -Because "the watcher job reported: $($jobOutput -join ' | ')"
+                $lines[0] | Should -Match 'Unhandled exception'
+            }
+            finally {
+                Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}

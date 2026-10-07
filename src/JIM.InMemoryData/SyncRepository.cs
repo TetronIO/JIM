@@ -4478,4 +4478,190 @@ public class SyncRepository : ISyncRepository
     }
 
     #endregion
+    #region Collision Remediation (#242, release 4)
+
+    private readonly Dictionary<Guid, GeneratedValueRevisionPending> _generatedValueRevisionsPending = new();
+
+    /// <summary>
+    /// The revision-pending records currently held (#242, release 4), for test inspection.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, GeneratedValueRevisionPending> GeneratedValueRevisionsPending => _generatedValueRevisionsPending;
+
+    /// <summary>
+    /// Seeds a revision-pending record directly (#242, release 4).
+    /// </summary>
+    public void SeedGeneratedValueRevisionPending(GeneratedValueRevisionPending record)
+    {
+        if (record.Id == Guid.Empty)
+            record.Id = Guid.NewGuid();
+        _generatedValueRevisionsPending[record.Id] = record;
+    }
+
+    /// <inheritdoc />
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentByIdAsync(Guid assignmentId)
+        => Task.FromResult(_generatedValueAssignments.TryGetValue(assignmentId, out var assignment) ? assignment : null);
+
+    /// <inheritdoc />
+    public virtual Task<GeneratedValueRevisionResult> ApplyGeneratedValueRevisionAsync(GeneratedValueRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        var assignment = revision.Assignment;
+
+        // The cross-assignment unique index (plan decision 13): another live assignment already holding the new value.
+        var taken = _generatedValueAssignments.Values.Any(a =>
+            a.Id != assignment.Id &&
+            ((a.MetaverseAttributeId.HasValue && a.MetaverseAttributeId == assignment.MetaverseAttributeId) ||
+             (a.ConnectedSystemObjectTypeAttributeId.HasValue && a.ConnectedSystemObjectTypeAttributeId == assignment.ConnectedSystemObjectTypeAttributeId)) &&
+            string.Equals(a.NormalisedValue, assignment.NormalisedValue, StringComparison.OrdinalIgnoreCase));
+        if (taken)
+            return Task.FromResult(GeneratedValueRevisionResult.ValueTaken);
+
+        MetaverseObjectAttributeValue? metaverseValue = null;
+        PendingExportAttributeValueChange? exportChange = null;
+
+        if (assignment.MetaverseObjectId.HasValue)
+        {
+            // The optimistic concurrency check: the object must still hold the value the export carried.
+            if (!_mvos.TryGetValue(assignment.MetaverseObjectId.Value, out var mvo))
+                return Task.FromResult(GeneratedValueRevisionResult.ValueChanged);
+
+            metaverseValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == assignment.MetaverseAttributeId && HoldsValue(av.StringValue, av.IntValue, av.LongValue, revision.PreviousValue, revision.PreviousNumericValue));
+            if (metaverseValue == null)
+                return Task.FromResult(GeneratedValueRevisionResult.ValueChanged);
+        }
+        else
+        {
+            exportChange = _pendingExports.Values
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .FirstOrDefault(c => c.Id == revision.PendingExportAttributeValueChangeId);
+            if (exportChange == null || !HoldsValue(exportChange.StringValue, exportChange.IntValue, exportChange.LongValue, revision.PreviousValue, revision.PreviousNumericValue))
+                return Task.FromResult(GeneratedValueRevisionResult.ValueChanged);
+        }
+
+        // Every check has passed; write every part, as the real repository's single transaction does.
+        if (revision.RetirePreviousValue && _generatedValueAssignments.TryGetValue(assignment.Id, out var stored))
+        {
+            var previous = new GeneratedValueAssignment
+            {
+                Id = stored.Id,
+                MetaverseObjectId = stored.MetaverseObjectId,
+                MetaverseAttributeId = stored.MetaverseAttributeId,
+                ConnectedSystemObjectId = stored.ConnectedSystemObjectId,
+                ConnectedSystemObjectTypeAttributeId = stored.ConnectedSystemObjectTypeAttributeId,
+                SyncRuleMappingGenerationId = stored.SyncRuleMappingGenerationId,
+                Value = revision.PreviousValue,
+                NormalisedValue = revision.PreviousValue.ToLowerInvariant()
+            };
+            RetireAssignments([previous], RetiredGeneratedValueReason.Regenerated, activityId: null);
+        }
+
+        if (metaverseValue != null)
+        {
+            SetValue(metaverseValue, assignment.Value, revision.NewNumericValue, revision.IsLongNumber);
+            if (revision.ContributedBySyncRuleId.HasValue)
+                metaverseValue.ContributedBySyncRuleId = revision.ContributedBySyncRuleId;
+            if (revision.ContributedBySystemId.HasValue)
+                metaverseValue.ContributedBySystemId = revision.ContributedBySystemId;
+
+            if (revision.MetaverseObjectChange != null)
+            {
+                if (revision.MetaverseObjectChange.Id == Guid.Empty)
+                    revision.MetaverseObjectChange.Id = Guid.NewGuid();
+                _mvoChanges[revision.MetaverseObjectChange.Id] = revision.MetaverseObjectChange;
+            }
+
+            var mvo = _mvos[assignment.MetaverseObjectId!.Value];
+            mvo.LastUpdated = DateTime.UtcNow;
+            if (revision.CachedDisplayName != null)
+                mvo.CachedDisplayName = revision.CachedDisplayName;
+
+            if (revision.RevisionPending != null)
+                SeedGeneratedValueRevisionPending(revision.RevisionPending);
+        }
+        else
+        {
+            SetValue(exportChange!, assignment.Value, revision.NewNumericValue, revision.IsLongNumber);
+        }
+
+        assignment.LastUpdated = DateTime.UtcNow;
+        _generatedValueAssignments[assignment.Id] = assignment;
+        return Task.FromResult(GeneratedValueRevisionResult.Applied);
+    }
+
+    private static bool HoldsValue(string? stringValue, int? intValue, long? longValue, string expected, long? expectedNumeric) =>
+        expectedNumeric.HasValue
+            ? (intValue ?? longValue) == expectedNumeric
+            : string.Equals(stringValue, expected, StringComparison.OrdinalIgnoreCase);
+
+    private static void SetValue(MetaverseObjectAttributeValue value, string text, long? numeric, bool isLongNumber)
+    {
+        if (!numeric.HasValue)
+        {
+            value.StringValue = text;
+            return;
+        }
+
+        if (isLongNumber)
+            value.LongValue = numeric;
+        else
+            value.IntValue = (int)numeric.Value;
+    }
+
+    private static void SetValue(PendingExportAttributeValueChange change, string text, long? numeric, bool isLongNumber)
+    {
+        if (!numeric.HasValue)
+        {
+            change.StringValue = text;
+            return;
+        }
+
+        if (isLongNumber)
+            change.LongValue = numeric;
+        else
+            change.IntValue = (int)numeric.Value;
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueRevisionPending>> GetGeneratedValueRevisionsPendingAsync(int maxResults)
+        => Task.FromResult(_generatedValueRevisionsPending.Values
+            // Mirrors the real foreign keys' cascade: a record whose object has gone is gone with it.
+            .Where(r => _mvos.ContainsKey(r.MetaverseObjectId))
+            .OrderBy(r => r.Created)
+            .ThenBy(r => r.Id)
+            .Take(maxResults)
+            .ToList());
+
+    /// <inheritdoc />
+    public Task<bool> AnyGeneratedValueRevisionsPendingAsync()
+        => Task.FromResult(_generatedValueRevisionsPending.Values.Any(r => _mvos.ContainsKey(r.MetaverseObjectId)));
+
+    /// <inheritdoc />
+    public Task<bool> HasGeneratedValueRevisionPendingAsync(Guid metaverseObjectId, int metaverseAttributeId)
+        => Task.FromResult(_generatedValueRevisionsPending.Values.Any(r => r.MetaverseObjectId == metaverseObjectId && r.MetaverseAttributeId == metaverseAttributeId));
+
+    /// <inheritdoc />
+    public Task DeleteGeneratedValueRevisionsPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        foreach (var id in ids)
+            _generatedValueRevisionsPending.Remove(id);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var idSet = connectedSystemObjectIds.ToHashSet();
+        var released = 0;
+        foreach (var pendingExport in _pendingExports.Values.Where(pe =>
+                     pe.Status == PendingExportStatus.Parked && pe.ConnectedSystemObjectId.HasValue && idSet.Contains(pe.ConnectedSystemObjectId.Value)))
+        {
+            pendingExport.Status = PendingExportStatus.Pending;
+            pendingExport.NextRetryAt = null;
+            released++;
+        }
+
+        return Task.FromResult(released);
+    }
+
+    #endregion
 }

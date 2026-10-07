@@ -581,6 +581,30 @@ JIM's own records of a Connected System hold only the accounts JIM imports. An a
 
 **Sync Preview.** A preview is a dry run and never contacts a Connected System, so it checks JIM's own records only. Where the synchronisation would also probe for a value the preview generated, the preview says so, naming the Connected Systems it would probe and the value: if one of them already has an account using it, the synchronisation generates a different value instead. The REST API's Sync Preview response carries the same information as `generatedValueProbes`.
 
+#### When a target rejects a value
+
+Checking JIM's records and probing make a clash rare, not impossible: an account can be created in the target between the check and the export, or sit somewhere a probe cannot see. When that happens the target refuses the export because another object there already holds the value, and JIM corrects the value for you. This is **Collision Remediation**.
+
+JIM corrects the value when all of these hold:
+
+- The target's Connector recognises "already in use" refusals and says which value was refused. The LDAP, SCIM and SQL Connectors do; see each Connector's page.
+- The refusal is about one generated value. The target named an attribute that carries the generated value, or one built from exactly one generated value (a User Principal Name made from the Account Name, say, with [Deriving Metaverse attributes](#deriving-metaverse-attributes)), or it named nothing and the export carries exactly one generated value. JIM never guesses: a refusal it cannot tie to one generated value is an ordinary export error.
+- No other target has already accepted the value for that person (see below).
+
+**What JIM does.** It draws the next value exactly as it would have at the start (`joe.bloggs` was refused, so `joe.bloggs1`, checked against everything JIM knows), saves it on the Metaverse Object, and leaves the refused export queued. The next synchronisation of any Connected System carries the corrected value to every target's queued export, the refusing one included, and each system's synchronisation recalculates values built from it, such as an email address or User Principal Name. The export run after that sends the corrected value. JIM does not retry inside the export run that saw the refusal, because the export would still carry the values built from the old one. A value generated on an export Synchronisation Rule is corrected on the queued export itself, since it belongs to that one Connected System Object.
+
+The refused value is [retired](#retired-values) when the flow never reuses values, so it is not issued to anyone else. The export run's Activity shows the export as **Value corrected**, naming the refused and the new value, and counts the corrections; the Metaverse Object's history records the change. Nothing about the export counts as a failure: its retry count is untouched.
+
+**When JIM does not correct it.** Renaming an account that is already in use somewhere is not a decision JIM makes on its own. The value **needs a decision** when:
+
+- another target has already accepted it for this person (its account in that system holds the value), so correcting it would rename that account too;
+- JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
+- JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
+
+The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings releases the parked export for the next export run to try again under the new settings. The decisions themselves (allowing the rename, which JIM then performs at the next refusal; retrying once the clash has been resolved in the target; or leaving it) are coming to the portal, the REST API and PowerShell in a later release.
+
+**When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, or an Attribute Flow with Collision Remediation switched off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
+
 #### Retired values
 
 A generated value is often an identifier: an account name, an email address, an employee number. Issuing one to a second person is a security problem as much as a data one, because mail, group memberships and permissions keyed on that identifier quietly follow it to the new holder. So when JIM stops holding a generated value, it **retires** it: the value goes into the attribute's **retired values** list, and JIM never issues it again, whichever Attribute Flow generates the attribute.
@@ -592,8 +616,9 @@ A value is retired when:
 | **Object deleted** | `ObjectDeleted` | The object that held the value was deleted: a leaver's Metaverse Object, or for an export flow the Connected System Object. |
 | **No longer generated** | `Superseded` | Another Attribute Flow now supplies the attribute for that object (see [Existing accounts](#generated-values) above), so JIM stopped managing the generated value. |
 | **Flow removed** | `Recalled` | The Attribute Flow that generated the value was removed. |
+| **Regenerated** | `Regenerated` | A target refused the value as already in use and JIM [corrected it](#when-a-target-rejects-a-value). |
 
-The REST API and PowerShell report the stored reason. A fourth stored reason, `Regenerated`, is reserved for a later release and is never written today.
+The REST API and PowerShell report the stored reason.
 
 **Never reuse a value.** Retiring is controlled by the mapping's **Never reuse a value** switch, which is on by default for "only if taken" and random tokens. With it on, a retired value is skipped when JIM generates: if `marisol.fenwick` left and was retired, the next Marisol Fenwick gets `marisol.fenwick1`. Turn it off only where a value may safely pass to a different person; with it off, nothing is retired, and a leaver's value is free for the next person who needs it. A sequence always behaves as though the switch is on, because its counter only moves forward, so the editor shows a locked line rather than a switch.
 
@@ -620,7 +645,7 @@ An export-mode generated value is drift-checked like any export Attribute Flow. 
 
 Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
 
-A value a target system rejects as a duplicate is reported as an ordinary export error, and a generated value cannot yet be changed by hand.
+A value a target system rejects as already in use is corrected or held for a decision, as described in [When a target rejects a value](#when-a-target-rejects-a-value). A generated value cannot yet be changed by hand.
 
 ### Deriving Metaverse attributes
 

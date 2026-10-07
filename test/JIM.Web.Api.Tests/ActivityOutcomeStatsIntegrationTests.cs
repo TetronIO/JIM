@@ -542,6 +542,33 @@ public class ActivityOutcomeStatsIntegrationTests
     }
 
     [Test]
+    public async Task GetStats_CollisionRemediationOutcomes_CountsCorrectedAndNeedingDecisionAsync()
+    {
+        // Arrange: an export run (Unique Value Generation, #242, release 4) where two rejected values were corrected
+        // (GeneratedValueRemediated roots on their export items) and one needs a decision (its item's error type).
+        var activity = await CreateActivityAsync();
+
+        var corrected1 = await CreateRpeiAsync(activity, ObjectChangeType.PendingExport);
+        await CreateOutcomeAsync(corrected1, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
+        var corrected2 = await CreateRpeiAsync(activity, ObjectChangeType.PendingExport);
+        await CreateOutcomeAsync(corrected2, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
+        var exported = await CreateRpeiAsync(activity, ObjectChangeType.Exported);
+        await CreateOutcomeAsync(exported, ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+        await CreateRpeiAsync(activity, ObjectChangeType.Exported, errorType: ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalGeneratedValuesRemediated, Is.EqualTo(2));
+            Assert.That(stats.TotalGeneratedValuesNeedingDecision, Is.EqualTo(1));
+            Assert.That(stats.TotalExported, Is.EqualTo(1), "a corrected value is not counted as exported");
+        }
+    }
+
+    [Test]
     public async Task GetStats_LegacyFallback_GeneratedValueStatsAreZeroAsync()
     {
         // Arrange: no outcomes; the legacy RPEI-based fallback has no ObjectChangeType equivalent for

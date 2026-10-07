@@ -28,7 +28,8 @@ public enum GeneratedValueAssignmentState
 
     /// <summary>
     /// The value was revised after an attributable, unanchored export rejection (Collision Remediation, release 4).
-    /// The object is flagged for review; the next synchronisation re-stages the export.
+    /// In import mode a <see cref="GeneratedValueRevisionPending"/> record carries the revision to the queued exports at
+    /// the next synchronisation; in export mode the queued export was rewritten directly.
     /// </summary>
     Remediated = 2,
 
@@ -69,4 +70,74 @@ public enum RetiredGeneratedValueReason
     /// System deleted, or its source type changed). The portal calls this "Flow removed".
     /// </summary>
     Recalled = 3
+}
+
+/// <summary>
+/// What became of a Collision Remediation revision handed to the repository (Unique Value Generation, #242, release
+/// 4). Not persisted.
+/// </summary>
+public enum GeneratedValueRevisionResult
+{
+    /// <summary>
+    /// The revision was written: the new value, the assignment and (import mode) the change record and
+    /// revision-pending record, all in one transaction.
+    /// </summary>
+    Applied = 0,
+
+    /// <summary>
+    /// Nothing was written, because the value being revised was no longer the one the export carried: something
+    /// changed it after the export run read it (the optimistic concurrency check). The rejection is reported as an
+    /// ordinary export error; the next synchronisation re-stages whatever the object now holds.
+    /// </summary>
+    ValueChanged = 1,
+
+    /// <summary>
+    /// Nothing was written, because another live assignment for the same attribute claimed the new value first (the
+    /// cross-assignment unique index, plan decision 13). The rejection is reported as an ordinary export error, and
+    /// the next rejection draws again.
+    /// </summary>
+    ValueTaken = 2
+}
+
+/// <summary>
+/// How a generated value's anchoring was decided (Unique Value Generation, #242, release 4; plan decision 10). Not
+/// persisted.
+/// </summary>
+public enum GeneratedValueAnchoring
+{
+    /// <summary>
+    /// No other participating Connected System holds the value for the object, so Collision Remediation may revise it.
+    /// </summary>
+    Unanchored = 0,
+
+    /// <summary>
+    /// Another participating Connected System has accepted the value (its Connected System Object joined to the same
+    /// Metaverse Object holds it), so revising it would rename an account that is already in use.
+    /// </summary>
+    Anchored = 1,
+
+    /// <summary>
+    /// A participating Connected System cannot say, because it has not completed a Full Import since its connector
+    /// space was cleared. Missing knowledge never permits a rename, so this resolves to Needs Decision.
+    /// </summary>
+    CannotTell = 2
+}
+
+/// <summary>
+/// What the export run did with an export rejected because a generated value it carried is already in use (Unique
+/// Value Generation, #242, release 4). Not persisted.
+/// </summary>
+public enum GeneratedValueCollisionHandling
+{
+    /// <summary>
+    /// Collision Remediation drew the next value and revised it; the export stays Pending for the next
+    /// synchronisation to re-stage.
+    /// </summary>
+    Remediated = 0,
+
+    /// <summary>
+    /// The value could not safely be revised (anchored, anchoring unknown, or remediation exhausted); the assignment
+    /// waits on an administrator and the export is Parked.
+    /// </summary>
+    NeedsDecision = 1
 }

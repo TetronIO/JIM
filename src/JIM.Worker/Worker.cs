@@ -422,7 +422,8 @@ public class Worker : BackgroundService
                                                                                             return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
                                                                                         },
                                                                                         connectorFactory: _connectorFactory,
-                                                                                        phaseReporter: phaseReporter);
+                                                                                        phaseReporter: phaseReporter,
+                                                                                        uniqueValueReservations: _uniqueValueReservations);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }

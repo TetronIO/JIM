@@ -70,6 +70,15 @@ public class GeneratedValueAssignment
     /// </summary>
     public string? PreviousValue { get; set; }
 
+    /// <summary>
+    /// The evaluated base expression the value was generated from, when the generated mapping has one (release 4).
+    /// Collision Remediation draws the next candidate from it, so a corrected value continues the same series
+    /// (<c>joe.bloggs</c>, then <c>joe.bloggs1</c>) rather than being rebuilt from inputs that may have changed since
+    /// the value was issued: a generated value is never recomputed from its inputs (FR 10). Null for a token with no
+    /// base, and for an assignment made before this was recorded.
+    /// </summary>
+    public string? BaseValue { get; set; }
+
     public GeneratedValueAssignmentState State { get; set; }
 
     /// <summary>

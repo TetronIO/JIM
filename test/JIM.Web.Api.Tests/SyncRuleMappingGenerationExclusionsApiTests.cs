@@ -62,6 +62,9 @@ public class SyncRuleMappingGenerationExclusionsApiTests
         var apiKeyRepo = new Mock<IApiKeyRepository>();
         var syncRepository = new InMemorySyncRepository();
         repository.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // The stored generation settings a save compares against to release a Needs Decision (#242, release 4): none.
+        _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(() => new Dictionary<int, SyncRuleMappingGeneration>());
         repository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
         repository.Setup(r => r.Activity).Returns(activityRepo.Object);
         repository.Setup(r => r.ApiKeys).Returns(apiKeyRepo.Object);

@@ -128,12 +128,21 @@ internal sealed class SqlConnectorExport
                 // It is reported against the object and the batch carries on; an aborting run is a
                 // cancellation, and that is the one thing this does not swallow.
                 failed++;
-                _logger.Error(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) could not be applied", pendingExport.Id, pendingExport.ChangeType);
                 // A duplicate key is reported as a value already in use, naming the column where the database
-                // named one (Unique Value Generation, decision 9); the database's own message is kept whole.
-                results[index] = SqlUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName)
-                    ? ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName)
-                    : ConnectedSystemExportResult.Failed(ex.Message);
+                // named one (Unique Value Generation, decision 9); the database's own message is kept whole. It is a
+                // per-object data conflict the export run reports on the object (and may correct), so it is logged at
+                // Warning; every other failure stays an Error.
+                if (SqlUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName))
+                {
+                    _logger.Warning(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) was rejected because a value it carries is already in use",
+                        pendingExport.Id, pendingExport.ChangeType);
+                    results[index] = ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName);
+                }
+                else
+                {
+                    _logger.Error(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) could not be applied", pendingExport.Id, pendingExport.ChangeType);
+                    results[index] = ConnectedSystemExportResult.Failed(ex.Message);
+                }
             }
         }
 

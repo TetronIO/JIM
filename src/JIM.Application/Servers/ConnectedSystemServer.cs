@@ -7124,6 +7124,8 @@ public partial class ConnectedSystemServer
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
         // can flush the change.
         await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
+        // The stored generation settings (#242, release 4), read before the Activity's save can flush the new ones.
+        var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7144,6 +7146,7 @@ public partial class ConnectedSystemServer
 
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
+        await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -7195,6 +7198,10 @@ public partial class ConnectedSystemServer
         if (mapping == null)
             return null;
 
+        // The stored generation settings (#242, release 4), read before anything can flush the new ones: a changed
+        // configuration releases the Needs Decision the flow's assignments wait on.
+        var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
+
         // Validation before the Activity, so a rejected update leaves no trace of an Update that never happened.
         ApplySyncRuleMappingSettings(mapping, settings);
         ValidateMappingTypeCompatibility(mapping);
@@ -7244,6 +7251,7 @@ public partial class ConnectedSystemServer
         // and reports the move on the very instance returned below (plan decision 3).
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
+        await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
@@ -8962,6 +8970,7 @@ public partial class ConnectedSystemServer
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+        var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -9000,6 +9009,9 @@ public partial class ConnectedSystemServer
             // before there is anything left to compare the new configuration against, so the comparison would
             // always see "no change" and never release the parked accounts.
             var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+            // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
+            // assignments; read for the same reason, before anything below can flush the new settings.
+            previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9021,6 +9033,9 @@ public partial class ConnectedSystemServer
         // saves through CreateOrUpdateSyncRuleAsync, never the single-mapping endpoints), so it cannot be
         // deferred to those alone.
         await ApplyGeneratedValueSequenceSkipsAsync(syncRule);
+
+        // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
+        await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
@@ -9166,6 +9181,7 @@ public partial class ConnectedSystemServer
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+        var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -9200,6 +9216,9 @@ public partial class ConnectedSystemServer
             // persist the new settings before there is anything left to compare them against, and the
             // comparison would always see "no change" and never release the parked accounts.
             var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+            // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
+            // assignments; read for the same reason, before anything below can flush the new settings.
+            previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9221,6 +9240,9 @@ public partial class ConnectedSystemServer
         // saves through CreateOrUpdateSyncRuleAsync, never the single-mapping endpoints), so it cannot be
         // deferred to those alone.
         await ApplyGeneratedValueSequenceSkipsAsync(syncRule);
+
+        // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
+        await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture

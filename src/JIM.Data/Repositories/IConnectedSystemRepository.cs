@@ -1221,6 +1221,14 @@ public interface IConnectedSystemRepository
     public Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId);
 
     /// <summary>
+    /// The stored generation settings (with their exclusions) of the given generated mappings, by generation id
+    /// (Unique Value Generation, #242, release 4). Untracked; read on the save path, before anything flushes, to tell
+    /// whether a save changed a flow's generation configuration, which releases the Needs Decision its assignments
+    /// wait on. Ids with no stored row are absent.
+    /// </summary>
+    public Task<Dictionary<int, SyncRuleMappingGeneration>> GetSyncRuleMappingGenerationsAsync(IReadOnlyCollection<int> generationIds);
+
+    /// <summary>
     /// Returns the settings that decide which Metaverse Objects a stored Synchronisation Rule covers (enabled,
     /// provisioning, Scoping Criteria at every depth), or null when the rule does not exist (issue #1925).
     /// <para>
