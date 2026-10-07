@@ -357,18 +357,26 @@
                         @* as rows they would outnumber the changes the administrator came to read. Still drillable.       *@
                         @if (UnchangedObjectCount > 0)
                         {
+                            @* Links rather than buttons: a button's capitals would restyle a schema type name, which is
+                               written exactly as its system spells it, as everywhere else in the panel. *@
                             <div class="d-flex align-center flex-wrap gap-2 mt-4" data-testid="jim-preview-unchanged">
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mud-text-secondary" />
                                 <MudText Class="mud-text-secondary">
-                                    @(UnchangedObjectCount == 1 ? "1 object would not change." : $"{UnchangedObjectCount:N0} objects would not change.")
+                                    @(UnchangedObjectCount == 1 ? "1 object would not change" : $"{UnchangedObjectCount:N0} objects would not change")@(_unchangedGroups.Count > 1 ? ":" : ".")
                                 </MudText>
-                                @foreach (var unchanged in _unchangedGroups)
+                                @if (_unchangedGroups.Count == 1)
                                 {
-                                    <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OnGroupClicked(unchanged))">
-                                        @(_unchangedGroups.Count == 1 || string.IsNullOrEmpty(unchanged.MetaverseObjectTypeName)
-                                            ? "Show them"
-                                            : $"Show {unchanged.MetaverseObjectTypeName} objects")
-                                    </MudButton>
+                                    var only = _unchangedGroups[0];
+                                    <MudLink OnClick="@(() => OnGroupClicked(only))" data-testid="jim-preview-unchanged-open">Show them</MudLink>
+                                }
+                                else
+                                {
+                                    @foreach (var unchanged in _unchangedGroups)
+                                    {
+                                        <MudLink OnClick="@(() => OnGroupClicked(unchanged))" data-testid="jim-preview-unchanged-open">
+                                            <span class="jim-code-inline">@unchanged.MetaverseObjectTypeName</span> objects (@unchanged.ObjectCount.ToString("N0"))
+                                        </MudLink>
+                                    }
                                 }
                             </div>
                         }
@@ -948,8 +956,8 @@
     /// </summary>
     private string? ObjectHref(ConfigurationChangePreviewDelta row) => ObjectSide(row) switch
     {
-        ObjectChipKind.ConnectedSystemObject =>
-            Utilities.GetConnectedSystemObjectHref(ObjectConnectedSystemId(row)!.Value, row.ConnectedSystemObjectId!.Value),
+        ObjectChipKind.ConnectedSystemObject when ObjectConnectedSystemId(row) is { } objectSystemId && row.ConnectedSystemObjectId is { } objectId =>
+            Utilities.GetConnectedSystemObjectHref(objectSystemId, objectId),
         ObjectChipKind.MetaverseObject when _selectedGroupTypePluralName is { Length: > 0 } pluralName =>
             Utilities.GetMetaverseObjectHref(row.MetaverseObjectId!.Value, pluralName),
         _ => null

@@ -712,7 +712,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("x", "y", null));
 
         var panel = RenderPanel();
-        panel.Find("[data-testid=jim-preview-unchanged] button").Click();
+        panel.Find("[data-testid=jim-preview-unchanged-open]").Click();
 
         panel.WaitForAssertion(() => Assert.That(panel.FindAll("[data-testid=jim-preview-drilldown-heading]"), Has.Count.EqualTo(1),
             "its objects are a drill-down like any group's"));

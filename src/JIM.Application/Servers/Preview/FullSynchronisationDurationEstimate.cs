@@ -27,8 +27,8 @@ internal static class FullSynchronisationDurationEstimate
     internal static TimeSpan For(int objects, int? lastRunObjects, TimeSpan? lastRunTime)
     {
         var rate = ReferenceObjectsPerSecond;
-        if (lastRunObjects is > 0 && lastRunTime is { TotalSeconds: > 0 } time)
-            rate = Math.Min(rate, lastRunObjects.Value / time.TotalSeconds);
+        if (lastRunObjects is int objectsRun && objectsRun > 0 && lastRunTime is { TotalSeconds: > 0 } time)
+            rate = Math.Min(rate, objectsRun / time.TotalSeconds);
 
         return TimeSpan.FromSeconds(objects / rate);
     }

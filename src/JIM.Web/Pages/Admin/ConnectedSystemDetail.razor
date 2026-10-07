@@ -7,6 +7,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Tasking
 @using JIM.Web.Pages.Admin.Components
+@using JIM.Web.Models
 @using JIM.Web.Shared
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -238,15 +239,40 @@
             ? "Run a Full Synchronisation for it to take effect."
             : "Run a Full Synchronisation for them to take effect.";
     <MudAlert Severity="@(driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning)"
-              Class="mt-2 mb-6">
-        @driftLead @driftGuidance
+              Class="mt-2 mb-6" data-testid="jim-configuration-drift-notice">
+        <span>@driftLead @driftGuidance</span>
+        @* Reviewing the changes reads what was configured; previewing reads what the run would then do (#1530). *@
+        <div class="d-flex align-center flex-wrap gap-2 mt-2">
+            @if (HasFullSynchronisationRunProfile)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
+                           data-testid="jim-drift-preview-full-synchronisation">
+                    Preview Full Synchronisation
+                </MudButton>
+            }
+            <MudButton Variant="Variant.Text" Color="Color.Inherit" Href="@($"/admin/connected-systems/{Id}?t=changes")">
+                Review changes
+            </MudButton>
+        </div>
     </MudAlert>
 }
 else if (_drift is { NeverFullySynchronised: true })
 {
     <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
-        This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
-        in full.
+        <span>
+            This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
+            in full.
+        </span>
+        @if (HasFullSynchronisationRunProfile)
+        {
+            <div class="mt-2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
+                    Preview Full Synchronisation
+                </MudButton>
+            </div>
+        }
     </MudAlert>
 }
 else if (_drift is { TrackingDisabled: true })
@@ -262,6 +288,10 @@ else if (_drift is { TrackingDisabled: true })
     <NavigableMudTabs TabPanelsClass="pt-5" Class="mt-2">
 
         <MudTabPanel Text="Details">
+            @* The Full Synchronisation preview (#1530): started from the notice above or a Run Profile, and found again here. *@
+            <ConnectedSystemFullSynchronisationPreview ConnectedSystem="_connectedSystem"
+                                                       StartRequest="_fullSynchronisationPreviewRequest"
+                                                       StartRequestHandled="OnFullSynchronisationPreviewRequestHandled" />
             <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
@@ -297,7 +327,8 @@ else if (_drift is { TrackingDisabled: true })
         </MudTabPanel>
 
         <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
-            <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem" />
+            <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem"
+                                           OnPreviewRequested="@(runProfile => RequestFullSynchronisationPreview(runProfile.Id))" />
         </MudTabPanel>
 
         @* Hidden rather than disabled where the Connector has no password channel: there is nothing here to
@@ -346,6 +377,29 @@ else if (_drift is { TrackingDisabled: true })
     // executing (its Activity is where progress lives); a fenced system with no task is a failed run,
     // retryable from the Danger Zone.
     private DeleteConnectedSystemWorkerTask? _deletionTask;
+
+    // A request to preview a Full Synchronisation (#1530), from the drift notice or a Run Profile, until the preview's
+    // host on the Details tab has handled it.
+    private FullSynchronisationPreviewRequest? _fullSynchronisationPreviewRequest;
+
+    private bool HasFullSynchronisationRunProfile =>
+        _connectedSystem?.RunProfiles?.Any(rp => rp.RunType == ConnectedSystemRunType.FullSynchronisation) == true;
+
+    /// <summary>
+    /// Asks the preview host on the Details tab to start a Full Synchronisation preview, and shows that tab: the Details
+    /// tab is the page's own URL, so navigating to it selects it wherever the request came from.
+    /// </summary>
+    private void RequestFullSynchronisationPreview(int? runProfileId = null)
+    {
+        _fullSynchronisationPreviewRequest = new FullSynchronisationPreviewRequest(Guid.NewGuid(), runProfileId);
+        NavManager.NavigateTo($"/admin/connected-systems/{Id}");
+    }
+
+    private void OnFullSynchronisationPreviewRequestHandled(Guid requestId)
+    {
+        if (_fullSynchronisationPreviewRequest?.Id == requestId)
+            _fullSynchronisationPreviewRequest = null;
+    }
 
     private IList<MetaverseAttribute>? _metaverseAttributes;
 

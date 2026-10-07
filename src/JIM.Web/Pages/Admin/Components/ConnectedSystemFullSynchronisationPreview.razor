@@ -12,6 +12,7 @@
 @inject IConfigurationChangePreviewStarter PreviewStarter
 @inject ISnackbar Snackbar
 @inject NavigationManager NavManager
+@inject IJSRuntime JS
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -49,7 +50,7 @@ else if (_previewActivityId is { } previewActivityId)
     }
     else if (_objectPreview != null && _objectPreviewContext != null)
     {
-        <div class="mb-6" data-testid="jim-full-sync-preview-object">
+        <div class="mb-6" data-testid="jim-full-sync-preview-object" @ref="_objectPreviewElement">
             <SyncPreviewPanel PreviewResult="_objectPreview" Context="_objectPreviewContext" OnClose="CloseObjectPreview" />
         </div>
     }
@@ -88,6 +89,8 @@ else if (_previewActivityId is { } previewActivityId)
     private SyncPreviewResult? _objectPreview;
     private CausalityPageContext? _objectPreviewContext;
     private bool _objectPreviewLoading;
+    private ElementReference _objectPreviewElement;
+    private bool _scrollToObjectPreview;
 
     private bool IsRunning => _previewState.Status == ConnectedSystemPreviewStatus.Running;
 
@@ -349,6 +352,7 @@ else if (_previewActivityId is { } previewActivityId)
                 CsoObjectTypeName: subject.Type?.Name,
                 MvoTypeName: null,
                 MvoTypePluralName: null);
+            _scrollToObjectPreview = true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -358,6 +362,26 @@ else if (_previewActivityId is { } previewActivityId)
         {
             _objectPreviewLoading = false;
             StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Brings a newly opened one-object view into sight: it opens beneath the drill-down row that asked for it, often
+    /// below the fold.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToObjectPreview || _objectPreview == null)
+            return;
+
+        _scrollToObjectPreview = false;
+        try
+        {
+            await JS.InvokeVoidAsync("jimScrollIntoView", _objectPreviewElement);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException)
+        {
+            // Scrolling is a courtesy; the view is open either way.
         }
     }
 
