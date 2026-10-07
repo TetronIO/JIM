@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)
 - 🐛 A 389 Directory Server Delta Import now stops and asks for a Full Import when the changelog's newest change number is below the last import's (a restore from backup or snapshot), instead of silently missing the changes made since the restore. (#2004)
+- 🐛 An OpenLDAP Delta Import now refuses, and asks for a Full Import, when the accesslog has been purged past where the last import ended (Delta Imports paused for longer than `olcAccessLogPurge` keeps entries); the discarded changes were previously lost without an error. (#2008)
+- 🐛 A 389 Directory Server Delta Import now also catches an online restore (`dsconf backup restore`), and a restore followed by enough writes to pass the last import's change number, by reading that change back; both previously went unnoticed. (#2008)
 - 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
 - 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
