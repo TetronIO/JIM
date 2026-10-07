@@ -175,8 +175,10 @@ public static class CausalityModelBuilder
             DetailCount = node.DetailCount,
             // DetailMessage on an outbound node carries the raw target Connected System id (decoded
             // above into SystemId), not display text; every other node's DetailMessage is already plain
-            // contextual text, exactly as the recorded tree treats it.
-            DetailMessage = SyncOutcomeTypes.IsPendingExport(node.OutcomeType) ? null : node.DetailMessage,
+            // contextual text, exactly as the recorded tree treats it. The id channel's types are the
+            // recorded tree's, so a disconnection, a cancelled provisioning or a withdrawal never shows
+            // its system's id as a stray number.
+            DetailMessage = UsesDetailMessageIdChannel(node.OutcomeType) ? null : node.DetailMessage,
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
             EffectiveSyncRuleId = effectiveSyncRuleId,

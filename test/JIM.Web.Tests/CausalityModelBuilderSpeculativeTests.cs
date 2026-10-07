@@ -205,6 +205,31 @@ public class CausalityModelBuilderSpeculativeTests
         Assert.That(node.AttributeRows[0].Value, Is.EqualTo("liam.allen@example.com"));
     }
 
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)]
+    public void BuildSpeculative_OutboundNodeCarryingItsSystemId_DoesNotShowTheIdAsADetailMessage(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        // An outbound preview node carries its target Connected System's id in DetailMessage, which names the system;
+        // it is not display text, so it must not surface on the event as a stray "2".
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode { OutcomeType = outcomeType, TargetEntityDescription = "Glitterband EMEA", DetailMessage = "2" }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.Roots[0].DetailMessage, Is.Null);
+            Assert.That(model.Roots[0].SystemId, Is.EqualTo(2), "the id still names the system");
+        }
+    }
+
     [Test]
     public void BuildSpeculative_WithdrawalBesideAStagedExport_ShowsTheWithdrawnChangesNotTheStagedOnes()
     {

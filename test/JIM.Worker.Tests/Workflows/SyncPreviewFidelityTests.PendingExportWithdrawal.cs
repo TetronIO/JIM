@@ -231,18 +231,19 @@ public partial class SyncPreviewFidelityTests
             ConnectedSystem = SyncRepo.ConnectedSystems[system.Id],
             Created = DateTime.UtcNow
         };
-        foreach (var (name, stringValue, guidValue) in new (string, string?, Guid?)[]
-                 {
-                     ("ExternalId", null, Guid.NewGuid()), ("EmployeeId", employeeId, null), ("DisplayName", displayName, null), ("Title", title, null)
-                 })
+        var values = new (string Name, string? StringValue, Guid? GuidValue)[]
         {
-            var attribute = type.Attributes.Single(a => a.Name == name);
-            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            ("ExternalId", null, Guid.NewGuid()), ("EmployeeId", employeeId, null), ("DisplayName", displayName, null), ("Title", title, null)
+        };
+        cso.AttributeValues.AddRange(values.Select(value =>
+        {
+            var attribute = type.Attributes.Single(a => a.Name == value.Name);
+            return new ConnectedSystemObjectAttributeValue
             {
                 Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attribute.Id, Attribute = attribute,
-                StringValue = stringValue, GuidValue = guidValue
-            });
-        }
+                StringValue = value.StringValue, GuidValue = value.GuidValue
+            };
+        }));
         SyncRepo.SeedConnectedSystemObject(cso);
         return cso;
     }
