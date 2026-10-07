@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Running `setup.sh` again over a Docker installation now restarts `jim.web` when it has to, so JIM serves the certificate that run issued instead of the previous one. (#1956)
 - 🐛 Declining `setup.sh`'s **Start JIM now?** now prints commands that work: on Podman with systemd they no longer fail to find JIM's unit, and a JIM already running is restarted on the new settings and certificate instead of left as it was. (#1984)
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
+- 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
 
 ### Performance
 
