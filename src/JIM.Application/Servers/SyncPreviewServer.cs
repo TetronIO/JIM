@@ -862,8 +862,9 @@ public class SyncPreviewServer
         // Inbound Attribute Flow onto the working copy, in one pass (references included: for a single
         // object preview, every other object's join state already exists, so no deferred pass is needed).
         var flowErrors = new List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)>();
-        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes;
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes = [];
         var originalMetaverseObject = cso.MetaverseObject;
+        var objectFailed = false;
         try
         {
             cso.MetaverseObject = workingMvo;
@@ -885,6 +886,8 @@ public class SyncPreviewServer
                         SyncRuleName = rule.Name,
                         ConnectedSystemId = connectedSystemId
                     });
+                    objectFailed = true;
+                    break;
                 }
                 catch (SyncExpressionMissingInputException missingInputEx)
                 {
@@ -900,6 +903,8 @@ public class SyncPreviewServer
                         ConnectedSystemId = connectedSystemId,
                         AttributeName = missingInputEx.TargetAttributeName
                     });
+                    objectFailed = true;
+                    break;
                 }
             }
 
@@ -910,14 +915,26 @@ public class SyncPreviewServer
             // ApplyGeneratedValue stage their results the same way an ordinary Attribute Flow writer does (mirrors
             // the worker's own "before Count actual attribute changes" ordering). Inside the try because the derived
             // pass, like the ordinary one, reads the working copy through the object's link.
-            generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
-                result, cso, workingMvo, inScopeRules, context, flowErrors);
+            if (!objectFailed)
+            {
+                generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
+                    result, cso, workingMvo, inScopeRules, context, flowErrors);
+            }
         }
         finally
         {
             // The CSO instance may be shared (an in-memory repository hands out its stored instance);
             // the working object is the preview's alone, so the only mutation to undo is this link.
             cso.MetaverseObject = originalMetaverseObject;
+        }
+
+        // The run fails an object whose inbound Expression throws, or whose input is missing under Fail the object, and
+        // discards everything its synchronisation would have done (SyncTaskProcessorBase's object-level catch): nothing
+        // projects, joins, flows or exports, and no further rule is evaluated. So the preview proposes the error alone.
+        if (objectFailed)
+        {
+            result.Inbound = new SyncPreviewInboundSummary { AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId };
+            return result;
         }
 
         foreach (var (syncRuleId, syncRuleName, flowError) in flowErrors)
