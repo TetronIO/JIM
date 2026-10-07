@@ -106,7 +106,7 @@
         </MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Sortable="false" HeaderStyle="width: 210px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Sortable="false" HeaderStyle="width: 190px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate><MudText Typo="Typo.button">Metaverse Object</MudText></HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.MetaverseObjectId is { } metaverseObjectId)
@@ -121,11 +121,11 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Sortable="false" HeaderStyle="width: 150px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Sortable="false" HeaderStyle="width: 140px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate><MudText Typo="Typo.button">Attribute</MudText></HeaderTemplate>
             <CellTemplate><OneLineText Text="@context.Item.AttributeName" /></CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Sortable="false" HeaderStyle="width: 160px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Sortable="false" HeaderStyle="width: 130px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate><MudText Typo="Typo.button">Value</MudText></HeaderTemplate>
             <CellTemplate><code class="jim-code-inline" title="@context.Item.Value">@context.Item.Value</code></CellTemplate>
         </TemplateColumn>
@@ -133,7 +133,7 @@
             <HeaderTemplate><MudText Typo="Typo.button">Why it is held</MudText></HeaderTemplate>
             <CellTemplate><GeneratedValueDecisionWhy Decision="@context.Item" OneLine="true" /></CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Sortable="false" HeaderStyle="width: 130px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Sortable="false" HeaderStyle="width: 110px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate><MudText Typo="Typo.button">Since</MudText></HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.Since is { } since)
