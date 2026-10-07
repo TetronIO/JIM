@@ -99,7 +99,7 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
 
         var population = await _application.SyncPreview.GetFullSyncPopulationAsync(ConnectedSystemId(context));
         var cap = Proposal(context).MaxObjects;
-        return new PreviewCostEstimate(cap.HasValue ? Math.Min(cap.Value, population) : population);
+        return new PreviewCostEstimate(cap is { } limit ? Math.Min(limit, population) : population);
     }
 
     /// <remarks>
@@ -128,7 +128,7 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         var connectedSystemId = ConnectedSystemId(context);
         var gracePeriods = (await _application.Metaverse.GetMetaverseObjectTypesAsync(false))
             .ToDictionary(type => type.Id, type => type.DeletionGracePeriod);
-        TimeSpan? GracePeriodOf(int? typeId) => typeId.HasValue ? gracePeriods.GetValueOrDefault(typeId.Value) : null;
+        TimeSpan? GracePeriodOf(int? typeId) => typeId is { } id ? gracePeriods.GetValueOrDefault(id) : null;
 
         var options = new FullSyncPreviewStreamOptions { MaxObjects = Proposal(context).MaxObjects };
         var objects = 0;
