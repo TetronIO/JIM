@@ -592,10 +592,12 @@ public class ConfigurationChangePreviewServer
                 activity.SyncRuleId = request.TargetId;
                 break;
             // Every Connected System surface lands in the same column, for the same reason as the Synchronisation
-            // Rule's: import scope, schema selection and deletion are different kinds of change to one system.
+            // Rule's: import scope, schema selection, deletion and a Full Synchronisation are different kinds of
+            // change to one system.
             case ConfigurationChangePreviewSurface.ConnectedSystem:
             case ConfigurationChangePreviewSurface.ConnectedSystemSchema:
             case ConfigurationChangePreviewSurface.ConnectedSystemDeletion:
+            case ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation:
                 activity.ConnectedSystemId = request.TargetId;
                 break;
             // Object Matching is previewed per Connected System, in both modes and across the switch between them,

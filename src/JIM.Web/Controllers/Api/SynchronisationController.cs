@@ -28,6 +28,7 @@ using JIM.Models.Tasking;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace JIM.Web.Controllers.Api;
 
@@ -2988,18 +2989,25 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Queues a synchronisation task for execution by the worker service. Returns 202 Accepted with the Activity ID and Task ID for tracking.
+    ///
+    /// The body is optional. A Full Synchronisation started after reading its preview can name it as
+    /// <c>previewActivityId</c>, and the run's Activity then records that it was informed by that preview.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="runProfileId">The unique identifier of the Run Profile to execute.</param>
+    /// <param name="request">Optional: the Full Synchronisation preview read before starting the run. Omit the body to run without one.</param>
     /// <returns>The execution response with Activity and task IDs for tracking.</returns>
     /// <response code="202">Run Profile execution has been queued.</response>
+    /// <response code="400">The run could not be queued, or <c>previewActivityId</c> is not a completed Full Synchronisation preview of this Connected System cited by a Full Synchronisation Run Profile.</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}/execute", Name = "ExecuteRunProfile")]
     [ProducesResponseType(typeof(RunProfileExecutionResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ExecuteRunProfileAsync(int connectedSystemId, int runProfileId)
+    public async Task<IActionResult> ExecuteRunProfileAsync(int connectedSystemId, int runProfileId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ExecuteRunProfileRequest? request = null)
     {
         _logger.LogInformation("Run Profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
             connectedSystemId, runProfileId);
@@ -3040,6 +3048,10 @@ public class SynchronisationController(
             }
             workerTask = SynchronisationWorkerTask.ForApiKey(connectedSystemId, runProfileId, apiKey.Id, apiKey.Name);
         }
+
+        // The preview the caller read first (#1530). Whether it describes this run is the tasking server's decision,
+        // where every run is queued; a refusal comes back as the 400 below.
+        workerTask.PreviewActivityId = request?.PreviewActivityId;
 
         var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
         if (!result.Success)

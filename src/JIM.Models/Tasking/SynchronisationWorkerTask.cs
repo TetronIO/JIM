@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 namespace JIM.Models.Tasking;
 
@@ -15,6 +16,14 @@ public class SynchronisationWorkerTask : WorkerTask
     /// The id for the Connected System Run Profile to execute via this task.
     /// </summary>
     public int ConnectedSystemRunProfileId { get; set; }
+
+    /// <summary>
+    /// The Full Synchronisation preview the administrator read before starting this run, if any (#1530). Transient
+    /// (never persisted on the task): it is checked and copied onto the run's Activity when the task is created, so the
+    /// audit trail records what the person starting the run was told it would do. Null when no preview informed it.
+    /// </summary>
+    [NotMapped]
+    public Guid? PreviewActivityId { get; set; }
 
     public SynchronisationWorkerTask()
     {

@@ -9,6 +9,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.TestSupport;
@@ -136,6 +137,52 @@ public class ConnectedSystemFullSynchronisationPreviewDatabaseTests
                 Is.EqualTo(topology.TargetCsoId), "the account deprovisioned");
             Assert.That(deltas.Single(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible).ObjectDisplayName,
                 Is.EqualTo("John Smith"), "named as the administrator knows him");
+        }
+    }
+
+    [Test]
+    public async Task FullSynchronisationRun_CitingTheCompletedPreviewOfItsSystem_RecordsItOnThePersistedRunActivityAsync()
+    {
+        // The run link end to end (#1530): a real preview, run through the framework as the Worker runs it, then a
+        // Full Synchronisation queued citing it. Mocks state a preview's Activity and stage statuses; this proves the
+        // framework actually leaves a completed Full Synchronisation preview in the shape the run's check accepts.
+        var topology = await SeedAsync();
+
+        Guid previewActivityId;
+        Guid runActivityId;
+        await using (var ctx = NewContext())
+        {
+            var repo = new PostgresDataRepository(ctx);
+            using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
+            var request = new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation,
+                TargetId = topology.HrSystemId,
+                TargetName = "HR Source",
+                ProposedConfiguration = new ConnectedSystemFullSynchronisationProposal(),
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = Guid.CreateVersion7(),
+                InitiatedByName = "Ada Lovelace"
+            };
+            var started = await jim.ConfigurationChangePreviews.StartPreviewAsync(request);
+            previewActivityId = started.ActivityId;
+            await jim.ConfigurationChangePreviews.RunPreviewAsync(previewActivityId, request, CancellationToken.None);
+
+            var fullSynchronisation = (await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(topology.HrSystemId))
+                .Single(p => p.RunType == ConnectedSystemRunType.FullSynchronisation);
+            var run = SynchronisationWorkerTask.ForUser(topology.HrSystemId, fullSynchronisation.Id, Guid.CreateVersion7(), "Ada Lovelace");
+            run.PreviewActivityId = previewActivityId;
+            var queued = await jim.Tasking.CreateWorkerTaskAsync(run);
+
+            Assert.That(queued.Success, Is.True, queued.ErrorMessage);
+            runActivityId = run.Activity!.Id;
+        }
+
+        await using (var ctx = NewContext(tracking: false))
+        {
+            var runActivity = await ctx.Activities.SingleAsync(a => a.Id == runActivityId);
+            Assert.That(runActivity.PreviewActivityId, Is.EqualTo(previewActivityId),
+                "the run's Activity, as stored, names the preview the administrator read");
         }
     }
 
