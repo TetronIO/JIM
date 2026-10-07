@@ -102,7 +102,15 @@ public enum ConfigurationChangePreviewSurface
     /// to the system's settings: it is the system's whole contribution leaving, evaluated by running the deprovisioning
     /// itself read-only, which no settings adapter does.
     /// </remarks>
-    ConnectedSystemDeletion = 10
+    ConnectedSystemDeletion = 10,
+
+    /// <summary>
+    /// Running a Full Synchronisation of a Connected System (#1530): what the run would do with the configuration
+    /// already saved, before it is started. The one surface that previews no configuration change at all; it exists
+    /// because a Full Synchronisation is how saved configuration reaches existing objects, and the moment
+    /// configuration becomes consequence is the moment an administrator most needs to read it first.
+    /// </summary>
+    ConnectedSystemFullSynchronisation = 11
 }
 
 /// <summary>

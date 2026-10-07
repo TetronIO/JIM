@@ -37,8 +37,26 @@ public class SyncPreviewInboundSummary
     public Guid? AlreadyJoinedMetaverseObjectId { get; set; }
 
     /// <summary>
-    /// The Metaverse attribute changes inbound Attribute Flow would make, one entry per attribute value
-    /// added or removed.
+    /// The Metaverse Object Type of the object the CSO is, or would be, connected to: the joined one, the one it would
+    /// join, or the one it would project (#1530).
+    /// </summary>
+    public int? MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// Snapshot of that type's name.
+    /// </summary>
+    public string? MetaverseObjectTypeName { get; set; }
+
+    /// <summary>
+    /// The connected Metaverse Object's name as it stands now, or a projection's name as Attribute Flow would give it
+    /// (#1530). Snapshotted because a preview's rows name objects its consequences may delete or rename.
+    /// </summary>
+    public string? MetaverseObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// The Metaverse attribute changes synchronising the CSO would make, one entry per attribute value added or
+    /// removed: what inbound Attribute Flow writes, or, for a CSO leaving (out of scope or obsolete), the values it
+    /// contributed being withdrawn and any surviving contributor's taking their place.
     /// </summary>
     public List<SyncPreviewAttributeFlowChange> AttributeFlowChanges { get; set; } = [];
 }

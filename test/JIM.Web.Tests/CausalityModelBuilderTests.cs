@@ -136,6 +136,9 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream,
             // The Disconnect sibling of DeprovisionQueued (#1966): the object it names is in the target system.
             [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = CausalityLane.Downstream,
+            // The Full Synchronisation preview's (#1530): never in a recorded tree, so they take the default lane.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = CausalityLane.Identity,
 
             // Unique Value Generation (#242): Assigned, Retired (and the retired Adopted outcome) happen on the
             // Metaverse Object's attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the

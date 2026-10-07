@@ -350,7 +350,8 @@ public class SyncPreviewServer
                     return result;
 
                 case FullSyncPreviewItemKind.Obsolete:
-                    result.SkippedObjectCount++;
+                    result.ObsoleteObjectCount++;
+                    AddOutboundToCounts(result.Counts, item.Preview!);
                     break;
 
                 case FullSyncPreviewItemKind.Unchanged:
@@ -386,17 +387,23 @@ public class SyncPreviewServer
             }
         }
 
-        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped, {Unchanged} unchanged), " +
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Obsolete} obsolete, {Unchanged} unchanged), " +
             "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
             "{Reviewed} Metaverse Object(s) export scope reviewed; " +
             "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
-            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount, result.UnchangedObjectCount,
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.ObsoleteObjectCount, result.UnchangedObjectCount,
             result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
             result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
             result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
             result.Truncated, result.TruncationReason, stopwatch.Elapsed.TotalSeconds);
         return result;
     }
+
+    /// <summary>
+    /// How many Connected System Objects a Full Synchronisation preview of the system would walk (#1530), read where the
+    /// walk reads them.
+    /// </summary>
+    internal Task<int> GetFullSyncPopulationAsync(int connectedSystemId) => SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystemId);
 
     /// <summary>
     /// Streams what a Full Synchronisation of one Connected System would do (#1530), one object at a time and in the
@@ -485,7 +492,9 @@ public class SyncPreviewServer
                 context.JoinedCsosByMvoIdForDeletion = null;
             }
 
-            foreach (var cso in page.Results)
+            // The run tears a page's obsolete objects down before processing the rest of it (pass 1, then pass 2), so
+            // they are met first; the sort is stable, so each group keeps the page's order.
+            foreach (var cso in page.Results.OrderBy(c => c.Status == ConnectedSystemObjectStatus.Obsolete ? 0 : 1))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -504,7 +513,16 @@ public class SyncPreviewServer
 
                 if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
                 {
-                    yield return Skipped(FullSyncPreviewItemKind.Obsolete, cso);
+                    var teardown = await PreviewObsoleteCsoAsync(cso, context, refreshCacheForWorkingMvo: false);
+                    evaluated++;
+                    yield return new FullSyncPreviewItem
+                    {
+                        Kind = FullSyncPreviewItemKind.Obsolete,
+                        ConnectedSystemObjectId = cso.Id,
+                        DisplayName = cso.NameOrId,
+                        ObjectTypeName = cso.Type?.Name,
+                        Preview = teardown
+                    };
                     continue;
                 }
                 if (unchangedWatermark.HasValue && cso.IsUnchangedSince(unchangedWatermark.Value))
@@ -590,6 +608,7 @@ public class SyncPreviewServer
                 {
                     Kind = FullSyncPreviewItemKind.ExportScopeReview,
                     MetaverseObjectId = mvo.Id,
+                    MetaverseObjectTypeId = mvo.Type?.Id,
                     DisplayName = mvo.NameOrId,
                     ObjectTypeName = mvo.Type?.Name,
                     Preview = reviewed
@@ -752,6 +771,7 @@ public class SyncPreviewServer
                 if (joinedMvo != null)
                 {
                     inbound.AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId;
+                    DescribeMetaverseObject(inbound, joinedMvo);
                     AddDriftCorrectionRoot(result, ProposeDriftCorrections(result, cso, CloneForPreview(joinedMvo), context));
                 }
             }
@@ -782,7 +802,7 @@ public class SyncPreviewServer
             // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
             // join intact, so nothing downstream changes, and the tree states only the retained join (#1649).
             if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
-                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context);
+                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context, refreshCacheForWorkingMvo);
             else if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.RemainJoined)
                 await BuildRetainedJoinRootAsync(result, cso, importRules, context);
 
@@ -812,6 +832,7 @@ public class SyncPreviewServer
             }
             workingMvo = CloneForPreview(joinedMvo);
             flaggedForScopeReview = joinedMvo.ScopeReviewPending;
+            DescribeMetaverseObject(inbound, joinedMvo);
         }
         else
         {
@@ -824,6 +845,7 @@ public class SyncPreviewServer
                 inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
                 workingMvo = CloneForPreview(matchedMvo);
                 flaggedForScopeReview = matchedMvo.ScopeReviewPending;
+                DescribeMetaverseObject(inbound, matchedMvo);
             }
             else
             {
@@ -850,8 +872,9 @@ public class SyncPreviewServer
         // Inbound Attribute Flow onto the working copy, in one pass (references included: for a single
         // object preview, every other object's join state already exists, so no deferred pass is needed).
         var flowErrors = new List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)>();
-        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes;
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes = [];
         var originalMetaverseObject = cso.MetaverseObject;
+        var objectFailed = false;
         try
         {
             cso.MetaverseObject = workingMvo;
@@ -873,6 +896,8 @@ public class SyncPreviewServer
                         SyncRuleName = rule.Name,
                         ConnectedSystemId = connectedSystemId
                     });
+                    objectFailed = true;
+                    break;
                 }
                 catch (SyncExpressionMissingInputException missingInputEx)
                 {
@@ -888,6 +913,8 @@ public class SyncPreviewServer
                         ConnectedSystemId = connectedSystemId,
                         AttributeName = missingInputEx.TargetAttributeName
                     });
+                    objectFailed = true;
+                    break;
                 }
             }
 
@@ -898,14 +925,26 @@ public class SyncPreviewServer
             // ApplyGeneratedValue stage their results the same way an ordinary Attribute Flow writer does (mirrors
             // the worker's own "before Count actual attribute changes" ordering). Inside the try because the derived
             // pass, like the ordinary one, reads the working copy through the object's link.
-            generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
-                result, cso, workingMvo, inScopeRules, context, flowErrors);
+            if (!objectFailed)
+            {
+                generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
+                    result, cso, workingMvo, inScopeRules, context, flowErrors);
+            }
         }
         finally
         {
             // The CSO instance may be shared (an in-memory repository hands out its stored instance);
             // the working object is the preview's alone, so the only mutation to undo is this link.
             cso.MetaverseObject = originalMetaverseObject;
+        }
+
+        // The run fails an object whose inbound Expression throws, or whose input is missing under Fail the object, and
+        // discards everything its synchronisation would have done (SyncTaskProcessorBase's object-level catch): nothing
+        // projects, joins, flows or exports, and no further rule is evaluated. So the preview proposes the error alone.
+        if (objectFailed)
+        {
+            result.Inbound = new SyncPreviewInboundSummary { AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId };
+            return result;
         }
 
         foreach (var (syncRuleId, syncRuleName, flowError) in flowErrors)
@@ -959,6 +998,10 @@ public class SyncPreviewServer
             : null;
 
         _syncEngine.ApplyPendingAttributeChanges(workingMvo);
+
+        // A projection is named as Attribute Flow names it; there is nothing for it to be called before.
+        if (inbound.WouldProject)
+            DescribeMetaverseObject(inbound, workingMvo);
 
         // The outbound chain over the prospective Metaverse Object state, against the context's shared cache. As the
         // run would: exports are evaluated only when Attribute Flow changed the object (the run queues no export
@@ -1103,6 +1146,23 @@ public class SyncPreviewServer
             if (change.Attribute == null && attributesById.TryGetValue(change.AttributeId, out var attribute))
                 change.Attribute = attribute;
         }
+
+        // Which of the object's attributes are corrections, and from what, so a preview can state each one (#1530): the
+        // value the object holds now, and what the correction writes.
+        var correctiveChanges = drift.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges).ToList();
+        result.DriftCorrections.AddRange(drift.DriftedAttributes.Select(drifted => new SyncPreviewDriftCorrection
+        {
+            AttributeId = drifted.Attribute.Id,
+            AttributeName = drifted.Attribute.Name,
+            CurrentValue = PreviewValueRenderer.Join(cso.AttributeValues
+                .Where(value => value.AttributeId == drifted.Attribute.Id)
+                .Select(value => value.ToStringNoName())),
+            CorrectedValue = PreviewValueRenderer.Join(correctiveChanges
+                .Where(change => change.AttributeId == drifted.Attribute.Id)
+                .Select(PreviewValueRenderer.Render)),
+            SyncRuleId = drifted.ExportRule.Id,
+            SyncRuleName = drifted.ExportRule.Name
+        }));
 
         foreach (var correction in drift.CorrectiveExports)
         {
@@ -1448,11 +1508,14 @@ public class SyncPreviewServer
     /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule
     /// attribution (#1085): the same first-applicable rule the real run attributes the disconnect to.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the Metaverse Object before
+    /// evaluating the recall's exports; see <see cref="PreviewCsoCoreAsync"/>.</param>
     private async Task BuildOutOfScopeCascadeAsync(
         SyncPreviewResult result,
         ConnectedSystemObject cso,
         List<SyncRule> importRules,
-        CsoPreviewContext context)
+        CsoPreviewContext context,
+        bool refreshCacheForWorkingMvo)
     {
         var guardedRepository = context.GuardedRepository;
         var mvoId = cso.MetaverseObjectId!.Value;
@@ -1465,6 +1528,8 @@ public class SyncPreviewServer
         // pending-change lists, and none of that may touch the shared instance.
         var workingMvo = CloneForPreview(joinedMvo);
         var mvoDisplayName = ObjectNaming.FirstPresent(joinedMvo.Name);
+        if (result.Inbound != null)
+            DescribeMetaverseObject(result.Inbound, joinedMvo);
 
         // The same first-applicable-scoping-rule attribution the real run's DisconnectedOutOfScope root
         // carries (#1085): the CSO fell out of scope of every rule with Scoping Criteria, so when several
@@ -1560,6 +1625,20 @@ public class SyncPreviewServer
             {
                 clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(
                     workingMvo, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals).Count;
+
+                // The run queues the recall for export evaluation (HandleCsoOutOfScopeAsync), so every target holding a
+                // recalled value is sent the change (#1530). Evaluated over the same change set, additions first and
+                // every removal in the removed set, so a genuine clear null-clears the target and a re-elected value
+                // exports as a change of value. The run records no outcome node for these exports on the departing
+                // object's item, so they are proposed without one.
+                var changedAttributes = workingMvo.PendingAttributeValueAdditions.Concat(workingMvo.PendingAttributeValueRemovals).ToList();
+                var removedAttributes = workingMvo.PendingAttributeValueRemovals.ToHashSet();
+                RecordMetaverseChanges(result, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals);
+                _syncEngine.ApplyPendingAttributeChanges(workingMvo);
+                if (refreshCacheForWorkingMvo)
+                    await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+                ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                    synchronisationChanges: (changedAttributes, removedAttributes)));
             }
         }
 
@@ -1654,23 +1733,144 @@ public class SyncPreviewServer
         if (deletionDecision.Fate != MvoDeletionFate.DeletedImmediately)
             return;
 
-        // Downstream deprovisioning: every OTHER Connected System Object still joined to the Metaverse
-        // Object, from the same dataset already read above (the disconnecting CSO is excluded explicitly:
-        // this preview never actually disconnects it, so it is still present in that joined set).
+        await AddDownstreamDeprovisioningAsync(result, deletionNode, mvoId, workingMvo.Type?.Id, joinedCsos, cso.Id, context);
+    }
+
+    /// <summary>
+    /// The teardown of an obsolete Connected System Object (#1530), which a synchronisation performs before processing
+    /// anything else (<c>SyncTaskProcessorBase.ProcessObsoleteConnectedSystemObjectAsync</c>): the object is disconnected
+    /// from its Metaverse Object, which is put to its type's Deletion Rule; what the object contributed is recalled (or
+    /// kept, where a deletion is pending or no import source remains); and the object is deleted. Previewed through the
+    /// run's own obsoletion core (<see cref="ConnectedSystemObjectObsoletionService"/>), driven read-only on preview-owned
+    /// clones as the Connected System deletion preview drives it, so the tree it records is the tree the run records.
+    /// What follows at the run's flush is previewed after it: the exports the recall causes, and the downstream
+    /// deprovisioning of an immediately deleted Metaverse Object.
+    /// </summary>
+    /// <param name="cso">The obsolete Connected System Object.</param>
+    /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the Metaverse Object before
+    /// evaluating the recall's exports; see <see cref="PreviewCsoCoreAsync"/>.</param>
+    private async Task<SyncPreviewResult> PreviewObsoleteCsoAsync(ConnectedSystemObject cso, CsoPreviewContext context, bool refreshCacheForWorkingMvo)
+    {
+        var result = new SyncPreviewResult { Inbound = new SyncPreviewInboundSummary { AlreadyJoinedMetaverseObjectId = cso.MetaverseObjectId } };
+        var guardedRepository = context.GuardedRepository;
+
+        MetaverseObject? joinedMvo = null;
+        if (cso.MetaverseObjectId is { } joinedMvoId)
+            joinedMvo = (await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([joinedMvoId])).SingleOrDefault();
+        if (joinedMvo != null)
+            DescribeMetaverseObject(result.Inbound, joinedMvo);
+        var workingCso = ObsoletionPreviewClone.Of(cso, joinedMvo, []);
+
+        var teardown = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
+            workingCso,
+            context.SyncRules,
+            ContributorRecallScope.ForObsoletingConnectedSystemObject(workingCso),
+            context.PriorityContext,
+            new RemainingImportSourceEvaluator(guardedRepository),
+            _syncEngine,
+            guardedRepository,
+            (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+            context.ObjectTypes,
+            ExpressionEvaluator,
+            () => new ActivityRunProfileExecutionItem(),
+            ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed,
+            (mvo, disconnectingSystemId, remainingConnectedSystemIds) =>
+                Task.FromResult(DecideDeletionForPreview(mvo, disconnectingSystemId, remainingConnectedSystemIds, context)),
+            recordPreRecallAttributeSnapshot: _ => { },
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
+
+        if (teardown.MvoAttributeChange is { } recall)
+            RecordMetaverseChanges(result, recall.Additions, recall.Removals);
+
+        result.OutcomeTree.AddRange(teardown.ExecutionItems
+            .SelectMany(item => item.SyncOutcomes)
+            .Where(outcome => outcome.ParentSyncOutcome == null && !outcome.ParentSyncOutcomeId.HasValue)
+            .OrderBy(outcome => outcome.Ordinal)
+            .Select(SyncOutcomeNode.FromSyncOutcome));
+
+        // The recall's exports, queued by the core as the run queues them. The run records no outcome node for them on
+        // the obsolete object's item, so they are proposed without one.
+        if (teardown.ExportEvaluation is { } exportEvaluation)
+        {
+            if (refreshCacheForWorkingMvo)
+                await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [exportEvaluation.Mvo.Id]);
+            ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([exportEvaluation.Mvo], context.Cache,
+                synchronisationChanges: (exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes)));
+        }
+
+        // An immediate deletion deprovisions downstream, nested under its deletion node as the run nests it.
+        if (joinedMvo != null && teardown.MvoDeletionDecision?.Fate == MvoDeletionFate.DeletedImmediately
+            && FindNode(result.OutcomeTree, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted) is { } deletionNode)
+        {
+            await AddDownstreamDeprovisioningAsync(result, deletionNode, joinedMvo.Id, joinedMvo.Type?.Id,
+                await GetJoinedCsosForDeletionAsync(context, joinedMvo.Id), cso.Id, context);
+        }
+
+        Log.Debug("PreviewObsoleteCsoAsync: Previewed the teardown of obsolete CSO {CsoId} in system {SystemId}: deletion fate {Fate}, {ExportCount} export(s) proposed.",
+            cso.Id, context.ConnectedSystemId, teardown.MvoDeletionDecision?.Fate, result.Outbound.ProposedExports.Count);
+        return result;
+    }
+
+    /// <summary>
+    /// The Deletion Rule's decision for a Metaverse Object whose connector is leaving, evaluated by the engine the run
+    /// asks and applied to nothing but the preview's own clone: a scheduled deletion is stamped on the clone as the run
+    /// stamps it, so the due date the outcome states is the one the run would record.
+    /// </summary>
+    private (MvoDeletionDecision Decision, string? PolicySnapshotJson) DecideDeletionForPreview(MetaverseObject mvo, int disconnectingSystemId,
+        IReadOnlyCollection<int> remainingConnectedSystemIds, CsoPreviewContext context)
+    {
+        context.SystemNames.TryGetValue(disconnectingSystemId, out var disconnectingSystemName);
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds, disconnectingSystemName);
+        if (decision.Fate == MvoDeletionFate.DeletionScheduled && mvo.LastConnectorDisconnectedDate == null)
+        {
+            mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            mvo.DeletionTriggeredBySystemId = disconnectingSystemId;
+        }
+
+        return (decision, null);
+    }
+
+    /// <summary>
+    /// The first node of <paramref name="outcomeType"/> in a tree, depth first.
+    /// </summary>
+    private static SyncOutcomeNode? FindNode(IEnumerable<SyncOutcomeNode> nodes, ActivityRunProfileExecutionItemSyncOutcomeType outcomeType) =>
+        nodes.Select(node => node.OutcomeType == outcomeType ? node : FindNode(node.Children, outcomeType))
+            .FirstOrDefault(found => found != null);
+
+    /// <summary>
+    /// What an immediate deletion of a Metaverse Object does downstream, nested under its deletion node as the run nests it
+    /// (<c>SyncTaskProcessorBase.FindMvoDeletedOutcomeNodes</c>): every other Connected System Object still joined to it has
+    /// its never-exported provisioning cancelled, or is deprovisioned, or (where no export rule stages a delete) is
+    /// disconnected and left in place. Shared by a scope exit's cascade and an obsolete object's teardown (#1530).
+    /// </summary>
+    /// <param name="result">The preview result to add the proposed deletions and warnings to.</param>
+    /// <param name="deletionNode">The <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted"/> node.</param>
+    /// <param name="mvoId">The Metaverse Object being deleted.</param>
+    /// <param name="mvoTypeId">Its type, which selects the export rules that decide each object's fate.</param>
+    /// <param name="joinedCsos">Every Connected System Object joined to it, the disconnecting one included.</param>
+    /// <param name="disconnectingCsoId">The object whose departure deletes it, which is not deprovisioned.</param>
+    /// <param name="context">The shared read-only inputs for the previewed Connected System.</param>
+    private async Task AddDownstreamDeprovisioningAsync(SyncPreviewResult result, SyncOutcomeNode deletionNode, Guid mvoId, int? mvoTypeId,
+        List<ConnectedSystemObject> joinedCsos, Guid disconnectingCsoId, CsoPreviewContext context)
+    {
+        // Every OTHER Connected System Object still joined to the Metaverse Object, from the joined set the caller
+        // read (the disconnecting CSO is excluded explicitly: this preview never actually disconnects it, so it is
+        // still present in that set).
         var exportRulesByMvoTypeId = context.Cache.ExportRulesByMvoTypeId;
 
         // Provisioning that was never exported is cancelled outright by the real run, ahead of and regardless
         // of the rules (ExportEvaluationServer.EvaluateMvoDeletionsAsync), so it must be here too. The Pending
         // Export read is paid only when a downstream object is Pending Provisioning, as in the real run.
         var pendingProvisioningCsoIds = joinedCsos
-            .Where(c => c.Id != cso.Id && c.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+            .Where(c => c.Id != disconnectingCsoId && c.Status == ConnectedSystemObjectStatus.PendingProvisioning)
             .Select(c => c.Id)
             .ToList();
         var existingPesByCsoId = pendingProvisioningCsoIds.Count > 0
             ? await context.GuardedRepository.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pendingProvisioningCsoIds)
             : [];
 
-        foreach (var downstreamCso in joinedCsos.Where(c => c.Id != cso.Id))
+        foreach (var downstreamCso in joinedCsos.Where(c => c.Id != disconnectingCsoId))
         {
             if (_syncEngine.IsProvisioningNeverExported(downstreamCso, existingPesByCsoId.GetValueOrDefault(downstreamCso.Id)))
             {
@@ -1686,7 +1886,7 @@ public class SyncPreviewServer
             }
 
             var exportDecision = _syncEngine.DecideMvoDeletionExport(
-                downstreamCso, workingMvo.Type?.Id, exportRulesByMvoTypeId, existingPendingExport: null);
+                downstreamCso, mvoTypeId, exportRulesByMvoTypeId, existingPendingExport: null);
             context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var targetSystemName);
 
             if (!exportDecision.ShouldStageDeleteExport)
@@ -2082,6 +2282,28 @@ public class SyncPreviewServer
     /// <summary>
     /// Maps one pending Metaverse attribute value change into the inbound summary's display shape.
     /// </summary>
+    /// <summary>
+    /// Names the Metaverse Object a preview's inbound summary is about (#1530): its type, and its name as it stands.
+    /// </summary>
+    private static void DescribeMetaverseObject(SyncPreviewInboundSummary inbound, MetaverseObject mvo)
+    {
+        inbound.MetaverseObjectTypeId = mvo.Type?.Id;
+        inbound.MetaverseObjectTypeName = mvo.Type?.Name;
+        inbound.MetaverseObjectDisplayName = ObjectNaming.FirstPresent(mvo.Name);
+    }
+
+    /// <summary>
+    /// Records a departing object's recall in the inbound summary (#1530), additions then removals as Attribute Flow's
+    /// are, so the values withdrawn (and any surviving contributor's taking their place) can be stated per attribute.
+    /// </summary>
+    private static void RecordMetaverseChanges(SyncPreviewResult result, IEnumerable<MetaverseObjectAttributeValue> additions,
+        IEnumerable<MetaverseObjectAttributeValue> removals)
+    {
+        result.Inbound ??= new SyncPreviewInboundSummary();
+        result.Inbound.AttributeFlowChanges.AddRange(additions.Select(addition => BuildAttributeFlowChange(addition, isAddition: true)));
+        result.Inbound.AttributeFlowChanges.AddRange(removals.Select(removal => BuildAttributeFlowChange(removal, isAddition: false)));
+    }
+
     private static SyncPreviewAttributeFlowChange BuildAttributeFlowChange(MetaverseObjectAttributeValue value, bool isAddition)
     {
         return new SyncPreviewAttributeFlowChange

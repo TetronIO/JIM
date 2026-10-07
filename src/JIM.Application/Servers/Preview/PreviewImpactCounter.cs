@@ -23,11 +23,14 @@ public static class PreviewImpactCounter
     /// Distinct objects per transition: for an adapter that may yield several deltas for one object and transition
     /// (one per attribute, say). A delta whose subject is null names no object and is not counted.
     /// </summary>
-    /// <param name="subjectOf">The object a delta counts against.</param>
-    public static IPreviewImpactCounter PerSubject(Func<PreviewDelta, Guid?> subjectOf)
+    /// <param name="subjectOf">
+    /// The object a delta counts against: usually its id, or a composite where an id alone does not tell two objects
+    /// apart (one identity's accounts in two Connected Systems are two objects).
+    /// </param>
+    public static IPreviewImpactCounter PerSubject<TSubject>(Func<PreviewDelta, TSubject?> subjectOf) where TSubject : struct
     {
         ArgumentNullException.ThrowIfNull(subjectOf);
-        return new PerSubjectCounter(subjectOf);
+        return new PerSubjectCounter<TSubject>(subjectOf);
     }
 
     /// <summary>
@@ -63,9 +66,9 @@ public static class PreviewImpactCounter
         public List<PreviewImpactCount> Build() => Order(_counts, connectedSystemId, metaverseObjectTypeId);
     }
 
-    private sealed class PerSubjectCounter(Func<PreviewDelta, Guid?> subjectOf) : IPreviewImpactCounter
+    private sealed class PerSubjectCounter<TSubject>(Func<PreviewDelta, TSubject?> subjectOf) : IPreviewImpactCounter where TSubject : struct
     {
-        private readonly Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, HashSet<Guid>> _subjects = [];
+        private readonly Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, HashSet<TSubject>> _subjects = [];
 
         public void Add(PreviewDelta delta)
         {

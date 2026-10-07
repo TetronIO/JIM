@@ -407,7 +407,23 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Its target is the disconnected object in the target system, never the item's own object, which is why it is not
     /// <see cref="Disconnected"/>: that describes the item's own Connected System Object leaving its Metaverse Object.
     /// </summary>
-    TargetDisconnected
+    TargetDisconnected,
+
+    /// <summary>
+    /// Preview only (#1530): synchronising the object would change nothing, because the run would skip it as unchanged
+    /// since the last synchronisation or would find it already as its Synchronisation Rules describe. One per object,
+    /// so a Full Synchronisation preview can say exactly how many objects it leaves alone; the verdict and the summary
+    /// of changes leave it out, because the count is the reassurance and the rows are not changes.
+    /// </summary>
+    WouldNotChange,
+
+    /// <summary>
+    /// Preview only (#1530): synchronising the object would fail it with an error for a reason no more specific
+    /// transition names (an Attribute Flow that would not evaluate is <see cref="WouldFailAttributeFlow"/>, an
+    /// ambiguous match <see cref="WouldMatchAmbiguously"/>). The run records the error and applies nothing to the
+    /// object; the delta carries the error's detail as its new value.
+    /// </summary>
+    WouldFail
 }
 
 /// <summary>
