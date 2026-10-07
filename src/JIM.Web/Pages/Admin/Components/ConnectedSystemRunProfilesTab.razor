@@ -140,6 +140,17 @@
                 </HeaderTemplate>
                 <CellTemplate>
                     <div class="d-flex justify-end">
+                        @* Full Synchronisation only (#1530): the preview walks the whole population as that run does,
+                           so it says nothing true about an import, an export or a Delta Synchronisation. *@
+                        @if (context.Item.RunType == ConnectedSystemRunType.FullSynchronisation && OnPreviewRequested.HasDelegate)
+                        {
+                            var runProfile = context.Item;
+                            <MudTooltip Text="Preview what this Full Synchronisation would do, without running it" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Secondary" Variant="Variant.Filled"
+                                               Size="Size.Small" OnClick="_ => OnPreviewRequested.InvokeAsync(runProfile)" Class="me-2"
+                                               aria-label="Preview this Full Synchronisation" data-testid="jim-run-profile-preview" />
+                            </MudTooltip>
+                        }
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
                                            Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context.Item)" Class="me-2" />
@@ -423,6 +434,13 @@
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    /// <summary>
+    /// Raised when the administrator asks to preview a Full Synchronisation Run Profile (#1530). The page shows the
+    /// preview on the Details tab; unset, the action is not offered.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ConnectedSystemRunProfile> OnPreviewRequested { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }

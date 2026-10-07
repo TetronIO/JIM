@@ -732,7 +732,7 @@ Both directions state a true before-and-after. An **import** mapping's old value
 Three answers are deliberately negative rather than reassuring:
 
 - A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
-- **Removing a mapping outright changes no value.** Inbound Attribute Flow contributes what its mappings produce, so a mapping that no longer exists leaves the values it last wrote in place; they stay as they are and stop being maintained. The preview says so rather than reporting a withdrawal.
+- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next Full Synchronisation of its Connected System, or kept if you [choose to keep them](#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
 - The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
 
 Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.

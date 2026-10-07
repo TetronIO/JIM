@@ -7,8 +7,8 @@ using JIM.Models.Preview;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// What can be said about a Connected System's latest deletion impact preview (#134), and which preview, if any, a
-/// deletion requested now records as having informed it.
+/// What can be said about a Connected System's latest preview of one kind, and which preview, if any, the change it
+/// previews records as having informed it if made now: a deletion (#134), or a Full Synchronisation (#1530).
 /// </summary>
 /// <param name="Status">Where the preview stands.</param>
 /// <param name="ActivityId">The preview's Activity, or null when there is none.</param>
@@ -16,8 +16,8 @@ namespace JIM.Web.Models;
 /// <param name="PercentComplete">How far a running preview has got, or null where it has no total to measure against.</param>
 /// <param name="Lines">A finished preview's verdict, one sentence per transition, worst first.</param>
 /// <param name="Staleness">What has happened since the preview started, where that was judged.</param>
-public sealed record DeletionImpactPreviewState(
-    DeletionImpactPreviewStatus Status,
+public sealed record ConnectedSystemPreviewState(
+    ConnectedSystemPreviewStatus Status,
     Guid? ActivityId = null,
     DateTime? Started = null,
     int? PercentComplete = null,
@@ -25,11 +25,11 @@ public sealed record DeletionImpactPreviewState(
     ConfigurationChangePreviewStaleness? Staleness = null)
 {
     /// <summary>
-    /// The preview a deletion requested now records as having informed it: a finished preview nothing has overtaken,
+    /// The preview the change records as having informed it if made now: a finished preview nothing has overtaken,
     /// and no other. An audit trail claiming the administrator was shown the consequences, when what they were shown
     /// no longer held, is worse than one saying they went ahead without looking.
     /// </summary>
-    public Guid? InformingPreviewActivityId => Status == DeletionImpactPreviewStatus.Current ? ActivityId : null;
+    public Guid? InformingPreviewActivityId => Status == ConnectedSystemPreviewStatus.Current ? ActivityId : null;
 
     /// <summary>
     /// What overtook a stale preview, as the subject of a sentence ("Configuration has changed since this preview
@@ -47,26 +47,26 @@ public sealed record DeletionImpactPreviewState(
     /// Reads a preview and its staleness. <paramref name="preview"/> must carry its Activity, which says when it
     /// started, how it ended and how far a running one has got.
     /// </summary>
-    public static DeletionImpactPreviewState From(ConfigurationChangePreview? preview, ConfigurationChangePreviewStaleness? staleness)
+    public static ConnectedSystemPreviewState From(ConfigurationChangePreview? preview, ConfigurationChangePreviewStaleness? staleness)
     {
         if (preview?.Activity is not { } activity)
-            return new DeletionImpactPreviewState(DeletionImpactPreviewStatus.NotPreviewed);
+            return new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.NotPreviewed);
 
         var ended = activity.Status is ActivityStatus.FailedWithError or ActivityStatus.Cancelled;
         var blocked = preview.ReadValidationFindings().Exists(f => f.Severity == PreviewValidationSeverity.Blocking);
         if (ended || preview.HasFailed || blocked)
-            return new DeletionImpactPreviewState(DeletionImpactPreviewStatus.DidNotFinish, preview.ActivityId, activity.Created);
+            return new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.DidNotFinish, preview.ActivityId, activity.Created);
 
         if (!preview.IsComplete)
         {
             int? percent = activity.ObjectsToProcess > 0
                 ? Math.Clamp(activity.ObjectsProcessed * 100 / activity.ObjectsToProcess, 0, 100)
                 : null;
-            return new DeletionImpactPreviewState(DeletionImpactPreviewStatus.Running, preview.ActivityId, activity.Created, percent);
+            return new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.Running, preview.ActivityId, activity.Created, percent);
         }
 
-        var status = staleness is { IsStale: true } ? DeletionImpactPreviewStatus.Stale : DeletionImpactPreviewStatus.Current;
-        return new DeletionImpactPreviewState(status, preview.ActivityId, activity.Created,
+        var status = staleness is { IsStale: true } ? ConnectedSystemPreviewStatus.Stale : ConnectedSystemPreviewStatus.Current;
+        return new ConnectedSystemPreviewState(status, preview.ActivityId, activity.Created,
             Lines: ConfigurationChangePreviewVerdict.Lines(preview.ReadImpactCounts()), Staleness: staleness);
     }
 }

@@ -20,7 +20,11 @@ namespace JIM.Models.Preview;
 /// How many delta rows the adapter expects to emit per affected object: 1 for a scope transition, N for an
 /// Attribute Flow change that touches N attributes. A per-adapter constant, not a measurement.
 /// </param>
-public record PreviewCostEstimate(int AffectedObjects, int DeltasPerObject = 1)
+/// <param name="EstimatedDuration">
+/// About how long the evaluation will take, where the surface can say: stated before a large preview starts so the
+/// administrator decides with a number in front of them. Null where the surface has no basis for one.
+/// </param>
+public record PreviewCostEstimate(int AffectedObjects, int DeltasPerObject = 1, TimeSpan? EstimatedDuration = null)
 {
     /// <summary>
     /// Estimated delta rows. Computed as a <see cref="long"/> because the multiplication is what overflows: a

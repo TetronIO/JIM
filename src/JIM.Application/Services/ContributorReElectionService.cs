@@ -55,6 +55,12 @@ public static class ContributorReElectionService
     /// marker and logs instead, because none of those callers hold a run-scoped reservation set to resolve
     /// it through, and the generating Connected System's own next synchronisation will see its mapping as the
     /// winning contributor and generate the value then.</param>
+    /// <param name="leaveSurvivorsAsFound">Sync Preview (#1899): true to put back, once the re-flow is done, what it
+    /// changed on each survivor (its link to <paramref name="mvo"/>, and the values and type a hydration loaded). A
+    /// preview's <paramref name="mvo"/> is its own working copy while the survivors are the repository's instances,
+    /// change-tracked on the worker's context where configuration change previews run, so a survivor left bound to
+    /// the copy lets the next save on that context discover the copy through it. The run passes false: binding the
+    /// survivor to the page's one instance of the object is what it wants.</param>
     /// <returns>
     /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result
     /// <paramref name="resolvePendingGeneratedValues"/> returned (work package J), for the caller to record as
@@ -72,7 +78,8 @@ public static class ContributorReElectionService
         Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
         IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
         IExpressionEvaluator expressionEvaluator,
-        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null)
+        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null,
+        bool leaveSurvivorsAsFound = false)
     {
         if (mvo.Type == null)
             return [];
@@ -118,47 +125,67 @@ public static class ContributorReElectionService
         if (objectTypes == null)
             throw new MissingMemberException("objectTypes is null!");
 
-        foreach (var (survivor, rule) in survivorsToReflow)
+        // Each survivor as it was found before its first re-flow (one contributing through two rules is met twice), for
+        // a caller that must leave the survivors as it found them.
+        var survivorsAsFound = leaveSurvivorsAsFound
+            ? new Dictionary<Guid, (ConnectedSystemObject Survivor, MetaverseObject? MetaverseObject, List<ConnectedSystemObjectAttributeValue> AttributeValues, ConnectedSystemObjectType Type)>()
+            : null;
+        try
         {
-            // The discovery load does not eagerly fetch the survivor's object type or reference-value navigations;
-            // load the full Connected System Object so the re-flow evaluates real values, can resolve the
-            // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
-            // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
-            // instance, now fully hydrated.
-            if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
-                survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
+            foreach (var (survivor, rule) in survivorsToReflow)
             {
-                var loaded = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
-                if (loaded != null)
+                survivorsAsFound?.TryAdd(survivor.Id, (survivor, survivor.MetaverseObject, survivor.AttributeValues, survivor.Type));
+
+                // The discovery load does not eagerly fetch the survivor's object type or reference-value navigations;
+                // load the full Connected System Object so the re-flow evaluates real values, can resolve the
+                // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
+                // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
+                // instance, now fully hydrated.
+                if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
+                    survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
                 {
-                    survivor.AttributeValues = loaded.AttributeValues;
-                    survivor.Type ??= loaded.Type;
+                    var loaded = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
+                    if (loaded != null)
+                    {
+                        survivor.AttributeValues = loaded.AttributeValues;
+                        survivor.Type ??= loaded.Type;
+                    }
                 }
+
+                // The gate writes to the survivor's joined Metaverse Object; ensure the back-reference is the MVO
+                // in hand. This overwrite is also what keeps the survivor's (possibly freshly reloaded) Type
+                // navigation from carrying a stale or distinct Metaverse Object instance forward: pinning the
+                // navigation back to `mvo` here is exactly the kind of same-page identity resolution
+                // MetaverseObjectPageIdentityMap (#1612) centralises for the sync processors' own loads.
+                survivor.MetaverseObject = mvo;
+
+                // A survivor out of the rule's scope is not a legitimate contributor, so it must not be re-elected.
+                if (!isCsoInScopeForImportRule(survivor, rule))
+                    continue;
+
+                // The survivor may belong to a different Connected System than the caller's cache covers, so its
+                // Connected System Object Type may not be in objectTypes; include it so the engine can resolve the
+                // survivor's type. Reference attributes are re-flowed too: unlike import-time flow (where a referenced
+                // object may not exist yet, needing deferred passes), every object a surviving CSO references already
+                // exists and is joined at recall time, so its references resolve in this single pass. This is the final
+                // opportunity to resolve them in this operation, hence isFinalReferencePass (an unresolvable reference warns).
+                var objectTypesForSurvivor = new List<ConnectedSystemObjectType>(objectTypes);
+                if (survivor.Type != null && objectTypesForSurvivor.All(t => t.Id != survivor.Type.Id))
+                    objectTypesForSurvivor.Add(survivor.Type);
+
+                syncEngine.FlowInboundAttributes(survivor, rule, objectTypesForSurvivor, expressionEvaluator,
+                    skipReferenceAttributes: false, onlyReferenceAttributes: false, isFinalReferencePass: true, priorityContext);
             }
-
-            // The gate writes to the survivor's joined Metaverse Object; ensure the back-reference is the MVO
-            // in hand. This overwrite is also what keeps the survivor's (possibly freshly reloaded) Type
-            // navigation from carrying a stale or distinct Metaverse Object instance forward: pinning the
-            // navigation back to `mvo` here is exactly the kind of same-page identity resolution
-            // MetaverseObjectPageIdentityMap (#1612) centralises for the sync processors' own loads.
-            survivor.MetaverseObject = mvo;
-
-            // A survivor out of the rule's scope is not a legitimate contributor, so it must not be re-elected.
-            if (!isCsoInScopeForImportRule(survivor, rule))
-                continue;
-
-            // The survivor may belong to a different Connected System than the caller's cache covers, so its
-            // Connected System Object Type may not be in objectTypes; include it so the engine can resolve the
-            // survivor's type. Reference attributes are re-flowed too: unlike import-time flow (where a referenced
-            // object may not exist yet, needing deferred passes), every object a surviving CSO references already
-            // exists and is joined at recall time, so its references resolve in this single pass. This is the final
-            // opportunity to resolve them in this operation, hence isFinalReferencePass (an unresolvable reference warns).
-            var objectTypesForSurvivor = new List<ConnectedSystemObjectType>(objectTypes);
-            if (survivor.Type != null && objectTypesForSurvivor.All(t => t.Id != survivor.Type.Id))
-                objectTypesForSurvivor.Add(survivor.Type);
-
-            syncEngine.FlowInboundAttributes(survivor, rule, objectTypesForSurvivor, expressionEvaluator,
-                skipReferenceAttributes: false, onlyReferenceAttributes: false, isFinalReferencePass: true, priorityContext);
+        }
+        finally
+        {
+            // The re-flow has staged everything it will on the Metaverse Object in hand; nothing below reads the survivors.
+            foreach (var (survivor, metaverseObject, attributeValues, type) in survivorsAsFound?.Values.AsEnumerable() ?? [])
+            {
+                survivor.MetaverseObject = metaverseObject;
+                survivor.AttributeValues = attributeValues;
+                survivor.Type = type;
+            }
         }
 
         // Unique Value Generation (#242, Phase 2 work package H fix): see resolvePendingGeneratedValues'

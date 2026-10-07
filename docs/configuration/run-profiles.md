@@ -14,7 +14,7 @@ A Run Profile is one of:
 
 - **Full Import**<br /> Read every object from the Connected System and replace the existing connector space view.
 - **Delta Import**<br /> Read only the objects that have changed since the last import. Faster, and only available where the connector supports change tracking.
-- **Full Synchronisation**<br /> Evaluate every connector space object against the Synchronisation Rules; produce projections, joins, Attribute Flows, and Pending Exports.
+- **Full Synchronisation**<br /> Evaluate every connector space object against the Synchronisation Rules; produce projections, joins, Attribute Flows, and Pending Exports. Its preview action shows what it would do without running it; see [Previewing a Full Synchronisation](connected-systems.md#previewing-a-full-synchronisation).
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 

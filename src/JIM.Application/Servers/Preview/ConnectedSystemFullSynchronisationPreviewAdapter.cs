@@ -97,9 +97,14 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var population = await _application.SyncPreview.GetFullSyncPopulationAsync(ConnectedSystemId(context));
+        var connectedSystemId = ConnectedSystemId(context);
+        var population = await _application.SyncPreview.GetFullSyncPopulationAsync(connectedSystemId);
         var cap = Proposal(context).MaxObjects;
-        return new PreviewCostEstimate(cap is { } limit ? Math.Min(limit, population) : population);
+        var evaluated = cap is { } limit ? Math.Min(limit, population) : population;
+
+        var lastRun = await _application.Activities.GetLatestCompletedFullSynchronisationAsync(connectedSystemId);
+        return new PreviewCostEstimate(evaluated,
+            EstimatedDuration: FullSynchronisationDurationEstimate.For(evaluated, lastRun?.ObjectsToProcess, lastRun?.ExecutionTime));
     }
 
     /// <remarks>

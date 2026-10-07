@@ -200,7 +200,8 @@ public partial class ConnectedSystemServer
                 () => new ActivityRunProfileExecutionItem(),
                 ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None,
                 (target, disconnectingSystemId, remaining) => Task.FromResult(EvaluateDeletionAtEndState(pass, target, disconnectingSystemId, remaining)),
-                recordPreRecallAttributeSnapshot: _ => { });
+                recordPreRecallAttributeSnapshot: _ => { },
+                leaveSurvivorsAsFound: true);
 
             if (mvo == null || objectName == null)
                 continue;
@@ -291,7 +292,7 @@ public partial class ConnectedSystemServer
             await ContributorReElectionService.ReElectSurvivingContributorsAsync(
                 mvo, recalledValues, pass.RecallScope, pass.PriorityContext, pass.SyncEngine, pass.Guard,
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
-                pass.SurvivorObjectTypes, pass.ExpressionEvaluator);
+                pass.SurvivorObjectTypes, pass.ExpressionEvaluator, leaveSurvivorsAsFound: true);
 
             var additions = mvo.PendingAttributeValueAdditions.ToList();
             var removals = mvo.PendingAttributeValueRemovals.ToList();

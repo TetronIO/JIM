@@ -587,6 +587,39 @@ Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).Con
 `configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
 treating `HasPendingChanges` as `false`.
 
+## Previewing a Full Synchronisation
+
+A Full Synchronisation is when configuration reaches your data: accounts provisioned, updated, disconnected or deleted
+across every Connected System the run reaches. A **Full Synchronisation preview** works out what a Full Synchronisation
+of this Connected System would do, against the objects as they stand, changing nothing, so you can read the
+consequences before you run it.
+
+**Starting it.** Choose **Preview Full Synchronisation** on the notice about configuration changes waiting for a Full
+Synchronisation, or the preview action (the eye) beside a Full Synchronisation Run Profile on the **Run Profiles** tab.
+Import, Export and Delta Synchronisation Run Profiles have no preview action, because a preview of the whole population
+says nothing true about a run that processes something else. The preview opens on the **Details** tab and runs in the
+background like any other [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it):
+you can cancel it, or leave the page and come back, and the tab picks up the latest preview until a Full
+Synchronisation of the system has run since it.
+
+**Large systems.** Above the size at which JIM asks how much detail a preview should keep, the same question also says
+roughly how long the preview will take, so you decide before it starts. The estimate is never faster than a
+conservative reference rate, and slower where this system's last Full Synchronisation was: a routine run skips objects
+unchanged since the one before, so its own speed would understate a run that has to look at everything.
+
+**Reading it.** The preview leads with the worst consequence, then lists each change by Connected System and attribute
+under **What would change**, including updates, provisioning and deprovisioning in the target systems the run reaches,
+drift corrections, and objects the run would fail. Objects the run would leave as they are are counted on one line
+under the list rather than as rows of it. Select a change to see the objects it applies to, with each value **Now**
+and **After the synchronisation**; select an object to see everything the run would do to it, as its own
+[Sync Preview](sync-preview.md) shows it. Where every object would stay as it is, the preview says the Full
+Synchronisation would change nothing.
+
+**Running it.** **Run Full Synchronisation** on the preview queues the run, and the run's Activity records that it was
+informed by the preview. If data or configuration has changed since the preview ran, the panel says so, and a run
+started then records no preview, because what it showed may no longer hold; choose **Run again** first for a current
+answer.
+
 ## Confirming a configuration change
 
 Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).

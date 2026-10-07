@@ -89,6 +89,29 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
     }
 
     [Test]
+    public async Task PreviewSynchronisedDeprovisioningAsync_SurvivingContributor_LeavesTheSurvivorAsItFoundItAsync()
+    {
+        // The takeover re-flows Training's object against the preview's copy of the Metaverse Object (#1899). That object
+        // is the repository's own instance, change-tracked on the worker's context, so it must not be left bound to the
+        // copy for a later save there to find.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        var training = SyncRepo.ConnectedSystemObjects.Values.Single(cso => cso.ConnectedSystemId == ctx.Training!.Id);
+        var trainingLinkBefore = training.MetaverseObject;
+
+        var deltas = await PreviewAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue), Is.Not.Empty,
+                "arrange: Training takes Description over");
+            Assert.That(training.MetaverseObject, Is.SameAs(trainingLinkBefore));
+        }
+    }
+
+    [Test]
     public async Task PreviewSynchronisedDeprovisioningAsync_SurvivingContributorWithSameValue_ReportsQuietTakeoverAndNoExportAsync()
     {
         var ctx = await SetUpTwoContributorsWithExportTargetAsync(trainingDescription: HrDescription);
