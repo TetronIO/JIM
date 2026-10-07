@@ -1861,6 +1861,20 @@ public interface ISyncRepository
     /// </summary>
     Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
+    /// <summary>
+    /// Clears every "Allow the rename" authorisation a successful export has made moot (Unique Value Generation, #242,
+    /// release 4): an allowance answers one rejection by one Connected System, so once an export to that system succeeds
+    /// for the object the value belongs to (its Metaverse Object's account there, or in export mode the Connected System
+    /// Object itself), the clash it answered no longer exists. Left in place, it would let a later, unrelated rejection
+    /// rename a live account without asking again. The assignment returns to Committed with the authorisation, who gave
+    /// it and when, and the held-decision context cleared. One set-based statement per export batch over the
+    /// <c>RenameAuthorised</c> partial index. Returns how many allowances were cleared.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the exports succeeded against.</param>
+    /// <param name="metaverseObjectIds">The Metaverse Objects whose accounts in that system exported successfully.</param>
+    /// <param name="connectedSystemObjectIds">The Connected System Objects that exported successfully.</param>
+    Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
     #endregion
 
     #region Retired Values Register (#242, Phase 6)

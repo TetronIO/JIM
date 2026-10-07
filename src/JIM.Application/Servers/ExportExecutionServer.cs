@@ -1966,6 +1966,9 @@ public class ExportExecutionServer
             }
         }
 
+        // An "Allow the rename" answers one rejection; an export that has now succeeded for that account makes it moot.
+        await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, repository);
+
         // Remove CSOs (and their now-superfluous Pending Exports) whose Delete just
         // confirmed provisioning that was never otherwise confirmed.
         if (unconfirmedProvisioningCsoDeletes.Count > 0)
@@ -2003,6 +2006,38 @@ public class ExportExecutionServer
             await derivedInputMarks.FlushAsync(repository);
             derivedInputMarks.LogSummary();
         }
+    }
+
+    /// <summary>
+    /// Clears every "Allow the rename" authorisation the batch's successful exports have made moot (Unique Value
+    /// Generation, #242, release 4). An allowance is given for one value held after one Connected System rejected it, and
+    /// releases that export; if the export then succeeds (the clash was fixed some other way), nothing else would ever
+    /// spend the allowance, and a later, unrelated rejection would rename a live account without asking again. A
+    /// Connected System Object has at most one Pending Export, so a successful export for the account is necessarily the
+    /// released one, carrying the value or the values derived from it; matching on the account rather than on the value
+    /// also covers a rejection of a derived value (a User Principal Name built from the generated Account Name). One
+    /// set-based statement per batch, through the batch's own repository so the parallel path is safe.
+    /// </summary>
+    private static async Task ClearRenameAuthorisationsAfterSuccessfulExportAsync(List<PendingExport> successfulNonDeleteExports, ISyncRepository repository)
+    {
+        if (successfulNonDeleteExports.Count == 0)
+            return;
+
+        var connectedSystemId = successfulNonDeleteExports[0].ConnectedSystemId;
+        var connectedSystemObjectIds = successfulNonDeleteExports
+            .Where(e => e.ConnectedSystemObjectId.HasValue)
+            .Select(e => e.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        var metaverseObjectIds = successfulNonDeleteExports
+            .Select(e => e.ConnectedSystemObject?.MetaverseObjectId ?? e.SourceMetaverseObjectId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToHashSet();
+
+        var cleared = await repository.ClearRenameAuthorisationsAfterSuccessfulExportAsync(connectedSystemId, metaverseObjectIds, connectedSystemObjectIds);
+        if (cleared > 0)
+            Log.Information("ProcessBatchSuccessAsync: {Count} rename allowance(s) for Connected System {ConnectedSystemId} cleared: the export they answered has now succeeded",
+                cleared, connectedSystemId);
     }
 
     /// <summary>
@@ -2845,6 +2880,8 @@ public class ExportExecutionServer
 
             if (autoConfirm && !valuesRecorded)
                 await LeaveUnrecordedExportsUnconfirmedAsync(successfulNonDeleteExports, exportsToDelete, result);
+
+            await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, SyncRepo);
 
             // Batch delete exports that are auto-confirmed
             if (exportsToDelete.Count > 0)

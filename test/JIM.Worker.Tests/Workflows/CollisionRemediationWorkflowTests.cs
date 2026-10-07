@@ -345,6 +345,77 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Export_AfterTheRenameIsAuthorisedTheExportSucceeds_ClearsTheAllowanceAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+
+        // The clash was fixed some other way, so the released export goes through with the same value.
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        var assignment = SyncRepo.GeneratedValueAssignments[assignmentId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"));
+            Assert.That(assignment.RenameAuthorised, Is.False, "the allowance answered a clash that no longer exists");
+            Assert.That(assignment.RenameAuthorisedAt, Is.Null);
+            Assert.That(assignment.RenameAuthorisedByName, Is.Null);
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(assignment.NeedsDecisionReason, Is.Null, "nothing is held any more");
+            Assert.That(assignment.NeedsDecisionEnteredAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task Export_AllowanceOutlivedByASuccessfulExport_ALaterRejectionEntersNeedsDecisionRatherThanRenamingAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        // Later, an unrelated clash: the same export is queued again and rejected.
+        var export = DirectoryExport(ctx);
+        export.Status = PendingExportStatus.Pending;
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+
+        var assignment = SyncRepo.GeneratedValueAssignments[assignmentId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"), "a spent allowance must never rename a live account without asking again");
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Export_AllowanceForAnotherSystemsRejection_IsKeptWhenThisSystemExportsSuccessfullyAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+        SyncRepo.GeneratedValueAssignments[assignmentId].RejectedByConnectedSystemId = ctx.Contractor.Id;
+
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        Assert.That(SyncRepo.GeneratedValueAssignments[assignmentId].RenameAuthorised, Is.True,
+            "only the system whose rejection the allowance answered can make it moot");
+    }
+
+    [Test]
     public async Task RetryFailedExports_ParkedExport_IsLeftParkedAsync()
     {
         var ctx = await SetUpAsync();

@@ -358,6 +358,54 @@ public class GeneratedValueDecisionDatabaseTests
         }
     }
 
+    [Test]
+    public async Task ClearRenameAuthorisationsAfterSuccessfulExportAsync_ClearsOnlyTheRejectingSystemsAllowancesForTheExportedObjectsAsync()
+    {
+        var estate = await SeedEstateAsync();
+        void Allowed(GeneratedValueAssignment a, int rejectedBy)
+        {
+            Hold(a, DateTime.UtcNow.AddHours(-1), rejectedBy, GeneratedValueNeedsDecisionReason.AnchoredElsewhere, estate.AnchoringSystemId);
+            a.State = GeneratedValueAssignmentState.Committed;
+            a.RenameAuthorised = true;
+            a.RenameAuthorisedAt = DateTime.UtcNow;
+            a.RenameAuthorisedByName = "Ada Admin";
+        }
+        var rita = await AddImportAssignmentAsync(estate, estate.RitaId, "r.okafor", a => Allowed(a, estate.RejectingSystemId));
+        var otherSystem = await AddImportAssignmentAsync(estate, estate.SamId, "s.adeyemi", a => Allowed(a, estate.AnchoringSystemId));
+        var notExported = await AddImportAssignmentAsync(estate, estate.LeeId, "l.chen", a => Allowed(a, estate.RejectingSystemId));
+        var exportMode = await AddExportAssignmentAsync(estate, "plee", a => Allowed(a, estate.ExportSystemId));
+        var stillHeld = await AddImportAssignmentAsync(estate, estate.PatId, "p.lee", a =>
+            Hold(a, DateTime.UtcNow, estate.RejectingSystemId, GeneratedValueNeedsDecisionReason.CannotTell, estate.AnchoringSystemId));
+
+        int clearedImport, clearedExport;
+        await using (var ctx = NewContext())
+        {
+            var repo = NewSyncRepository(ctx);
+            clearedImport = await repo.ClearRenameAuthorisationsAfterSuccessfulExportAsync(estate.RejectingSystemId, [estate.RitaId, estate.SamId, estate.PatId], []);
+            clearedExport = await repo.ClearRenameAuthorisationsAfterSuccessfulExportAsync(estate.ExportSystemId, [], [estate.CsoId]);
+        }
+
+        await using var check = NewContext();
+        var stored = await check.GeneratedValueAssignments.Where(a => new[] { rita, otherSystem, notExported, exportMode, stillHeld }.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(clearedImport, Is.EqualTo(1));
+            Assert.That(clearedExport, Is.EqualTo(1));
+            Assert.That(stored[rita].RenameAuthorised, Is.False);
+            Assert.That(stored[rita].RenameAuthorisedAt, Is.Null);
+            Assert.That(stored[rita].RenameAuthorisedByName, Is.Null);
+            Assert.That(stored[rita].State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(stored[rita].NeedsDecisionReason, Is.Null);
+            Assert.That(stored[rita].NeedsDecisionEnteredAt, Is.Null);
+            Assert.That(stored[rita].AnchoredByConnectedSystemId, Is.Null);
+            Assert.That(stored[otherSystem].RenameAuthorised, Is.True, "a different system's rejection is not answered by this export");
+            Assert.That(stored[notExported].RenameAuthorised, Is.True, "an object this batch did not export keeps its allowance");
+            Assert.That(stored[exportMode].RenameAuthorised, Is.False, "an export-mode allowance clears on its own account's export");
+            Assert.That(stored[stillHeld].State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision), "a held value is left for its decision");
+        }
+    }
+
     // ---- Estate ----
 
     private sealed record Estate(

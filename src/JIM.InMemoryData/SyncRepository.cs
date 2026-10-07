@@ -4663,6 +4663,33 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(released);
     }
 
+    /// <inheritdoc />
+    public Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(
+        int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var mvoSet = metaverseObjectIds.ToHashSet();
+        var csoSet = connectedSystemObjectIds.ToHashSet();
+        var cleared = 0;
+        foreach (var assignment in _generatedValueAssignments.Values.Where(a =>
+                     a.RenameAuthorised && a.State != GeneratedValueAssignmentState.NeedsDecision && a.RejectedByConnectedSystemId == connectedSystemId
+                     && ((a.MetaverseObjectId.HasValue && mvoSet.Contains(a.MetaverseObjectId.Value))
+                         || (a.ConnectedSystemObjectId.HasValue && csoSet.Contains(a.ConnectedSystemObjectId.Value)))))
+        {
+            assignment.RenameAuthorised = false;
+            assignment.RenameAuthorisedAt = null;
+            assignment.RenameAuthorisedByName = null;
+            assignment.State = GeneratedValueAssignmentState.Committed;
+            assignment.NeedsDecisionEnteredAt = null;
+            assignment.NeedsDecisionReason = null;
+            assignment.AnchoredByConnectedSystemId = null;
+            assignment.NeedsDecisionActivityRunProfileExecutionItemId = null;
+            assignment.LastUpdated = DateTime.UtcNow;
+            cleared++;
+        }
+
+        return Task.FromResult(cleared);
+    }
+
     #endregion
 
     #region Generated value decisions (#242, release 4, Phase 9)

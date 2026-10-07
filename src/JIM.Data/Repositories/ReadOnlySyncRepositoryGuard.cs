@@ -656,6 +656,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseParkedPendingExportsAsync));
 
+    public Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(ClearRenameAuthorisationsAfterSuccessfulExportAsync));
+
     public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
         => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueAssignmentsAsync));
 
