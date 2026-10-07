@@ -193,12 +193,22 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     #region Continuity and readiness
 
     /// <summary>
-    /// Refuses to read from a watermark the changelog has been trimmed past: when the rootDSE advertises the
-    /// oldest change number still held and it is beyond the one after the watermark, the changes between were
-    /// discarded (389 Directory Server: the Retro Changelog plug-in's maximum age) and a Delta Import would skip
-    /// them without noticing. A directory that does not advertise its first change number cannot be checked here.
+    /// Refuses to read from a watermark the changelog no longer continues from: one it has been trimmed past, or one
+    /// it has gone back behind (#2004). Either way a Delta Import reading from the watermark would skip changes
+    /// without noticing.
     /// </summary>
     public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        VerifyNotTrimmedPast(previous, current);
+        VerifyNotGoneBackwards(previous, current);
+    }
+
+    /// <summary>
+    /// When the rootDSE advertises the oldest change number still held and it is beyond the one after the watermark,
+    /// the changes between were discarded (389 Directory Server: the Retro Changelog plug-in's maximum age). A
+    /// directory that does not advertise its first change number cannot be checked here.
+    /// </summary>
+    private void VerifyNotTrimmedPast(LdapConnectorRootDse previous, LdapConnectorRootDse current)
     {
         if (current.FirstChangeNumber is not { } first || previous.LastChangeNumber is not { } last || last + 1 >= first)
             return;
@@ -210,6 +220,32 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             $"The directory's changelog no longer holds the changes since the last import: it starts at change number {first}, " +
             $"and the last import ended at {last}, so changes between them were trimmed (389 Directory Server: the Retro Changelog plug-in's maximum age) " +
             "and cannot be imported. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+    }
+
+    /// <summary>
+    /// A changelog's change numbers only ever increase, so an advertised newest change number below the watermark
+    /// means the directory went back: restored from a backup or snapshot (389 Directory Server: the changelog is
+    /// restored with the data and numbering resumes from the restored point), or a different server answered, since
+    /// a server numbers its own changelog. Changes made since reuse numbers the watermark has passed. Only the
+    /// advertised number is trusted here: an enumerated one can stop at the directory's size limit short of the
+    /// newest change, which is safe for a watermark but proves nothing about a rollback. 389 Directory Server never
+    /// trims its changelog empty (it keeps the newest entry) and keeps its numbering when the plug-in is turned off
+    /// and on, so neither is mistaken for one. Once numbering overtakes the watermark again the rollback can no
+    /// longer be seen here.
+    /// </summary>
+    private void VerifyNotGoneBackwards(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        if (current.AdvertisedLastChangeNumber is not { } newest || previous.LastChangeNumber is not { } last || newest >= last)
+            return;
+
+        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog's newest change number is {Newest} and the last import ended at {Last}",
+            newest, last);
+
+        throw new CannotPerformDeltaImportException(
+            $"The directory's changelog has gone back since the last import: its newest change number is {newest}, and the last import ended at {last}. " +
+            "Change numbers only ever increase, so the usual cause is that the directory was restored from a backup or snapshot; it also happens when " +
+            "Host reaches a different server, since each server numbers its own changelog. Changes made since reuse numbers the last import has already " +
+            "passed, so a Delta Import would silently miss them. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
     }
 
     /// <summary>
