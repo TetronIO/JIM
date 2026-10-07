@@ -30,6 +30,7 @@ The connector requires no internet access of its own and adds no cloud-service d
 | Partitions and Containers | ❌ | SCIM has no partition concept; resource types are Connected System Object Types. |
 | Parallel Export | ✅ | Bounded by the provider's own rate limits, which the connector honours. |
 | Bulk Operations | ✅ | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
+| Probe | ✅ | Asks the provider whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
 
 ### Schema Discovery
 
@@ -117,6 +118,16 @@ Providers commonly rate-limit. The connector:
 
 Throttling is recorded in the logs and never fails a run; it is not reported on the Activity.
 
+### Probing for values already in use
+
+When a synchronisation generates a value that is exported unchanged to an attribute of this provider, such as an account name sent to `userName` or an address sent to `emails.work`, JIM asks the provider whether the value is already in use before choosing it. This catches an account JIM has not imported yet: one created in the provider since the last import, by another process or by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems).
+
+- **One connection per synchronisation**<br /> The connection is made with this Connected System's own settings, credential and certificates, the first time the synchronisation needs it, and closed when the run ends. JIM reads the provider's discovery documents once when it connects, to learn each resource type's endpoint and attributes.
+- **One search per object**<br /> The object's candidate values (up to ten) and a control value JIM already holds for the attribute go in one filtered `GET` to the resource type's endpoint, for example `/Users?filter=userName eq "jbloggs" or userName eq "jbloggs1"`. Each value is written as a quoted string with its quotes and backslashes escaped, so a value can never change what the filter asks. A control value that does not come back means the credential cannot see the attribute, and JIM stops trusting the probe for that attribute for the rest of the run.
+- **The provider decides what counts as the same value**<br /> An attribute the provider does not treat as case exact (`userName` included) matches without regard to case, which is also how the provider will judge the export.
+- **An address is searched across every entry**<br /> A typed slot such as `emails.work` is searched as `emails.value`, so an address held as another account's home or other email is found too.
+- **Undetermined is not a failure**<br /> A provider that cannot be reached, refuses the credential (`401` or `403`) or does not answer in time stops JIM probing it for the rest of the run. A provider that will not filter on an attribute (`400` with `invalidFilter`, or `501`), returns resources holding none of the values asked for (a filter it did not apply), or reports more matches than it returned stops JIM probing that attribute only. Each is reported once on the synchronisation's Activity as a warning naming the reason, and the run continues with JIM's own records.
+
 ## Connection Settings
 
 ### SCIM Service Provider
@@ -200,7 +211,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 - **HTTPS is required.** Identity data must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation.
 - **Secrets are encrypted at rest** and never logged, sanitised or otherwise.
-- **Least privilege.** Give the credential only the SCIM permissions the Run Profiles you have configured need: read for import, write for export.
+- **Least privilege.** Give the credential only the SCIM permissions the Run Profiles you have configured need: read for import, write for export. A Connected System a generated value is exported to also needs read access with filtering across the resource types it probes, including for a credential that only exports; see [Probing for values already in use](#probing-for-values-already-in-use).
 - **No cloud dependency.** The connector calls only the Base URL you configure, so it works unchanged in an air-gapped deployment against an on-premises provider.
 
 ## Troubleshooting
@@ -219,6 +230,9 @@ Something changed the resource in the provider between JIM reading it and writin
 
 **The connection test fails with a certificate error**<br />
 JIM shows the certificate the provider presented and which check it failed. An untrusted issuer is fixed by adding the certificate under **Admin > Certificates**; an expired certificate has to be renewed on the provider; a name mismatch means connecting by a name the certificate carries. See [When a connection test fails on the certificate](#when-a-connection-test-fails-on-the-certificate).
+
+**A synchronisation warns that JIM couldn't probe the provider**<br />
+The warning names the reason. A refused credential needs read access to the resource type; a refused filter means the provider will not search that attribute, so JIM relies on its own records for it (and on [Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) should the provider then refuse a value); a provider that returned resources holding none of the values asked for is not applying the filter it advertises. See [Probing for values already in use](#probing-for-values-already-in-use).
 
 **An attribute never receives a value**<br />
 Re-import the schema. A provider that has changed what it publishes, or one whose `/Schemas` document went missing (leaving the connector on the RFC 7643 core schemas), will offer a different attribute set.

@@ -115,6 +115,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal (string Message, string SqlState)? FailureDetail { get; set; }
 
     /// <summary>
+    /// Called with each command's text just before the stand-in runs it, so a test can act at the moment a statement
+    /// is in flight (cancelling the run it belongs to, say).
+    /// </summary>
+    internal Action<string>? BeforeExecute { get; set; }
+
+    /// <summary>
     /// When set, any command whose text contains this reports that it affected no row, without raising.
     /// That is how a statement the database accepted but applied to nothing is expressed here: a row an
     /// UPDATE or a DELETE keys on that is no longer there, or an INSERT a trigger silently discards.
@@ -168,6 +174,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// test can prove the hook is not simply the pre-open one called a second time.
     /// </summary>
     internal List<ConnectionState> ConnectionStatesWhenConfiguredOpen { get; } = [];
+
+    /// <summary>
+    /// Whether this stand-in database compares text case-sensitively, as Oracle Database does by default. Off, it
+    /// compares the way Microsoft SQL Server's default collation does: without regard to case.
+    /// </summary>
+    internal bool CaseSensitiveCollation { get; init; }
 
     /// <summary>
     /// Which dialect this stand-in speaks. Settable so a test can exercise the Oracle type-mapping
@@ -870,6 +882,7 @@ internal sealed class FakeDbCommand : DbCommand
         var columnTypes = bound.ToDictionary(parameter => parameter.ParameterName, parameter => parameter.ColumnType, StringComparer.OrdinalIgnoreCase);
 
         _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction, columnTypes));
+        _provider.BeforeExecute?.Invoke(CommandText);
 
         if (_provider.FailWhenCommandTextContains is { } failureMarker && CommandText.Contains(failureMarker, StringComparison.Ordinal))
             throw _provider.FailureDetail is { } detail
@@ -935,7 +948,10 @@ internal sealed class FakeDbCommand : DbCommand
 
         var dataTable = ResolveDataTable();
         if (dataTable != null)
-            return ReadRows(dataTable);
+        {
+            var membership = MembershipPredicatePattern.Match(CommandText);
+            return membership.Success ? ReadMatchingValues(dataTable, membership) : ReadRows(dataTable);
+        }
 
         throw new FakeDbException($"This stand-in database has nothing to answer with for: {CommandText}");
     }
@@ -1000,6 +1016,27 @@ internal sealed class FakeDbCommand : DbCommand
     {
         var orderByColumns = ParseOrderByColumns();
         return orderByColumns.Count > 0 ? ReadPage(dataTable, orderByColumns) : ReadRelatedRows(dataTable);
+    }
+
+    /// <summary>
+    /// Answers a uniqueness probe (#1941): the distinct values of one column that equal any bound value, compared
+    /// the way the stand-in's collation compares text, and blank-padded as both dialects compare a CHAR column.
+    /// </summary>
+    private DbDataReader ReadMatchingValues(FakeSqlDataTable dataTable, Match membership)
+    {
+        var column = membership.Groups["column"].Value;
+        var ordinal = dataTable.IndexOf(column);
+        var bound = membership.Groups["parameter"].Captures.Select(capture => BoundValue(capture.Value)).OfType<string>().ToList();
+        var comparer = _provider.CaseSensitiveCollation ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+        var matching = dataTable.Rows
+            .Select(row => row[ordinal])
+            .OfType<string>()
+            .Where(value => bound.Any(candidate => comparer.Equals(value.TrimEnd(' '), candidate.TrimEnd(' '))))
+            .Distinct(StringComparer.Ordinal)
+            .Select(value => new object?[] { value });
+
+        return FakeDbDataReader.ForRows([column], matching);
     }
 
     private DbDataReader ReadPage(FakeSqlDataTable dataTable, IReadOnlyList<string> anchorColumns)
@@ -1199,6 +1236,10 @@ internal sealed class FakeDbCommand : DbCommand
                 CompareValues(relatedRow[relatedTable.IndexOf(correlation.RelatedColumn)], parentRow[parentTable.IndexOf(correlation.ParentColumn)]) == 0) &&
             (predicate.WatermarkColumn == null || CompareValues(relatedRow[relatedTable.IndexOf(predicate.WatermarkColumn)], predicate.Watermark) > 0));
     }
+
+    private static readonly Regex MembershipPredicatePattern = new(
+        @"^SELECT DISTINCT \[(?<column>[^\]]+)\] FROM .+ WHERE \[\k<column>\] IN \((?:@(?<parameter>\w+)(?:, )?)+\)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
     private static readonly Regex JoinPredicatePattern = new(
         @"\[(?<column>[^\]]+)\]\s*=\s*@(?<parameter>" + SqlConnectorImport.JoinParameterPrefix + @"\d+_\d+)",

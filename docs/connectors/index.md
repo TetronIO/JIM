@@ -34,10 +34,10 @@ JIM ships with the following built-in connectors. **Passwords** means the connec
 |-----------|-------------|--------------|-------|
 | [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export | ❌ |
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, Samba AD, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export, [Passwords](../concepts/passwords.md) | ✅ |
-| [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export | ❌ |
-| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export | ❌ |
+| [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export | ✅ |
+| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export | ✅ |
 
-Probing for the SCIM 2.0 Client and SQL Connectors is planned ([#1941](https://github.com/TetronIO/JIM/issues/1941)), as is probing an Active Directory forest through a Global Catalog ([#1940](https://github.com/TetronIO/JIM/issues/1940)). A Connected System whose connector cannot probe is still checked against JIM's own records of it.
+Probing an Active Directory forest through a Global Catalog is planned ([#1940](https://github.com/TetronIO/JIM/issues/1940)). A Connected System whose connector cannot probe is still checked against JIM's own records of it.
 
 ## 🗺️ Upcoming Connectors
 
