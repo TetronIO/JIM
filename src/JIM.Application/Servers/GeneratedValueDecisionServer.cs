@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Security;
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -157,6 +158,53 @@ public class GeneratedValueDecisionServer
 
         return attention;
     }
+
+    /// <summary>
+    /// What allowing the rename of one held value would do, for the "Allow the rename" confirmation (plan decision 11): every
+    /// Connected System the value is exported to where the object has an account, and whether that account is renamed,
+    /// created or updated; and the value JIM is likely to choose, where that is cheap to say. The value itself is chosen by
+    /// the worker at the next export, after checking every system again. Null when no generated value has that id.
+    /// </summary>
+    public async Task<GeneratedValueRenamePreview?> GetRenamePreviewAsync(Guid assignmentId)
+    {
+        var decision = await GetDecisionAsync(assignmentId);
+        if (decision == null)
+            return null;
+
+        var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(decision.SyncRuleMappingId);
+        var participants = mapping?.Generation == null
+            ? []
+            : await Application.ConnectedSystems.GetGeneratedValueParticipantsAsync(mapping, mapping.SyncRule?.ConnectedSystemId ?? 0);
+
+        List<ConnectedSystemObject> accounts;
+        if (decision.MetaverseObjectId.HasValue)
+        {
+            accounts = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(decision.MetaverseObjectId.Value);
+        }
+        else
+        {
+            var account = decision is { ConnectedSystemObjectId: { } csoId, ConnectedSystemObjectConnectedSystemId: { } systemId }
+                ? await Application.ConnectedSystems.GetConnectedSystemObjectAsync(systemId, csoId)
+                : null;
+            accounts = account == null ? [] : [account];
+        }
+
+        var assignment = await Application.SyncRepo.GetGeneratedValueAssignmentByIdAsync(assignmentId);
+        return new GeneratedValueRenamePreview
+        {
+            Decision = decision,
+            Changes = GeneratedValueRenamePlanner.Plan(participants, accounts, decision.Value),
+            LikelyValue = mapping?.Generation == null || assignment == null
+                ? null
+                : GeneratedValueRenamePlanner.LikelyNextValue(mapping.Generation, assignment.BaseValue ?? FallbackBase(assignment), decision.Value)
+        };
+    }
+
+    /// <summary>
+    /// An assignment made before its base was recorded: its own value is the base when nothing was added to it, which is
+    /// the common case and the same fallback Collision Remediation uses.
+    /// </summary>
+    private static string FallbackBase(GeneratedValueAssignment assignment) => assignment.Value;
 
     // ---- Actions ----
 

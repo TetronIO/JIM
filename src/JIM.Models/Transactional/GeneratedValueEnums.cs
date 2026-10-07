@@ -218,3 +218,19 @@ public enum GeneratedValueDecisionActionOutcome
     /// <summary>The value exists but is not waiting on a decision, so there is nothing to act on.</summary>
     NotWaitingForDecision = 2
 }
+
+/// <summary>
+/// How allowing the rename of a held generated value changes one Connected System it is exported to (Unique Value
+/// Generation, #242, release 4, Phase 9): what the "Allow the rename" confirmation names for each system. Not persisted.
+/// </summary>
+public enum GeneratedValueRenameChangeKind
+{
+    /// <summary>An account there already holds the value, so the new value renames it.</summary>
+    Rename = 0,
+
+    /// <summary>The object is being provisioned there, so the account is created with the new value.</summary>
+    Create = 1,
+
+    /// <summary>An account there is joined but does not hold the value, so it is updated with the new value.</summary>
+    Update = 2
+}
