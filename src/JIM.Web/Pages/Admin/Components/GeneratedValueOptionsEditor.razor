@@ -260,6 +260,9 @@
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
     <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" />
 
+    @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
+    <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" />
+
     @* ─── Advanced: attempt limit ─── *@
     <MudExpansionPanels Elevation="0" Class="mt-5">
         <MudExpansionPanel Text="Advanced">

@@ -25,7 +25,7 @@ public class GeneratedValueAvailabilityPanelTests : JimComponentTestContext
     public async Task TearDownAsync() => await DisposeComponentsAsync();
 
     private static GeneratedValueParticipant Row(int systemId, string systemName, GeneratedValueParticipantCheck check, GeneratedValueParticipantReason reason,
-        bool canBeExcluded = true, bool isExcluded = false) => new()
+        bool canBeExcluded = true, bool isExcluded = false, bool reportsCollisions = false) => new()
     {
         ConnectedSystemId = systemId,
         ConnectedSystemName = systemName,
@@ -35,7 +35,8 @@ public class GeneratedValueAvailabilityPanelTests : JimComponentTestContext
         Check = check,
         Reason = reason,
         CanBeExcluded = canBeExcluded,
-        IsExcluded = isExcluded
+        IsExcluded = isExcluded,
+        ReportsCollisions = reportsCollisions
     };
 
     private IRenderedComponent<GeneratedValueAvailabilityPanel> RenderPanel(IReadOnlyList<GeneratedValueParticipant>? participants, SyncRuleMappingGeneration generation, Action? onChanged = null) =>
@@ -163,6 +164,24 @@ public class GeneratedValueAvailabilityPanelTests : JimComponentTestContext
             Assert.That(changes, Is.EqualTo(1));
             Assert.That(cut.Find(RowMarker).QuerySelectorAll("[data-testid='generated-value-availability-reason']"), Is.Empty,
                 "until the host reloads, the row no longer claims an exclusion it does not have");
+        }
+    }
+    [Test]
+    public void Render_ReportsCollisions_SaysWhichSystemsCanAndExplainsOnlyThoseThatCannot()
+    {
+        var cut = RenderPanel(
+        [
+            Row(2, "Active Directory", GeneratedValueParticipantCheck.JimRecordsAndProbe, GeneratedValueParticipantReason.None, reportsCollisions: true),
+            Row(3, "Payroll", GeneratedValueParticipantCheck.JimRecordsOnly, GeneratedValueParticipantReason.ConnectorCannotProbe)
+        ], new SyncRuleMappingGeneration());
+
+        var rows = cut.FindAll(RowMarker);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows[0].QuerySelector("[data-testid='generated-value-availability-reports-collisions']")!.GetAttribute("data-reports"), Is.EqualTo("true"));
+            Assert.That(rows[1].QuerySelector("[data-testid='generated-value-availability-reports-collisions']")!.GetAttribute("data-reports"), Is.EqualTo("false"));
+            Assert.That(rows[0].QuerySelectorAll("[data-testid='generated-value-availability-collision-note']"), Is.Empty);
+            Assert.That(rows[1].QuerySelectorAll("[data-testid='generated-value-availability-collision-note']"), Has.Length.EqualTo(1));
         }
     }
 }
