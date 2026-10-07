@@ -88,7 +88,8 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         commandText == ViewsCommandText ||
         commandText == ColumnsCommandText ||
         commandText == PrimaryKeyColumnsCommandText ||
-        commandText == ForeignKeyColumnsCommandText;
+        commandText == ForeignKeyColumnsCommandText ||
+        commandText == ColumnIgnoresCaseQuery;
 
     /// <summary>
     /// Every transaction this stand-in handed out, so a test can assert that one was committed on
@@ -180,6 +181,19 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// compares the way Microsoft SQL Server's default collation does: without regard to case.
     /// </summary>
     internal bool CaseSensitiveCollation { get; init; }
+
+    /// <summary>
+    /// Whether this stand-in can say how a column compares text, as Microsoft SQL Server can from its catalogue. Off,
+    /// it stands for a dialect that cannot (Oracle Database, as JIM reads it).
+    /// </summary>
+    internal bool CanReportColumnCollation { get; init; } = true;
+
+    /// <summary>
+    /// The stand-in for the dialect's "does this column ignore case" catalogue query.
+    /// </summary>
+    internal const string ColumnIgnoresCaseQuery = "FAKE CATALOGUE: COLUMN IGNORES CASE";
+
+    public override string? ColumnIgnoresCaseCommandText => CanReportColumnCollation ? ColumnIgnoresCaseQuery : null;
 
     /// <summary>
     /// Which dialect this stand-in speaks. Settable so a test can exercise the Oracle type-mapping
@@ -840,6 +854,10 @@ internal sealed class FakeDbCommand : DbCommand
         if (CommandText.StartsWith("INSERT ", StringComparison.OrdinalIgnoreCase))
             return _provider.GeneratedKey;
 
+        // Whether the column compares text without regard to case: one for yes, zero for no.
+        if (CommandText == FakeSqlProvider.ColumnIgnoresCaseQuery)
+            return _provider.CaseSensitiveCollation ? 0 : 1;
+
         var dataTable = ResolveDataTable();
 
         // A count over a source this stand-in holds rows for, honouring any watermark the command
@@ -1020,14 +1038,16 @@ internal sealed class FakeDbCommand : DbCommand
 
     /// <summary>
     /// Answers a uniqueness probe (#1941): the distinct values of one column that equal any bound value, compared
-    /// the way the stand-in's collation compares text, and blank-padded as both dialects compare a CHAR column.
+    /// the way the stand-in's collation compares text, ignoring trailing spaces as Microsoft SQL Server compares text.
     /// </summary>
     private DbDataReader ReadMatchingValues(FakeSqlDataTable dataTable, Match membership)
     {
         var column = membership.Groups["column"].Value;
         var ordinal = dataTable.IndexOf(column);
         var bound = membership.Groups["parameter"].Captures.Select(capture => BoundValue(capture.Value)).OfType<string>().ToList();
-        var comparer = _provider.CaseSensitiveCollation ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+        // Lower-cased on both sides compares without regard to case whatever the collation.
+        var comparer = _provider.CaseSensitiveCollation && !membership.Groups["lower"].Success ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
 
         var matching = dataTable.Rows
             .Select(row => row[ordinal])
@@ -1238,7 +1258,7 @@ internal sealed class FakeDbCommand : DbCommand
     }
 
     private static readonly Regex MembershipPredicatePattern = new(
-        @"^SELECT DISTINCT \[(?<column>[^\]]+)\] FROM .+ WHERE \[\k<column>\] IN \((?:@(?<parameter>\w+)(?:, )?)+\)$",
+        @"^SELECT DISTINCT \[(?<column>[^\]]+)\] FROM .+ WHERE (?:(?<lower>LOWER\(\[\k<column>\]\))|\[\k<column>\]) IN \((?:(?:LOWER\()?@(?<parameter>\w+)\)?(?:, )?)+\)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
     private static readonly Regex JoinPredicatePattern = new(

@@ -75,6 +75,12 @@ internal abstract class SqlProviderBase : ISqlProvider
     public abstract string ForeignKeyColumnsCommandText { get; }
 
     /// <summary>
+    /// Null unless a dialect can read a column's collation from its catalogue: a column whose comparison cannot be
+    /// read is treated as comparing case, which is never wrong, only slower.
+    /// </summary>
+    public virtual string? ColumnIgnoresCaseCommandText => null;
+
+    /// <summary>
     /// The dialect's opening identifier quote character.
     /// </summary>
     protected abstract char OpenQuote { get; }

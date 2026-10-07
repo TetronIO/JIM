@@ -21,9 +21,12 @@ namespace JIM.Connectors.SCIM;
 /// control value as equality assertions joined by <c>or</c> (RFC 7644 section 3.4.2.2), and reading back the probed
 /// attribute from whatever comes back.
 /// <para>
-/// The provider's own equality rules decide what counts as the same value: an attribute that is not case exact (most
-/// are, <c>userName</c> included) matches without regard to case. A value the search returns is in use whatever the
-/// credential can see; a value it does not return is only as good as the control value coming back with it.
+/// Case is ignored wherever the provider can ignore it, as at every uniqueness check (PRD FR 31): an attribute that is
+/// not case exact (most, <c>userName</c> included) is matched without regard to case by the provider, and every value
+/// returned is compared to the candidates the same way. A case-exact attribute (<c>externalId</c>) is matched exactly,
+/// because a SCIM filter has no way to ask otherwise; a value differing only in case is then not one the provider
+/// would refuse either. A value the search returns is in use whatever the credential can see; a value it does not
+/// return is only as good as the control value coming back with it.
 /// </para>
 /// </summary>
 internal sealed class ScimConnectorUniquenessProbe

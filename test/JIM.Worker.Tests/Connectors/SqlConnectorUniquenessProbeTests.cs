@@ -127,7 +127,8 @@ public class SqlConnectorUniquenessProbeTests
         await connector.ProbeAsync(Request("USERNAME", ["joe.bloggs"], null), _logger, CancellationToken.None);
 
         Assert.That(provider.ExecutedStatementTexts.Single(), Is.EqualTo(
-            "SELECT DISTINCT [USERNAME] FROM (SELECT * FROM [HR].[EMPLOYEES] WHERE [ACTIVE] = 1) [JIM_SOURCE] WHERE [USERNAME] IN (@probe0)"));
+            "SELECT DISTINCT [USERNAME] FROM (SELECT * FROM [HR].[EMPLOYEES] WHERE [ACTIVE] = 1) [JIM_SOURCE] WHERE LOWER([USERNAME]) IN (LOWER(@probe0))"),
+            "a statement has no catalogue entry to say how its columns compare, so the probe compares lower-cased values");
     }
 
     /// <summary>
@@ -182,24 +183,106 @@ public class SqlConnectorUniquenessProbeTests
     }
 
     /// <summary>
-    /// The database's own comparison rules decide what counts as the same value, as they decide what its unique
-    /// constraints refuse: under a case-insensitive collation (Microsoft SQL Server's default) a differently cased
-    /// value is a collision, and under a case-sensitive one (Oracle Database's default) it is not.
+    /// Generated-value uniqueness ignores case at every check (PRD FR 31), the probe included, whatever the column's
+    /// collation: <c>JOE.BLOGGS</c> is in use when <c>joe.bloggs</c> is.
     /// </summary>
-    [TestCase(false, UniquenessProbeOutcome.Found)]
-    [TestCase(true, UniquenessProbeOutcome.NotFound)]
-    public async Task ProbeAsync_ValueHeldInAnotherCase_FollowsTheDatabasesCollationAsync(bool caseSensitive, UniquenessProbeOutcome expected)
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ProbeAsync_ValueHeldInAnotherCase_IsFoundWhateverTheCollationAsync(bool caseSensitiveCollation)
     {
-        var connector = Open(PersonDatabase(caseSensitive));
+        var connector = Open(PersonDatabase(caseSensitiveCollation));
 
         var result = await connector.ProbeAsync(Request("USERNAME", ["JOE.BLOGGS"], null), _logger, CancellationToken.None);
 
-        Assert.That(result.Outcomes, Is.EqualTo(new[] { expected }));
+        Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found }));
     }
 
     /// <summary>
-    /// A CHAR column hands its values back blank-padded, while both dialects compare it blank-padded; reading the
-    /// padding as part of the value would miss every collision on such a column.
+    /// A column whose collation already ignores case (Microsoft SQL Server's default) is compared as it stands, so an
+    /// index on it can answer the query.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_ColumnCollationIgnoresCase_ComparesTheColumnAsItStandsAsync()
+    {
+        var provider = PersonDatabase(caseSensitiveCollation: false);
+        var connector = Open(provider);
+
+        await connector.ProbeAsync(Request("USERNAME", ["joe.bloggs"], null), _logger, CancellationToken.None);
+
+        Assert.That(provider.ExecutedStatementTexts.Single(), Is.EqualTo(
+            "SELECT DISTINCT [USERNAME] FROM [HR].[EMPLOYEES] WHERE [USERNAME] IN (@probe0)"));
+    }
+
+    /// <summary>
+    /// A column whose collation compares case (Oracle Database's default, or a case-sensitive Microsoft SQL Server
+    /// collation) is compared lower-cased on both sides, so a differently cased value still matches.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_ColumnCollationComparesCase_ComparesLowerCasedValuesAsync()
+    {
+        var provider = PersonDatabase(caseSensitiveCollation: true);
+        var connector = Open(provider);
+
+        await connector.ProbeAsync(Request("USERNAME", ["joe.bloggs", "joe.bloggs1"], null), _logger, CancellationToken.None);
+
+        Assert.That(provider.ExecutedStatementTexts.Single(), Is.EqualTo(
+            "SELECT DISTINCT [USERNAME] FROM [HR].[EMPLOYEES] WHERE LOWER([USERNAME]) IN (LOWER(@probe0), LOWER(@probe1))"));
+    }
+
+    /// <summary>
+    /// A dialect that cannot say how a column compares is treated as comparing case, so the probe still ignores it.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_DialectCannotReportTheColumnsCollation_ComparesLowerCasedValuesAsync()
+    {
+        var provider = PersonDatabase(caseSensitiveCollation: false, canReportColumnCollation: false);
+        var connector = Open(provider);
+
+        var result = await connector.ProbeAsync(Request("USERNAME", ["JOE.BLOGGS"], null), _logger, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.ExecutedStatementTexts.Single(), Does.Contain("WHERE LOWER([USERNAME]) IN (LOWER(@probe0))"));
+            Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found }));
+        }
+    }
+
+    /// <summary>
+    /// Reading the collation is an optimisation: when it fails, the probe compares lower-cased values, which is right
+    /// whatever the collation, rather than failing.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_ReadingTheColumnsCollationFails_StillAnswersComparingLowerCasedValuesAsync()
+    {
+        var provider = PersonDatabase(caseSensitiveCollation: true);
+        provider.FailWhenCommandTextContains = FakeSqlProvider.ColumnIgnoresCaseQuery;
+        var connector = Open(provider);
+
+        var result = await connector.ProbeAsync(Request("USERNAME", ["JOE.BLOGGS", "joe.bloggs1"], "asmith"), _logger, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.ExecutedStatementTexts.Single(), Does.Contain("WHERE LOWER([USERNAME]) IN ("));
+            Assert.That(result.IsFailure, Is.False);
+            Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found, UniquenessProbeOutcome.NotFound }));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAsync_SeveralBatchesForOneAttribute_ReadTheColumnsCollationOnceAsync()
+    {
+        var provider = PersonDatabase();
+        var connector = Open(provider);
+
+        await connector.ProbeAsync(Request("USERNAME", ["joe.bloggs"], null), _logger, CancellationToken.None);
+        await connector.ProbeAsync(Request("USERNAME", ["ada.lovelace"], null), _logger, CancellationToken.None);
+
+        Assert.That(provider.ExecutedCommandTexts.Count(text => text == FakeSqlProvider.ColumnIgnoresCaseQuery), Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Microsoft SQL Server compares text ignoring trailing spaces, so a CHAR column it matched hands the value back
+    /// blank-padded; reading the padding as part of the value would miss every collision on such a column.
     /// </summary>
     [Test]
     public async Task ProbeAsync_FixedWidthColumnReturnsPaddedValues_StillFoundAsync()
@@ -343,9 +426,9 @@ public class SqlConnectorUniquenessProbeTests
         }
     }
 
-    private static FakeSqlProvider PersonDatabase(bool caseSensitiveCollation = false)
+    private static FakeSqlProvider PersonDatabase(bool caseSensitiveCollation = false, bool canReportColumnCollation = true)
     {
-        var provider = new FakeSqlProvider { CaseSensitiveCollation = caseSensitiveCollation };
+        var provider = new FakeSqlProvider { CaseSensitiveCollation = caseSensitiveCollation, CanReportColumnCollation = canReportColumnCollation };
         provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "USERNAME"], [1, "asmith"], [2, "joe.bloggs"], [3, "joe.bloggs"]);
         return provider;
     }

@@ -16,10 +16,11 @@ namespace JIM.Connectors.Sql;
 /// attribute, its related table), asking for the distinct values of the probed column that equal any of the object's
 /// candidates or the control value, each bound as a parameter.
 /// <para>
-/// The database's own comparison rules decide what counts as the same value, exactly as they decide what its unique
-/// constraints refuse: under Microsoft SQL Server's default, case-insensitive collation a differently cased value is
-/// in use; under Oracle Database's default, case-sensitive comparison it is not. The column is compared as it stands,
-/// with no function wrapped around it, so an index on it serves the search.
+/// Case is ignored, as it is at every uniqueness check (PRD FR 31): <c>JBloggs</c> is in use when <c>jbloggs</c> is,
+/// whatever the column's collation. A column whose collation already ignores case (Microsoft SQL Server's default)
+/// is compared as it stands, so an index on it serves the search; any other (Oracle Database's default, a
+/// case-sensitive collation, a SELECT statement, or a column whose collation the dialect cannot report) is compared
+/// lower-cased on both sides. The collation is read once per column for the life of the probe connection.
 /// </para>
 /// </summary>
 internal sealed class SqlConnectorUniquenessProbe
@@ -33,6 +34,7 @@ internal sealed class SqlConnectorUniquenessProbe
     private readonly DbConnection _connection;
     private readonly SqlSchemaConfiguration _configuration;
     private readonly ILogger _logger;
+    private readonly Dictionary<(string Source, string Column), bool> _columnIgnoresCase = [];
 
     internal SqlConnectorUniquenessProbe(ISqlProvider provider, DbConnection connection, SqlSchemaConfiguration configuration, ILogger logger)
     {
@@ -59,10 +61,10 @@ internal sealed class SqlConnectorUniquenessProbe
 
         var values = request.ControlValue == null ? request.Candidates.ToList() : request.Candidates.Append(request.ControlValue).ToList();
 
-        string commandText;
+        ProbeSource source;
         try
         {
-            commandText = BuildCommandText(objectType, request.AttributeName, values.Count);
+            source = ResolveSource(objectType, request.AttributeName);
         }
         catch (ArgumentException)
         {
@@ -79,7 +81,9 @@ internal sealed class SqlConnectorUniquenessProbe
         var valuesFound = new List<string>();
         try
         {
-            await using var command = _provider.CreateCommand(_connection, commandText);
+            var ignoresCase = await ColumnIgnoresCaseAsync(source, timeout.Token);
+
+            await using var command = _provider.CreateCommand(_connection, BuildCommandText(source, values.Count, ignoresCase));
             command.CommandTimeout = Math.Max(1, (int)Math.Ceiling(request.Timeout.TotalSeconds));
             for (var index = 0; index < values.Count; index++)
                 command.Parameters.Add(_provider.CreateParameter(ParameterPrefix + index.ToString(CultureInfo.InvariantCulture), values[index]));
@@ -96,8 +100,8 @@ internal sealed class SqlConnectorUniquenessProbe
 
                 valuesFound.Add(value);
 
-                // A fixed-width CHAR column hands its values back blank-padded, while both dialects compare it
-                // blank-padded, so the database matched the unpadded value too.
+                // Microsoft SQL Server compares text ignoring trailing spaces, so a fixed-width CHAR column it
+                // matched hands the value back padded; the unpadded form is the one that was asked for.
                 var unpadded = value.TrimEnd(' ');
                 if (unpadded.Length != value.Length)
                     valuesFound.Add(unpadded);
@@ -138,34 +142,76 @@ internal sealed class SqlConnectorUniquenessProbe
     }
 
     /// <summary>
-    /// The statement for one batch: the distinct values of the attribute's column that equal any bound value. An
-    /// attribute held in a related table is searched there; any other is a column of the Object Type's own source,
-    /// named exactly as import names it. Identifiers are quoted by the dialect, and values are never interpolated.
+    /// Where an attribute's values are searched: an attribute held in a related table in that table's value column;
+    /// any other in the column of the Object Type's own table, view or SELECT statement named exactly as import names
+    /// it. Identifiers are quoted by the dialect.
     /// </summary>
     /// <exception cref="ArgumentException">A name the dialect will not quote as an identifier.</exception>
-    private string BuildCommandText(SqlObjectTypeConfiguration objectType, string attributeName, int valueCount)
+    private ProbeSource ResolveSource(SqlObjectTypeConfiguration objectType, string attributeName)
     {
         var relatedTable = objectType.RelatedTables.FirstOrDefault(r => string.Equals(r.AttributeName, attributeName, StringComparison.OrdinalIgnoreCase));
-
-        string column;
-        string from;
         if (relatedTable != null)
         {
-            column = _provider.QuoteIdentifier(relatedTable.ValueColumn);
-            from = _provider.QualifyObjectName(relatedTable.SchemaName, relatedTable.TableName);
-        }
-        else
-        {
-            column = _provider.QuoteIdentifier(attributeName);
-            from = objectType.IsCustomSelect
-                ? $"({objectType.SelectStatement}) {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}"
-                : _provider.QualifyObjectName(objectType.SchemaName, objectType.TableName!);
+            var qualifiedTable = _provider.QualifyObjectName(relatedTable.SchemaName, relatedTable.TableName);
+            return new ProbeSource(qualifiedTable, qualifiedTable, relatedTable.ValueColumn, _provider.QuoteIdentifier(relatedTable.ValueColumn));
         }
 
+        var column = _provider.QuoteIdentifier(attributeName);
+        if (objectType.IsCustomSelect)
+            return new ProbeSource($"({objectType.SelectStatement}) {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}", null, attributeName, column);
+
+        var qualifiedObject = _provider.QualifyObjectName(objectType.SchemaName, objectType.TableName!);
+        return new ProbeSource(qualifiedObject, qualifiedObject, attributeName, column);
+    }
+
+    /// <summary>
+    /// The statement for one batch: the distinct values of the source's column that equal any bound value, compared
+    /// as the column stands where it already ignores case and lower-cased on both sides otherwise. Values are never
+    /// interpolated.
+    /// </summary>
+    private string BuildCommandText(ProbeSource source, int valueCount, bool columnIgnoresCase)
+    {
         var placeholders = Enumerable.Range(0, valueCount)
-            .Select(index => _provider.GetParameterPlaceholder(ParameterPrefix + index.ToString(CultureInfo.InvariantCulture)));
+            .Select(index => _provider.GetParameterPlaceholder(ParameterPrefix + index.ToString(CultureInfo.InvariantCulture)))
+            .Select(placeholder => columnIgnoresCase ? placeholder : $"LOWER({placeholder})");
 
-        return $"SELECT DISTINCT {column} FROM {from} WHERE {column} IN ({string.Join(", ", placeholders)})";
+        var compared = columnIgnoresCase ? source.QuotedColumn : $"LOWER({source.QuotedColumn})";
+
+        return $"SELECT DISTINCT {source.QuotedColumn} FROM {source.From} WHERE {compared} IN ({string.Join(", ", placeholders)})";
+    }
+
+    /// <summary>
+    /// Whether the source's column already compares text without regard to case, read from the dialect's catalogue
+    /// once per column for the life of the connection. A statement has no catalogue entry, a dialect may be unable to
+    /// say, and a read may fail; each answers no, which is never wrong, only unable to use a plain index on the column.
+    /// </summary>
+    private async Task<bool> ColumnIgnoresCaseAsync(ProbeSource source, CancellationToken cancellationToken)
+    {
+        if (source.CatalogueName == null || _provider.ColumnIgnoresCaseCommandText is not { } commandText)
+            return false;
+
+        var key = (source.CatalogueName, source.ColumnName);
+        if (_columnIgnoresCase.TryGetValue(key, out var known))
+            return known;
+
+        var ignoresCase = false;
+        try
+        {
+            await using var command = _provider.CreateCommand(_connection, commandText);
+            command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.ObjectName, source.CatalogueName));
+            command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.ColumnName, source.ColumnName));
+
+            var answer = await command.ExecuteScalarAsync(cancellationToken);
+            ignoresCase = answer is not null and not DBNull && Convert.ToInt32(answer, CultureInfo.InvariantCulture) == 1;
+        }
+        catch (DbException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug(ex, "SqlConnectorUniquenessProbe: Could not read how column {Column} of {Source} compares text; comparing lower-cased values.",
+                LogSanitiser.Sanitise(source.ColumnName), LogSanitiser.Sanitise(source.CatalogueName));
+        }
+
+        _columnIgnoresCase[key] = ignoresCase;
+        return ignoresCase;
     }
 
     private UniquenessProbeResult TimedOut(UniquenessProbeRequest request)
@@ -174,4 +220,13 @@ internal sealed class SqlConnectorUniquenessProbe
             LogSanitiser.Sanitise(request.AttributeName), request.Timeout.TotalSeconds);
         return UniquenessProbeResult.Failed(request.Candidates.Count, $"The database did not answer within {request.Timeout.TotalSeconds:0} seconds");
     }
+
+    /// <summary>
+    /// Where one attribute is searched.
+    /// </summary>
+    /// <param name="From">What the statement reads from, ready for its FROM clause.</param>
+    /// <param name="CatalogueName">The table or view as the catalogue knows it, or null for a SELECT statement.</param>
+    /// <param name="ColumnName">The column, unquoted, as the catalogue knows it.</param>
+    /// <param name="QuotedColumn">The column, quoted for the statement.</param>
+    private sealed record ProbeSource(string From, string? CatalogueName, string ColumnName, string QuotedColumn);
 }
