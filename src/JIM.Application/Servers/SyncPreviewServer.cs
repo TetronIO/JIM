@@ -918,17 +918,55 @@ public class SyncPreviewServer
                 }
             }
 
+            // The orphaned-contribution recall and the withdrawal re-election (#1899), between the ordinary pass and the
+            // derived levels exactly as the run takes them, because both change values a derived flow reads. A survivor
+            // whose own Expression fails fails the object in the run (its object-level catch), so it does here too.
+            // Inside the try because the recall reads the working copy through the object's link.
+            List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> reElectionOutcomes = [];
+            if (!objectFailed)
+            {
+                try
+                {
+                    reElectionOutcomes = await RecallAndReElectForPreviewAsync(result, cso, workingMvo, context, asTheRunWould);
+                }
+                catch (SyncExpressionEvaluationException expressionEx)
+                {
+                    result.Errors.Add(new SyncPreviewMessage
+                    {
+                        Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                        Detail = $"An Expression failed to evaluate while handing a withdrawn value to the next contributor: {expressionEx.Message}",
+                        SyncRuleName = expressionEx.SyncRuleName,
+                        ConnectedSystemId = connectedSystemId,
+                        AttributeName = expressionEx.TargetAttributeName
+                    });
+                    objectFailed = true;
+                }
+                catch (SyncExpressionMissingInputException missingInputEx)
+                {
+                    result.Errors.Add(new SyncPreviewMessage
+                    {
+                        Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                        Detail = missingInputEx.DescribeForAdministrator(),
+                        SyncRuleName = missingInputEx.SyncRuleName,
+                        ConnectedSystemId = connectedSystemId,
+                        AttributeName = missingInputEx.TargetAttributeName
+                    });
+                    objectFailed = true;
+                }
+            }
+
             // Unique Value Generation (#242) and Metaverse-Derived Attribute Flows (#1750, plan Phase 5): the worker's
             // per-object level loop, read-only. Level 0 resolves the generations the ordinary pass recorded (dry run);
             // each derived level is then evaluated once and its generations resolved before the next level reads
             // them. Must run before the flows are captured immediately below, since the derived pass and
             // ApplyGeneratedValue stage their results the same way an ordinary Attribute Flow writer does (mirrors
             // the worker's own "before Count actual attribute changes" ordering). Inside the try because the derived
-            // pass, like the ordinary one, reads the working copy through the object's link.
+            // pass, like the ordinary one, reads the working copy through the object's link. A value the re-election
+            // generated comes first, as the worker merges it.
             if (!objectFailed)
             {
-                generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
-                    result, cso, workingMvo, inScopeRules, context, flowErrors);
+                generatedValueOutcomes = [.. reElectionOutcomes, .. await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
+                    result, cso, workingMvo, inScopeRules, context, flowErrors)];
             }
         }
         finally
@@ -996,6 +1034,12 @@ public class SyncPreviewServer
         var removedAttributes = workingMvo.PendingAttributeValueRemovals.Count > 0
             ? workingMvo.PendingAttributeValueRemovals.ToHashSet()
             : null;
+
+        // What the run's Detailed tracking counts from the same lists (#91): asserted nulls, which are the "Null is a value"
+        // markers written into the additions, and attributes cleared with no contributor to take them over.
+        var assertedNullCount = workingMvo.PendingAttributeValueAdditions.Count(av => av.NullValue);
+        var clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(
+            workingMvo, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals).Count;
 
         _syncEngine.ApplyPendingAttributeChanges(workingMvo);
 
@@ -1080,6 +1124,30 @@ public class SyncPreviewServer
                     Ordinal = root.Children.Count
                 };
                 root.Children.Add(attributeFlowChild);
+            }
+
+            // Detailed tracking's asserted nulls and no-contributor clears (#91), beneath the root after the Attribute
+            // Flow child, in the order the worker's root builder adds them; the run's export outcomes come later.
+            if (assertedNullCount > 0)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailCount = assertedNullCount,
+                    Ordinal = root.Children.Count
+                });
+            }
+
+            if (clearedAttributeCount > 0)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailCount = clearedAttributeCount,
+                    Ordinal = root.Children.Count
+                });
             }
 
             // The outbound outcomes nest under the Attribute Flow child where there is one, because what
@@ -1277,6 +1345,68 @@ public class SyncPreviewServer
 
         static string DescribeDerivedHost(string? syncRuleName) =>
             syncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{syncRuleName}'.";
+    }
+
+    /// <summary>
+    /// The two steps the run takes on a joined object between the ordinary pass and the derived levels
+    /// (<c>SyncTaskProcessorBase.ProcessMetaverseObjectChangesAsync</c>, #1899), in its order, on the preview's working
+    /// copy: the orphaned-contribution recall stages the removal of a value this system contributed through an
+    /// Attribute Flow mapping that no longer exists (#1533), then the withdrawal re-election hands every attribute the
+    /// ordinary pass or the recall cleared to the next surviving contributor (#91), or leaves it cleared.
+    /// </summary>
+    /// <remarks>
+    /// The recall is made only as the run would. The configuration change previews ask the other question of a baseline
+    /// and a proposal, and a proposal removing a mapping would recall its values on one side only, which those previews
+    /// deliberately leave to the next Full Synchronisation rather than count against the save; nor can a proposal carry
+    /// the keep-the-values choice that severs the provenance the recall reads (<c>SyncRuleAttributeFlowPreviewAdapter</c>).
+    /// The re-election follows whatever the ordinary pass withdrew on either path, because it is the same
+    /// synchronisation's answer to the same change. Survivors are re-flowed against the working copy and left as they
+    /// were found, so nothing shared is touched.
+    /// </remarks>
+    /// <param name="result">The preview result, for a generation a re-elected survivor's mapping would fail.</param>
+    /// <param name="cso">The previewed object, linked to <paramref name="workingMvo"/> for the call.</param>
+    /// <param name="workingMvo">The preview's working copy, carrying the ordinary pass's staged changes.</param>
+    /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="asTheRunWould">See <see cref="PreviewCsoCoreAsync"/>.</param>
+    /// <returns>A Generated outcome per value a re-elected survivor's generated mapping resolved; usually empty.</returns>
+    private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> RecallAndReElectForPreviewAsync(
+        SyncPreviewResult result,
+        ConnectedSystemObject cso,
+        MetaverseObject workingMvo,
+        CsoPreviewContext context,
+        bool asTheRunWould)
+    {
+        if (asTheRunWould)
+            _syncEngine.RecallOrphanedContributions(cso, context.PriorityContext);
+
+        if (workingMvo.PendingAttributeValueRemovals.Count == 0)
+            return [];
+
+        // Only a genuine clear is withdrawn: an attribute the pass replaced, or that keeps another value, has nothing to
+        // hand over. An asserted null writes a marker into the additions, so it is never treated as cleared here.
+        var clearedAttributeIds = ContributorReElectionService.GetClearedAttributeIds(
+            workingMvo, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals);
+        var withdrawnValues = workingMvo.PendingAttributeValueRemovals
+            .Where(av => clearedAttributeIds.Contains(av.AttributeId))
+            .ToList();
+        if (withdrawnValues.Count == 0)
+            return [];
+
+        // The run's scope for a withdrawal (SyncTaskProcessorBase.ReElectSurvivingContributorsAsync): the withdrawing
+        // system is excluded, since its other enabled rules have already flowed in this pass, and a generation the
+        // survivor's mapping needs is resolved for the object leaving the attribute, never the person's own account.
+        return await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+            workingMvo,
+            withdrawnValues,
+            ContributorRecallScope.ForObsoletingConnectedSystemObject(cso),
+            context.PriorityContext,
+            _syncEngine,
+            context.GuardedRepository,
+            (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+            context.ObjectTypes,
+            ExpressionEvaluator,
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id),
+            leaveSurvivorsAsFound: true);
     }
 
     /// <summary>
@@ -1597,7 +1727,8 @@ public class SyncPreviewServer
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
                 context.ObjectTypes,
                 ExpressionEvaluator,
-                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
+                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id),
+                leaveSurvivorsAsFound: true);
 
             var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guardedRepository);
             var noImportSourceRemains = !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(
@@ -1778,7 +1909,8 @@ public class SyncPreviewServer
             (mvo, disconnectingSystemId, remainingConnectedSystemIds) =>
                 Task.FromResult(DecideDeletionForPreview(mvo, disconnectingSystemId, remainingConnectedSystemIds, context)),
             recordPreRecallAttributeSnapshot: _ => { },
-            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id),
+            leaveSurvivorsAsFound: true);
 
         if (teardown.MvoAttributeChange is { } recall)
             RecordMetaverseChanges(result, recall.Additions, recall.Removals);
