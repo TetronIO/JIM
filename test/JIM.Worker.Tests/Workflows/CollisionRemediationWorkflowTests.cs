@@ -273,6 +273,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked));
             Assert.That(SyncRepo.PendingExports[export.Id].ErrorCount, Is.Zero);
             Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved));
+            Assert.That(item.ObjectChangeType, Is.EqualTo(ObjectChangeType.PendingExport), "a held export wrote nothing; it is still queued");
+            Assert.That(item.SyncOutcomes.Select(o => o.OutcomeType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Exported),
+                "nothing was exported, so the Activity must not count it as exported");
             Assert.That(item.ErrorMessage, Does.Contain("Directory").And.Contain("joe.bloggs").And.Contain("Contractor"),
                 "the error names the rejecting system, the value and the system that has provisioned it");
             Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty);

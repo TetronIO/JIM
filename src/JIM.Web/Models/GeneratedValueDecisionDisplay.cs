@@ -8,17 +8,6 @@ using JIM.Models.Transactional.DTOs;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// One piece of the "why it is held" sentence: plain text, or a Connected System rendered as its chip.
-/// </summary>
-/// <param name="Text">The text, or the Connected System's name when <see cref="IsConnectedSystem"/>.</param>
-/// <param name="ConnectedSystemId">The Connected System, when this piece names one.</param>
-public sealed record GeneratedValueDecisionWhyPart(string Text, int? ConnectedSystemId = null)
-{
-    /// <summary>Whether this piece names a Connected System (and so renders as its chip).</summary>
-    public bool IsConnectedSystem => ConnectedSystemId.HasValue;
-}
-
-/// <summary>
 /// What the Generated Values surfaces (the Operations tab, the Metaverse Object's banner) say about a held generated value
 /// (Unique Value Generation, #242, release 4, Phase 9): the "why it is held" sentence for each reason, its second line,
 /// and whether the value offers its two actions. One place, so the tab and the banner cannot explain the same value two

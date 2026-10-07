@@ -499,4 +499,35 @@ public class CausalitySummaryBuilderTests
         Assert.That(sentence, Does.Contain($"processed person {entryUuid}:"));
         Assert.That(sentence, Does.Not.Contain($"{entryUuid} ({entryUuid})"));
     }
+    [Test]
+    public void Build_ExportItemWhoseGeneratedValueWasCorrected_SaysSoWithAValueCorrectedPill()
+    {
+        // Collision Remediation (#242, release 4): the export wrote nothing; the item's record is the correction.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, parent: null, ordinal: 0, detailCount: 2,
+            detailMessage: "Glitterband EMEA already holds the Account Name \"liam.allen\" for another object, so JIM corrected it to \"liam.allen1\".");
+
+        var summary = BuildSummary(item, CausalityTestData.ExportContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Is.EqualTo(new[] { ("Value corrected", CausalityTone.Warning) }));
+            Assert.That(RenderSentence(summary.Segments), Does.Contain("corrected").And.Not.Contain("no changes were needed"));
+        }
+    }
+
+    [Test]
+    public void Build_ExportItemHeldForADecision_SaysSoWithANeedsADecisionPillAndNothingExported()
+    {
+        // Needs Decision (#242, release 4): the export is parked, so the item records no outcome; its error is the story.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved };
+
+        var summary = BuildSummary(item, CausalityTestData.ExportContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Is.EqualTo(new[] { ("Needs a decision", CausalityTone.Error) }));
+            Assert.That(RenderSentence(summary.Segments), Does.Contain("decision").And.Not.Contain("no changes were needed"));
+        }
+    }
 }
