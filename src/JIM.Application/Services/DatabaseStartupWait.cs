@@ -18,7 +18,8 @@ namespace JIM.Application.Services;
 /// Attempts are retried after 1, 2, 4 and 8 seconds, then every 15 seconds, each failure logged at Information
 /// with its attempt number, the time spent so far and the reason. When the budget is spent, one Fatal line is
 /// logged and <see cref="Models.Exceptions.DatabaseUnavailableException"/> is thrown, so the service stops and its
-/// supervisor starts it again. A failure that waiting cannot fix is thrown by
+/// supervisor starts it again. Each attempt opens a new connection, so the database's host name is resolved afresh
+/// every time, and each failure names the address it was tried at. A failure that waiting cannot fix is thrown by
 /// <see cref="IRepository.TryConnectAsync"/> straight away and is not caught here.
 /// </remarks>
 internal sealed class DatabaseStartupWait

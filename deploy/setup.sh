@@ -1145,16 +1145,40 @@ configure_firewall() {
         fi
     fi
 
-    local command="firewall-cmd --permanent --add-port=${port}/tcp && firewall-cmd --reload"
+    # Opened now and for good, without reloading firewalld: a reload also removes the rules Podman adds for running
+    # containers' networks, as keep_network_through_firewall_reload explains.
+    local command="firewall-cmd --add-port=${port}/tcp && firewall-cmd --permanent --add-port=${port}/tcp"
     if [ "$open" != "true" ]; then
         warn "firewalld blocks port ${port}, so other machines cannot reach JIM until you allow it: ${command}"
     elif [ "$(id -u)" -ne 0 ]; then
         warn "Opening the firewall needs root. Ask your administrators to run: ${command}"
     else
-        { firewall-cmd --permanent --add-port="${port}/tcp" && firewall-cmd --reload; } >/dev/null \
+        { firewall-cmd --add-port="${port}/tcp" && firewall-cmd --permanent --add-port="${port}/tcp"; } >/dev/null \
             || fatal "Failed to open port ${port} in firewalld"
         success "Allowed port ${port} in firewalld"
     fi
+}
+
+# A firewalld reload, or a restart, removes the rules Podman adds for a rootful container network, which firewalld
+# itself does not keep: JIM's services can then neither resolve names on their network nor, where the host filters
+# bridged traffic, reach their database, until JIM restarts (found investigating #2009). Podman ships
+# netavark-firewalld-reload.service to put the rules back after every reload, and leaves it disabled. A rootless
+# installation's rules live in its account's own network namespace, which firewalld does not touch.
+keep_network_through_firewall_reload() {
+    [ -z "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ] || return 0
+    command -v firewall-cmd >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 || return 0
+
+    local unit="netavark-firewalld-reload.service"
+    if ! systemctl cat "$unit" >/dev/null 2>&1; then
+        warn "This Podman has no ${unit}, so reloading firewalld takes JIM's network away: restart JIM after any firewalld reload."
+        return 0
+    fi
+    if [ "$(firewall-cmd --state 2>/dev/null)" = "running" ]; then
+        systemctl enable --now "$unit" >/dev/null 2>&1 || fatal "Failed to enable ${unit}"
+    else
+        systemctl enable "$unit" >/dev/null 2>&1 || fatal "Failed to enable ${unit}"
+    fi
+    success "Enabled ${unit}, which restores JIM's network rules whenever firewalld reloads"
 }
 
 # Ubuntu 24.04 gives crun and podman AppArmor profiles of their own. A container that sets no-new-privileges, as
@@ -2947,6 +2971,7 @@ main() {
     if [ "$RUNTIME" = "podman" ]; then
         configure_apparmor
         configure_firewall
+        keep_network_through_firewall_reload
     fi
     keep_installation
 
