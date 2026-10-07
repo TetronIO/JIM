@@ -7134,21 +7134,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
-        // Null out the FK reference in Activities to preserve audit history
-        if (Repository.Database.Database.IsRelational())
+        // History that names the rule (its Activities and the Metaverse Object changes it caused) outlives it. The
+        // database clears those references itself (ON DELETE SET NULL) in the same statement that removes the rule, so
+        // a refused delete can no longer leave the history detached from a rule that still exists (#1990). The
+        // in-memory test provider enforces no foreign keys and so clears nothing; emulate the database there.
+        if (!Repository.Database.Database.IsRelational())
         {
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
-                syncRule.Id);
-        }
-        else
-        {
-            // The in-memory test provider does not support raw SQL; tracked fallback with the same semantics.
             var activities = await Repository.Database.Activities.AsTracking()
                 .Where(a => a.SyncRuleId == syncRule.Id).ToListAsync();
             foreach (var activity in activities)
                 activity.SyncRuleId = null;
-            await Repository.Database.SaveChangesAsync();
+
+            var changes = await Repository.Database.MetaverseObjectChanges.AsTracking()
+                .Where(c => c.SyncRuleId == syncRule.Id).ToListAsync();
+            foreach (var change in changes)
+                change.SyncRuleId = null;
         }
 
         Repository.Database.Remove(syncRule);
@@ -7689,9 +7689,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
 
-        // Capture the id sets the audit-severing statements key on BEFORE their rows are deleted, so any
-        // TRACKED Activity instances can be fixed up to match the database once the deletion commits (raw
-        // SQL bypasses the change tracker; see the tracker fix-up after the commit below).
+        // Capture the id sets the audit severing keys on BEFORE their rows are deleted, so any TRACKED Activity
+        // instances can be fixed up to match the database once the deletion commits (raw SQL, and the ON DELETE
+        // SET NULL it sets off, bypass the change tracker; see the tracker fix-up after the commit below).
         var severedSyncRuleIds = await Repository.Database.SyncRules
             .Where(sr => sr.ConnectedSystemId == connectedSystemId)
             .Select(sr => sr.Id)
@@ -7707,34 +7707,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for
         //    audit; only the now-dead foreign key is nulled. They must be nulled before their targets are deleted.
+        //    History naming this system's Synchronisation Rules (Activities.SyncRuleId and
+        //    MetaverseObjectChanges.SyncRuleId) needs no statement here: the database clears it, ON DELETE SET NULL,
+        //    as step 11 deletes the rules (#1990).
 
-        // 2a. Activities referencing this system, its Run Profiles, or its Synchronisation Rules.
+        // 2a. Activities referencing this system or its Run Profiles.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL
               WHERE ""ConnectedSystemRunProfileId"" IN (SELECT ""Id"" FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL
-              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
-            connectedSystemId);
-        await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 2b. Metaverse Object changes referencing this system's Synchronisation Rules.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectChanges"" SET ""SyncRuleId"" = NULL
-              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
-            connectedSystemId);
-
-        // 2c. Metaverse attribute values contributed by this system: keep the value, null the contributor.
+        // 2b. Metaverse attribute values contributed by this system: keep the value, null the contributor.
         //     Attribute recall (removing the values and re-evaluating precedence) is deliberately out of scope here;
         //     it is a sync-engine concern handled on CSO obsoletion, not bulk system deletion.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ContributedBySystemId"" = NULL WHERE ""ContributedBySystemId"" = {0}",
             connectedSystemId);
 
-        // 2d. Example-data template attributes referencing this system's schema attributes.
+        // 2c. Example-data template attributes referencing this system's schema attributes.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ExampleDataTemplateAttributes"" SET ""ConnectedSystemObjectTypeAttributeId"" = NULL
               WHERE ""ConnectedSystemObjectTypeAttributeId"" IN (
@@ -7743,8 +7736,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               )",
             connectedSystemId);
 
-        // 2e. On the preserve-history path, retained ConnectedSystemObjectChanges reference the object types deleted
-        //     in step 11; null that FK first. (On the delete-history path those change rows have already been removed.)
+        // 2d. On the preserve-history path, retained ConnectedSystemObjectChanges reference the object types deleted
+        //     in step 13; null that FK first. (On the delete-history path those change rows have already been removed.)
         if (!deleteChangeHistory)
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
@@ -7914,20 +7907,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         Repository.Database.Database.SetCommandTimeout(previousTimeout);
 
-        // Mirror the audit-severing raw SQL onto any TRACKED Activity instances. The worker's long-lived
-        // context holds the task's Activity tracked, and the completion write that follows this deletion
-        // marks the whole entity Modified (UpdateDetachedSafe), so without this fix-up it re-asserts the
-        // deleted system id and PostgreSQL refuses with 23503, poisoning every later SaveChangesAsync on
-        // the context (the first #809 Synchronised Deprovisioning run died exactly this way, after
-        // "system deleted"). Raw SQL writes must fix up tracked instances; the code issuing the SQL owns it.
+        // Mirror the audit severing (the raw SQL, and ON DELETE SET NULL as the rules go) onto any TRACKED
+        // Activity instances. The worker's long-lived context holds the task's Activity tracked, and the
+        // completion write that follows this deletion marks the whole entity Modified (UpdateDetachedSafe), so
+        // without this fix-up it re-asserts the deleted system id and PostgreSQL refuses with 23503, poisoning
+        // every later SaveChangesAsync on the context (the first #809 Synchronised Deprovisioning run died
+        // exactly this way, after "system deleted"). Raw SQL writes must fix up tracked instances; the code
+        // issuing the SQL owns it.
         FixUpTrackedActivitiesAfterConnectedSystemDelete(connectedSystemId, severedSyncRuleIds, severedRunProfileIds);
 
         Log.Information("DeleteConnectedSystemAsync: Completed bulk deletion for Connected System {Id}", connectedSystemId);
     }
 
     /// <summary>
-    /// Re-synchronises tracked <see cref="JIM.Models.Activities.Activity"/> instances with the audit-severing UPDATEs the
-    /// Connected System deletion issued as raw SQL: any tracked Activity referencing the deleted system,
+    /// Re-synchronises tracked <see cref="JIM.Models.Activities.Activity"/> instances with the audit severing the
+    /// Connected System deletion performed in the database (raw SQL UPDATEs, and ON DELETE SET NULL as the
+    /// Synchronisation Rules go): any tracked Activity referencing the deleted system,
     /// one of its Synchronisation Rules, or one of its Run Profiles has that foreign key nulled in memory,
     /// exactly as the database now holds it. Enumeration runs with change detection suspended, because
     /// <c>ChangeTracker.Entries()</c> otherwise triggers <c>DetectChanges()</c>, which can attach untracked

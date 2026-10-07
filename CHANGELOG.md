@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A delete queued because an object left an export rule's scope now shows on that object's execution item and in the run's Pending Exports total, as a provisioning does. (#1925)
 - 🐛 An object leaving an export rule's scope under a Disconnect Deprovisioning Action is now reported on its execution item as **Disconnected from target system**, in synchronisation, recall and Sync Preview; it was visible only in the service log. (#1966)
 - 🐛 Sync Preview of a Connected System Object now shows what synchronising it would do: it no longer proposes corrections to values changed in other systems, which the synchronisation leaves alone, and now shows the drift corrections the synchronisation makes where an export rule enforces state. (#1530)
+- 🐛 Sync Preview of an object leaving import scope now shows the updates its departure sends to target systems, where the values it contributed are withdrawn or handed to another source; it showed only the disconnection. (#1530)
+- 🐛 Sync Preview of an object whose Expression would fail it no longer also shows the projection and exports the synchronisation then discards; it shows the error alone, as the run records it. (#1530)
 - 🐛 Switching an export rule's Deprovisioning Action from Delete to Disconnect now withdraws its queued deletes not yet exported and disconnects those objects instead; they were still deleted at the next export. (#1970)
 - 🐛 PowerShell: `-MetaverseAttributeName` now works on `New-JIMScopingCriterion`, `Set-JIMScopingCriterion`, `New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion`; it always reported the attribute as not found. (#1965)
 - 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
@@ -77,6 +79,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Running `setup.sh` again over a Docker installation now restarts `jim.web` when it has to, so JIM serves the certificate that run issued instead of the previous one. (#1956)
 - 🐛 Declining `setup.sh`'s **Start JIM now?** now prints commands that work: on Podman with systemd they no longer fail to find JIM's unit, and a JIM already running is restarted on the new settings and certificate instead of left as it was. (#1984)
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
+- 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
+
+### Performance
+
+- ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
 
 ## [0.16.0] - 2026-09-29
 

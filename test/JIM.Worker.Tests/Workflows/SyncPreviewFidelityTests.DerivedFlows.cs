@@ -195,6 +195,23 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
+    [Test]
+    public async Task StreamFullSyncPreviewAsync_EnabledDerivedFlowsFormACycle_YieldsTheRefusalAndNothingElseAsync()
+    {
+        var ctx = await SetUpDerivedAsync(emailExpression: "mv[\"User Principal Name\"]");
+        SeedDerivedHr(ctx, "E1", "jbloggs");
+
+        var items = new List<FullSyncPreviewItem>();
+        await foreach (var item in Jim.SyncPreview.StreamFullSyncPreviewAsync(ctx.Hr.Id))
+            items.Add(item);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Select(i => i.Kind), Is.EqualTo(new[] { FullSyncPreviewItemKind.Population, FullSyncPreviewItemKind.Refused }));
+            Assert.That(items[^1].Preview!.Errors.Select(e => e.Code), Is.EqualTo(new[] { SyncPreviewMessageCode.DerivedFlowCycle }));
+        }
+    }
+
     // ---- Dry run never writes a derived-input mark ----
 
     [Test]

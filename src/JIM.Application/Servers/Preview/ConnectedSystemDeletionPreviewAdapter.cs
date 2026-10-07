@@ -116,21 +116,18 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
     /// re-implementing it. One count per transition, of distinct objects, because the verdict states each as "N objects
     /// would ..." and an object losing three values has lost them once.
     /// </remarks>
-    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context)
+    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context) =>
+        await PreviewImpactCounter.CountAsync((await CreateImpactCounterAsync(context))!, EvaluateDeltasAsync(context, CancellationToken.None));
+
+    /// <summary>
+    /// Stage 2 counted in the framework's one evaluation pass (#1530): distinct objects per transition, exactly as
+    /// <see cref="CountImpactAsync"/> counts.
+    /// </summary>
+    public Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var objectsByTransition = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, HashSet<Guid>>();
-        await foreach (var delta in EvaluateDeltasAsync(context, CancellationToken.None))
-            CountSubject(objectsByTransition, delta);
-
-        return
-        [
-            .. objectsByTransition
-                .OrderByDescending(count => count.Value.Count)
-                .ThenBy(count => count.Key)
-                .Select(count => new PreviewImpactCount(count.Key, count.Value.Count))
-        ];
+        return Task.FromResult<IPreviewImpactCounter?>(PreviewImpactCounter.PerSubject(SubjectOf));
     }
 
     public async IAsyncEnumerable<PreviewDelta> EvaluateDeltasAsync(PreviewContext context,
@@ -146,18 +143,14 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
     /// Adds the object a delta is about to its transition's set: the target's object for an export transition, the
     /// Metaverse Object otherwise.
     /// </summary>
-    private static void CountSubject(Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, HashSet<Guid>> objectsByTransition, PreviewDelta delta)
-    {
-        var subject = TargetObjectTransitions.Contains(delta.TransitionType)
+    /// <summary>
+    /// The object a delta counts against: the target account for a transition that happens to one, else the Metaverse
+    /// Object.
+    /// </summary>
+    private static Guid? SubjectOf(PreviewDelta delta) =>
+        TargetObjectTransitions.Contains(delta.TransitionType)
             ? delta.ConnectedSystemObjectId ?? delta.MetaverseObjectId
             : delta.MetaverseObjectId ?? delta.ConnectedSystemObjectId;
-        if (subject is not { } subjectId)
-            return;
-
-        if (!objectsByTransition.TryGetValue(delta.TransitionType, out var objects))
-            objectsByTransition[delta.TransitionType] = objects = [];
-        objects.Add(subjectId);
-    }
 
     private static int ConnectedSystemId(PreviewContext context) =>
         context.TargetId ?? throw new ArgumentException("A Connected System deletion preview needs the system as its target.", nameof(context));

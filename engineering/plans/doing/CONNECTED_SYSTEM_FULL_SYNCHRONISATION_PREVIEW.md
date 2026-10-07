@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -23,6 +23,7 @@ A Full Synchronisation after a configuration change is the moment configuration 
 2. **Evaluate the whole population by default.** Every other preview refuses to show partial counts, because a partial count read as a whole one is how a change gets approved as safe. Above a size threshold the administrator sees an estimate and confirms before it starts. A cap stays available to scripts.
 3. **Close the target-system gap in the same work**, rather than hiding the action on target systems.
 4. **Prove the fidelity question with tests first** (done, below), and fix the engine where it is real.
+5. **"N objects would not change" is a group of its own (2026-10-07)**, not a column on the preview: the adapter yields a would-not-change delta per unchanged object, so the count is exact in the existing per-group counts, the drill-down shows a sample of them, and REST and PowerShell carry it with no new fields. The verdict and the "What would change" grid leave that group out and show it as the "would not change" line.
 
 ## Finding: the whole-system walk does not answer "what would this run do"
 
@@ -137,15 +138,24 @@ Scenario: Previewing and running from a script
 - The unchanged-object optimisation, found by the runtime check: while no configuration has changed since it was last fully applied, the run skips every object unchanged since the last synchronisation, drift included, and the walk proposed corrections for them. The rule moved onto the models (`ConnectedSystemObject.IsUnchangedSince`, `ConnectedSystem.GetUnchangedObjectWatermark`), read by the PostgreSQL loader, the run and the walk alike; the walk counts what it skips in `FullSyncPreviewResult.UnchangedObjectCount`. The in-memory repository ignores the watermark, so the workflow tests assert against the rule and the runtime check pairs preview and run.
 - Runtime check on the full stack: preview and real Full Synchronisation of a target with a drifted value agree (one Update, Add and Remove on the attribute, one Drift Correction item counting it), and a source object's preview no longer proposes the target's correction. The per-object preview evaluates an object as if processed, which the docs now say.
 
-### Phase 2: streaming walk and single-pass counting
+### Phase 2: streaming walk and single-pass counting ✅
 
-- The walk streams per-object results; no cap by default; samples kept as a consumer for the existing engine API.
-- Framework counts from the delta stream for adapters that declare it; the deletion adapter adopts it (one pass instead of two).
-- Evaluated-object count recorded on the preview (migration).
+- Streaming walk ✅: `SyncPreviewServer.StreamFullSyncPreviewAsync` yields `FullSyncPreviewItem`s in the order the run meets them (the population, a refusal on a derived flow cycle, each object evaluated or skipped as obsolete or unchanged, the export scope review, and a truncation when a bound stopped it), with no bound by default (`FullSyncPreviewStreamOptions`). The read-only scope and rollback-only transaction live as long as the enumeration. `PreviewFullSyncAsync` is now one consumer of it (counts and bounded samples), its semantics unchanged.
+- Single-pass counting ✅: an adapter that can only count by evaluating supplies an `IPreviewImpactCounter` (`CreateImpactCounterAsync`; `PreviewImpactCounter.PerDelta` or `PerSubject`), which the framework feeds during the one evaluation pass and records only when the whole stream completes. Wider than first planned: eight adapters counted by streaming their own deltas, not just the deletion adapter, and all eight adopted it, each with an equivalence test (its counter fed its own deltas equals its `CountImpactAsync`). Runtime: a 1,108-object deletion preview went from 3.8s to 2.1s with identical counts.
+- Evaluated-object count: moved to Phase 3 and decided there (decision 5): no column; the stream reports every unchanged object, and the adapter counts them as a group of their own.
 
-### Phase 3: adapter and transitions
+### Phase 3: adapter and transitions ✅
 
-- Surface, proposal, adapter, estimate, validation, delta mapping; adapter tests and an equivalence test against the real run's Pending Exports and outcomes.
+- Three engine gaps found while mapping the run's consequences, each fixed test-first and paired with the run before the adapter was built (`SyncPreviewFidelityTests.ScopeExit`, `.Obsolete`, `.FailedObjects`):
+  - **A scope exit's recall** proposed no exports, though the run evaluates exports over it: a target holding a recalled value is now sent the change. Also fixes the per-object Sync Preview.
+  - **Obsolete objects** were skipped by the walk, though a Full Synchronisation tears each down first (disconnect, Deletion Rule, recall, deprovisioning): the most destructive things a run routinely does. The walk now drives the run's own obsoletion core read-only on clones, as the deletion preview does (the clone helpers moved to a shared `ObsoletionPreviewClone`), then the recall's exports and an immediate deletion's downstream deprovisioning (shared with the scope-exit cascade). Each page's obsolete objects are met first, as the run tears them down in pass 1.
+  - **An object the run fails** (an inbound Expression that throws, or a missing input under Fail the object) still had its projection and exports proposed, which the run discards. It now previews as the error alone. Also fixes the per-object Sync Preview.
+- Surface `ConnectedSystemFullSynchronisation`, `ConnectedSystemFullSynchronisationProposal(MaxObjects)`, `ConnectedSystemFullSynchronisationPreviewAdapter`, registered. Validation blocks a missing or deleting system, a cap below one, a system with no Full Synchronisation Run Profile and a derived flow cycle; a cap below the population warns that the counts describe only the objects evaluated.
+- Rows (`FullSynchronisationPreviewDeltas`), each read off a fact the walk established, in the vocabulary every preview speaks: Projected, Joined, Disconnects from its Metaverse Object (the object's own scope exit or teardown, and a target's disconnection), Left scope with the join kept, Connected System Object deleted (unjoined obsolete), Becomes eligible for deletion (with when), Attributes flowed and Value cleared per Metaverse attribute (not for a projection), Drift corrected per attribute, Provisioned, Updated in the target system per attribute (old to new: the engine now carries the target's current values), Removed from the target system, Provisioning cancelled, and the failures (Attribute Flow does not evaluate, Matches more than one, and a new Fails with an error). The engine gained what the rows needed: the inbound summary's Metaverse Object name and type, a departing object's recall in its changes, `OutboundPreviewEntry.CurrentTargetValues`, and `SyncPreviewResult.DriftCorrections`.
+- Would not change (decision 5): a new `WouldNotChange` transition, one row per object the run skips as unchanged or leaves as it is, not stated in the verdict (`StatedInVerdict: false`) and sorted last. Its exclusion from the grid, as a line of its own, is Phase 5.
+- Counts: single pass, distinct objects per transition, a target system's object told apart by system (one identity provisioned to two systems is two). Paired with the run: projections, provisioning, disconnections, deletions and deprovisioning counted equal what the run records and stages.
+- The verdict's sentence forms for the run outcomes this preview states (Projected, Joined, Provisioned, Drift corrected and others) were added, which the behaviour-toggle and scoping previews' verdicts gain too.
+- Estimate: the population, one row each (most objects of a repeat run would not change). The duration estimate the confirmation shows moved to Phase 5, beside the dialog that displays it, and #1520's figures still set the threshold.
 
 ### Phase 4: run link
 
@@ -153,6 +163,7 @@ Scenario: Previewing and running from a script
 
 ### Phase 5: portal
 
+- The duration estimate for the threshold confirmation: the last completed Full Synchronisation's duration where there is one, else the object count against #1520's rate.
 - Drift notice button, Run Profiles row action, inline panel on the Connected System page with reattach, threshold confirmation, "would not change" line, Run Full Synchronisation from the panel, drill-down columns, object view through the Sync Preview panel. bUnit tests where the logic lives.
 
 ### Phase 6: REST and PowerShell

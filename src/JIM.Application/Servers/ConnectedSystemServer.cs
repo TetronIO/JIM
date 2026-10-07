@@ -83,7 +83,7 @@ public partial class ConnectedSystemServer
     {
         await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.SynchronisationRule, syncRule.Id,
-            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(syncRule, hashKey),
             $"Synchronisation Rule {syncRule.Id}");
     }
 
@@ -205,7 +205,7 @@ public partial class ConnectedSystemServer
     private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
         await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
-            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(syncRule, hashKey),
             $"Synchronisation Rule {syncRule.Id}");
     }
 

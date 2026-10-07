@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
 namespace JIM.Models.Sync;
@@ -86,6 +87,13 @@ public class OutboundPreviewEntry
     /// would report "would now write X" with nothing to compare X against.
     /// </remarks>
     public List<PendingExportAttributeValueChange> NoNetChangeSkippedChanges { get; init; } = [];
+
+    /// <summary>
+    /// The target object's current values for every attribute <see cref="AttributeChanges"/> writes, read from the same
+    /// cache the no-net-change check reads (#1530), so a preview can state an update as an old-to-new pair. Empty for a
+    /// provisioning, whose object does not exist yet.
+    /// </summary>
+    public List<ConnectedSystemObjectAttributeValue> CurrentTargetValues { get; init; } = [];
 
     /// <summary>
     /// The out-of-scope deprovisioning verdict, for a Deprovisioning entry.

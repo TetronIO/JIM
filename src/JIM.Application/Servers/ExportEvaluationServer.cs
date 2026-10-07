@@ -3372,7 +3372,13 @@ public class ExportEvaluationServer
             WouldJoinCsoId = wouldJoinCsoId,
             AttributeChanges = attributeChanges,
             NoNetChangeSkippedCount = noNetChangeSkipped,
-            NoNetChangeSkippedChanges = noNetChangeSkippedChanges
+            NoNetChangeSkippedChanges = noNetChangeSkippedChanges,
+            CurrentTargetValues = effectiveExistingCso == null
+                ? []
+                : [.. attributeChanges
+                    .Select(change => change.AttributeId)
+                    .Distinct()
+                    .SelectMany(attributeId => cache.CsoAttributeValues[(effectiveExistingCso.Id, attributeId)])]
         };
     }
 

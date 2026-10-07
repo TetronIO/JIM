@@ -416,6 +416,15 @@ public class ObjectMatchingPreviewAdapterTests
     }
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "alice@example.com"), UnjoinedCso("E7", "alice@example.com")];
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(_adapter, Context(ProposalWith(MailRuleProposal())));
+    }
+
+    [Test]
     public async Task CountImpactAsync_CountsEachTransitionSeparately()
     {
         _csoType.ObjectMatchingRules = [StoredRule()];

@@ -164,21 +164,16 @@ public class DeletePathForeignKeyCoverageTests
                 "Activities are retained for audit; step 2a nulls the reference to the deleted system.",
             ["FK_Activities_ConnectedSystemRunProfiles_ConnectedSystemRunPro~"] =
                 "Activities are retained for audit; step 2a nulls the reference to the deleted Run Profiles.",
-            ["FK_Activities_SyncRules_SyncRuleId"] =
-                "Activities are retained for audit; step 2a nulls the reference to the deleted Synchronisation Rules.",
-            ["FK_MetaverseObjectChanges_SyncRules_SyncRuleId"] =
-                "Metaverse Object change history is retained; step 2b nulls the reference to the deleted " +
-                "Synchronisation Rules.",
             ["FK_MetaverseObjectAttributeValues_ConnectedSystems_Contributed~"] =
-                "The contributed value is retained and only its contributor cleared; step 2c nulls it. Attribute " +
+                "The contributed value is retained and only its contributor cleared; step 2b nulls it. Attribute " +
                 "recall is a sync-engine concern, deliberately out of scope for bulk system deletion.",
             ["FK_MetaverseObjectAttributeValues_ConnectedSystemObjects_Unres~"] =
                 "The metaverse value is retained and only the now-unresolvable staged reference cleared; step 7b " +
                 "nulls it.",
             ["FK_ExampleDataTemplateAttributes_ConnectedSystemAttributes_Con~"] =
-                "Example Data Templates are retained; step 2d nulls the reference to this system's schema attributes.",
+                "Example Data Templates are retained; step 2c nulls the reference to this system's schema attributes.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectTypes_Del~"] =
-                "On the preserve-history path the change rows are kept; step 2e nulls DeletedObjectTypeId before " +
+                "On the preserve-history path the change rows are kept; step 2d nulls DeletedObjectTypeId before " +
                 "step 13 removes the Object Types. On the delete-history path the rows are already gone.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectAttribute~"] =
                 "On the preserve-history path the change rows are kept; step 5 nulls " +
@@ -210,11 +205,31 @@ public class DeletePathForeignKeyCoverageTests
                 "Change history reference values are kept; both deleters null ReferenceValueId first."
         });
 
+    /// <summary>
+    /// <c>ConnectedSystemRepository.DeleteSyncRuleAsync</c>: remove one Synchronisation Rule through EF Core, letting
+    /// its own configuration (Attribute Flow mappings, Object Matching Rules, Scoping Criteria, initial password) go
+    /// by cascade, and leaving every history and provenance row that names it in place with the reference cleared by
+    /// the database (#1990).
+    /// <para>
+    /// This is a single <c>DELETE</c> rather than a hand-written sequence, but the property is the same: a history
+    /// table that refers to a rule with <c>NO ACTION</c> refuses the delete for every rule that has ever done any
+    /// work, so the rule can never be deleted. Nothing is severed by hand, so the list is empty and any such foreign
+    /// key fails here.
+    /// </para>
+    /// </summary>
+    private static readonly DeleteSurface SyncRuleDeletion = new(
+        Name: "deleting a Synchronisation Rule (ConnectedSystemRepository.DeleteSyncRuleAsync)",
+        DeleteRoots: ["SyncRules"],
+        TruncatedTables: [],
+        RemovedTables: [],
+        SeveredForeignKeys: new Dictionary<string, string>());
+
     private static IEnumerable<TestCaseData> Surfaces()
     {
         yield return new TestCaseData(FactoryReset).SetName("{m}(factory reset)");
         yield return new TestCaseData(ConnectedSystemDeletion).SetName("{m}(Connected System deletion)");
         yield return new TestCaseData(MetaverseObjectDeletion).SetName("{m}(Metaverse Object deletion)");
+        yield return new TestCaseData(SyncRuleDeletion).SetName("{m}(Synchronisation Rule deletion)");
     }
 
     private string _connectionString = null!;

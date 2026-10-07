@@ -70,6 +70,27 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
+    [Test]
+    public async Task StreamFullSyncPreviewAsync_OfASystemThatDoesNotReachTheFlaggedObjects_YieldsTheReviewAfterTheWalkAsync()
+    {
+        var ctx = await SetUpScopeReviewAsync();
+        var john = SyncRepo.MetaverseObjects.Values.Single(m => m.ScopeReviewPending);
+
+        var items = new List<FullSyncPreviewItem>();
+        await foreach (var item in Jim.SyncPreview.StreamFullSyncPreviewAsync(ctx.Target.Id))
+            items.Add(item);
+
+        var review = items.Single(i => i.Kind == FullSyncPreviewItemKind.ExportScopeReview);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items[^1], Is.SameAs(review), "the run drains the review after its own objects");
+            Assert.That(review.MetaverseObjectId, Is.EqualTo(john.Id));
+            Assert.That(review.DisplayName, Is.EqualTo("John Smith"));
+            Assert.That(review.ObjectTypeName, Is.EqualTo("Person"));
+            Assert.That(review.Preview!.Outbound.ObjectsToCreate, Is.EqualTo(1));
+        }
+    }
+
     private sealed record ScopeReviewContext(ConnectedSystem Source, ConnectedSystem Target);
 
     /// <summary>

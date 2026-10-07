@@ -177,7 +177,7 @@ public partial class ConnectedSystemServer
 
         foreach (var original in page)
         {
-            var cso = CloneForDeprovisioningPreview(original, mvoClones);
+            var cso = ObsoletionPreviewClone.Of(original, metaverseObject: null, mvoClones);
             cso.Status = ConnectedSystemObjectStatus.Obsolete;
             var mvo = cso.MetaverseObject;
 
@@ -281,7 +281,7 @@ public partial class ConnectedSystemServer
 
         foreach (var original in metaverseObjects.Where(mvo => mvo.LastConnectorDisconnectedDate == null))
         {
-            var mvo = CloneForDeprovisioningPreview(original);
+            var mvo = ObsoletionPreviewClone.Of(original);
             var objectName = original.NameOrId;
             var recalledValues = mvo.AttributeValues.Where(av => av.ContributedBySyncRuleId == syncRuleId).ToList();
             if (recalledValues.Count == 0)
@@ -523,65 +523,6 @@ public partial class ConnectedSystemServer
             AttributeName: attributeName,
             OldValue: oldValue,
             NewValue: newValue);
-
-    /// <summary>
-    /// A preview-owned copy of a Connected System Object, joined to a preview-owned copy of its Metaverse Object, so the
-    /// obsoletion core's join breaking and attribute recall act on copies. The Metaverse Object copy is shared across the
-    /// page through <paramref name="mvoClones"/>. Value instances are shared, not copied: the core adds and removes list
-    /// entries but never mutates a value in place.
-    /// </summary>
-    private static ConnectedSystemObject CloneForDeprovisioningPreview(ConnectedSystemObject cso, Dictionary<Guid, MetaverseObject> mvoClones)
-    {
-        MetaverseObject? mvoClone = null;
-        if (cso.MetaverseObject != null && !mvoClones.TryGetValue(cso.MetaverseObject.Id, out mvoClone))
-        {
-            mvoClone = CloneForDeprovisioningPreview(cso.MetaverseObject);
-            mvoClones[mvoClone.Id] = mvoClone;
-        }
-
-        var clone = new ConnectedSystemObject
-        {
-            Id = cso.Id,
-            Created = cso.Created,
-            LastUpdated = cso.LastUpdated,
-            Type = cso.Type,
-            TypeId = cso.TypeId,
-            ConnectedSystem = cso.ConnectedSystem,
-            ConnectedSystemId = cso.ConnectedSystemId,
-            PartitionId = cso.PartitionId,
-            ExternalIdAttributeId = cso.ExternalIdAttributeId,
-            SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
-            AttributeValues = [.. cso.AttributeValues],
-            Status = cso.Status,
-            MetaverseObject = mvoClone,
-            MetaverseObjectId = cso.MetaverseObjectId,
-            JoinType = cso.JoinType,
-            DateJoined = cso.DateJoined
-        };
-        mvoClone?.ConnectedSystemObjects.Add(clone);
-        return clone;
-    }
-
-    /// <summary>
-    /// A preview-owned copy of a Metaverse Object carrying what the obsoletion core and the deletion rule read: identity,
-    /// type, origin, values, and any deletion already pending.
-    /// </summary>
-    private static MetaverseObject CloneForDeprovisioningPreview(MetaverseObject mvo)
-    {
-        var clone = new MetaverseObject
-        {
-            Id = mvo.Id,
-            Type = mvo.Type,
-            Origin = mvo.Origin,
-            Created = mvo.Created,
-            CachedDisplayName = mvo.CachedDisplayName,
-            LastConnectorDisconnectedDate = mvo.LastConnectorDisconnectedDate,
-            DeletionTriggeredBySystemId = mvo.DeletionTriggeredBySystemId
-        };
-        foreach (var attributeValue in mvo.AttributeValues)
-            clone.AttributeValues.Add(attributeValue);
-        return clone;
-    }
 
     /// <summary>
     /// The shared, read-only inputs every page of one deprovisioning preview evaluates against; the preview's twin of the

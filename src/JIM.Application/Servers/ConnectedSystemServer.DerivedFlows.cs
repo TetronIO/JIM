@@ -45,6 +45,23 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The dependency cycle among the enabled derived flows that a synchronisation would refuse to start on (#1750,
+    /// decision 11), or null when there is none (#1530). Built from every rule, as the run builds its graph.
+    /// </summary>
+    internal async Task<string?> GetDerivedFlowCycleAsync()
+    {
+        try
+        {
+            DerivedFlowGraphFactory.Create(await Application.SyncRepo.GetAllSyncRulesAsync(), []);
+            return null;
+        }
+        catch (DerivedFlowCycleException cycle)
+        {
+            return cycle.Message;
+        }
+    }
+
+    /// <summary>
     /// The Metaverse attributes whose values deleting <paramref name="connectedSystemId"/> with Synchronised
     /// Deprovisioning could withdraw or change, and that a surviving derived flow reads, each with the names of the
     /// Connected Systems hosting those flows (#134). The deletion preview states these rather than showing them: the

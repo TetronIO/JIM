@@ -404,6 +404,15 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
         Assert.That(counts.Sum(c => c.ObjectCount), Is.EqualTo(deltas.Count));
     }
 
+    [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        GivenObject($"CN=Ann,{ContractorsDn}");
+        GivenObject($"CN=Bob,{ContractorsDn}", joinedTo: Guid.CreateVersion7());
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(NewAdapter(), Context(SelectionOf(UsersContainerId)));
+    }
+
     // ─── Validation ───
 
     [Test]

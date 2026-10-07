@@ -4874,7 +4874,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
-                        .HasForeignKey("SyncRuleId");
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
@@ -5035,7 +5036,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
                         .WithMany()
-                        .HasForeignKey("SyncRuleId");
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("ActivityRunProfileExecutionItem");
 

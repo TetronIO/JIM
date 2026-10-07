@@ -529,6 +529,22 @@ public class JimDbContext : DbContext
             .HasMany(mvo => mvo.Changes)
             .WithOne(mvoc => mvoc.MetaverseObject);
 
+        // The Synchronisation Rule a change or an Activity names is history, not ownership (#1990). SetNull on rule
+        // deletion so the history outlives the rule: the change keeps its SyncRuleName snapshot and the Activity its
+        // TargetName, and the id reads null. Left to convention (an optional FK defaults to ClientSetNull, i.e. NO
+        // ACTION) the database refused to delete any rule a synchronisation had ever attributed a change to.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasOne(mvoc => mvoc.SyncRule)
+            .WithMany()
+            .HasForeignKey(mvoc => mvoc.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<Activity>()
+            .HasOne<SyncRule>()
+            .WithMany(sr => sr.Activities)
+            .HasForeignKey(a => a.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // When a metaverse attribute definition is deleted, preserve the change history record
         // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
         // the attribute metadata even after the definition is removed.
