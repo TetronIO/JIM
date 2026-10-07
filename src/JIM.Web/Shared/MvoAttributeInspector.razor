@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using Utilities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -198,9 +199,22 @@
             <ol class="jim-inspector-rail">
                 @foreach (var entry in Provenance.History)
                 {
-                    <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()">
+                    var generatedEvent = GeneratedValueHistoryDisplay.EventFor(entry);
+                    <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()" data-generated-event="@generatedEvent">
                         <div>
-                            <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
+                            @* A generated value's two events worth naming (#242, release 4) read as what they were. *@
+                            @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Value corrected</MudChip>
+                            }
+                            else if (generatedEvent == GeneratedValueHistoryEvent.Generated)
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="ma-0">Value generated</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
+                            }
                             <span class="jim-text-code">
                                 @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
                             </span>
@@ -223,7 +237,13 @@
                             {
                                 <span>· @entry.SyncRuleName</span>
                             }
-                            @if (entry.IsGeneratedValue)
+                            @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
+                            {
+                                @* Collision Remediation writes the value outside any synchronisation, so there is no Activity
+                                   to link: the export that met the rejection records it, and the next synchronisation carries it. *@
+                                <span>· @entry.Change.InitiatedByName</span>
+                            }
+                            else if (entry.IsGeneratedValue)
                             {
                                 <span>· @ValueOriginGrouping.GeneratedValueLabel</span>
                             }

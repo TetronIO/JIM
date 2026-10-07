@@ -262,7 +262,8 @@ public static class GeneratedValueParticipation
         IsExcluded = isExcluded,
         CanBeExcluded = canBeExcluded,
         Check = check,
-        Reason = reason
+        Reason = reason,
+        ReportsCollisions = system.ReportsCollisions
     };
 
     /// <summary>

@@ -48,6 +48,12 @@ public class GeneratedValueParticipantDto
     /// </summary>
     public GeneratedValueParticipantReason Reason { get; set; }
 
+    /// <summary>
+    /// Whether this Connected System's Connector reports a value it was sent as already in use (release 4), so Collision
+    /// Remediation can act on a rejection here. Where it cannot, a collision is an ordinary export error.
+    /// </summary>
+    public bool ReportsCollisions { get; set; }
+
     public static GeneratedValueParticipantDto FromModel(GeneratedValueParticipant participant) => new()
     {
         ConnectedSystemId = participant.ConnectedSystemId,
@@ -58,6 +64,7 @@ public class GeneratedValueParticipantDto
         IsExcluded = participant.IsExcluded,
         CanBeExcluded = participant.CanBeExcluded,
         Check = participant.Check,
-        Reason = participant.Reason
+        Reason = participant.Reason,
+        ReportsCollisions = participant.ReportsCollisions
     };
 }

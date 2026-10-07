@@ -1,0 +1,361 @@
+@using JIM.Application.Servers
+@using JIM.Models.Logic.DTOs
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject NavigationManager NavManager
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Generated Values tab of Operations (Unique Value Generation, #242, release 4, Phase 9), modelled on the Passwords
+   tab. It lists only what waits on an administrator: a generated value a target rejected as already in use that JIM
+   could not safely correct (Needs a decision), and one whose rename has been allowed until the next export spends it.
+   Values Collision Remediation corrected need nothing, so they are only counted; their story is in their Metaverse
+   Object's history. Named for the feature rather than the state, so the allowed renames have a home. Deep-linkable:
+   the attention indicators on the Synchronisation Rules and Connected Systems lists land here filtered
+   (?syncRuleId=, ?connectedSystemId=). *@
+
+@* mt-5 for the same reason as the Passwords tab: the Operations page hands its tabs no top padding of their own. *@
+<MudText Typo="Typo.h6" Class="mt-5 mb-1">Generated values held for a decision</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    A target rejected these generated values as already in use, and JIM could not safely correct them. Their exports are
+    held until you allow the rename or try the same value again.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%; border-left: 3px solid var(--mud-palette-warning);" data-testid="generated-values-tile-needs-decision">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Needs a decision</MudText>
+            <MudText Typo="Typo.h4" Color="@(_summary.NeedsDecisionCount > 0 ? Color.Warning : Color.Default)" data-testid="generated-values-tile-count">@_summary.NeedsDecisionCount.ToString("N0")</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Exports held until you act</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%;" data-testid="generated-values-tile-rename-allowed">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Rename allowed</MudText>
+            <MudText Typo="Typo.h4" data-testid="generated-values-tile-count">@_summary.RenameAllowedCount.ToString("N0")</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Renamed at the next export</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%;" data-testid="generated-values-tile-corrected">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Corrected, last 7 days</MudText>
+            <MudTooltip Arrow="true" Placement="Placement.Top">
+                <TooltipContent>
+                    <TooltipText Text="@CorrectedTooltip" />
+                </TooltipContent>
+                <ChildContent>
+                    <MudText Typo="Typo.h4" data-testid="generated-values-tile-count">@_summary.CorrectedRecentlyCount.ToString("N0")</MudText>
+                </ChildContent>
+            </MudTooltip>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No action needed</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* mt-0: MudGrid pulls itself up by its items' 24px top padding, so a margin would stack on it (see the Passwords tab). *@
+<MudGrid Class="mt-0">
+    <MudItem xs="12" sm="4">
+        <MudSelect T="int?" Label="Connected System" Value="_connectedSystemId" ValueChanged="OnConnectedSystemFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Placeholder="All">
+            @foreach (var system in _connectedSystems)
+            {
+                <MudSelectItem T="int?" Value="@system.Id">@system.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="int?" Label="Synchronisation Rule" Value="_syncRuleId" ValueChanged="OnSyncRuleFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Placeholder="All">
+            @foreach (var rule in _syncRules)
+            {
+                <MudSelectItem T="int?" Value="@rule.Id">@rule.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="GeneratedValueDecisionStatus?" Label="Status" Value="_status" ValueChanged="OnStatusFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Placeholder="All">
+            <MudSelectItem T="GeneratedValueDecisionStatus?" Value="@GeneratedValueDecisionStatus.NeedsDecision">Needs a decision</MudSelectItem>
+            <MudSelectItem T="GeneratedValueDecisionStatus?" Value="@GeneratedValueDecisionStatus.RenameAllowed">Rename allowed</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+</MudGrid>
+
+<VirtualisedDataGrid @ref="_grid" T="GeneratedValueDecisionHeader"
+                     ContainerId="generated-value-decisions"
+                     DefaultSortBy="since"
+                     LoadWindow="LoadWindowAsync"
+                     ShowSearch="false"
+                     SingularName="held value"
+                     PluralName="held values">
+    <ToolBarExtras>
+        @* Acts on the filter shown, not on a selection: every held value matching the Connected System and Synchronisation
+           Rule filters. An allowed rename is never released by Try again, so it is not counted. *@
+        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                   Disabled="@(_busy || _summary.NeedsDecisionCount == 0)" OnClick="TryAgainAllAsync"
+                   data-testid="generated-values-try-again-all">
+            Try again for all @_summary.NeedsDecisionCount.ToString("N0")
+        </MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 190px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate><MudText Typo="Typo.button">Metaverse Object</MudText></HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.MetaverseObjectId is { } metaverseObjectId)
+                {
+                    <ObjectChip Kind="ObjectChipKind.MetaverseObject" Name="@(context.Item.MetaverseObjectDisplayName ?? metaverseObjectId.ToString())"
+                                Href="@MetaverseObjectHref(context.Item, metaverseObjectId)" Class="ma-0"
+                                Tooltip="@ObjectDescription.ForMetaverseObjectChipTooltip(context.Item.MetaverseObjectTypeName, context.Item.MetaverseObjectDisplayName)" />
+                }
+                else if (context.Item is { ConnectedSystemObjectId: { } csoId, ConnectedSystemObjectConnectedSystemId: { } csId })
+                {
+                    <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" Href="@JIM.Utilities.Utilities.GetConnectedSystemObjectHref(csId, csoId)" Class="ma-0" />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 140px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate><MudText Typo="Typo.button">Attribute</MudText></HeaderTemplate>
+            <CellTemplate><OneLineText Text="@context.Item.AttributeName" /></CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 130px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate><MudText Typo="Typo.button">Value</MudText></HeaderTemplate>
+            <CellTemplate><code class="jim-code-inline" title="@context.Item.Value">@context.Item.Value</code></CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <HeaderTemplate><MudText Typo="Typo.button">Why it is held</MudText></HeaderTemplate>
+            <CellTemplate><GeneratedValueDecisionWhy Decision="@context.Item" OneLine="true" /></CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 110px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate><MudText Typo="Typo.button">Since</MudText></HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Since is { } since)
+                {
+                    <MudTooltip Text="@since.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <span>@since.ToLocalTime().ToRelativeTime()</span>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 250px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate><MudText Typo="Typo.button">Actions</MudText></HeaderTemplate>
+            <CellTemplate>
+                @if (GeneratedValueDecisionDisplay.OffersActions(context.Item))
+                {
+                    <span class="jim-one-line-list" style="gap: 8px;">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="@_busy"
+                                   OnClick="@(() => AllowRenameAsync(context.Item))" data-testid="generated-value-allow-rename">
+                            Allow the rename…
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@_busy"
+                                   OnClick="@(() => TryAgainAsync(context.Item))" data-testid="generated-value-try-again">
+                            Try again
+                        </MudButton>
+                    </span>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (HasFilter)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No held values match these filters"
+                             SecondaryText="Clear the filters to see every held value."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            @* Empty is the healthy state, and says so rather than reading as a fault. *@
+            <div data-testid="generated-values-empty">
+                <TableEmptyState Icon="@Icons.Material.Filled.CheckCircleOutline"
+                                 PrimaryText="Nothing needs a decision"
+                                 SecondaryText="A generated value appears here when a target rejects it as already in use and JIM cannot safely correct it." />
+            </div>
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
+
+@code {
+    private VirtualisedDataGrid<GeneratedValueDecisionHeader>? _grid;
+    private List<ConnectedSystemHeader> _connectedSystems = [];
+    private List<SyncRuleHeader> _syncRules = [];
+    private GeneratedValueDecisionSummary _summary = new();
+
+    /// <summary>Pre-selects the Connected System filter: the link from a Connected System's attention indicator.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "connectedSystemId")]
+    public int? ConnectedSystemIdFilter { get; set; }
+
+    /// <summary>Pre-selects the Synchronisation Rule filter: the link from a Synchronisation Rule's attention indicator.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "syncRuleId")]
+    public int? SyncRuleIdFilter { get; set; }
+
+    /// <summary>Raised after an action changed what is held, so the page can refresh its tab badge.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private int? _connectedSystemId;
+    private int? _syncRuleId;
+    private GeneratedValueDecisionStatus? _status;
+
+    /// <summary>Guards the actions while one is in flight.</summary>
+    private bool _busy;
+
+    private bool HasFilter => _connectedSystemId.HasValue || _syncRuleId.HasValue || _status.HasValue;
+
+    /// <summary>
+    /// The filter the list is showing, which is also what the bulk Try again acts on: built in one place so the two cannot
+    /// drift.
+    /// </summary>
+    public GeneratedValueDecisionFilter CurrentFilter => new()
+    {
+        ConnectedSystemId = _connectedSystemId,
+        SyncRuleId = _syncRuleId,
+        Status = _status
+    };
+
+    private string CorrectedTooltip =>
+        $"Values a target rejected as already in use that JIM corrected on its own since {_summary.CorrectedSince.ToLocalTime().ToFriendlyDate()}. " +
+        "Each one's history is on its Metaverse Object.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connectedSystemId = ConnectedSystemIdFilter;
+        _syncRuleId = SyncRuleIdFilter;
+
+        using var jim = JimFactory.Create();
+        _connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _syncRules = [.. (await jim.ConnectedSystems.GetSyncRuleHeadersAsync()).OrderBy(r => r.Name)];
+        await LoadSummaryAsync();
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        using var jim = JimFactory.Create();
+        _summary = await jim.GeneratedValueDecisions.GetSummaryAsync(_connectedSystemId, _syncRuleId);
+    }
+
+    private async Task<VirtualisedWindow<GeneratedValueDecisionHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        using var jim = JimFactory.Create();
+        var result = await jim.GeneratedValueDecisions.GetDecisionsAsync(CurrentFilter, request.StartIndex, request.Count, request.IncludeTotalCount);
+        return new VirtualisedWindow<GeneratedValueDecisionHeader>(result.Results, result.TotalResults);
+    }
+
+    private async Task OnConnectedSystemFilterChangedAsync(int? value)
+    {
+        _connectedSystemId = value;
+        if (value == null)
+            ForgetDeepLink("connectedSystemId");
+        await RefreshAsync();
+    }
+
+    private async Task OnSyncRuleFilterChangedAsync(int? value)
+    {
+        _syncRuleId = value;
+        if (value == null)
+            ForgetDeepLink("syncRuleId");
+        await RefreshAsync();
+    }
+
+    private async Task OnStatusFilterChangedAsync(GeneratedValueDecisionStatus? value)
+    {
+        _status = value;
+        await RefreshAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _connectedSystemId = null;
+        _syncRuleId = null;
+        _status = null;
+        ForgetDeepLink("connectedSystemId", "syncRuleId");
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Drops deep-link parameters from the URL as well as from this component: the tab strip re-creates the tab each time
+    /// the reader returns to it and reads the query string afresh, so a filter cleared only in memory would come back.
+    /// </summary>
+    private void ForgetDeepLink(params string[] parameterNames)
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(NavManager.Uri).Query);
+        if (!parameterNames.Any(name => query[name] != null))
+            return;
+
+        var cleared = parameterNames.ToDictionary(name => name, _ => (object?)null);
+        NavManager.NavigateTo(NavManager.GetUriWithQueryParameters(cleared), replace: true);
+    }
+
+    /// <summary>Re-reads the counts and the list: what matches has changed, so the totals and the scroll position are stale.</summary>
+    private async Task RefreshAsync()
+    {
+        await LoadSummaryAsync();
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
+
+    private async Task AllowRenameAsync(GeneratedValueDecisionHeader decision)
+    {
+        if (await GeneratedValueDecisionActions.AllowRenameAsync(DialogService, decision.AssignmentId))
+            await AfterActionAsync();
+    }
+
+    private async Task TryAgainAsync(GeneratedValueDecisionHeader decision)
+    {
+        _busy = true;
+        try
+        {
+            if (await GeneratedValueDecisionActions.TryAgainAsync(JimFactory, Snackbar, AuthenticationStateProvider.GetAuthenticationStateAsync(), decision.AssignmentId))
+                await AfterActionAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TryAgainAllAsync()
+    {
+        _busy = true;
+        try
+        {
+            var filter = CurrentFilter;
+            filter.Status = null;
+            if (await GeneratedValueDecisionActions.TryAgainAllAsync(JimFactory, DialogService, Snackbar,
+                    AuthenticationStateProvider.GetAuthenticationStateAsync(), filter, _summary.NeedsDecisionCount))
+                await AfterActionAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AfterActionAsync()
+    {
+        await RefreshAsync();
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+
+    private static string MetaverseObjectHref(GeneratedValueDecisionHeader decision, Guid metaverseObjectId) =>
+        string.IsNullOrWhiteSpace(decision.MetaverseObjectTypePluralName)
+            ? "/search"
+            : JIM.Utilities.Utilities.GetMetaverseObjectHref(metaverseObjectId, decision.MetaverseObjectTypePluralName);
+}

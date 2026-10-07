@@ -192,7 +192,8 @@ public partial class ConnectedSystemServer
                 {
                     var probe = GetUniquenessProbe(cs.ConnectorDefinition, probes, created);
                     return new GeneratedValueParticipantSystem(cs.Id, cs.Name, cs.ConnectorDefinition?.Name ?? string.Empty,
-                        probe != null, attributeName => probe != null && probe.CanProbeAttribute(attributeName));
+                        probe != null, attributeName => probe != null && probe.CanProbeAttribute(attributeName),
+                        ReportsCollisions: cs.ConnectorDefinition?.SupportsUniquenessRejectionClassification == true);
                 });
 
             return mappings

@@ -1,0 +1,59 @@
+@using JIM.Models.Logic
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Collision Remediation on the generated Attribute Flow form (Unique Value Generation, #242, release 4, Phase 9), below
+   "Checked for availability in". On by default in the engine. It can only act where a system the value is exported to
+   reports that a value is already in use (the panel's "Reports collisions" column), so with none it is disabled, off,
+   and says why. It edits the generation in place, so it saves with the other generation settings; changing it releases
+   any held decisions for the flow on save, as changing how the value is generated does. *@
+
+<div class="mt-5" data-testid="collision-remediation">
+    <MudText Typo="Typo.subtitle2" Class="mb-1">Collision Remediation</MudText>
+    <MudSwitch T="bool" Value="@(Available && Generation.CollisionRemediation)" ValueChanged="OnChangedAsync"
+               Color="Color.Primary" Disabled="@(Disabled || !Available)">
+        <MudText Typo="Typo.body1">Let JIM correct a value a target rejects as already in use</MudText>
+    </MudSwitch>
+    @if (Participants != null && !Available)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="collision-remediation-unavailable">
+            Not available: none of the systems this value is exported to can report that a value is already in use, so a
+            collision is recorded as an export error.
+        </MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            While no other system holds the value, JIM chooses the next free one and exports it again. Once another system
+            holds it, JIM holds the export for your decision instead of renaming that account.
+        </MudText>
+    }
+</div>
+
+@code {
+    /// <summary>The generated mapping's settings, whose <see cref="SyncRuleMappingGeneration.CollisionRemediation"/> this edits in place.</summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMappingGeneration Generation { get; set; } = null!;
+
+    /// <summary>Where the value is exported, from the availability panel's read; null while loading.</summary>
+    [Parameter]
+    public IReadOnlyList<GeneratedValueParticipant>? Participants { get; set; }
+
+    /// <summary>Raised after the switch changes the setting.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>Whether any system the value is exported to reports collisions; false while the participants load.</summary>
+    private bool Available => Participants?.Any(p => p.ReportsCollisions) == true;
+
+    private async Task OnChangedAsync(bool value)
+    {
+        Generation.CollisionRemediation = value;
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+}

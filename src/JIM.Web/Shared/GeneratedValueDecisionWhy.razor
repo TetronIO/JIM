@@ -1,0 +1,84 @@
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Why a generated value is held (Unique Value Generation, #242, release 4, Phase 9): the sentence for its reason, with
+   each Connected System as its chip, and the line saying what that means; or, for an allowed rename, who allowed it and
+   when. The words come from GeneratedValueDecisionDisplay, so the Operations tab and the Metaverse Object's banner
+   cannot explain the same value two ways. OneLine keeps it to the grid row's single line, the second line following
+   inline and low-lighted, with the whole of it on the element's title. *@
+
+@if (Decision.Status == GeneratedValueDecisionStatus.RenameAllowed)
+{
+    <span class="@(OneLine ? "jim-one-line" : null)" title="@(OneLine ? RenameAllowedText : null)" data-testid="generated-value-why-rename-allowed">
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">Rename allowed</MudChip>
+        @if (!string.IsNullOrWhiteSpace(Decision.RenameAllowedBy))
+        {
+            <span> by @Decision.RenameAllowedBy</span>
+        }
+        @if (Decision.RenameAllowedAt is { } allowedAt)
+        {
+            <span title="@allowedAt.ToLocalTime().ToFriendlyDate()">, @allowedAt.ToLocalTime().ToRelativeTime()</span>
+        }
+        @if (OneLine)
+        {
+            <span class="jim-one-line-secondary">@RenameAllowedSecondary</span>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@RenameAllowedSecondary</MudText>
+        }
+    </span>
+}
+else
+{
+    <span class="@(OneLine ? "jim-one-line" : null)" title="@(OneLine ? FullText : null)" data-testid="generated-value-why">
+        @foreach (var part in GeneratedValueDecisionDisplay.Why(Decision))
+        {
+            if (part.ConnectedSystemId is { } connectedSystemId)
+            {
+                <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@part.Text" Href="@($"/admin/connected-systems/{connectedSystemId}")" Class="ma-0" />
+            }
+            else
+            {
+                @part.Text
+            }
+        }
+        @if (GeneratedValueDecisionDisplay.WhySecondary(Decision) is { } secondary)
+        {
+            if (OneLine)
+            {
+                <span class="jim-one-line-secondary">@secondary</span>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@secondary</MudText>
+            }
+        }
+    </span>
+}
+
+@code {
+    /// <summary>The held value.</summary>
+    [Parameter, EditorRequired]
+    public GeneratedValueDecisionHeader Decision { get; set; } = null!;
+
+    /// <summary>
+    /// Keep it to one line (a virtualised grid row): the second line follows inline, and the whole of it is the title.
+    /// Otherwise the second line sits underneath.
+    /// </summary>
+    [Parameter]
+    public bool OneLine { get; set; }
+
+    private const string RenameAllowedSecondary = "The next export run picks the next free value.";
+
+    private string FullText =>
+        string.Concat(GeneratedValueDecisionDisplay.Why(Decision).Select(p => p.Text))
+        + (GeneratedValueDecisionDisplay.WhySecondary(Decision) is { } secondary ? $" {secondary}" : string.Empty);
+
+    private string RenameAllowedText =>
+        $"Rename allowed{(string.IsNullOrWhiteSpace(Decision.RenameAllowedBy) ? string.Empty : $" by {Decision.RenameAllowedBy}")}. {RenameAllowedSecondary}";
+}

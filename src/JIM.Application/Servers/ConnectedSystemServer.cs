@@ -7360,6 +7360,8 @@ public partial class ConnectedSystemServer
             generation.AttemptLimit = update.AttemptLimit.Value;
         if (update.NeverReuse.HasValue)
             generation.NeverReuse = update.NeverReuse.Value;
+        if (update.CollisionRemediation.HasValue)
+            generation.CollisionRemediation = update.CollisionRemediation.Value;
         if (update.Exclusions != null)
             ReplaceGenerationExclusions(generation, update.Exclusions);
 

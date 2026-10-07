@@ -17,6 +17,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.TestSupport;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -44,6 +45,7 @@ public class SyncRuleMappingGenerationExclusionsApiTests
     private const int MailSystemId = 30;
 
     private Mock<IConnectedSystemRepository> _csRepo = null!;
+    private InMemorySyncRepository _syncRepository = null!;
     private SynchronisationController _controller = null!;
     private SyncRule _importRule = null!;
     private SyncRule _exportRule = null!;
@@ -60,7 +62,7 @@ public class SyncRuleMappingGenerationExclusionsApiTests
         var metaverseRepo = new Mock<IMetaverseRepository>();
         var activityRepo = new Mock<IActivityRepository>();
         var apiKeyRepo = new Mock<IApiKeyRepository>();
-        var syncRepository = new InMemorySyncRepository();
+        var syncRepository = _syncRepository = new InMemorySyncRepository();
         repository.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
         // The stored generation settings a save compares against to release a Needs Decision (#242, release 4): none.
         _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
@@ -102,7 +104,7 @@ public class SyncRuleMappingGenerationExclusionsApiTests
         _csRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(new Dictionary<int, string> { [AdSystemId] = "Active Directory", [MailSystemId] = "Mail" });
         _csRepo.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() =>
         [
-            new ConnectedSystem { Id = AdSystemId, Name = "Active Directory", ConnectorDefinition = new ConnectorDefinition { Name = "JIM LDAP Connector", SupportsUniquenessProbe = true } },
+            new ConnectedSystem { Id = AdSystemId, Name = "Active Directory", ConnectorDefinition = new ConnectorDefinition { Name = "JIM LDAP Connector", SupportsUniquenessProbe = true, SupportsUniquenessRejectionClassification = true } },
             new ConnectedSystem { Id = MailSystemId, Name = "Mail", ConnectorDefinition = new ConnectorDefinition { Name = "JIM SQL Connector" } }
         ]);
 
@@ -323,6 +325,81 @@ public class SyncRuleMappingGenerationExclusionsApiTests
             Assert.That(ad.Check, Is.EqualTo(GeneratedValueParticipantCheck.JimRecordsAndProbe));
             Assert.That(ad.CanBeExcluded, Is.True);
         }
+    }
+
+    // ---- Collision Remediation (release 4, Phase 9) ----
+
+    [Test]
+    public async Task GetSyncRuleMappingAsync_GeneratedMapping_SaysWhichParticipantsReportCollisionsAsync()
+    {
+        var mapping = SeedImportGeneratedMapping();
+
+        var dto = (SyncRuleMappingDto)((OkObjectResult)await _controller.GetSyncRuleMappingAsync(ImportRuleId, mapping.Id)).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Generation!.Participants!.Single(p => p.ConnectedSystemId == AdSystemId).ReportsCollisions, Is.True);
+            Assert.That(dto.Generation.Participants!.Single(p => p.ConnectedSystemId == MailSystemId).ReportsCollisions, Is.False);
+            Assert.That(dto.Generation.CollisionRemediation, Is.True, "Collision Remediation is on by default");
+        }
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_CollisionRemediationOff_SavesItAsync()
+    {
+        var result = await _controller.CreateSyncRuleMappingAsync(ImportRuleId, new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = AccountNameId,
+            Sources = [],
+            Generation = new CreateSyncRuleMappingGenerationRequest { TokenKind = GeneratedValueTokenKind.Random, CollisionRemediation = false }
+        });
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>(), (result as ObjectResult)?.Value is ApiErrorResponse error ? error.Message : null);
+        var dto = (SyncRuleMappingDto)((CreatedAtRouteResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.Generation!.CollisionRemediation, Is.False);
+            Assert.That(_mappingsById[dto.Id].Generation!.CollisionRemediation, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_CollisionRemediationSwitchedOff_SavesItAndReleasesHeldDecisionsAsync()
+    {
+        var mapping = SeedImportGeneratedMapping();
+        var stored = new SyncRuleMappingGeneration { Id = 1, TokenKind = GeneratedValueTokenKind.Random, CollisionRemediation = true };
+        _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(() => new Dictionary<int, SyncRuleMappingGeneration> { [1] = stored });
+        var held = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = AccountNameId, Value = "r.okafor", NormalisedValue = "r.okafor",
+            SyncRuleMappingGenerationId = 1, State = GeneratedValueAssignmentState.NeedsDecision, NeedsDecisionEnteredAt = DateTime.UtcNow
+        };
+        _syncRepository.SeedGeneratedValueAssignment(held);
+
+        var dto = Ok(await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, mapping.Id, new UpdateSyncRuleMappingRequest
+        {
+            Generation = new UpdateSyncRuleMappingGenerationRequest { CollisionRemediation = false }
+        }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mapping.Generation!.CollisionRemediation, Is.False);
+            Assert.That(dto.Generation!.CollisionRemediation, Is.False);
+            Assert.That(_syncRepository.GeneratedValueAssignments[held.Id].State, Is.EqualTo(GeneratedValueAssignmentState.Committed),
+                "switching Collision Remediation is the administrator's answer, so the next export tries again");
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_CollisionRemediationOmitted_LeavesItUnchangedAsync()
+    {
+        var mapping = SeedImportGeneratedMapping();
+        mapping.Generation!.CollisionRemediation = false;
+
+        Ok(await PatchExclusionsAsync(mapping.Id, exclusions: null, attemptLimit: 50));
+
+        Assert.That(mapping.Generation.CollisionRemediation, Is.False);
     }
 
     /// <summary>Connectors that can probe any attribute, never connected.</summary>

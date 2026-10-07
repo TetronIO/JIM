@@ -111,6 +111,13 @@ public class JimApplication : IDisposable
     /// </summary>
     public UniqueValueGenerationServer UniqueValues { get; }
 
+    /// <summary>
+    /// The generated values held for an administrator's decision (Unique Value Generation, #242, release 4, Phase 9):
+    /// the reads behind the Generated Values tab, its indicators and the Metaverse Object banner, and the audited
+    /// "Allow the rename" and "Try again" actions, shared by the portal, the REST API and PowerShell.
+    /// </summary>
+    public GeneratedValueDecisionServer GeneratedValueDecisions { get; }
+
     /// <param name="previewAdapters">
     /// Overrides the configuration change preview adapter list below. Null in every host: the list is deliberately
     /// one readable, compile-time set rather than something that varies by process. It exists so a test can drive
@@ -163,6 +170,7 @@ public class JimApplication : IDisposable
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         SyncPreview = new SyncPreviewServer(this, SyncRepo);
         UniqueValues = new UniqueValueGenerationServer(SyncRepo);
+        GeneratedValueDecisions = new GeneratedValueDecisionServer(this);
         PasswordGenerator = new PasswordGeneratorService();
         // Credential protection is reached through a delegate because the hosts assign CredentialProtection after
         // constructing this facade, so a value read here would always be the null that precedes it. The fallback

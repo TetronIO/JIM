@@ -72,6 +72,22 @@ public class CausalityPanelTests
     }
 
     [Test]
+    public void Render_ExportHeldForADecision_RendersTheSummaryBandRatherThanTheNoTrackingNotice()
+    {
+        // A held export (#242, release 4) records no outcome because nothing was exported; the band says why.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved };
+
+        var cut = RenderPanel(item, CausalityTestData.ExportContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(".outcome-strip .mud-chip"), Has.Count.EqualTo(1));
+            Assert.That(cut.Markup, Does.Not.Contain("Outcome tracking was not enabled"));
+        }
+    }
+
+    [Test]
     public void Render_LeaverScenario_RendersWithoutException()
     {
         var cut = RenderPanel(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());

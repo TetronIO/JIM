@@ -24,13 +24,20 @@ public static class CausalitySummaryBuilder
 
         var segments = new List<SummarySegment>();
         segments.AddRange(BuildOpening(model.Context, model.IsSpeculative));
-        AppendClauses(segments, model.IsSpeculative ? BuildSpeculativeClauses(allEvents) : BuildClauses(allEvents));
+        var heldForDecision = model.ItemErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
+        AppendClauses(segments, heldForDecision
+            ? [[new SummarySegment.Text("a generated value it carried was rejected as already in use, so the export is held until an administrator makes a decision")]]
+            : model.IsSpeculative ? BuildSpeculativeClauses(allEvents) : BuildClauses(allEvents));
         segments.Add(new SummarySegment.Text("."));
+
+        var pills = BuildPills(allEvents);
+        if (heldForDecision)
+            pills.Add(new CausalityPill("Needs a decision", CausalityTone.Error));
 
         return new CausalitySummary
         {
             Segments = segments,
-            Pills = BuildPills(allEvents)
+            Pills = pills
         };
     }
 
@@ -139,6 +146,11 @@ public static class CausalitySummaryBuilder
     /// </summary>
     private static List<List<SummarySegment>> BuildClauses(IReadOnlyList<CausalityEvent> allEvents)
     {
+        // Unique Value Generation (#242, release 4): an export Collision Remediation corrected, or held for a decision,
+        // wrote nothing this run; say what became of the generated value instead.
+        if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated))
+            return [[new SummarySegment.Text("a generated value it carried was rejected as already in use, so JIM corrected it, and the next synchronisation will export the new value")]];
+
         if (allEvents.Count == 0)
             return [[new SummarySegment.Text("no changes were needed")]];
 

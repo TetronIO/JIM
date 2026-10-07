@@ -251,5 +251,40 @@ public partial class SyncRepository
         return released;
     }
 
+    /// <inheritdoc />
+    public async Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(
+        int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0 && connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        // "RenameAuthorised" leads the predicate so the statement reads IX_GeneratedValueAssignments_RenameAuthorised, a
+        // partial index holding only the handful of allowances outstanding: every export batch runs this, and almost
+        // always matches nothing. A held value (NeedsDecision) is never touched: its allowance has not been given yet.
+        var cleared = await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""GeneratedValueAssignments""
+              SET ""RenameAuthorised"" = false, ""RenameAuthorisedAt"" = NULL, ""RenameAuthorisedByName"" = NULL,
+                  ""State"" = {0}, ""NeedsDecisionEnteredAt"" = NULL, ""NeedsDecisionReason"" = NULL,
+                  ""AnchoredByConnectedSystemId"" = NULL, ""NeedsDecisionActivityRunProfileExecutionItemId"" = NULL,
+                  ""LastUpdated"" = {1}
+              WHERE ""RenameAuthorised"" AND ""State"" <> {2} AND ""RejectedByConnectedSystemId"" = {3}
+                AND (""MetaverseObjectId"" = ANY({4}) OR ""ConnectedSystemObjectId"" = ANY({5}))",
+            (int)GeneratedValueAssignmentState.Committed, DateTime.UtcNow, (int)GeneratedValueAssignmentState.NeedsDecision,
+            connectedSystemId, metaverseObjectIds.ToArray(), connectedSystemObjectIds.ToArray());
+
+        if (cleared > 0)
+        {
+            // Raw SQL bypasses the tracker: drop any tracked copy so a later save cannot write the allowance back
+            // (src/CLAUDE.md, Raw SQL Writes Must Fix Up or Detach Tracked Instances).
+            var mvoSet = metaverseObjectIds.ToHashSet();
+            var csoSet = connectedSystemObjectIds.ToHashSet();
+            DetachTrackedEntities<GeneratedValueAssignment>(a => a.RenameAuthorised && a.RejectedByConnectedSystemId == connectedSystemId
+                && ((a.MetaverseObjectId.HasValue && mvoSet.Contains(a.MetaverseObjectId.Value))
+                    || (a.ConnectedSystemObjectId.HasValue && csoSet.Contains(a.ConnectedSystemObjectId.Value))));
+        }
+
+        return cleared;
+    }
+
     #endregion
 }

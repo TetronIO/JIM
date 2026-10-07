@@ -103,5 +103,20 @@ public enum ActivityTargetOperationType
     /// reserved for a system-wide factory reset; conflating the two would make a per-mapping counter move
     /// indistinguishable, in the Activity list, from wiping the whole system.
     /// </summary>
-    RestartGeneratedValues = 19
+    RestartGeneratedValues = 19,
+
+    /// <summary>
+    /// "Allow the rename" on a generated value held for a decision (Unique Value Generation, #242, release 4): an
+    /// administrator authorised JIM to choose the next free value at the next export and apply it everywhere, renaming
+    /// the account that holds the current one. Used with <see cref="ActivityTargetType.MetaverseObject"/> for a
+    /// Metaverse attribute's value, or <see cref="ActivityTargetType.ConnectedSystemObject"/> for an export-mode value.
+    /// </summary>
+    AllowGeneratedValueRename = 20,
+
+    /// <summary>
+    /// "Try again" on a generated value held for a decision (Unique Value Generation, #242, release 4): an administrator
+    /// released the held export so the next export run tries the same value again. Same target types as
+    /// <see cref="AllowGeneratedValueRename"/>.
+    /// </summary>
+    RetryGeneratedValue = 21
 }

@@ -198,7 +198,8 @@ public class UniqueValueGenerationServerCollisionRemediationTests
         var assignment = SeedAssignment(repo, GeneratedValueAssignmentState.Committed);
         var itemId = Guid.NewGuid();
 
-        await new UniqueValueGenerationServer(repo).EnterNeedsDecisionAsync(assignment, rejectedByConnectedSystemId: 3, anchoredByConnectedSystemId: 4, itemId);
+        await new UniqueValueGenerationServer(repo).EnterNeedsDecisionAsync(assignment, rejectedByConnectedSystemId: 3, anchoredByConnectedSystemId: 4, itemId,
+            GeneratedValueNeedsDecisionReason.AnchoredElsewhere);
 
         var stored = repo.GeneratedValueAssignments[assignment.Id];
         using (Assert.EnterMultipleScope())
@@ -208,6 +209,50 @@ public class UniqueValueGenerationServerCollisionRemediationTests
             Assert.That(stored.AnchoredByConnectedSystemId, Is.EqualTo(4));
             Assert.That(stored.NeedsDecisionActivityRunProfileExecutionItemId, Is.EqualTo(itemId));
             Assert.That(stored.NeedsDecisionEnteredAt, Is.Not.Null);
+            Assert.That(stored.NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.AnchoredElsewhere),
+                "the decision surfaces say why the value is held without re-deriving it from state that has since moved on");
+        }
+    }
+
+    [Test]
+    public async Task RetryAsync_NeedsDecision_ClearsWhyItWasHeldAsync()
+    {
+        var repo = new InMemorySyncRepository();
+        var (assignment, _) = SeedNeedsDecisionWithParkedExport(repo);
+        assignment.NeedsDecisionReason = GeneratedValueNeedsDecisionReason.AnchoredElsewhere;
+        assignment.AnchoredByConnectedSystemId = 4;
+
+        await new UniqueValueGenerationServer(repo).RetryAsync(assignment.Id);
+
+        var stored = repo.GeneratedValueAssignments[assignment.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.NeedsDecisionReason, Is.Null);
+            Assert.That(stored.AnchoredByConnectedSystemId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task AuthoriseRenameAsync_KeepsWhyAndSinceWhenTheValueWasHeldAsync()
+    {
+        // The Rename allowed row still says what the administrator decided about, and since when, until the next export
+        // spends the authorisation.
+        var repo = new InMemorySyncRepository();
+        var (assignment, _) = SeedNeedsDecisionWithParkedExport(repo);
+        var since = DateTime.UtcNow.AddDays(-4);
+        assignment.NeedsDecisionEnteredAt = since;
+        assignment.NeedsDecisionReason = GeneratedValueNeedsDecisionReason.AnchoredElsewhere;
+        assignment.AnchoredByConnectedSystemId = 4;
+
+        await new UniqueValueGenerationServer(repo).AuthoriseRenameAsync(assignment.Id, "Jay");
+
+        var stored = repo.GeneratedValueAssignments[assignment.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.State, Is.EqualTo(GeneratedValueAssignmentState.Committed), "the export is released for the next run");
+            Assert.That(stored.NeedsDecisionEnteredAt, Is.EqualTo(since));
+            Assert.That(stored.NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.AnchoredElsewhere));
+            Assert.That(stored.AnchoredByConnectedSystemId, Is.EqualTo(4));
         }
     }
 

@@ -181,6 +181,7 @@
             <CellTemplate>
                 <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
                                                    SubjectName="@context.Item.Name" />
+                <GeneratedValueAttentionIndicator Attention="@GetGeneratedValueAttention(context.Item.Id)" SyncRuleId="@context.Item.Id" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Status" Sortable="false">
@@ -237,6 +238,9 @@
     private VirtualisedDataGrid<SyncRuleHeader>? _grid;
     private IList<SyncRuleHeader>? _syncRuleHeaders;
     private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
+
+    // Generated values held for a decision per rule (Unique Value Generation, #242, release 4): one grouped read for the page.
+    private Dictionary<int, GeneratedValueDecisionAttention>? _generatedValueAttention;
     private bool _canCreateSyncRules;
 
     // The single holder of filter state. SyncRuleFilter.Matches is the same predicate the REST API
@@ -283,8 +287,12 @@
         // One grouped count for the whole page rather than one query per row, which is the shape a per-row
         // indicator turns into if each row asks for itself.
         if (_syncRuleHeaders.Count > 0)
+        {
             _initialPasswordAttention = await jim.InitialPasswords.GetAttentionBySyncRuleAsync(
                 _syncRuleHeaders.Select(r => r.Id).ToList());
+            _generatedValueAttention = await jim.GeneratedValueDecisions.GetAttentionBySyncRuleAsync(
+                _syncRuleHeaders.Select(r => r.Id).ToList());
+        }
     }
 
     /// <summary>
@@ -335,6 +343,9 @@
     /// </summary>
     private static string GetObjectMappingSortKey(SyncRuleHeader header) =>
         header.Direction == SyncRuleDirection.Import ? header.ConnectedSystemObjectTypeName : header.MetaverseObjectTypeName;
+
+    private GeneratedValueDecisionAttention? GetGeneratedValueAttention(int syncRuleId) =>
+        _generatedValueAttention != null && _generatedValueAttention.TryGetValue(syncRuleId, out var attention) ? attention : null;
 
     private InitialPasswordAttention? GetInitialPasswordAttention(int syncRuleId) =>
         _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(syncRuleId, out var attention) ? attention : null;

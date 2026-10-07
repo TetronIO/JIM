@@ -34,6 +34,20 @@ namespace JIM.Web.Tests;
 public class ActivityRunProfileExecutionItemDetailTests
 {
     [Test]
+    public void ShowsCausality_ExportHeldForADecision_ShowsTheBandThoughNothingWasRecorded()
+    {
+        // A held export (#242, release 4) records no outcome, since nothing was exported; its band is what says why.
+        var held = new ActivityRunProfileExecutionItem { ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved };
+        var failed = new ActivityRunProfileExecutionItem { ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ActivityRunProfileExecutionItemDetail.ShowsCausality(held), Is.True);
+            Assert.That(ActivityRunProfileExecutionItemDetail.ShowsCausality(failed), Is.False, "an item with nothing recorded and an ordinary error has no story to tell");
+        }
+    }
+
+    [Test]
     public void BuildCausalityPageContext_RunSystemDiffersFromObjectSystem_UsesRunSystem()
     {
         // Arrange: a cross-system cascade, e.g. a Full Sync on Yellowstone APAC (the run's system)

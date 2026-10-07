@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+
 namespace JIM.Web.Causality;
 
 /// <summary>
@@ -25,6 +27,13 @@ public sealed class CausalityModel
     /// and the panel renders a "Preview" band rather than an execution timestamp.
     /// </summary>
     public bool IsSpeculative { get; init; }
+
+    /// <summary>
+    /// The execution item's error, when it has one. Read by the summary where the error is the item's whole story: an
+    /// export held for a decision about a generated value (#242, release 4) records no outcome, because nothing was
+    /// exported, so without its error the sentence would say nothing happened.
+    /// </summary>
+    public ActivityRunProfileExecutionItemErrorType? ItemErrorType { get; init; }
 
     /// <summary>
     /// Enumerates every event in the tree, depth-first in display order.
