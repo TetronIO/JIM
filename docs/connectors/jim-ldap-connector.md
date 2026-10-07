@@ -700,11 +700,13 @@ The error names both invocationIds (or both hostnames, for a watermark recorded 
 - **The directory was restored from a backup, snapshot or checkpoint.** A domain controller restored this way is issued a new invocationId even though its hostname is unchanged, and its USNs restart from the restored point. Changes made after the restore reuse USN values the watermark has already passed, so a Delta Import reading from that watermark would silently miss them; JIM refuses to read any change instead.
 - **A different domain controller answered.** With [domain controller discovery and pinning](#domain-controller-discovery-and-pinning) in place, the most common case is the previously pinned domain controller having become unreachable: JIM already cleared the pin and failed that run outright, and the following run resolved via Host, discovered a different domain controller, and re-pinned to it.
 
+A restore that keeps the domain controller's invocationId (a file-level or volume snapshot restore that bypasses Active Directory's own restore process) is caught a different way. A live domain controller's highest committed USN never goes backwards, so when it is now below the recorded watermark the Delta Import fails fast with "Delta import aborted: the domain controller's highest committed update sequence number (USN) has gone backwards since the watermark was recorded (watermark: ..., current: ...)". The remedy is the same Full Import. JIM can only see this kind of restore while the directory's USN is still behind the watermark: once enough changes have been made since the restore to carry it past, it looks like ordinary progress, so run a Full Import after any restore rather than relying on the Delta Import to notice.
+
 What to do:
 
 - Run a Full Import. It imports everything, and records the domain controller's current invocationId together with a new USN watermark, so the Delta Imports after it run normally for as long as that domain controller keeps its invocationId.
 - If you need consistent affinity to one specific domain controller regardless of availability, set Preferred Domain Controller rather than relying on auto-discovery.
-- If the account JIM connects as cannot read the domain controller's NTDS Settings object, the invocationId cannot be read. JIM then compares hostnames only, which catches a different domain controller but cannot catch a restore of the same one, and logs a warning that identity could not be verified. Grant the account read access to that object to restore the stronger check.
+- If the account JIM connects as cannot read the domain controller's NTDS Settings object, the invocationId cannot be read. JIM then compares hostnames only, which catches a different domain controller but catches a restore of the same one only through the USN check above, and logs a warning that identity could not be verified. Grant the account read access to that object to restore the stronger check.
 
 ### Export failures
 
