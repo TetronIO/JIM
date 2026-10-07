@@ -370,7 +370,7 @@ public partial class SyncPreviewFidelityTests
         var ctx = await SetUpNewSourceObjectAsync();
         await CreateCsoAsync(ctx.Source.Id, ctx.SourceObject.Type, "Jane Doe", "EMP002");
 
-        // This system's last completed Full Synchronisation evaluated 10 objects in 100 seconds: ten seconds each, far
+        // This system's last completed Full Synchronisation took 100 seconds over its two objects: fifty seconds each, far
         // slower than the reference. A newer failed run, another system's slower run and a Delta Synchronisation say
         // nothing about how long this system's Full Synchronisation takes.
         var executed = DateTime.UtcNow.AddHours(-2);
@@ -383,7 +383,27 @@ public partial class SyncPreviewFidelityTests
 
         var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
 
-        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(20)), "two objects at ten seconds each");
+        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(100)), "as long as the run took over the same objects");
+    }
+
+    [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_ReadsTheRunsSpeedOverTheSystemNotItsLastStepsCounterAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+        for (var i = 0; i < 20; i++)
+            await CreateCsoAsync(ctx.Source.Id, ctx.SourceObject.Type, $"Person {i}", $"EMP{i + 100}");
+
+        // The run took half a second over the system's 21 objects. Its Activity's ObjectsToProcess is not that population:
+        // each counting step of a run resets it, so a completed run's names whichever step counted last (on the dev stack,
+        // 16 for a system of 1,118). Read as the population, it made a run of 42 objects a second look like two a second,
+        // and a five-second preview look like six minutes.
+        DbContext.Activities.Add(RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete,
+            DateTime.UtcNow.AddHours(-1), objects: 1, seconds: 0.5));
+        await DbContext.SaveChangesAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(0.5)), "as long as the run took over the same 21 objects");
     }
 
     [Test]
@@ -492,7 +512,7 @@ public partial class SyncPreviewFidelityTests
     private ConnectedSystemFullSynchronisationPreviewAdapter FullSynchronisationAdapter => new(Jim);
 
     private static Activity RunActivity(int connectedSystemId, ConnectedSystemRunType runType, ActivityStatus status, DateTime executed,
-        int objects, int seconds) => new()
+        int objects, double seconds) => new()
     {
         TargetType = ActivityTargetType.ConnectedSystemRunProfile,
         TargetOperationType = ActivityTargetOperationType.Execute,

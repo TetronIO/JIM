@@ -57,9 +57,12 @@ New-JIMConfigurationChangePreview -ConnectedSystemId <int> -SchemaObjectType <ha
 
 New-JIMConfigurationChangePreview -ConnectedSystemId <int> -Deletion
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int> -FullSynchronisation
+    [-MaxObjects <int>] [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
-Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection, or, with `-Deletion`, deleting it altogether. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
+Which identifier you pass selects the entity, and the parameters beside it select the surface. `-MetaverseObjectTypeId` previews that type's deletion settings. `-ConnectedSystemId` previews that system's partition and container selection, or, with `-MatchingRule`, its Object Matching Rules, or, with `-SchemaObjectType`, its schema selection, or, with `-Deletion`, deleting it altogether, or, with `-FullSynchronisation`, running a Full Synchronisation of it. `-SyncRuleId` previews a Synchronisation Rule's destructive toggles, or, with `-ScopingCriteriaGroup`, its Scoping Criteria, or, with `-AttributeFlowMapping`, its Attribute Flow, or, with `-RuleState`, its behaviour toggles.
 
 ### Parameters
 
@@ -87,9 +90,11 @@ Which identifier you pass selects the entity, and the parameters beside it selec
 | `ObjectMatchingRuleMode` | `string` | No | stored mode | `ConnectedSystem` (Simple) or `SyncRule` (Advanced). Pass it to preview the switch between them. |
 | `SchemaObjectType` | `hashtable[]` | Yes | | The proposed schema selection, one hashtable per Connected System Object Type being changed. Each needs `objectTypeId`, and then only the keys being changed: `selected`, `removeContributedAttributesOnObsoletion`, and `selectedAttributeIds`. |
 | `Deletion` | `switch` | Yes | | Previews deleting the Connected System named by `-ConnectedSystemId`, rather than changing it. |
+| `FullSynchronisation` | `switch` | Yes | | Previews running a Full Synchronisation of the Connected System named by `-ConnectedSystemId`. The system needs a Full Synchronisation Run Profile; without one the proposal comes back blocked. |
+| `MaxObjects` | `int` | No | every object | Evaluate only this many objects, in the order the synchronisation would meet them. A capped preview warns that its counts describe only the objects it evaluated. At least 1. |
 | `FullDataSet` | `switch` | No | off | Keep every object-level detail row rather than the per-group cap's worth. Summary counts are exact either way. |
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
-| `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
+| `TimeoutSeconds` | `int` | No | `300`, or twice the estimate | How long `-Wait` polls before giving up. Where the start result carries an `EstimatedDuration` (a Full Synchronisation preview), the default is twice that estimate when it is longer than 300 seconds. A value you pass is always honoured. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
 
 `MetaverseObjectTypeId`, `ConnectedSystemId` and `SyncRuleId` are mutually exclusive: each is mandatory in its own parameter set.
 
@@ -103,11 +108,13 @@ An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetav
 
 `-Deletion` previews what [`Remove-JIMConnectedSystem`](connected-systems.md#remove-jimconnectedsystem) does by default: deprovisioning the system through synchronisation. It reports which Metaverse attribute values another Connected System would take over (`WouldTakeOverContributedValue`) and which would be cleared because nothing else contributes them (`NoContributor`), which Metaverse Objects would become eligible for deletion (`WouldBecomeDeletionEligible`), and which updates and deletions would be staged for the other Connected Systems (`WouldStageUpdateExport`, `WouldStageDeleteExport`). There is nothing to propose beyond the system itself. Deleting with `-DeleteImmediately` skips all of that work, keeping the system's values without provenance, so this preview does not describe it. Pass the finished preview's `ActivityId` to `Remove-JIMConnectedSystem -PreviewActivityId` and the deletion's Activity records that it was looked at first.
 
+`-FullSynchronisation` previews running a Full Synchronisation of the system, which is how configuration changes reach your data. It reports every change the run would make to Metaverse Objects (`Projected`, `Joined`, `AttributeFlow`, `WouldBecomeDeletionEligible`), every update, provisioning and deletion it would stage for the other Connected Systems (`WouldStageUpdateExport`, `Provisioned`, `WouldStageDeleteExport`), the drift it would correct where an export rule enforces state (`DriftCorrection`), the objects it would fail, and how many objects would not change (`WouldNotChange`). `ImpactCounts` counts distinct objects per consequence; `Groups` breaks them down by Connected System, attribute and value change, as the portal's **What would change** list does. Every object is evaluated unless `-MaxObjects` caps it, so a large system takes a while: the start result's `EstimatedDuration` says roughly how long. Pass the finished preview's `ActivityId` to [`Start-JIMRunProfile -PreviewActivityId`](run-profiles.md#start-jimrunprofile) and the run's Activity records that it was informed by the preview; JIM refuses the run, queuing nothing, when the id is not a completed Full Synchronisation preview of that same system.
+
 An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
 ### Output
 
-Without `-Wait`, returns a `PSCustomObject` with `ActivityId`, `ValidationFindings`, `IsBlocked`, `Failed`, `EstimatedAffectedObjects` and `EstimatedDeltaRows`. With `-Wait`, returns the finished preview, as described under `Get-JIMConfigurationChangePreview` below.
+Without `-Wait`, returns a `PSCustomObject` with `ActivityId`, `ValidationFindings`, `IsBlocked`, `Failed`, `EstimatedAffectedObjects`, `EstimatedDeltaRows` and `EstimatedDuration` (how long evaluation should take, as a `TimeSpan` string such as `00:04:17`; set for a Full Synchronisation preview, empty otherwise). With `-Wait`, returns the finished preview, as described under `Get-JIMConfigurationChangePreview` below.
 
 A proposal carrying a blocking validation finding is never evaluated: `IsBlocked` is `$true`, the findings say why, and `-Wait` returns immediately rather than polling for results that will not arrive.
 
@@ -146,6 +153,21 @@ $preview.ImpactCounts | Format-Table TransitionType, ObjectCount
 ```powershell title="Check what a narrowed scope would put on course for deletion"
 $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
 $preview.ImpactCounts | Where-Object TransitionType -eq 'WouldBecomeDeletionEligible'
+```
+
+```powershell title="Preview a Full Synchronisation and see what it would do to each system"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -FullSynchronisation -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+$preview.Groups | Format-Table TransitionType, ConnectedSystemName, AttributeName, OldValue, NewValue, ObjectCount
+```
+
+```powershell title="Run a Full Synchronisation only when nothing would be deleted"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -FullSynchronisation -Wait
+$destructive = $preview.ImpactCounts |
+    Where-Object TransitionType -in 'WouldBecomeDeletionEligible', 'WouldStageDeleteExport'
+if ($preview.IsComplete -and -not $destructive) {
+    Start-JIMRunProfile -ConnectedSystemId 3 -RunProfileName 'Full Synchronisation' -PreviewActivityId $preview.ActivityId -Wait
+}
 ```
 
 ```powershell title="Preview flipping an export rule's Deprovisioning Action to Delete"

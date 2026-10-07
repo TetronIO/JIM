@@ -647,7 +647,154 @@ Describe 'New-JIMConfigurationChangePreview' {
         }
     }
 
+    Context 'Connected System Full Synchronisation previews (#1530)' {
+        It 'Posts a Full Synchronisation preview of that Connected System, evaluating every object unless capped' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/5/full-synchronisation/preview'
+                # No cap is sent when none is asked for: an absent cap is what makes the counts describe the whole system.
+                $script:capturedBody.Keys.Count | Should -Be 0
+            }
+        }
+
+        It 'Sends -MaxObjects as the cap on the objects evaluated' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -MaxObjects 500 | Out-Null
+
+                $script:capturedBody.maxObjects | Should -Be 500
+            }
+        }
+
+        It 'Asks for the full data set only when -FullDataSet is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -FullDataSet | Out-Null
+
+                $script:capturedBody.deltaPersistence | Should -Be 'Full'
+            }
+        }
+
+        It 'Accepts ConnectedSystemId from the pipeline by property name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedEndpoint = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedEndpoint = $Endpoint
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                [PSCustomObject]@{ ConnectedSystemId = 8 } | New-JIMConfigurationChangePreview -FullSynchronisation | Out-Null
+
+                $script:capturedEndpoint | Should -Be '/api/v1/synchronisation/connected-systems/8/full-synchronisation/preview'
+            }
+        }
+
+        It 'Refuses a cap below one before sending anything' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+
+                { New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -MaxObjects 0 -ErrorAction Stop } |
+                    Should -Throw -ErrorId 'ParameterArgumentValidationError,New-JIMConfigurationChangePreview'
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Cannot be combined with a deletion preview' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+
+                { New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -Deletion -ErrorAction Stop } |
+                    Should -Throw -ErrorId 'AmbiguousParameterSet,New-JIMConfigurationChangePreview'
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+    }
+
     Context 'Waiting' {
+        It 'Waits as long as the preview''s own estimate suggests when no timeout is given' {
+            InModuleScope JIM {
+                # A Full Synchronisation preview of a large system takes far longer than the default five minutes,
+                # and the start response says roughly how long. Giving up at five minutes would abandon a preview
+                # that is working exactly as expected.
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $activityId = [guid]::NewGuid()
+                $script:reads = 0
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ ActivityId = $activityId; IsBlocked = $false; Failed = $false; ValidationFindings = @(); EstimatedDuration = '00:20:00' }
+                    }
+
+                    $script:reads++
+                    [PSCustomObject]@{
+                        ActivityId     = $activityId
+                        IsComplete     = ($script:reads -ge 2)
+                        HasFailed      = $false
+                        ActivityStatus = if ($script:reads -ge 2) { 'Complete' } else { 'InProgress' }
+                    }
+                }
+                Mock Start-Sleep { }
+
+                # The clock reads the start, then ten minutes on: past the default timeout, well inside the estimate.
+                $script:start = [datetime]'2026-10-07T12:00:00'
+                $script:clockReads = 0
+                Mock Get-Date { $script:clockReads++; if ($script:clockReads -eq 1) { $script:start } else { $script:start.AddMinutes(10) } }
+
+                $result = New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -Wait -ErrorVariable waitErrors -ErrorAction SilentlyContinue
+
+                $waitErrors | Should -BeNullOrEmpty
+                $result.IsComplete | Should -BeTrue
+                $script:reads | Should -Be 2
+            }
+        }
+
+        It 'Honours an explicit -TimeoutSeconds over the estimate' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $activityId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ ActivityId = $activityId; IsBlocked = $false; Failed = $false; ValidationFindings = @(); EstimatedDuration = '00:20:00' }
+                    }
+                    [PSCustomObject]@{ ActivityId = $activityId; IsComplete = $false; HasFailed = $false; ActivityStatus = 'InProgress' }
+                }
+                Mock Start-Sleep { }
+
+                $script:start = [datetime]'2026-10-07T12:00:00'
+                $script:clockReads = 0
+                Mock Get-Date { $script:clockReads++; if ($script:clockReads -eq 1) { $script:start } else { $script:start.AddMinutes(10) } }
+
+                $result = New-JIMConfigurationChangePreview -ConnectedSystemId 5 -FullSynchronisation -Wait -TimeoutSeconds 60 -ErrorVariable waitErrors -ErrorAction SilentlyContinue
+
+                ($waitErrors | Out-String) | Should -Match 'did not finish within 60 seconds'
+                $result.IsComplete | Should -BeFalse
+            }
+        }
+
         It 'Returns the start result without polling when the proposal is blocked' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
