@@ -384,6 +384,17 @@ public static class Helpers
         };
 
     /// <summary>
+    /// The label an error carries on an Activity's execution item chips and its error filter: the enum name spelled out,
+    /// except where the portal names the condition in its own words. A generated value held for a decision (#242,
+    /// release 4) reads as the decision it waits on, as the Generated Values tab and the item's own heading say.
+    /// </summary>
+    public static string GetErrorTypeChipLabel(ActivityRunProfileExecutionItemErrorType errorType) => errorType switch
+    {
+        ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved => "Needs a decision",
+        _ => errorType.ToString().SplitOnCapitalLetters()
+    };
+
+    /// <summary>
     /// Returns the heading for a Run Profile Execution Item's error, naming the phase it belongs to.
     /// </summary>
     public static string GetErrorPhaseTitle(ActivityRunProfileExecutionItemErrorType? errorType)

@@ -6,7 +6,7 @@
 
 @* "Checked for availability in" (Unique Value Generation, #242, release 3): every Connected System a generated value
    is exported to, how JIM checks the value there (its own records, a probe of the target, or not at all, and why),
-   and the Include switch that excludes a system from the checks. Display only: the host loads the rows
+   whether it can report a collision (release 4), and the Include switch that excludes a system from the checks. Display only: the host loads the rows
    (ConnectedSystemServer.GetGeneratedValueParticipantsAsync) and reloads them when the Include switch changes
    Generation.Exclusions, which saves with the rest of the generation settings. *@
 
@@ -32,6 +32,7 @@
                     <th>Connected System</th>
                     <th>Exported as</th>
                     <th>Checked</th>
+                    <th>Reports collisions</th>
                     <th class="jim-availability-include">Include</th>
                 </tr>
             </thead>
@@ -64,6 +65,21 @@
                             @if (reason != null)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="generated-value-availability-reason">@reason</MudText>
+                            }
+                        </td>
+                        <td>
+                            @* Whether the Connector can say a value it was sent is already in use (release 4): only then can
+                               Collision Remediation act on a rejection here. *@
+                            <MudChip T="string" Variant="Variant.Text" Class="ma-0" data-testid="generated-value-availability-reports-collisions"
+                                     data-reports="@(participant.ReportsCollisions ? "true" : "false")"
+                                     Color="@(participant.ReportsCollisions ? Color.Success : Color.Default)">
+                                @(participant.ReportsCollisions ? "Yes" : "No")
+                            </MudChip>
+                            @if (!participant.ReportsCollisions)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="generated-value-availability-collision-note">
+                                    A collision here is an ordinary export error.
+                                </MudText>
                             }
                         </td>
                         <td class="jim-availability-include">

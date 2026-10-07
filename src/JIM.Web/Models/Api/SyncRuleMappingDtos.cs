@@ -124,8 +124,8 @@ public class SyncRuleMappingDto
 
 /// <summary>
 /// API representation of a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3), its
-/// exclusions and the Connected Systems its value is checked for availability in (release 3). Collision Remediation is
-/// deliberately absent: it is a release 4 feature, so no surface exposes it yet.
+/// exclusions, the Connected Systems its value is checked for availability in (release 3), and whether Collision
+/// Remediation corrects a value a target rejects as already in use (release 4).
 /// </summary>
 public class SyncRuleMappingGenerationDto
 {
@@ -141,6 +141,15 @@ public class SyncRuleMappingGenerationDto
     public string? Separator { get; set; }
     public int AttemptLimit { get; set; }
     public bool NeverReuse { get; set; }
+
+    /// <summary>
+    /// Whether JIM corrects a value a target rejects as already in use (Collision Remediation, release 4): while no other
+    /// Connected System holds the value, JIM chooses the next free one and exports it again; once another does, the export
+    /// is held for an administrator's decision instead. Acts only on a rejection from a Connected System whose Connector
+    /// reports collisions (<see cref="GeneratedValueParticipantDto.ReportsCollisions"/>); elsewhere a collision is an
+    /// ordinary export error.
+    /// </summary>
+    public bool CollisionRemediation { get; set; }
 
     /// <summary>
     /// Present only on the response to a create or settings-update call that raised the target attribute's
@@ -184,6 +193,7 @@ public class SyncRuleMappingGenerationDto
         Separator = entity.Separator,
         AttemptLimit = entity.AttemptLimit,
         NeverReuse = entity.NeverReuse,
+        CollisionRemediation = entity.CollisionRemediation,
         SequenceSkippedAhead = entity.SequenceSkippedAhead == null
             ? null
             : new SequenceSkippedAheadDto { From = entity.SequenceSkippedAhead.From, To = entity.SequenceSkippedAhead.To }
@@ -221,6 +231,11 @@ public class CreateSyncRuleMappingGenerationRequest
     public bool NeverReuse { get; set; } = true;
 
     /// <summary>
+    /// Whether JIM corrects a value a target rejects as already in use (Collision Remediation, release 4). Defaults to on.
+    /// </summary>
+    public bool CollisionRemediation { get; set; } = true;
+
+    /// <summary>
     /// The ids of the Connected Systems to exclude from the value's availability checks (release 3). Each must be a
     /// Connected System the value is exported to unchanged, by an export Attribute Flow taking the generated Metaverse
     /// attribute as its only source; otherwise the request is refused naming the Connected System. Not accepted for a
@@ -250,7 +265,8 @@ public class CreateSyncRuleMappingGenerationRequest
         RandomLength = RandomLength,
         Separator = Separator,
         AttemptLimit = AttemptLimit,
-        NeverReuse = NeverReuse
+        NeverReuse = NeverReuse,
+        CollisionRemediation = CollisionRemediation
     };
 }
 
@@ -289,6 +305,13 @@ public class UpdateSyncRuleMappingGenerationRequest
     public bool? NeverReuse { get; set; }
 
     /// <summary>
+    /// Whether JIM corrects a value a target rejects as already in use (Collision Remediation, release 4). Omitted (null)
+    /// leaves it unchanged. Changing it releases any values of this flow held for a decision, so the next export tries
+    /// again under the new setting.
+    /// </summary>
+    public bool? CollisionRemediation { get; set; }
+
+    /// <summary>
     /// The ids of the Connected Systems excluded from the value's availability checks (release 3). Omitted (null)
     /// leaves the exclusions unchanged; an empty list clears them; a list replaces them. Each must be a Connected System
     /// the value is exported to unchanged, otherwise the request is refused naming the Connected System; refused
@@ -310,7 +333,8 @@ public class UpdateSyncRuleMappingGenerationRequest
         RandomLength = RandomLength,
         Separator = Separator,
         AttemptLimit = AttemptLimit,
-        NeverReuse = NeverReuse
+        NeverReuse = NeverReuse,
+        CollisionRemediation = CollisionRemediation
     };
 }
 

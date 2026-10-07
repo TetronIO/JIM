@@ -1273,3 +1273,203 @@ Describe 'setup.sh finish_upgrade' -Skip:$script:NoBash {
         Get-Content -Raw (Join-Path $dir '.env') | Should -Be 'new'
     }
 }
+
+Describe 'setup.sh main, stopping before it starts JIM' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+
+        # An installation of 1.0.0 as an earlier run left it, with a certificate the installer created, and a 1.1.0
+        # bundle beside it. The installer is told to replace its configuration, and given the settings to answer every
+        # question with, a certificate for new names included; everything that would touch the container runtime, the
+        # network or the host's ports is replaced, and starting JIM only says so. -Fresh leaves the installation out,
+        # for a first install.
+        function New-ReinstallArrangement {
+            param([string]$Environment = '', [ValidateSet('docker', 'podman')][string]$Runtime = 'docker', [switch]$Fresh)
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            $installation = Join-Path $root 'jim'
+            $bundle = Join-Path $root 'bundle'
+            New-Item -ItemType Directory -Path (Join-Path $bundle 'compose'), (Join-Path $bundle 'docker-images'), (Join-Path $bundle 'podman') -Force | Out-Null
+            foreach ($name in 'docker-compose.yml', 'docker-compose.production.yml') {
+                "# v1.1.0's $name" | Set-Content -NoNewline (Join-Path $bundle "compose/$name")
+            }
+            Copy-Item (Join-Path $script:RepositoryRoot '.env.example') (Join-Path $bundle 'compose/.env.example')
+            foreach ($name in 'jim.yaml', 'jim-database.yaml', 'jim-config.yaml') {
+                Copy-Item (Join-Path $script:RepositoryRoot 'deploy' 'podman' $name) (Join-Path $bundle "podman/$name")
+            }
+            "1.1.0`n" | Set-Content -NoNewline (Join-Path $bundle 'VERSION')
+
+            if (-not $Fresh) {
+                New-Item -ItemType Directory -Path (Join-Path $installation 'tls') -Force | Out-Null
+                if ($Runtime -eq 'podman') {
+                    foreach ($name in 'jim.yaml', 'jim-database.yaml') {
+                        "# v1.0.0's $name" | Set-Content -NoNewline (Join-Path $installation $name)
+                    }
+                    "data:`n  JIM_SSO_AUTHORITY: `"https://idp.example.test/realms/jim`"`n" |
+                        Set-Content -NoNewline (Join-Path $installation 'jim-config.yaml')
+                    "JIM_RUNTIME=podman`nJIM_PODMAN_ACCOUNT=`nJIM_PODMAN_SYSTEMD=true`nJIM_WEB_PORT=443`n" |
+                        Set-Content -NoNewline (Join-Path $installation 'install.conf')
+                }
+                else {
+                    foreach ($name in 'docker-compose.yml', 'docker-compose.production.yml') {
+                        "# v1.0.0's $name" | Set-Content -NoNewline (Join-Path $installation $name)
+                    }
+                    (@(
+                        'DOCKER_REGISTRY=ghcr.io/tetronio/'
+                        'JIM_VERSION=1.0.0'
+                        'JIM_DB_HOSTNAME=jim.database'
+                        'JIM_DB_PASSWORD=the-database-password'
+                        'JIM_SSO_AUTHORITY=https://idp.example.test/realms/jim'
+                        'JIM_WEB_PORT=443'
+                        'JIM_DB_SHARED_BUFFERS=1459MB'
+                    ) -join "`n") + "`n" | Set-Content -NoNewline (Join-Path $installation '.env')
+                    "# the compose files' checksums`n" | Set-Content -NoNewline (Join-Path $installation 'compose-files.sha256')
+                }
+                "# v1.0.0's installer`n" | Set-Content -NoNewline (Join-Path $installation 'setup.sh')
+                "jim.example.test`n" | Set-Content -NoNewline (Join-Path $installation 'tls/names')
+                foreach ($name in 'ca.crt', 'ca.key', 'tls.crt', 'tls.key') {
+                    "v1.0.0's $name" | Set-Content -NoNewline (Join-Path $installation "tls/$name")
+                }
+            }
+
+            $podman = ''
+            if ($Runtime -eq 'podman') {
+                # Run as root, as by default; Podman holds no secret yet, and has every image.
+                $podman = @'
+PODMAN_SYSTEMD=true
+choose_podman_account() { PODMAN_ACCOUNT=''; }
+prepare_podman_account() { :; }
+check_account_environment() { :; }
+as_jim_account() { return 1; }
+verify_podman_images() { :; }
+store_podman_secrets() { echo "stored the secrets in Podman"; }
+store_tls_secret() { echo "stored the certificate in Podman"; }
+install_podman_units() { echo "installed the systemd units"; }
+'@
+            }
+
+            [pscustomobject]@{
+                Installation = $installation
+                Arrange = @"
+JIM_INSTALL_DIR='$installation'
+BUNDLE_DIR='$bundle'
+choose_runtime() { RUNTIME=$Runtime; }
+prompt_yn() { return 0; }
+check_prerequisites() { :; }
+host_memory_mb() { echo 5836; }
+load_bundle_images() { :; }
+check_database_image() { DATABASE_IMAGE_ID=''; }
+verify_bundle_images() { :; }
+port_problem() { :; }
+set_tls_key_owner() { :; }
+launch_jim() { echo "started JIM"; }
+show_summary() { :; }
+$podman
+JIM_SETUP_DB_MODE=bundled
+JIM_SSO_AUTHORITY=https://idp.example.org/realms/jim
+JIM_SSO_CLIENT_ID=jim
+JIM_SSO_SECRET=the-client-secret
+JIM_SSO_API_SCOPE=api://jim/access_as_user
+JIM_SSO_CLAIM_TYPE=sub
+JIM_SSO_MV_ATTRIBUTE='Subject Identifier'
+JIM_SSO_INITIAL_ADMIN=admin
+JIM_WEB_PORT=443
+JIM_SETUP_TLS_MODE=generate
+JIM_SETUP_TLS_NAMES=jim.example.org
+JIM_TRUSTED_PROXIES=
+$Environment
+"@
+            }
+        }
+
+        # Every file and folder under a folder, hidden ones included, with each file's content.
+        function Get-FolderState {
+            param([string]$Path)
+            if (-not (Test-Path $Path)) {
+                return '(no folder)'
+            }
+            $entries = Get-ChildItem -Path $Path -Recurse -Force | Sort-Object FullName | ForEach-Object {
+                $relative = [IO.Path]::GetRelativePath($Path, $_.FullName)
+                if ($_.PSIsContainer) { "$relative/" } else { "${relative}: $(Get-Content -Raw $_.FullName)" }
+            }
+            $entries -join "`n"
+        }
+    }
+
+    It 'puts the installation back as it was when it refuses a setting, so that JIM starts on it as before (#1994)' {
+        # As #1994 was found: 8GB of shared_buffers given, on a host with 5.7 GB.
+        $arrangement = New-ReinstallArrangement -Environment 'JIM_DB_SHARED_BUFFERS=8GB'
+        $before = Get-FolderState $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM_DB_SHARED_BUFFERS is 8GB*'
+        Get-FolderState $arrangement.Installation | Should -BeExactly $before
+    }
+
+    It 'puts back the certificate and its authority too when Ctrl+C stops it after it created new ones' {
+        # New names need a new certificate authority, which the installer creates before it asks about a proxy.
+        $arrangement = New-ReinstallArrangement -Environment 'configure_proxy() { kill -INT $$; }'
+        $before = Get-FolderState $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*Created a certificate authority*'
+        $result.Output | Should -Not -BeLike '*started JIM*'
+        Get-FolderState $arrangement.Installation | Should -BeExactly $before
+    }
+
+    It 'keeps the new configuration once it goes on to start JIM, whether or not JIM then starts' {
+        $arrangement = New-ReinstallArrangement -Environment 'launch_jim() { echo "started JIM"; exit 1; }'
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.Output | Should -BeLike '*started JIM*'
+        $settings = Get-Content (Join-Path $arrangement.Installation '.env')
+        $settings | Should -Contain 'JIM_VERSION=1.1.0'
+        $settings | Should -Contain 'JIM_SSO_AUTHORITY=https://idp.example.org/realms/jim'
+        $settings | Should -Contain 'JIM_DB_PASSWORD=the-database-password'
+        Get-Content -Raw (Join-Path $arrangement.Installation 'docker-compose.yml') | Should -BeExactly "# v1.1.0's docker-compose.yml"
+        Get-Content (Join-Path $arrangement.Installation 'tls/names') | Should -Be 'jim.example.org'
+        Get-ChildItem -Force -Name $arrangement.Installation | Sort-Object |
+            Should -Be (@('.env', 'compose-files.sha256', 'docker-compose.production.yml', 'docker-compose.yml', 'setup.sh', 'tls') | Sort-Object)
+    }
+
+    It 'leaves nothing behind when a first installation stops, so that running it again does not keep the template''s database password' {
+        # The topology is refused before the run writes a database password, leaving the template's placeholder.
+        $arrangement = New-ReinstallArrangement -Fresh -Environment 'JIM_SETUP_DB_MODE=sideways'
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*Invalid JIM_SETUP_DB_MODE*'
+        $arrangement.Installation | Should -Not -Exist
+    }
+
+    It 'stops, changing nothing, when an earlier run that stopped left the installation''s files set aside' {
+        $arrangement = New-ReinstallArrangement
+        New-Item -ItemType Directory -Path (Join-Path $arrangement.Installation '.before-setup') | Out-Null
+        "JIM_VERSION=0.9.0`n" | Set-Content -NoNewline (Join-Path $arrangement.Installation '.before-setup/.env')
+        $before = Get-FolderState $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike "*$(Join-Path $arrangement.Installation '.before-setup')*"
+        Get-FolderState $arrangement.Installation | Should -BeExactly $before
+    }
+
+    It 'on Podman, puts the installation back when it stops for want of AppArmor''s rules, having stored nothing in Podman' {
+        $arrangement = New-ReinstallArrangement -Runtime podman -Environment 'configure_apparmor() { fatal "JIM needs a network rule"; }'
+        $before = Get-FolderState $arrangement.Installation
+
+        $result = Invoke-SetupFunction 'main' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*JIM needs a network rule*'
+        $result.Output | Should -Not -BeLike '*stored the secrets in Podman*'
+        $result.Output | Should -Not -BeLike '*installed the systemd units*'
+        Get-FolderState $arrangement.Installation | Should -BeExactly $before
+    }
+}

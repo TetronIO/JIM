@@ -42,4 +42,10 @@ public class GeneratedValueParticipant
 
     /// <summary>Why the check is less than <see cref="GeneratedValueParticipantCheck.JimRecordsAndProbe"/>; None when it is not.</summary>
     public GeneratedValueParticipantReason Reason { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System's Connector can report that a value it was sent is already in use (release 4): only
+    /// then can Collision Remediation act on a rejection there. Elsewhere, a collision is an ordinary export error.
+    /// </summary>
+    public bool ReportsCollisions { get; set; }
 }

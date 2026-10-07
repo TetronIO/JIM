@@ -96,6 +96,9 @@
         # Unique Value Generation (#242)
         'Get-JIMGeneratedValueSequence',
         'Restart-JIMGeneratedValues',
+        'Get-JIMGeneratedValueDecision',
+        'Approve-JIMGeneratedValueRename',
+        'Reset-JIMGeneratedValueDecision',
 
         # Object Matching Rules
         'Get-JIMMatchingRule',

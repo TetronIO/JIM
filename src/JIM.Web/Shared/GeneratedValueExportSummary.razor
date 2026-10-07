@@ -1,0 +1,74 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What an export run did about generated values its target rejected as already in use (Unique Value Generation, #242,
+   release 4, Phase 9), from the run's two statistics: a sentence in the causality band's idiom and a pill per count.
+   The per-object story is on each execution item's own causality band. Renders nothing for a run that met no such
+   rejection. *@
+
+@if (Corrected + NeedingDecision > 0)
+{
+    <MudPaper Outlined="true" Class="@($"pa-4 {Class}")" data-testid="generated-value-export-summary">
+        <MudText Typo="Typo.body1">
+            <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@ConnectedSystemName"
+                        Href="@(ConnectedSystemId.HasValue ? $"/admin/connected-systems/{ConnectedSystemId}" : null)" Class="ma-0" />
+            rejected @Values(Corrected + NeedingDecision) as already in use@(Clauses).
+        </MudText>
+        <MudStack Row="true" Spacing="2" Class="mt-2">
+            @if (Corrected > 0)
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0" data-testid="generated-value-export-corrected">@Corrected.ToString("N0") corrected</MudChip>
+            }
+            @if (NeedingDecision > 0)
+            {
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0" data-testid="generated-value-export-needs-decision">
+                    @NeedingDecision.ToString("N0") @(NeedingDecision == 1 ? "needs" : "need") a decision
+                </MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    /// <summary>Values Collision Remediation corrected in the run.</summary>
+    [Parameter]
+    public int Corrected { get; set; }
+
+    /// <summary>Values the run held for an administrator's decision.</summary>
+    [Parameter]
+    public int NeedingDecision { get; set; }
+
+    /// <summary>The Connected System the run exported to.</summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>The panel's geometry, the call site's to set.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private static string Values(int count) => count == 1 ? "1 generated value" : $"{count:N0} generated values";
+
+    private string Clauses
+    {
+        get
+        {
+            var corrected = Corrected switch
+            {
+                0 => null,
+                1 when NeedingDecision == 0 => "; JIM corrected it, and the next synchronisation will export the new value",
+                _ when NeedingDecision == 0 => "; JIM corrected them, and the next synchronisation will export the new values",
+                _ => $": JIM corrected {Corrected:N0}, and the next synchronisation will export the new {(Corrected == 1 ? "value" : "values")}"
+            };
+            var held = NeedingDecision switch
+            {
+                0 => null,
+                _ when Corrected == 0 => $", and {(NeedingDecision == 1 ? "it needs" : "they need")} a decision before JIM exports {(NeedingDecision == 1 ? "it" : "them")}",
+                _ => $"; {NeedingDecision:N0} {(NeedingDecision == 1 ? "needs" : "need")} a decision"
+            };
+            return corrected + held;
+        }
+    }
+}

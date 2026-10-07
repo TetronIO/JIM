@@ -420,6 +420,7 @@ Returns one or more mapping objects representing Attribute Flow Rules. Each mapp
 
 | Property | Type | Description |
 |----------|------|-------------|
+| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)) |
 | `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
 | `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
 | `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
@@ -437,6 +438,7 @@ Each entry in `Generation.Participants` has:
 | `CanBeExcluded` | `bool` | Whether it can be: only where the value is exported to it unchanged from an import generated mapping |
 | `Check` | `string` | `JimRecordsAndProbe` (JIM's records of the system, and a probe of the system itself), `JimRecordsOnly` or `NotChecked` |
 | `Reason` | `string` | Why the check is less than `JimRecordsAndProbe`: `ConnectorCannotProbe`, `AttributeNotProbed`, `NotTextValue`, `ExportedThroughExpression`, `CombinedWithOtherSources` or `Excluded`; `None` when it is not |
+| `ReportsCollisions` | `bool` | Whether the Connected System's Connector reports a value as already in use, so Collision Remediation can act on a rejection there; elsewhere a collision is an ordinary export error |
 
 `Warnings` and `DependentDerivedFlows` are always empty on a read; they describe a save.
 
@@ -497,7 +499,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
-    [-ExcludeConnectedSystemId <int[]>]
+    [-CollisionRemediation <bool>] [-ExcludeConnectedSystemId <int[]>]
 
 # Export: generated (Unique Value Generation, #242)
 New-JIMSyncRuleMapping -SyncRuleId <int>
@@ -508,6 +510,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
+    [-CollisionRemediation <bool>]
 ```
 
 ### Parameters
@@ -535,6 +538,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
 | `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. |
 | `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
+| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
 | `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
 
 ### Output
@@ -548,7 +552,7 @@ Returns the created mapping object. A generated mapping's `Generation` property 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242).** `-Generate` applies to import and export mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only. Collision Remediation is not configurable from any surface yet.
+- **Unique Value Generation (#242).** `-Generate` and `-CollisionRemediation` apply to import and export generated mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only.
 - Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples
@@ -625,7 +629,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
-    [-ExcludeConnectedSystemId <int[]>]
+    [-CollisionRemediation <bool>] [-ExcludeConnectedSystemId <int[]>]
     [-PassThru]
 
 # From the pipeline
@@ -658,6 +662,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `Separator` | `string` | No | | The characters between the base value and the token. Supply `''` or `$null` to clear it; omit to leave it unchanged |
 | `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object |
 | `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
+| `CollisionRemediation` | `bool` | No | | Whether JIM corrects a value a target rejects as already in use. Changing it releases this Attribute Flow's values [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Generated mappings only |
 | `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/synchronisation-rules.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
@@ -708,6 +713,10 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId 4, 
 
 ```powershell title="Check every Connected System again (clear the exclusions)"
 Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @()
+```
+
+```powershell title="Switch Collision Remediation off, so a rejected value is reported as an export error instead"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -CollisionRemediation $false
 ```
 
 ---
@@ -802,6 +811,161 @@ Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12
 
 ```powershell title="Do the same without prompting, for use in a script"
 Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
+```
+
+---
+
+## Generated value decisions
+
+When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
+
+### Get-JIMGeneratedValueDecision
+
+Lists the generated values held for a decision, newest first, or reads one by id, or summarises them.
+
+#### Syntax
+
+```powershell
+# List (default)
+Get-JIMGeneratedValueDecision [-ConnectedSystemId <int>] [-SyncRuleId <int>] [-Status <string>]
+    [-MetaverseObjectId <guid>] [-Page <int>] [-PageSize <int>]
+
+# Every page
+Get-JIMGeneratedValueDecision -All [-ConnectedSystemId <int>] [-SyncRuleId <int>] [-Status <string>]
+    [-MetaverseObjectId <guid>] [-PageSize <int>] [-Force]
+
+# One value
+Get-JIMGeneratedValueDecision -Id <guid>
+
+# Counts
+Get-JIMGeneratedValueDecision -Summary [-ConnectedSystemId <int>] [-SyncRuleId <int>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | No | | Values involving one Connected System: it rejected the value, it anchors the value, or the value is exported to and checked in it |
+| `SyncRuleId` | `int` | No | | Values generated by one Synchronisation Rule's Attribute Flows |
+| `Status` | `string` | No | | `NeedsDecision` or `RenameAllowed`; omit for both |
+| `MetaverseObjectId` | `guid` | No | | One Metaverse Object's values, including those on the accounts joined to it |
+| `Id` | `guid` | Yes (ById set) | | One value by id, whatever its state |
+| `Summary` | `switch` | Yes (Summary set) | | Returns the counts instead of the rows |
+| `Page` | `int` | No | `1` | Page number |
+| `PageSize` | `int` | No | `50` | Items per page (1-100) |
+| `All` | `switch` | Yes (ListAll set) | | Retrieves every page, up to 1000 pages |
+| `Force` | `switch` | No | | Overrides the `-All` page ceiling |
+
+#### Output
+
+The list and `-Id` forms return the same shape, one object per value:
+
+| Property | Description |
+|----------|-------------|
+| `Id` | The value's id: what `Approve-JIMGeneratedValueRename` and `Reset-JIMGeneratedValueDecision` take |
+| `Status` | `NeedsDecision`, `RenameAllowed`, or (only from `-Id`) `Released`: nothing is waiting on a decision for it |
+| `Reason` | `AnchoredElsewhere` (another Connected System has already accepted it; correcting it renames that account), `CannotTell` (a Connected System's connector space was cleared and has not been fully imported since), `RemediationLimitReached` (corrected `RemediationCount` times and still rejected) or `NoValueAvailable` (no other value could be generated) |
+| `MetaverseObjectId`, `MetaverseObjectDisplayName`, `MetaverseObjectTypeName` | The Metaverse Object the value belongs to (or, for a value generated on an export Synchronisation Rule, the one its account is joined to) |
+| `ConnectedSystemObjectId`, `ConnectedSystemObjectConnectedSystemId` | For a value generated on an export Synchronisation Rule: the account it belongs to, and its Connected System; `$null` otherwise |
+| `AttributeName`, `Value` | The attribute and the value the target rejected, which is still the value JIM holds |
+| `RemediationCount` | How many times Collision Remediation has already corrected the value |
+| `RejectedByConnectedSystemId`, `RejectedByConnectedSystemName` | The Connected System that rejected it |
+| `AnchoredByConnectedSystemId`, `AnchoredByConnectedSystemName` | The Connected System that anchors it, or cannot tell whether it does |
+| `Since` | When the value began waiting on a decision (UTC) |
+| `RenameAllowedAt`, `RenameAllowedBy` | When and by whom the rename was allowed; only while `Status` is `RenameAllowed` |
+| `SyncRuleId`, `SyncRuleName`, `SyncRuleMappingId` | The Synchronisation Rule and Attribute Flow that generated the value |
+
+With `-Summary`, one object: `NeedsDecisionCount`, `RenameAllowedCount`, `CorrectedRecentlyCount` (values Collision Remediation corrected since `CorrectedSince`, seven days ago, counted once each from their most recent correction) and `CorrectedSince`.
+
+#### Examples
+
+```powershell title="How much needs attention"
+Get-JIMGeneratedValueDecision -Summary
+```
+
+```powershell title="Why each held value is held"
+Get-JIMGeneratedValueDecision -Status NeedsDecision |
+    Select-Object MetaverseObjectDisplayName, AttributeName, Value, Reason, RejectedByConnectedSystemName, AnchoredByConnectedSystemName
+```
+
+```powershell title="Every held value involving one Connected System"
+Get-JIMGeneratedValueDecision -ConnectedSystemId 3 -All
+```
+
+### Approve-JIMGeneratedValueRename
+
+Allows the rename. At the next export that meets the rejection, JIM chooses the next free value and applies it everywhere the value is used, renaming the account in the Connected System that already holds the current value. The new value is decided then, after JIM checks every system again, not now. The held export is released so that export happens.
+
+#### Syntax
+
+```powershell
+Approve-JIMGeneratedValueRename [-Id] <guid> [-Force] [-WhatIf] [-Confirm]
+
+Get-JIMGeneratedValueDecision ... | Approve-JIMGeneratedValueRename [-Force] [-WhatIf] [-Confirm]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes (ById set) | | The value's id |
+| `InputObject` | `PSCustomObject` | Yes (InputObject set) | | A held value from `Get-JIMGeneratedValueDecision`, through the pipeline; the confirmation then names the value and its object |
+| `Force` | `switch` | No | | Skips the confirmation |
+
+#### Output
+
+The value as it now stands, in `Get-JIMGeneratedValueDecision`'s shape, with `Status` `RenameAllowed`. A value not waiting on a decision (already released, or its rename already allowed) is an error, and nothing changes.
+
+**ShouldProcess impact level:** High, because it renames a live account. This command prompts for confirmation by default.
+
+#### Examples
+
+```powershell title="Allow the rename of one value"
+Approve-JIMGeneratedValueRename -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f
+```
+
+```powershell title="See which accounts would be renamed for every value held from one Synchronisation Rule, without allowing anything"
+Get-JIMGeneratedValueDecision -SyncRuleId 2 -Status NeedsDecision -All | Approve-JIMGeneratedValueRename -WhatIf
+```
+
+Run the second example without `-WhatIf` only after reviewing what it lists: every value it names renames a live account.
+
+### Reset-JIMGeneratedValueDecision
+
+Tries again: releases the held exports so the next export run tries the same values, for when the clash has been resolved in the target. A value the target rejects again is held for a decision again. Values whose rename has been allowed are left as they are. A pipeline is collected and sent as one request; each value released is recorded as its own Activity.
+
+#### Syntax
+
+```powershell
+Reset-JIMGeneratedValueDecision [-Id <guid[]>] [-ConnectedSystemId <int>] [-SyncRuleId <int>]
+    [-MetaverseObjectId <guid>] [-AllDecisions] [-Force] [-WhatIf] [-Confirm]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid[]` | No | | The values to try again. Accepts held values from `Get-JIMGeneratedValueDecision` through the pipeline. Combines with the other criteria |
+| `ConnectedSystemId` | `int` | No | | Every held value involving one Connected System |
+| `SyncRuleId` | `int` | No | | Every held value generated by one Synchronisation Rule's Attribute Flows |
+| `MetaverseObjectId` | `guid` | No | | Every held value of one Metaverse Object |
+| `AllDecisions` | `switch` | No | | Every value needing a decision. Required when nothing else narrows the request |
+| `Force` | `switch` | No | | Skips the confirmation |
+
+#### Output
+
+One object with `AffectedCount`: how many values were released. Zero is a valid outcome.
+
+**ShouldProcess impact level:** Medium.
+
+#### Examples
+
+```powershell title="Try again every value held from one Synchronisation Rule"
+Reset-JIMGeneratedValueDecision -SyncRuleId 2
+```
+
+```powershell title="Try again every value involving one Connected System that needs a decision, in one request"
+Get-JIMGeneratedValueDecision -Status NeedsDecision -ConnectedSystemId 3 | Reset-JIMGeneratedValueDecision -Force
 ```
 
 ---

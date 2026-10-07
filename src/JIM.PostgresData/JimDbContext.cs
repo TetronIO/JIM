@@ -1493,6 +1493,16 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<GeneratedValueAssignment>()
             .HasIndex(a => a.SyncRuleMappingGenerationId)
             .HasDatabaseName("IX_GeneratedValueAssignments_SyncRuleMappingGenerationId");
+        // The generated value decision reads (release 4, Phase 9) select held values (the State index above), allowed
+        // renames and recent corrections; each is a sliver of the table, so each gets a partial index of its own.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => a.RenameAuthorised)
+            .HasFilter("\"RenameAuthorised\"")
+            .HasDatabaseName("IX_GeneratedValueAssignments_RenameAuthorised");
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => a.RemediatedAt)
+            .HasFilter("\"RemediatedAt\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueAssignments_RemediatedAt");
 
         // Exactly one mode: the import pair (MetaverseObjectId, MetaverseAttributeId) or the export pair
         // (ConnectedSystemObjectId, ConnectedSystemObjectTypeAttributeId), never a mix of the two and never

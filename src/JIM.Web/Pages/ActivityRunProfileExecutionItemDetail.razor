@@ -287,7 +287,7 @@
         }
 
         @* Causality - shows what the run did to this object and what it caused *@
-        @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
+        @if (ShowsCausality(_activityRunProfileExecutionItem))
         {
             <MudText Typo="Typo.h6" Class="mb-2">
                 Causality
@@ -433,7 +433,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
                             <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
                                 <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                    @errorType.ToString().SplitOnCapitalLetters()
+                                    @Helpers.GetErrorTypeChipLabel(errorType)
                                 </MudText>
                                 @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
                                 {
@@ -463,6 +463,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     }
 
 @code {
+    /// <summary>
+    /// Whether the item has a causality story to show: something it recorded, or an export held for a decision about a
+    /// generated value (#242, release 4), which records nothing because nothing was exported, so its band says why.
+    /// </summary>
+    public static bool ShowsCausality(ActivityRunProfileExecutionItem item) =>
+        item.SyncOutcomes.Count > 0 || item.ErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
+
     [Parameter]
     public Guid Id { get; set; }
 

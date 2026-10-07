@@ -41,8 +41,9 @@ public enum GeneratedValueParticipantReason
     ConnectorCannotProbe = 1,
 
     /// <summary>
-    /// The Connector can probe, but not this attribute: its values only need to be unique within their container (a
-    /// Distinguished Name or naming attribute), so a system-wide search would report false collisions.
+    /// The Connector can probe, but not this attribute: either it identifies the account in this system (the external
+    /// ID or the Distinguished Name), or its values only need to be unique within their container (a naming attribute),
+    /// so a system-wide search would report false collisions.
     /// </summary>
     AttributeNotProbed = 2,
 

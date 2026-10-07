@@ -138,6 +138,13 @@ function New-JIMSyncRuleMapping {
         $true (the server default and recommended setting). Always treated as true for a Sequence token,
         regardless of what is supplied, because its forward-only counter makes reuse impossible.
 
+    .PARAMETER CollisionRemediation
+        Whether JIM corrects a generated value a target rejects as already in use (Collision Remediation). While no
+        other Connected System holds the value, JIM chooses the next free one and exports it again; once another
+        does, the export is held for a decision instead (see Get-JIMGeneratedValueDecision). Acts only on a
+        rejection from a Connected System whose Connector reports collisions (Generation.Participants'
+        ReportsCollisions); elsewhere a collision is an ordinary export error. Omit for $true.
+
     .PARAMETER ExcludeConnectedSystemId
         Import generated mappings only: the IDs of Connected Systems to leave out of the value's availability
         checks. Values already in use in an excluded Connected System do not stop JIM choosing them; JIM neither
@@ -341,6 +348,10 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ExportGenerated')]
         [bool]$NeverReuse,
 
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [bool]$CollisionRemediation,
+
         # Exclusions (release 3), import generated mappings only: an export-mode generated value is checked
         # only in its own Connected System, so it has nothing to exclude.
         [Parameter(ParameterSetName = 'ImportGenerated')]
@@ -520,6 +531,7 @@ function New-JIMSyncRuleMapping {
             if ($PSBoundParameters.ContainsKey('Separator')) { $generation.separator = $Separator }
             if ($PSBoundParameters.ContainsKey('AttemptLimit')) { $generation.attemptLimit = $AttemptLimit }
             if ($PSBoundParameters.ContainsKey('NeverReuse')) { $generation.neverReuse = $NeverReuse }
+            if ($PSBoundParameters.ContainsKey('CollisionRemediation')) { $generation.collisionRemediation = $CollisionRemediation }
             # Always sent as a JSON array, even for a single ID: the @() keeps one value from serialising as a
             # bare number.
             if ($PSBoundParameters.ContainsKey('ExcludeConnectedSystemId')) { $generation.exclusions = @($ExcludeConnectedSystemId) }

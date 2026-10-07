@@ -159,7 +159,7 @@ Two independent rendering pipelines cover these enums, and they do not overlap:
 
 ## Unique Value Generation (#242) at a glance
 
-🆕 UVG marks twelve members across all four enums, added in Phase 1 of the [Unique Value Generation plan](plans/doing/UNIQUE_VALUE_GENERATION.md) so the ordinal tests changed exactly once for the whole feature rather than once per release. Their wiring status differs by release, and is **not** uniform, which is the one place this feature's enum footprint needs reading carefully rather than assumed from the enum comments alone:
+🆕 UVG marks twelve members across all four enums, added in Phase 1 of the [Unique Value Generation plan](plans/done/UNIQUE_VALUE_GENERATION.md) so the ordinal tests changed exactly once for the whole feature rather than once per release. Their wiring status differs by release, and is **not** uniform, which is the one place this feature's enum footprint needs reading carefully rather than assumed from the enum comments alone:
 
 | Release | Members | Wired today? |
 |---|---|---|

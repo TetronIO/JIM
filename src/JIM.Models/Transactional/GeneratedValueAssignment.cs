@@ -145,6 +145,19 @@ public class GeneratedValueAssignment
     /// </summary>
     public Guid? NeedsDecisionActivityRunProfileExecutionItemId { get; set; }
 
+    /// <summary>
+    /// Why this assignment entered <see cref="GeneratedValueAssignmentState.NeedsDecision"/> (release 4, Phase 9), kept
+    /// alongside <see cref="NeedsDecisionEnteredAt"/>. Null outside a decision, and for a decision recorded before the
+    /// reason was.
+    /// </summary>
+    public GeneratedValueNeedsDecisionReason? NeedsDecisionReason { get; set; }
+
+    /// <summary>
+    /// When Collision Remediation last corrected this value (UTC; release 4, Phase 9): what "corrected in the last 7
+    /// days" counts. Null until the first correction.
+    /// </summary>
+    public DateTime? RemediatedAt { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;

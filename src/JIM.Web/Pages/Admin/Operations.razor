@@ -46,6 +46,13 @@
                  BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
         <OperationsPasswordsTab />
     </MudTabPanel>
+    @* Badged with the generated values waiting on an administrator (Unique Value Generation, #242, release 4): an export
+       held for a decision is work JIM has stopped doing, which must be visible without opening the tab. An allowed
+       rename is not counted: it waits on the next export, not on anyone. *@
+    <MudTabPanel Text="Generated Values" Icon="@Icons.Material.Filled.Fingerprint" BadgeColor="Color.Warning"
+                 BadgeData="@(_generatedValueAttentionCount > 0 ? _generatedValueAttentionCount.ToString("N0") : null)">
+        <OperationsGeneratedValuesTab OnChanged="RefreshAndRenderAsync" />
+    </MudTabPanel>
 </NavigableMudTabs>
 
 @code {
@@ -79,6 +86,12 @@
     private int _passwordAttentionCount;
 
     /// <summary>
+    /// Generated values held for a decision, for the Generated Values tab's badge: loaded by the page for the same reason
+    /// as the Passwords badge, and refreshed on the same poll and after the tab's own actions.
+    /// </summary>
+    private int _generatedValueAttentionCount;
+
+    /// <summary>
     /// Whether the Service Health strip is collapsed. Read here rather than by the strip: the strip only renders once
     /// OnInitializedAsync has finished, so its first render already has the answer, whereas a strip reading it itself
     /// could only do so after rendering and would paint open, then animate shut.
@@ -108,6 +121,13 @@
         _report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
         var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
         _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
+        _generatedValueAttentionCount = (await jim.GeneratedValueDecisions.GetSummaryAsync()).NeedsDecisionCount;
+    }
+
+    private async Task RefreshAndRenderAsync()
+    {
+        await RefreshAsync();
+        StateHasChanged();
     }
 
     private async Task OnPollTimerElapsedAsync()

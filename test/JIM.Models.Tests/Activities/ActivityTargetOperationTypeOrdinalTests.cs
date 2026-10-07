@@ -49,7 +49,9 @@ public class ActivityTargetOperationTypeOrdinalTests
 
         // Unique Value Generation (#242, Phase 3): "Start again" moving a generated Sequence mapping's counter.
         // Distinct from Reset (9), which is reserved for a system-wide factory reset.
-        [ActivityTargetOperationType.RestartGeneratedValues] = 19
+        [ActivityTargetOperationType.RestartGeneratedValues] = 19,
+        [ActivityTargetOperationType.AllowGeneratedValueRename] = 20,
+        [ActivityTargetOperationType.RetryGeneratedValue] = 21
     };
 
     [Test]
