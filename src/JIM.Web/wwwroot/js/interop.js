@@ -503,3 +503,11 @@ window.jimTableViewColumnResizer = {
         window.jimTableViewColumnResizer._attached.delete(table);
     }
 };
+
+// Brings an element into view: a panel opened beneath the control that opened it (a Full Synchronisation preview's
+// one-object view, #1530), which would otherwise appear below the fold with nothing saying it had.
+window.jimScrollIntoView = function (element) {
+    if (element && element.scrollIntoView) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};

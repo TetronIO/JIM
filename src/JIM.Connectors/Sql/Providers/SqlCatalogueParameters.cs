@@ -13,4 +13,6 @@ internal static class SqlCatalogueParameters
     internal const string SchemaName = "catalogueSchemaName";
 
     internal const string ObjectName = "catalogueObjectName";
+
+    internal const string ColumnName = "catalogueColumnName";
 }

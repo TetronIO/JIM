@@ -367,6 +367,7 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
 
     private static UniquenessProbeRequest Request(IReadOnlyList<string> candidates, string? controlValue, string attributeName = "userPrincipalName") => new()
     {
+        ObjectTypeName = "user",
         AttributeName = attributeName,
         Candidates = candidates,
         ControlValue = controlValue

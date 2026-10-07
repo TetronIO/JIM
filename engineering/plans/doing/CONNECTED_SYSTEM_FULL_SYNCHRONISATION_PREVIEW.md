@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Doing (Phases 1-6 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -165,14 +165,22 @@ Scenario: Previewing and running from a script
 - The Activity page already shows "Informed by a preview" for any Activity carrying the link, a run's included.
 - Runtime: on the stack, body-less execute calls still queue; an unknown id, a deletion preview, another system's preview and a Delta Synchronisation citation are each refused with a 400 naming why; `Start-JIMRunProfile -PreviewActivityId` queued a Full Synchronisation whose stored Activity names the preview (a deletion preview relabelled in the database stood in, as nothing starts a Full Synchronisation preview until Phase 6).
 
-### Phase 5: portal
+### Phase 5: portal ✅
 
-- The duration estimate for the threshold confirmation: the last completed Full Synchronisation's duration where there is one, else the object count against #1520's rate.
-- Drift notice button, Run Profiles row action, inline panel on the Connected System page with reattach, threshold confirmation, "would not change" line, Run Full Synchronisation from the panel, drill-down columns, object view through the Sync Preview panel. bUnit tests where the logic lives.
+- Two decisions taken with the user (2026-10-07): the large-system confirmation is the existing large-preview dialog, extended with the duration, rather than a second prompt inline in the panel; and the duration is never faster than a reference rate (`FullSynchronisationDurationEstimate`, a conservative 50 objects a second until #1520 measures the real one), slower where the system's last completed Full Synchronisation was, because a routine run skips unchanged objects and so overstates a full evaluation. `PreviewCostEstimate.EstimatedDuration` carries it; the starter hands the dialog the whole estimate.
+- The panel: would-not-change groups leave the grid for one line under it, drillable per object type; a preview where every object would not change says the run would change nothing, naming the system; a `HeaderActions` slot; selectable drill-down rows (`OnObjectSelected`); Now and After the synchronisation columns; and a projected object's provisioning row links the object being projected (it linked a non-existent object in the target system).
+- `ConnectedSystemFullSynchronisationPreview`, on the Details tab: started by a one-shot request from the drift notice or a Run Profile's Preview action (Full Synchronisation rows only), reattached on arrival until a Full Synchronisation completes after it, stale warning, Run Full Synchronisation (citing the preview only while current, judged again at the click), and one object's own Sync Preview from a drill-down row (`SyncPreviewServer.GetFullSynchronisationRowSubjectAsync`: the synchronised object, or for a target row the synchronised object of the same identity). The deletion preview's state model became the shared `ConnectedSystemPreviewState`.
+- Runtime on the stack (uppercasing Job Title on the APAC import rule): drift notice offers the preview; the Run Profiles action starts it; it reads 990 EMEA accounts updated per title value and 128 objects unchanged; drill-down and object view work; Run Full Synchronisation queued a run whose Activity names the genuine preview; after it, the panel no longer reattaches, and a new preview says the run would change nothing. Reverting showed one gap to follow up: the preview does not list the staged exports a run would withdraw (the reverted titles' uppercase exports), though its end state is right.
+- Public docs (Connected Systems: Previewing a Full Synchronisation) and the changelog entry land here, as the feature becomes reachable; REST and PowerShell follow in Phase 6.
 
-### Phase 6: REST and PowerShell
+### Phase 6: REST and PowerShell ✅
 
-- Start endpoint; `New-JIMConfigurationChangePreview -FullSynchronisation` (optional `-MaxObjects`); Pester tests; docs, including the preview-then-run example for `Start-JIMRunProfile -PreviewActivityId` (the parameter landed in Phase 4).
+- `POST connected-systems/{id}/full-synchronisation/preview`, with an optional body (`maxObjects`, `deltaPersistence`); a cap below one comes back blocked, as on the portal's path. The shared start response gains `estimatedDuration` (null for every other surface), so a script has the number the portal's large-preview dialog shows.
+- `New-JIMConfigurationChangePreview -FullSynchronisation [-MaxObjects]`. `-Wait` defaults its timeout to twice the estimate where that exceeds five minutes, because the fixed five minutes would abandon a working preview of any system above roughly 15,000 objects at the reference rate; an explicit `-TimeoutSeconds` still wins.
+- Docs: Connected Systems (Automating it), PowerShell previews (the parameter set, what the counts and groups say, preview-then-gate-then-run), Run Profiles (`-PreviewActivityId` example). The changelog entry now names the REST API and PowerShell.
+- A Phase 5 fault found on the runtime walk: the duration estimate read the last run's speed as `ObjectsToProcess` over its execution time, but each counting step of a run resets that counter, so a completed run holds whichever step counted last (16 on the dev stack, for a system of 1,118). It estimated six minutes for a five-second preview. The run is now measured over the system's population; a test pins it.
+- A docs fact worth keeping: a Full Synchronisation preview's impact counts are per transition and never split by system (`ConnectedSystemId` is empty); the per-system breakdown is in its groups.
+- Runtime on the stack (Yellowstone APAC, 1,118 objects, Job Title uppercased): the start result carries the estimate (22 s at the reference rate; the real preview took 4 s); a 100-object cap warns; the full preview counts 990 attribute flows, 990 updates staged for Glitterband EMEA and 128 unchanged; the documented gate ran the Full Synchronisation, whose Activity cites that preview; citing a deletion preview is refused with a 400; REST answers 404 for an unknown system and a blocked 202 for a cap of 0. Reverted afterwards, with a Full Synchronisation that withdrew the staged exports.
 
 ### Phase 7: verification and close-out
 

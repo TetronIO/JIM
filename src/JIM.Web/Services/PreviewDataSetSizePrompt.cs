@@ -16,11 +16,14 @@ public class PreviewDataSetSizePrompt(IDialogService dialogService) : IPreviewDa
 {
     private readonly IDialogService _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
 
-    public async Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(long estimatedDeltaRows)
+    public async Task<ConfigurationChangePreviewDeltaPersistence?> AskAsync(PreviewCostEstimate estimate)
     {
+        ArgumentNullException.ThrowIfNull(estimate);
+
         var parameters = new DialogParameters<PreviewDataSetSizeDialog>
         {
-            { x => x.EstimatedDeltaRows, estimatedDeltaRows }
+            { x => x.EstimatedDeltaRows, estimate.EstimatedDeltaRows },
+            { x => x.EstimatedDuration, estimate.EstimatedDuration }
         };
 
         var dialog = await _dialogService.ShowAsync<PreviewDataSetSizeDialog>("How much detail should this preview keep?", parameters);

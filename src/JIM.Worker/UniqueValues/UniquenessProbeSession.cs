@@ -163,6 +163,7 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
 
         var request = new UniquenessProbeRequest
         {
+            ObjectTypeName = attribute.ObjectTypeName,
             AttributeName = attribute.Name,
             Candidates = candidates,
             ControlValue = controlValue,
@@ -303,11 +304,12 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
         if (system.Attributes.TryGetValue(attributeId, out var existing))
             return existing;
 
-        var definition = system.ConnectedSystem!.ObjectTypes?
-            .SelectMany(t => t.Attributes)
-            .FirstOrDefault(a => a.Id == attributeId);
+        // The object type travels with the attribute: a SCIM provider is searched at that resource type's endpoint and a
+        // database in that Object Type's table (#1941).
+        var objectType = system.ConnectedSystem!.ObjectTypes?.FirstOrDefault(t => t.Attributes.Any(a => a.Id == attributeId));
+        var definition = objectType?.Attributes.First(a => a.Id == attributeId);
 
-        var state = new AttributeState(definition?.Name ?? $"attribute {attributeId}");
+        var state = new AttributeState(definition?.Name ?? $"attribute {attributeId}", objectType?.Name ?? string.Empty);
         system.Attributes[attributeId] = state;
 
         if (definition == null)
@@ -354,9 +356,10 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
         public Dictionary<int, AttributeState> Attributes { get; } = [];
     }
 
-    private sealed class AttributeState(string name)
+    private sealed class AttributeState(string name, string objectTypeName)
     {
         public string Name { get; } = name;
+        public string ObjectTypeName { get; } = objectTypeName;
         public bool Probes { get; set; } = true;
         public IReadOnlyList<string> ControlValues { get; set; } = [];
         public string? LatchedReason { get; set; }

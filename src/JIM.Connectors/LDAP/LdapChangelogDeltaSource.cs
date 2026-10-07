@@ -56,6 +56,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     private static readonly string[] ChangeAttributes = [ChangeNumberAttribute, "changeType", "targetDN", ChangesAttribute, NewRdnAttribute, NewSuperiorAttribute];
 
     private const string ChangesAttribute = "changes";
+    private const string ChangeTimeAttribute = "changeTime";
     private const string NewRdnAttribute = "newRdn";
     private const string NewSuperiorAttribute = "newSuperior";
 
@@ -88,13 +89,22 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
     {
         var changelogDn = ChangelogDnFor(rootDse);
+        rootDse.LastChangeNumber = TakeWatermark(rootDse, changelogDn, searchTimeout);
+        rootDse.LastChangeTime = rootDse.LastChangeNumber is > 0 and var changeNumber
+            ? CaptureChangeTime(changelogDn, changeNumber, searchTimeout)
+            : null;
 
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The watermark itself: the advertised lastChangeNumber, else the changelog's highest; see <see cref="CaptureWatermarkAsync"/>.</summary>
+    private long? TakeWatermark(LdapConnectorRootDse rootDse, string changelogDn, TimeSpan searchTimeout)
+    {
         if (rootDse.AdvertisedLastChangeNumber is { } advertised)
         {
             _logger.Debug("LdapChangelogDeltaSource: The rootDSE advertises lastChangeNumber {LastChangeNumber}; recorded as the watermark without enumerating {ChangelogDn}",
                 advertised, LogSanitiser.Sanitise(changelogDn));
-            rootDse.LastChangeNumber = advertised;
-            return Task.CompletedTask;
+            return advertised;
         }
 
         var probe = ProbeChangelog(changelogDn);
@@ -102,12 +112,62 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         {
             _logger.Warning("LdapChangelogDeltaSource: No watermark was recorded because the changelog at {ChangelogDn} could not be read ({Outcome}{Detail}); the next Delta Import will run as a Full Import",
                 LogSanitiser.Sanitise(changelogDn), probe.Outcome, probe.Detail == null ? string.Empty : ": " + probe.Detail);
-            rootDse.LastChangeNumber = null;
-            return Task.CompletedTask;
+            return null;
         }
 
-        rootDse.LastChangeNumber = FindHighestChangeNumber(changelogDn, searchTimeout);
-        return Task.CompletedTask;
+        return FindHighestChangeNumber(changelogDn, searchTimeout);
+    }
+
+    /// <summary>
+    /// The changeTime of the watermark's own change, for the next Delta Import to compare (#2008). Null when the
+    /// change is not there to read (389 Directory Server can advertise a lastChangeNumber an online restore removed),
+    /// records no changeTime, or cannot be read: the comparison is then skipped, so nothing here fails the import.
+    /// </summary>
+    private string? CaptureChangeTime(string changelogDn, long changeNumber, TimeSpan searchTimeout)
+    {
+        try
+        {
+            var read = ReadChangeTime(changelogDn, changeNumber, searchTimeout);
+            if (read.ChangeTime == null)
+                _logger.Debug("LdapChangelogDeltaSource: Change {ChangeNumber} in {ChangelogDn} gave no changeTime to record ({Outcome}); the next Delta Import will not compare it",
+                    changeNumber, LogSanitiser.Sanitise(changelogDn), read.Outcome);
+            return read.ChangeTime;
+        }
+        catch (LdapException ex)
+        {
+            _logger.Warning("LdapChangelogDeltaSource: Change {ChangeNumber} in {ChangelogDn} could not be read for its changeTime: {Message}; the next Delta Import will not compare it",
+                changeNumber, LogSanitiser.Sanitise(changelogDn), LogSanitiser.Sanitise(ex.Message));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads one change by its number for its changeTime. A fault on the way to the directory propagates as the
+    /// directory raised it; a refusal says nothing about the change and is reported as such.
+    /// </summary>
+    private (WatermarkChangeOutcome Outcome, string? ChangeTime) ReadChangeTime(string changelogDn, long changeNumber, TimeSpan? searchTimeout)
+    {
+        var request = new SearchRequest($"{ChangeNumberAttribute}={changeNumber},{changelogDn}", "(objectClass=*)", SearchScope.Base, ChangeTimeAttribute);
+
+        try
+        {
+            var response = (SearchResponse)(searchTimeout is { } timeout ? _executor.SendRequest(request, timeout) : _executor.SendRequest(request));
+            return response.Entries.Count == 0
+                ? (WatermarkChangeOutcome.Missing, null)
+                : (WatermarkChangeOutcome.Present, LdapConnectorUtilities.GetEntryAttributeStringValue(response.Entries[0], ChangeTimeAttribute));
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            return (WatermarkChangeOutcome.Missing, null);
+        }
+        catch (DirectoryOperationException)
+        {
+            return (WatermarkChangeOutcome.Refused, null);
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+        {
+            return (WatermarkChangeOutcome.Missing, null);
+        }
     }
 
     /// <summary>
@@ -193,12 +253,23 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     #region Continuity and readiness
 
     /// <summary>
-    /// Refuses to read from a watermark the changelog has been trimmed past: when the rootDSE advertises the
-    /// oldest change number still held and it is beyond the one after the watermark, the changes between were
-    /// discarded (389 Directory Server: the Retro Changelog plug-in's maximum age) and a Delta Import would skip
-    /// them without noticing. A directory that does not advertise its first change number cannot be checked here.
+    /// Refuses to read from a watermark the changelog no longer continues from: one it has been trimmed past, one it
+    /// has gone back behind (#2004), or one whose own change it no longer holds (#2008). Either way a Delta Import
+    /// reading from the watermark would skip changes without noticing.
     /// </summary>
     public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        VerifyNotTrimmedPast(previous, current);
+        VerifyNotGoneBackwards(previous, current);
+        VerifyWatermarkChangeStillHeld(previous, current);
+    }
+
+    /// <summary>
+    /// When the rootDSE advertises the oldest change number still held and it is beyond the one after the watermark,
+    /// the changes between were discarded (389 Directory Server: the Retro Changelog plug-in's maximum age). A
+    /// directory that does not advertise its first change number cannot be checked here.
+    /// </summary>
+    private void VerifyNotTrimmedPast(LdapConnectorRootDse previous, LdapConnectorRootDse current)
     {
         if (current.FirstChangeNumber is not { } first || previous.LastChangeNumber is not { } last || last + 1 >= first)
             return;
@@ -210,6 +281,78 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             $"The directory's changelog no longer holds the changes since the last import: it starts at change number {first}, " +
             $"and the last import ended at {last}, so changes between them were trimmed (389 Directory Server: the Retro Changelog plug-in's maximum age) " +
             "and cannot be imported. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+    }
+
+    /// <summary>
+    /// A changelog's change numbers only ever increase, so an advertised newest change number below the watermark
+    /// means the directory went back: restored from a backup or snapshot (389 Directory Server: the changelog is
+    /// restored with the data and numbering resumes from the restored point), or a different server answered, since
+    /// a server numbers its own changelog. Changes made since reuse numbers the watermark has passed. Only the
+    /// advertised number is trusted here: an enumerated one can stop at the directory's size limit short of the
+    /// newest change, which is safe for a watermark but proves nothing about a rollback. 389 Directory Server never
+    /// trims its changelog empty (it keeps the newest entry) and keeps its numbering when the plug-in is turned off
+    /// and on, so neither is mistaken for one. Once numbering overtakes the watermark again the rollback can no
+    /// longer be seen here.
+    /// </summary>
+    private void VerifyNotGoneBackwards(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        if (current.AdvertisedLastChangeNumber is not { } newest || previous.LastChangeNumber is not { } last || newest >= last)
+            return;
+
+        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog's newest change number is {Newest} and the last import ended at {Last}",
+            newest, last);
+
+        throw new CannotPerformDeltaImportException(
+            $"The directory's changelog has gone back since the last import: its newest change number is {newest}, and the last import ended at {last}. " +
+            "Change numbers only ever increase, so the usual cause is that the directory was restored from a backup or snapshot; it also happens when " +
+            "Host reaches a different server, since each server numbers its own changelog. Changes made since reuse numbers the last import has already " +
+            "passed, so a Delta Import would silently miss them. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+    }
+
+    /// <summary>
+    /// Reads the watermark's own change back and compares its changeTime with the one recorded (#2008), which catches
+    /// what comparing numbers cannot. A different changeTime means the number now names another change: the
+    /// directory was restored and written to until its numbering passed the watermark again, or a different server
+    /// answered. A missing change while older ones remain (the changelog starts at or before it) means the changes
+    /// after the backup were taken out of the changelog: 389 Directory Server's online restore does exactly that and
+    /// carries on numbering after them, so the newest number never goes back. A change trimmed with nothing after it
+    /// lost (the changelog now starts just past it) is ordinary housekeeping, and where the directory does not
+    /// advertise where its changelog starts the two cannot be told apart, so neither is refused. Nothing is read
+    /// without a recorded changeTime, and a refused read concludes nothing; the readiness check names a refusal.
+    /// </summary>
+    private void VerifyWatermarkChangeStillHeld(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        if (previous.LastChangeNumber is not { } last || string.IsNullOrEmpty(previous.LastChangeTime))
+            return;
+
+        var recorded = previous.LastChangeTime;
+        var read = ReadChangeTime(ChangelogDnFor(current), last, searchTimeout: null);
+
+        if (read.Outcome == WatermarkChangeOutcome.Present && read.ChangeTime != null && !string.Equals(read.ChangeTime, recorded, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber} was recorded at {Recorded} and now names a change recorded at {Now}",
+                last, LogSanitiser.Sanitise(recorded), LogSanitiser.Sanitise(read.ChangeTime));
+
+            throw new CannotPerformDeltaImportException(
+                $"The directory's changelog no longer holds the change the last import ended at: change number {last} was recorded at {recorded}, " +
+                $"and now names a change recorded at {read.ChangeTime}, so its numbering has been reused. The usual cause is that the directory was " +
+                "restored from a backup or snapshot and then written to; it also happens when Host reaches a different server, since each server numbers " +
+                "its own changelog. Objects and values the restore took away are gone without any change recording it, so a Delta Import would silently " +
+                "miss that. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+        }
+
+        if (read.Outcome == WatermarkChangeOutcome.Missing && current.FirstChangeNumber is { } first && first <= last)
+        {
+            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber} is no longer in the changelog, which still starts at {First}",
+                last, first);
+
+            throw new CannotPerformDeltaImportException(
+                $"The directory's changelog no longer holds the change the last import ended at (change number {last}), though it still holds older " +
+                $"changes from change number {first}. The usual cause is that the directory was restored from a backup or snapshot: 389 Directory " +
+                "Server's online restore takes the changes made after the backup out of its changelog and carries on numbering after them. Objects " +
+                "and values the restore took away are gone without any change recording it, so a Delta Import would silently miss that. Run a Full " +
+                "Import, which also detects deletions by absence, to re-establish the baseline.");
+        }
     }
 
     /// <summary>
@@ -345,6 +488,19 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
 
         /// <summary>The connection failed before the directory could answer; nothing is known.</summary>
         CouldNotDetermine
+    }
+
+    /// <summary>What reading the watermark's own change back found.</summary>
+    private enum WatermarkChangeOutcome
+    {
+        /// <summary>The directory answered the change.</summary>
+        Present,
+
+        /// <summary>The directory answered noSuchObject, or Success with no entry.</summary>
+        Missing,
+
+        /// <summary>The directory refused the read, which says nothing about the change.</summary>
+        Refused
     }
 
     /// <param name="Entry">The entry the directory answered, when <paramref name="Outcome"/> is <see cref="ChangelogProbeOutcome.Readable"/>.</param>

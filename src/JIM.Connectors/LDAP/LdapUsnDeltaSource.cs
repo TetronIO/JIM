@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -15,7 +16,8 @@ namespace JIM.Connectors.LDAP;
 /// HighestCommittedUSN; what changed is every object whose uSNChanged has passed it, searched per selected
 /// Container and Object Type; what was deleted is every tombstone in each partition's Deleted Objects container
 /// that has done the same. Because a USN is scoped to the domain controller that issued it, the source also
-/// records that controller's invocationId and refuses to read from a watermark another one produced.
+/// records that controller's invocationId and refuses to read from a watermark another one produced, or one the
+/// directory has since gone back behind.
 /// </summary>
 internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
 {
@@ -55,10 +57,39 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
 
     /// <summary>
     /// Guards against a USN-based Delta Import silently connecting to a different domain controller than the one
-    /// that produced the persisted watermark (see #230).
+    /// that produced the persisted watermark (see #230), then against a watermark the directory has gone back
+    /// behind (see #1869). Identity comes first, because USNs from two invocationIds are not comparable.
     /// </summary>
-    public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current) =>
+    public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
         LdapConnectorUtilities.VerifyDomainControllerIdentity(previous, current, _logger);
+        VerifyUsnHasNotGoneBackwards(previous, current);
+    }
+
+    /// <summary>
+    /// A domain controller's HighestCommittedUSN only ever increases, so one below the recorded watermark means the
+    /// directory went back in time: a restore that bypassed Active Directory's own and so kept the invocationId (a
+    /// file-level or volume snapshot restore; Samba AD keeps its invocationId across one), or, where identity could not
+    /// be verified, a different domain controller. Either way changes made since reuse numbers the watermark has
+    /// passed, and reading from it would miss them. Once the directory's USN overtakes the watermark again the
+    /// rollback can no longer be seen here, so this catches it only until then. Missing data on either side is not
+    /// itself a reason to fail.
+    /// </summary>
+    private void VerifyUsnHasNotGoneBackwards(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    {
+        if (previous.HighestCommittedUsn is not { } watermark || current.HighestCommittedUsn is not { } currentUsn || currentUsn >= watermark)
+            return;
+
+        _logger.Warning("LdapUsnDeltaSource: Refusing the Delta Import; the domain controller's HighestCommittedUSN is {CurrentUsn}, below the recorded watermark {Watermark}",
+            currentUsn, watermark);
+
+        throw new CannotPerformDeltaImportException(
+            $"Delta import aborted: the domain controller's highest committed update sequence number (USN) has gone backwards since " +
+            $"the watermark was recorded (watermark: {watermark}, current: {currentUsn}). A domain controller's USN only ever increases, " +
+            "so the usual cause is that the directory was restored from a backup or snapshot in a way that kept its invocationId: its " +
+            "update sequence numbers restart from the restored point, and changes made since reuse numbers the watermark has already " +
+            "passed, so a Delta Import reading from it would silently miss changes. Run a Full Import to re-establish the delta baseline.");
+    }
 
     /// <summary>
     /// Evaluates, for every partition given, whether the account JIM connects as may list its Deleted Objects

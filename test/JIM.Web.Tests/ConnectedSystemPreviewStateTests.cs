@@ -19,18 +19,18 @@ namespace JIM.Web.Tests;
 /// held, is worse than one saying they went ahead without looking.
 /// </summary>
 [TestFixture]
-public class DeletionImpactPreviewStateTests
+public class ConnectedSystemPreviewStateTests
 {
     private static readonly DateTime Started = new(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
 
     [Test]
     public void From_NoPreview_IsNotPreviewedAndRecordsNone()
     {
-        var state = DeletionImpactPreviewState.From(null, null);
+        var state = ConnectedSystemPreviewState.From(null, null);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.NotPreviewed));
+            Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.NotPreviewed));
             Assert.That(state.InformingPreviewActivityId, Is.Null);
         }
     }
@@ -42,11 +42,11 @@ public class DeletionImpactPreviewStateTests
         preview.Activity.ObjectsToProcess = 400;
         preview.Activity.ObjectsProcessed = 100;
 
-        var state = DeletionImpactPreviewState.From(preview, Current());
+        var state = ConnectedSystemPreviewState.From(preview, Current());
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.Running));
+            Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.Running));
             Assert.That(state.PercentComplete, Is.EqualTo(25));
             Assert.That(state.InformingPreviewActivityId, Is.Null, "an unfinished preview has told the administrator nothing yet");
         }
@@ -57,7 +57,7 @@ public class DeletionImpactPreviewStateTests
     {
         var preview = Preview(ActivityStatus.InProgress, ConfigurationChangePreviewStageStatus.InProgress);
 
-        var state = DeletionImpactPreviewState.From(preview, Current());
+        var state = ConnectedSystemPreviewState.From(preview, Current());
 
         Assert.That(state.PercentComplete, Is.Null, "0% would claim a measurement nobody has made");
     }
@@ -68,11 +68,11 @@ public class DeletionImpactPreviewStateTests
         var preview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             counts: [new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312)]);
 
-        var state = DeletionImpactPreviewState.From(preview, Current());
+        var state = ConnectedSystemPreviewState.From(preview, Current());
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.Current));
+            Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.Current));
             Assert.That(state.InformingPreviewActivityId, Is.EqualTo(preview.ActivityId));
             Assert.That(state.Started, Is.EqualTo(Started));
             Assert.That(state.Lines, Is.EqualTo(new[] { new PreviewVerdictLine(Severity.Error, "312 objects would become eligible for deletion.") }));
@@ -85,11 +85,11 @@ public class DeletionImpactPreviewStateTests
         var preview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
         var staleness = new ConfigurationChangePreviewStaleness(null, Started.AddMinutes(2));
 
-        var state = DeletionImpactPreviewState.From(preview, staleness);
+        var state = ConnectedSystemPreviewState.From(preview, staleness);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.Stale));
+            Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.Stale));
             Assert.That(state.Staleness, Is.EqualTo(staleness), "the host says which kind of change overtook it");
             Assert.That(state.InformingPreviewActivityId, Is.Null);
         }
@@ -101,11 +101,11 @@ public class DeletionImpactPreviewStateTests
     {
         var preview = Preview(activityStatus, stageStatus);
 
-        var state = DeletionImpactPreviewState.From(preview, Current());
+        var state = ConnectedSystemPreviewState.From(preview, Current());
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.DidNotFinish));
+            Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.DidNotFinish));
             Assert.That(state.InformingPreviewActivityId, Is.Null);
         }
     }
@@ -121,9 +121,9 @@ public class DeletionImpactPreviewStateTests
             new(PreviewValidationSeverity.Blocking, "This Connected System is already being deleted.")
         });
 
-        var state = DeletionImpactPreviewState.From(preview, Current());
+        var state = ConnectedSystemPreviewState.From(preview, Current());
 
-        Assert.That(state.Status, Is.EqualTo(DeletionImpactPreviewStatus.DidNotFinish));
+        Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.DidNotFinish));
     }
 
     private static ConfigurationChangePreviewStaleness Current() => new(null, null);

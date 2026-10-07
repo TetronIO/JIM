@@ -52,6 +52,13 @@ function New-JIMConfigurationChangePreview {
           staged for the other Connected Systems. There is nothing to propose beyond the system itself.
           Deleting a system with -DeleteImmediately skips all of that work, so this preview does not
           describe it.
+        - -ConnectedSystemId with -FullSynchronisation previews running a Full Synchronisation of that
+          system: every change it would make to Metaverse Objects, every update, provisioning and
+          deletion it would stage for the other Connected Systems, the corrections it would make where an
+          export rule enforces state, and how many objects would not change. Ask for one after changing
+          configuration and before running the Full Synchronisation that applies it. Every object is
+          evaluated unless -MaxObjects caps it, so a large system takes a while; the start result's
+          EstimatedDuration says roughly how long.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -61,8 +68,9 @@ function New-JIMConfigurationChangePreview {
         evaluated: check IsBlocked and ValidationFindings before reading anything else.
 
         Pass the returned ActivityId to the cmdlet that makes the change (Set-JIMMetaverseObjectType
-        -PreviewActivityId, or Remove-JIMConnectedSystem -PreviewActivityId for a deletion), so the audit
-        records which preview informed it.
+        -PreviewActivityId, Remove-JIMConnectedSystem -PreviewActivityId for a deletion, or
+        Start-JIMRunProfile -PreviewActivityId for a Full Synchronisation), so the audit records which
+        preview informed it.
 
     .PARAMETER MetaverseObjectTypeId
         The Metaverse Object Type whose deletion settings are being proposed. Selects the deletion
@@ -70,10 +78,21 @@ function New-JIMConfigurationChangePreview {
 
     .PARAMETER ConnectedSystemId
         The Connected System whose partition and container selection is being proposed. Selects the scope
-        selection surface, unless -MatchingRule, -SchemaObjectType or -Deletion selects another.
+        selection surface, unless -MatchingRule, -SchemaObjectType, -Deletion or -FullSynchronisation
+        selects another.
 
     .PARAMETER Deletion
         Previews deleting the Connected System named by -ConnectedSystemId, rather than changing it.
+
+    .PARAMETER FullSynchronisation
+        Previews running a Full Synchronisation of the Connected System named by -ConnectedSystemId. The
+        system needs a Full Synchronisation Run Profile; without one the proposal comes back blocked.
+
+    .PARAMETER MaxObjects
+        Evaluate only this many objects, in the order the synchronisation would meet them, rather than
+        every object. Omitted, every object is evaluated, which is the only way the counts describe the
+        whole system; a capped preview carries a warning saying its counts describe only the objects it
+        evaluated. Useful for a quick look at a very large system.
 
     .PARAMETER SchemaObjectType
         The proposed schema selection, as one hashtable per Connected System Object Type being changed.
@@ -183,11 +202,14 @@ function New-JIMConfigurationChangePreview {
 
     .PARAMETER TimeoutSeconds
         How long -Wait polls before giving up and writing an error. The preview itself keeps running;
-        read it later with Get-JIMConfigurationChangePreview. Defaults to 300 seconds.
+        read it later with Get-JIMConfigurationChangePreview. Defaults to 300 seconds, or to twice the
+        preview's EstimatedDuration where that is longer, so a Full Synchronisation preview of a large
+        system is not abandoned while it is working as expected. A value you pass is always honoured.
 
     .OUTPUTS
         Without -Wait: PSCustomObject with ActivityId, ValidationFindings, IsBlocked, Failed,
-        EstimatedAffectedObjects and EstimatedDeltaRows.
+        EstimatedAffectedObjects, EstimatedDeltaRows and EstimatedDuration (set for a Full
+        Synchronisation preview only).
         With -Wait: the preview, as returned by Get-JIMConfigurationChangePreview.
 
     .EXAMPLE
@@ -354,6 +376,33 @@ function New-JIMConfigurationChangePreview {
         deletion's Activity, so the audit shows the consequences were looked at first.
 
     .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -FullSynchronisation -Wait
+        $preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+        $preview.Groups | Format-Table TransitionType, ConnectedSystemName, AttributeName, OldValue, NewValue, ObjectCount
+
+        Previews a Full Synchronisation of Connected System 3. ImpactCounts says how many objects each
+        consequence reaches; Groups breaks those down by Connected System, attribute and value change,
+        such as the updates that would be staged for each other system.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 3 -FullSynchronisation -Wait
+        $destructive = $preview.ImpactCounts |
+            Where-Object TransitionType -in 'WouldBecomeDeletionEligible', 'WouldStageDeleteExport'
+        if ($preview.IsComplete -and -not $destructive) {
+            Start-JIMRunProfile -ConnectedSystemId 3 -RunProfileName 'Full Synchronisation' -PreviewActivityId $preview.ActivityId -Wait
+        }
+
+        Previews a Full Synchronisation and runs it only if nothing would become eligible for deletion
+        and nothing would be deleted from another system. The run's Activity records the preview, so the
+        audit shows what the run was expected to do.
+
+    .EXAMPLE
+        New-JIMConfigurationChangePreview -ConnectedSystemId 3 -FullSynchronisation -MaxObjects 1000 -Wait
+
+        Takes a quick look at the first 1,000 objects of a large system. The result warns that its
+        counts describe only those objects.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -SyncRuleId 42 -RuleState Disabled -Wait
         $preview.ImpactCounts
 
@@ -376,6 +425,7 @@ function New-JIMConfigurationChangePreview {
         Set-JIMMatchingRule
         Set-JIMConnectedSystemObjectType
         Remove-JIMConnectedSystem
+        Start-JIMRunProfile
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -401,12 +451,21 @@ function New-JIMConfigurationChangePreview {
         [Parameter(Mandatory, ParameterSetName = 'ObjectMatching', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemSchema', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemDeletion', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemFullSynchronisation', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
         # Mandatory so that it, and only it, selects the deletion set: -ConnectedSystemId on its own keeps meaning
         # the scope selection, and a deletion is never previewed because a caller left something out.
         [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemDeletion')]
         [switch]$Deletion,
+
+        # Mandatory for the same reason as -Deletion: it alone selects the Full Synchronisation set.
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemFullSynchronisation')]
+        [switch]$FullSynchronisation,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemFullSynchronisation')]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$MaxObjects,
 
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
         [int[]]$SelectedPartitionIds,
@@ -581,6 +640,12 @@ function New-JIMConfigurationChangePreview {
             }
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemFullSynchronisation' -and $PSBoundParameters.ContainsKey('MaxObjects')) {
+            # Sent only when asked for: without a cap every object is evaluated, which is the only way the counts
+            # describe the whole system.
+            $body.maxObjects = $MaxObjects
+        }
+
         if ($FullDataSet) {
             $body.deltaPersistence = 'Full'
         }
@@ -618,6 +683,10 @@ function New-JIMConfigurationChangePreview {
             $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/deletion/preview"
             $subject = "the deletion of Connected System $ConnectedSystemId"
         }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemFullSynchronisation') {
+            $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/full-synchronisation/preview"
+            $subject = "a Full Synchronisation of Connected System $ConnectedSystemId"
+        }
         else {
             $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"
             $subject = "Metaverse Object Type $MetaverseObjectTypeId"
@@ -647,7 +716,16 @@ function New-JIMConfigurationChangePreview {
             return $start
         }
 
-        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        # Five minutes suits every surface but one: a Full Synchronisation preview evaluates every object in the
+        # system, and its start response says how long that should take. Unless the caller chose a timeout, allow
+        # twice that estimate, so a large preview working exactly as expected is not abandoned part-way.
+        [long]$timeout = $TimeoutSeconds
+        if (-not $PSBoundParameters.ContainsKey('TimeoutSeconds') -and $start.EstimatedDuration) {
+            $estimate = [TimeSpan]$start.EstimatedDuration
+            $timeout = [Math]::Max($timeout, [long][Math]::Ceiling($estimate.TotalSeconds * 2))
+        }
+
+        $deadline = (Get-Date).AddSeconds($timeout)
         while ($true) {
             $preview = Get-JIMConfigurationChangePreview -ActivityId $start.ActivityId
             if ($preview.IsComplete -or $preview.HasFailed -or $preview.ActivityStatus -eq 'Cancelled') {
@@ -655,7 +733,7 @@ function New-JIMConfigurationChangePreview {
             }
 
             if ((Get-Date) -ge $deadline) {
-                Write-Error "The preview did not finish within $TimeoutSeconds seconds. It is still running; read it with Get-JIMConfigurationChangePreview -ActivityId $($start.ActivityId), or abandon it with Stop-JIMConfigurationChangePreview."
+                Write-Error "The preview did not finish within $timeout seconds. It is still running; read it with Get-JIMConfigurationChangePreview -ActivityId $($start.ActivityId), or abandon it with Stop-JIMConfigurationChangePreview."
                 return $preview
             }
 

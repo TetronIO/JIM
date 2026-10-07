@@ -90,6 +90,29 @@ public class UniquenessProbeSessionTests
     }
 
     /// <summary>
+    /// A SCIM provider searches one resource type's endpoint and a database one Object Type's table (#1941), so the
+    /// request names the object type the attribute belongs to, not merely the attribute.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_AttributeOfASecondObjectType_NamesThatObjectTypeOnTheRequestAsync()
+    {
+        var connector = new FakeProbingConnector();
+        var system = FakeUniquenessProbeHost.ProbingSystem(CorporateAdId, "Corporate AD", true, Attribute(700, "sAMAccountName"));
+        system.ObjectTypes!.Add(new ConnectedSystemObjectType { Id = 71, Name = "group", Attributes = [Attribute(710, "displayName")] });
+        await using var session = new UniquenessProbeSession(new FakeUniquenessProbeHost().WithSystem(system, _ => connector), CancellationToken.None);
+
+        await session.ProbeAsync(SamAccountName, ["joe.bloggs"]);
+        await session.ProbeAsync(new UniquenessProbeTarget(CorporateAdId, 710), ["Finance Team"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connector.Requests[0].ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(connector.Requests[1].ObjectTypeName, Is.EqualTo("group"));
+            Assert.That(connector.Requests[1].AttributeName, Is.EqualTo("displayName"));
+        }
+    }
+
+    /// <summary>
     /// Plan decision 14, revised 2026-10-06: an empty target is normal on a first load, so with no control the probe
     /// still runs, a hit is acted on, and nothing is reported.
     /// </summary>

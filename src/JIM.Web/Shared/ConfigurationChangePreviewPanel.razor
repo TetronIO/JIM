@@ -40,6 +40,7 @@
             <MudChip T="string" Color="@StatusColour" Variant="Variant.Filled">@StatusLabel</MudChip>
         }
         <MudSpacer />
+        @HeaderActions
         @if (IsRunning)
         {
             <MudButton data-testid="jim-preview-cancel" Variant="Variant.Text" Color="Color.Default"
@@ -204,7 +205,7 @@
                     }
 
                     @* ─── Summary groups: the landing view ─── *@
-                    @if (_groups.Count > 0)
+                    @if (_changeGroups.Count > 0)
                     {
                         <MudText Typo="Typo.subtitle1" Class="mt-4">What would change</MudText>
                         @* The summary groups are already in memory (they are read whole on every refresh), so the
@@ -350,11 +351,40 @@
                                 }
                             </EmptyContent>
                         </VirtualisedDataGrid>
+
+                        @* ─── Would not change (#1530) ─── *@
+                        @* One line rather than rows: on a repeat Full Synchronisation most objects would not change, and *@
+                        @* as rows they would outnumber the changes the administrator came to read. Still drillable.       *@
+                        @if (UnchangedObjectCount > 0)
+                        {
+                            @* Links rather than buttons: a button's capitals would restyle a schema type name, which is
+                               written exactly as its system spells it, as everywhere else in the panel. *@
+                            <div class="d-flex align-center flex-wrap gap-2 mt-4" data-testid="jim-preview-unchanged">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudText Class="mud-text-secondary">
+                                    @(UnchangedObjectCount == 1 ? "1 object would not change" : $"{UnchangedObjectCount:N0} objects would not change")@(_unchangedGroups.Count > 1 ? ":" : ".")
+                                </MudText>
+                                @if (_unchangedGroups.Count == 1)
+                                {
+                                    var only = _unchangedGroups[0];
+                                    <MudLink OnClick="@(() => OnGroupClicked(only))" data-testid="jim-preview-unchanged-open">Show them</MudLink>
+                                }
+                                else
+                                {
+                                    @foreach (var unchanged in _unchangedGroups)
+                                    {
+                                        <MudLink OnClick="@(() => OnGroupClicked(unchanged))" data-testid="jim-preview-unchanged-open">
+                                            <span class="jim-code-inline">@unchanged.MetaverseObjectTypeName</span> objects (@unchanged.ObjectCount.ToString("N0"))
+                                        </MudLink>
+                                    }
+                                }
+                            </div>
+                        }
                     }
                     else if (NothingWouldChange)
                     {
-                        <MudAlert Severity="Severity.Success" Class="mt-4">
-                            @ConfigurationChangePreviewWording.NothingWouldChange(preview.Surface)
+                        <MudAlert Severity="Severity.Success" Class="mt-4" data-testid="jim-preview-nothing">
+                            @ConfigurationChangePreviewWording.NothingWouldChange(preview.Surface, activity.TargetName)
                         </MudAlert>
                     }
 
@@ -395,12 +425,14 @@
                            state and reloads rather than keeping the previous group's rows. The column headers carry
                            no sort affordance because the stored read offers no ordering to drive one; the rows
                            arrive in the order the preview recorded them. *@
+                        var valueTitles = ConfigurationChangePreviewWording.ValueColumnTitles(preview.Surface);
                         <VirtualisedDataGrid @ref="_deltasGrid" T="ConfigurationChangePreviewDelta"
                                              ContainerId="preview-delta-list"
                                              UrlParameterPrefix="pd-"
                                              StateKey="@selected.Id.ToString()"
                                              DefaultSortBy="recorded"
                                              LoadWindow="LoadDeltaWindowAsync"
+                                             RowClicked="@DeltaRowClicked"
                                              SingularName="Object"
                                              PluralName="Objects"
                                              SearchPlaceholder="Search object, attribute or value">
@@ -423,7 +455,7 @@
                                         @if (objectSide is { } side && !string.IsNullOrWhiteSpace(row.Item.ObjectDisplayName))
                                         {
                                             <ObjectChip Kind="@side" Name="@row.Item.ObjectDisplayName" Href="@ObjectHref(row.Item)"
-                                                        Tooltip="@ObjectTooltip(side)" Class="ma-0" />
+                                                        Tooltip="@ObjectTooltip(side, row.Item)" Class="ma-0" />
                                         }
                                         else
                                         {
@@ -459,9 +491,9 @@
                                         </span>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Current value" Sortable="false">
+                                <TemplateColumn Title="@valueTitles.Current" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Current value</MudText>
+                                        <MudText Typo="Typo.button">@valueTitles.Current</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @* Which system a value came from, where that is what tells two values apart (a
@@ -470,13 +502,23 @@
                                                            Contributor="@ConfigurationChangePreviewWording.ValueContributor(preview.Surface, row.Item.TransitionType, false, activity.TargetName, selected.ConnectedSystemName)" />
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Proposed value" Sortable="false">
+                                <TemplateColumn Title="@valueTitles.Proposed" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Proposed value</MudText>
+                                        <MudText Typo="Typo.button">@valueTitles.Proposed</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         <PreviewDeltaValue Value="@row.Item.NewValue"
                                                            Contributor="@ConfigurationChangePreviewWording.ValueContributor(preview.Surface, row.Item.TransitionType, true, activity.TargetName, selected.ConnectedSystemName)" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                @* The chevron that says a row opens, where the host can open one (the drill-down's only
+                                   other affordance is a pointer cursor, which a touch screen never shows). Hidden rather
+                                   than conditional, so it keeps its place among the columns. *@
+                                <TemplateColumn Sortable="false" CellClass="jim-preview-open" Hidden="@(!OnObjectSelected.HasDelegate)">
+                                    <HeaderTemplate></HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                                                 Class="mud-text-secondary" />
                                     </CellTemplate>
                                 </TemplateColumn>
                             </Columns>
@@ -573,9 +615,28 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
+    /// <summary>
+    /// Actions the host offers on the preview, rendered in the panel's header (a Full Synchronisation preview's Run
+    /// Full Synchronisation, #1530). The host decides when they apply; the panel only places them.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>
+    /// Raised when the administrator selects a drill-down row, for a host that can show what would happen to that one
+    /// object (#1530). Unset, rows are not selectable and only their object links lead anywhere.
+    /// </summary>
+    [Parameter]
+    public EventCallback<ConfigurationChangePreviewDelta> OnObjectSelected { get; set; }
+
     private ConfigurationChangePreview? _preview;
     private Activity? _activity;
     private List<ConfigurationChangePreviewGroup> _groups = [];
+
+    // The groups split for display (#1530): changes for the What would change grid, and the would-not-change groups
+    // stated as one line under it.
+    private List<ConfigurationChangePreviewGroup> _changeGroups = [];
+    private List<ConfigurationChangePreviewGroup> _unchangedGroups = [];
     private List<PreviewValidationFinding> _findings = [];
     private List<PreviewImpactCount> _impactCounts = [];
     private ConfigurationChangePreviewGroup? _selectedGroup;
@@ -616,8 +677,25 @@
     /// </summary>
     private bool NothingWouldChange =>
         _preview is { HasFailed: false, SummaryStatus: ConfigurationChangePreviewStageStatus.Complete }
-        && _groups.Count == 0
-        && _impactCounts.All(c => c.ObjectCount == 0);
+        && _changeGroups.Count == 0
+        && _impactCounts.Where(c => !ConfigurationChangePreviewWording.IsUnchanged(c.TransitionType)).All(c => c.ObjectCount == 0);
+
+    /// <summary>
+    /// How many objects would not change: the stage 2 count where there is one, which counts objects exactly, else the
+    /// groups' rows (one per object).
+    /// </summary>
+    private int UnchangedObjectCount =>
+        _impactCounts.Where(c => ConfigurationChangePreviewWording.IsUnchanged(c.TransitionType)).Sum(c => c.ObjectCount) is > 0 and var counted
+            ? counted
+            : _unchangedGroups.Sum(g => g.ObjectCount);
+
+    /// <summary>
+    /// Selecting a drill-down row, where the host can show that one object (<see cref="OnObjectSelected"/>). Default,
+    /// so the grid offers no pointer, where it cannot.
+    /// </summary>
+    private EventCallback<ConfigurationChangePreviewDelta> DeltaRowClicked => OnObjectSelected.HasDelegate
+        ? EventCallback.Factory.Create<ConfigurationChangePreviewDelta>(this, delta => OnObjectSelected.InvokeAsync(delta))
+        : default;
 
     private Color StatusColour => _activity?.Status switch
     {
@@ -698,6 +776,8 @@
             // Groups are read but deliberately not rendered for a failed preview; keeping the read unconditional
             // means the failure branch is the only thing deciding what is shown.
             _groups = await jim.ConfigurationChangePreviews.GetPreviewGroupsAsync(ActivityId);
+            _changeGroups = _groups.Where(g => !ConfigurationChangePreviewWording.IsUnchanged(g.TransitionType)).ToList();
+            _unchangedGroups = _groups.Where(g => ConfigurationChangePreviewWording.IsUnchanged(g.TransitionType)).ToList();
 
             // A group the administrator had open can disappear between refreshes only if the preview was re-run;
             // dropping the selection is better than paging a group that is no longer in the summary.
@@ -752,7 +832,7 @@
     /// </summary>
     private Task<VirtualisedWindow<ConfigurationChangePreviewGroup>> LoadGroupWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        IEnumerable<ConfigurationChangePreviewGroup> groups = _groups;
+        IEnumerable<ConfigurationChangePreviewGroup> groups = _changeGroups;
 
         if (!string.IsNullOrWhiteSpace(request.SearchText))
         {
@@ -855,13 +935,20 @@
     /// beside it. Otherwise the Metaverse Object. Null where the row names nothing addressable (a container, or a row
     /// stored before ids were recorded).
     /// </summary>
-    private static ObjectChipKind? ObjectSide(ConfigurationChangePreviewDelta row)
+    private ObjectChipKind? ObjectSide(ConfigurationChangePreviewDelta row)
     {
-        if (row is { ConnectedSystemObjectId: not null, ConnectedSystemId: not null })
+        if (row.ConnectedSystemObjectId.HasValue && ObjectConnectedSystemId(row).HasValue)
             return ObjectChipKind.ConnectedSystemObject;
 
         return row.MetaverseObjectId.HasValue ? ObjectChipKind.MetaverseObject : null;
     }
+
+    /// <summary>
+    /// The Connected System the row's Connected System Object is in: the row's own, except for a projected object's
+    /// provisioning, whose object is the one being projected in the system this preview was of.
+    /// </summary>
+    private int? ObjectConnectedSystemId(ConfigurationChangePreviewDelta row) =>
+        ConfigurationChangePreviewWording.ObjectConnectedSystemId(row, _activity?.ConnectedSystemId);
 
     /// <summary>
     /// Where the row's name leads, for the side <see cref="ObjectSide"/> chose. A Metaverse Object's page is addressed
@@ -869,8 +956,8 @@
     /// </summary>
     private string? ObjectHref(ConfigurationChangePreviewDelta row) => ObjectSide(row) switch
     {
-        ObjectChipKind.ConnectedSystemObject =>
-            Utilities.GetConnectedSystemObjectHref(row.ConnectedSystemId!.Value, row.ConnectedSystemObjectId!.Value),
+        ObjectChipKind.ConnectedSystemObject when ObjectConnectedSystemId(row) is { } objectSystemId && row.ConnectedSystemObjectId is { } objectId =>
+            Utilities.GetConnectedSystemObjectHref(objectSystemId, objectId),
         ObjectChipKind.MetaverseObject when _selectedGroupTypePluralName is { Length: > 0 } pluralName =>
             Utilities.GetMetaverseObjectHref(row.MetaverseObjectId!.Value, pluralName),
         _ => null
@@ -880,10 +967,12 @@
     /// The chip's tooltip: the side, and for a Connected System Object which system, since the group knows it and the
     /// avatar's two letters do not.
     /// </summary>
-    private string ObjectTooltip(ObjectChipKind side) => side switch
+    private string ObjectTooltip(ObjectChipKind side, ConfigurationChangePreviewDelta row) => side switch
     {
-        ObjectChipKind.ConnectedSystemObject when !string.IsNullOrEmpty(_selectedGroup?.ConnectedSystemName) =>
-            $"Connected System Object in {_selectedGroup.ConnectedSystemName}",
+        ObjectChipKind.ConnectedSystemObject when ObjectConnectedSystemId(row) != row.ConnectedSystemId && _activity?.TargetName is { Length: > 0 } previewedSystemName =>
+            $"Connected System Object in {previewedSystemName}",
+        ObjectChipKind.ConnectedSystemObject when _selectedGroup?.ConnectedSystemName is { Length: > 0 } groupSystemName =>
+            $"Connected System Object in {groupSystemName}",
         ObjectChipKind.ConnectedSystemObject => "Connected System Object",
         _ => "Metaverse Object"
     };

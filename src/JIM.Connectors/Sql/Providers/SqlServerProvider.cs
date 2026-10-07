@@ -303,6 +303,14 @@ internal class SqlServerProvider : SqlProviderBase
         $"AND tc.TABLE_SCHEMA = @{SqlCatalogueParameters.SchemaName} AND tc.TABLE_NAME = @{SqlCatalogueParameters.ObjectName} " +
         "ORDER BY kcu.ORDINAL_POSITION";
 
+    // The collation's comparison style carries an "ignore case" flag in its lowest bit. OBJECT_ID resolves the quoted,
+    // schema-qualified name exactly as a statement naming it would (the default schema where none is given), and works
+    // for views as well as tables; a column with no collation (not text) answers 0.
+    public override string ColumnIgnoresCaseCommandText =>
+        "SELECT CASE WHEN CAST(COLLATIONPROPERTY(c.collation_name, 'ComparisonStyle') AS int) & 1 = 1 THEN 1 ELSE 0 END " +
+        "FROM sys.columns c " +
+        $"WHERE c.object_id = OBJECT_ID(@{SqlCatalogueParameters.ObjectName}) AND c.name = @{SqlCatalogueParameters.ColumnName}";
+
     // sys.* rather than INFORMATION_SCHEMA here: the standard views cannot express both sides of a
     // foreign key without a three-way join through REFERENTIAL_CONSTRAINTS, and lose the column
     // pairing on a composite key.

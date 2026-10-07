@@ -365,6 +365,59 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_EstimatesTheDurationFromThisSystemsLastCompletedRunAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+        await CreateCsoAsync(ctx.Source.Id, ctx.SourceObject.Type, "Jane Doe", "EMP002");
+
+        // This system's last completed Full Synchronisation took 100 seconds over its two objects: fifty seconds each, far
+        // slower than the reference. A newer failed run, another system's slower run and a Delta Synchronisation say
+        // nothing about how long this system's Full Synchronisation takes.
+        var executed = DateTime.UtcNow.AddHours(-2);
+        DbContext.Activities.AddRange(
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, executed, objects: 10, seconds: 100),
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.FailedWithError, executed.AddMinutes(30), objects: 10, seconds: 1),
+            RunActivity(ctx.Target.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, executed.AddMinutes(40), objects: 1, seconds: 1_000),
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.DeltaSynchronisation, ActivityStatus.Complete, executed.AddMinutes(50), objects: 1, seconds: 1_000));
+        await DbContext.SaveChangesAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(100)), "as long as the run took over the same objects");
+    }
+
+    [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_ReadsTheRunsSpeedOverTheSystemNotItsLastStepsCounterAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+        for (var i = 0; i < 20; i++)
+            await CreateCsoAsync(ctx.Source.Id, ctx.SourceObject.Type, $"Person {i}", $"EMP{i + 100}");
+
+        // The run took half a second over the system's 21 objects. Its Activity's ObjectsToProcess is not that population:
+        // each counting step of a run resets it, so a completed run's names whichever step counted last (on the dev stack,
+        // 16 for a system of 1,118). Read as the population, it made a run of 42 objects a second look like two a second,
+        // and a five-second preview look like six minutes.
+        DbContext.Activities.Add(RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete,
+            DateTime.UtcNow.AddHours(-1), objects: 1, seconds: 0.5));
+        await DbContext.SaveChangesAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(0.5)), "as long as the run took over the same 21 objects");
+    }
+
+    [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_WithNoCompletedRun_EstimatesAtTheReferenceRateAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration,
+            Is.EqualTo(TimeSpan.FromSeconds(1 / FullSynchronisationDurationEstimate.ReferenceObjectsPerSecond)));
+    }
+
+    [Test]
     public async Task FullSynchronisationAdapter_EvaluateDeltasAsync_WithACap_StopsAtItAsync()
     {
         var ctx = await SetUpNewSourceObjectAsync();
@@ -417,7 +470,59 @@ public partial class SyncPreviewFidelityTests
         return new NewSourceObjectContext(source, target, sourceObject);
     }
 
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowAboutTheSynchronisedObject_IsThatObjectAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var sourceObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Source.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Source.Id, connectedSystemObjectId: sourceObject.Id, metaverseObjectId: sourceObject.MetaverseObjectId);
+
+        Assert.That(subject?.Id, Is.EqualTo(sourceObject.Id));
+    }
+
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowAboutATargetObject_IsTheSynchronisedObjectOfTheSameIdentityAsync()
+    {
+        // A row about an account in Active Directory is a consequence of synchronising the HR object joined to the same
+        // Metaverse Object, and that object's preview is what shows the whole chain.
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var sourceObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Source.Id);
+        var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Target.Id, connectedSystemObjectId: targetObject.Id, metaverseObjectId: targetObject.MetaverseObjectId);
+
+        Assert.That(subject?.Id, Is.EqualTo(sourceObject.Id));
+    }
+
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowNamingNoObjectOfTheSystem_IsNoneAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Target.Id, connectedSystemObjectId: targetObject.Id, metaverseObjectId: null);
+
+        Assert.That(subject, Is.Null, "an object elsewhere with no identity to follow names nothing in this system");
+    }
+
     private ConnectedSystemFullSynchronisationPreviewAdapter FullSynchronisationAdapter => new(Jim);
+
+    private static Activity RunActivity(int connectedSystemId, ConnectedSystemRunType runType, ActivityStatus status, DateTime executed,
+        int objects, double seconds) => new()
+    {
+        TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+        TargetOperationType = ActivityTargetOperationType.Execute,
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemRunType = runType,
+        Status = status,
+        Executed = executed,
+        ExecutionTime = TimeSpan.FromSeconds(seconds),
+        ObjectsToProcess = objects
+    };
 
     private static PreviewContext FullSynchronisationContext(int connectedSystemId, int? maxObjects = null) => new()
     {

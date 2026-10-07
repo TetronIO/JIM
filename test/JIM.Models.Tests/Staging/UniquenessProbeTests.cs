@@ -52,7 +52,19 @@ public class UniquenessProbeTests
     [Test]
     public void Validate_NoAttributeName_Throws()
     {
-        var request = new UniquenessProbeRequest { AttributeName = " ", Candidates = ["jbloggs"] };
+        var request = new UniquenessProbeRequest { ObjectTypeName = "inetOrgPerson", AttributeName = " ", Candidates = ["jbloggs"] };
+
+        Assert.That(request.Validate, Throws.ArgumentException);
+    }
+
+    /// <summary>
+    /// A SCIM provider searches one resource type's endpoint and a database one Object Type's table (#1941), so a
+    /// batch with no object type cannot be probed by them.
+    /// </summary>
+    [Test]
+    public void Validate_NoObjectTypeName_Throws()
+    {
+        var request = new UniquenessProbeRequest { ObjectTypeName = " ", AttributeName = "uid", Candidates = ["jbloggs"] };
 
         Assert.That(request.Validate, Throws.ArgumentException);
     }
@@ -240,6 +252,7 @@ public class UniquenessProbeTests
 
     private static UniquenessProbeRequest Request(IReadOnlyList<string> candidates, string? controlValue) => new()
     {
+        ObjectTypeName = "inetOrgPerson",
         AttributeName = "uid",
         Candidates = candidates,
         ControlValue = controlValue

@@ -44,6 +44,13 @@ public class ConfigurationChangePreviewStartResponse
 
     public long? EstimatedDeltaRows { get; set; }
 
+    /// <summary>
+    /// How long the preview is expected to take to evaluate, where the surface can say. A Full Synchronisation
+    /// preview estimates it from the number of objects and how fast this system last synchronised, never faster than
+    /// a conservative reference rate; other surfaces leave it null. Use it to decide how long to wait for the result.
+    /// </summary>
+    public TimeSpan? EstimatedDuration { get; set; }
+
     public static ConfigurationChangePreviewStartResponse FromResult(ConfigurationChangePreviewStartResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -55,7 +62,8 @@ public class ConfigurationChangePreviewStartResponse
             IsBlocked = result.IsBlocked,
             Failed = result.Failed,
             EstimatedAffectedObjects = result.Estimate?.AffectedObjects,
-            EstimatedDeltaRows = result.Estimate?.EstimatedDeltaRows
+            EstimatedDeltaRows = result.Estimate?.EstimatedDeltaRows,
+            EstimatedDuration = result.Estimate?.EstimatedDuration
         };
     }
 }
