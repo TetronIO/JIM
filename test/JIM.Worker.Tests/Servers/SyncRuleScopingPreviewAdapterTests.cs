@@ -302,6 +302,16 @@ public class SyncRuleScopingPreviewAdapterTests
     // ── Counts ───────────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Sales");
+        GivenJoinedCso("Sales");
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(NewAdapter(), Context(ProposalScopedTo("Marketing")));
+    }
+
+    [Test]
     public async Task CountImpactAsync_TwoObjectsLeavingScope_CountsBothUnderTheirTransitionAsync()
     {
         GivenRuleScopedToSales(_rule);

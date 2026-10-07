@@ -371,10 +371,11 @@ public class ConfigurationChangePreviewServer
         var adapter = _adapters.Get(preview.Surface);
         var context = BuildContext(request, activityId);
 
-        if (!await RunImpactCountsAsync(preview, activity, adapter, context, cancellationToken))
+        var (proceed, impactCounter) = await RunImpactCountsAsync(preview, activity, adapter, context, cancellationToken);
+        if (!proceed)
             return;
 
-        if (!await RunEvaluationAsync(preview, activity, adapter, context, cancellationToken))
+        if (!await RunEvaluationAsync(preview, activity, adapter, context, impactCounter, cancellationToken))
             return;
 
         activity.Message = "Preview complete";
@@ -382,10 +383,12 @@ public class ConfigurationChangePreviewServer
     }
 
     /// <summary>
-    /// Stage 2. Returns false when the preview has reached a terminal state and nothing further should run.
+    /// Stage 2. Proceed is false when the preview has reached a terminal state and nothing further should run. For an
+    /// adapter that counts from its delta stream (<see cref="IConfigurationChangePreviewAdapter.CreateImpactCounterAsync"/>,
+    /// #1530), the stage is left in progress and its counter returned, for the evaluation pass to feed and complete.
     /// </summary>
-    private async Task<bool> RunImpactCountsAsync(ConfigurationChangePreview preview, Activity activity,
-        IConfigurationChangePreviewAdapter adapter, PreviewContext context, CancellationToken cancellationToken)
+    private async Task<(bool Proceed, IPreviewImpactCounter? Counter)> RunImpactCountsAsync(ConfigurationChangePreview preview,
+        Activity activity, IConfigurationChangePreviewAdapter adapter, PreviewContext context, CancellationToken cancellationToken)
     {
         preview.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.InProgress;
         preview.ImpactCountsStarted = DateTime.UtcNow;
@@ -398,25 +401,30 @@ public class ConfigurationChangePreviewServer
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var counter = adapter.ProducesDeltas ? await adapter.CreateImpactCounterAsync(context) : null;
+            if (counter != null)
+                return (true, counter);
+
             var counts = await adapter.CountImpactAsync(context) ?? [];
             preview.ImpactCounts = Serialise(counts);
             preview.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Complete;
             preview.ImpactCountsCompleted = DateTime.UtcNow;
             await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
-            return true;
+            return (true, null);
         }
         catch (OperationCanceledException)
         {
             await CancelPreviewAsync(preview, activity,
                 p => p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Cancelled);
-            return false;
+            return (false, null);
         }
         catch (Exception ex)
         {
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries).
             await FailPreviewAsync(preview, activity, ex, "counting the objects the change would affect",
                 p => p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Failed);
-            return false;
+            return (false, null);
         }
     }
 
@@ -425,8 +433,14 @@ public class ConfigurationChangePreviewServer
     /// persisted beneath it, so the two can never describe different populations. Returns false when the preview
     /// has reached a terminal state.
     /// </summary>
+    /// <param name="impactCounter">
+    /// Stage 2's counter, when the adapter counts from its delta stream (#1530): fed every delta of this pass, and its
+    /// counts recorded only when the whole stream has been evaluated, exactly as the summary is, so a pass that fails
+    /// or is cancelled midway leaves no partial count behind.
+    /// </param>
     private async Task<bool> RunEvaluationAsync(ConfigurationChangePreview preview, Activity activity,
-        IConfigurationChangePreviewAdapter adapter, PreviewContext context, CancellationToken cancellationToken)
+        IConfigurationChangePreviewAdapter adapter, PreviewContext context, IPreviewImpactCounter? impactCounter,
+        CancellationToken cancellationToken)
     {
         if (!adapter.ProducesDeltas)
         {
@@ -461,6 +475,7 @@ public class ConfigurationChangePreviewServer
                 cancellationToken.ThrowIfCancellationRequested();
 
                 summariser.Add(delta);
+                impactCounter?.Add(delta);
 
                 if (summariser.TotalDeltas % ProgressReportingInterval == 0)
                 {
@@ -476,6 +491,12 @@ public class ConfigurationChangePreviewServer
             await _application.Repository.ConfigurationChangePreviews.CreatePreviewResultsAsync(groups);
 
             var completedAt = DateTime.UtcNow;
+            if (impactCounter != null)
+            {
+                preview.ImpactCounts = Serialise(impactCounter.Build());
+                preview.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Complete;
+                preview.ImpactCountsCompleted = completedAt;
+            }
             preview.SummaryStatus = ConfigurationChangePreviewStageStatus.Complete;
             preview.SummaryCompleted = completedAt;
             preview.DeltasStatus = ConfigurationChangePreviewStageStatus.Complete;
@@ -495,6 +516,8 @@ public class ConfigurationChangePreviewServer
         {
             await CancelPreviewAsync(preview, activity, p =>
             {
+                if (impactCounter != null)
+                    p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Cancelled;
                 p.SummaryStatus = ConfigurationChangePreviewStageStatus.Cancelled;
                 p.DeltasStatus = ConfigurationChangePreviewStageStatus.Cancelled;
             });
@@ -505,6 +528,8 @@ public class ConfigurationChangePreviewServer
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries).
             await FailPreviewAsync(preview, activity, ex, "evaluating what the change would do", p =>
             {
+                if (impactCounter != null)
+                    p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Failed;
                 p.SummaryStatus = ConfigurationChangePreviewStageStatus.Failed;
                 p.DeltasStatus = ConfigurationChangePreviewStageStatus.Failed;
             });
