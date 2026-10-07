@@ -101,6 +101,15 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
 
   roles:
     - redhat.rhel_system_roles.podman
+
+  post_tasks:
+    # Puts back the firewall rules Podman adds for JIM's network whenever firewalld reloads; without it, a reload
+    # leaves JIM unable to reach its database until JIM restarts. Podman ships it disabled.
+    - name: Keep JIM's network through a firewalld reload
+      ansible.builtin.systemd_service:
+        name: netavark-firewalld-reload.service
+        enabled: true
+        state: started
 ```
 
 With your own PostgreSQL server, leave out `jim-database.yaml` and the `jim-database` unit, and set `JIM_DB_HOSTNAME` in `jim-config.yaml`. For a port other than 443, change `PublishPort=` and the firewall port together.

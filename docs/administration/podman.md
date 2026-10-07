@@ -113,7 +113,9 @@ None of these checks starts until its service has finished starting, however lon
 
 ## Firewall, SELinux and AppArmor
 
-- **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port).
+- **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https` (or `--add-port=<port>/tcp` for another port), which opens it now and for good without reloading firewalld.
+
+    A firewalld reload, or a restart, removes the rules Podman adds for a rootful JIM's network: JIM's services can then neither resolve names on their network nor, on some hosts, reach their database, and JIM stays down until you restart it. Podman ships `netavark-firewalld-reload.service` to put the rules back after every reload, but leaves it disabled. The installer enables it; by hand, as root: `systemctl enable --now netavark-firewalld-reload.service`. A rootless JIM needs neither: firewalld does not touch its network.
 - **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
 - **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
 
@@ -170,10 +172,11 @@ If your organisation's policy requires every step by hand, these steps do what t
       "$(base64 -w0 /opt/jim/tls/tls.crt)" "$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
     ```
 
-5. **Open the port** in firewalld, and on Ubuntu 24.04 add the AppArmor rules JIM's containers need (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
+5. **Open the port** in firewalld, and keep JIM's network through a firewalld reload; on Ubuntu 24.04, add the AppArmor rules JIM's containers need instead (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
 
     ```bash
-    firewall-cmd --permanent --add-service=https && firewall-cmd --reload
+    firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https
+    systemctl enable --now netavark-firewalld-reload.service
     ```
 
 6. **Start JIM**, then wait until `podman healthcheck run jim-web` succeeds:
