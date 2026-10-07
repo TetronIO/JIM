@@ -97,7 +97,7 @@ For example, on a host with 8 GB of memory the installer sets `JIM_DB_SHARED_BUF
 
 `shared_buffers` is allocated in full when PostgreSQL starts, so a value larger than the host can give stops the database from starting: its log says `could not map anonymous shared memory: Cannot allocate memory`. Size it down, as below.
 
-The installer uses any of these given in its environment as given, and its summary marks each one `(given)`. It checks a given `JIM_DB_SHARED_BUFFERS` against the host's memory before it starts anything. When the host cannot give it (the value is as much as the host's memory or more), the installer stops having started nothing, and names the size it would choose instead; leave the setting unset or give less, and run it again. It warns, and carries on, when the value is more than half the host's memory, or is a size it cannot read: PostgreSQL's units are case-sensitive, so it refuses `8gb` where it takes `8GB`.
+The installer uses any of these given in its environment as given, and its summary marks each one `(given)`. It checks a given `JIM_DB_SHARED_BUFFERS` against the host's memory before it starts anything. When the host cannot give it (the value is as much as the host's memory or more), the installer stops having started nothing, leaving an existing installation as it was, and names the size it would choose instead; leave the setting unset or give less, and run it again. It warns, and carries on, when the value is more than half the host's memory, or is a size it cannot read: PostgreSQL's units are case-sensitive, so it refuses `8gb` where it takes `8GB`.
 
 To change them, for example after adding memory to the host, edit the settings and restart the database:
 
