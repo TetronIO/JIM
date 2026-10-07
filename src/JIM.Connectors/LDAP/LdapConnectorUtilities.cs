@@ -7,6 +7,8 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
@@ -979,6 +981,44 @@ internal static class LdapConnectorUtilities
             "does not host would otherwise silently return zero objects. A domain's objects must be managed through a " +
             "Connected System whose Host targets that domain's own domain controllers (one Connected System per domain " +
             "today).");
+    }
+
+    /// <summary>
+    /// The LDAP result code for a server that cannot be reached (LDAP_SERVER_DOWN), which the platform LDAP client
+    /// raises for a refused or failed connection.
+    /// </summary>
+    private const int LdapServerDownErrorCode = 81;
+
+    /// <summary>
+    /// Throws an <see cref="LdapException"/> unless <paramref name="server"/> accepts a TCP connection on
+    /// <paramref name="port"/> within <paramref name="timeout"/>.
+    /// <para>
+    /// The platform LDAP client on Linux does not bound its TCP connect by the connection's timeout: against an address
+    /// a firewall silently drops, a bind waits out the operating system's SYN retries, measured at over two minutes.
+    /// That is acceptable for a Connected System's own connection, whose failure fails the operation anyway, but not
+    /// for an optional second connection whose caller has a fixed budget and a fallback (the uniqueness probe's
+    /// Global Catalog, #1940), so such a caller asks this first. A server that accepts the connection but does not
+    /// answer LDAP is still bounded by the connection's own timeout.
+    /// </para>
+    /// </summary>
+    internal static void EnsureAcceptsConnections(string server, int port, TimeSpan timeout)
+    {
+        using var client = new TcpClient();
+        using var cancellation = new CancellationTokenSource(timeout);
+        try
+        {
+            // Synchronous by design: every caller is already on a worker thread doing synchronous LDAP work.
+            client.ConnectAsync(server, port, cancellation.Token).AsTask().GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            throw new LdapException(LdapServerDownErrorCode, string.Create(CultureInfo.InvariantCulture,
+                $"{server} did not accept a connection on port {port} within {timeout.TotalSeconds:0} seconds"));
+        }
+        catch (SocketException ex)
+        {
+            throw new LdapException(LdapServerDownErrorCode, $"{server} did not accept a connection on port {port}: {ex.Message.TrimEnd('.')}");
+        }
     }
 
     /// <summary>

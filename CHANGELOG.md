@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
 - ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
+- ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 
 ### Changed
 

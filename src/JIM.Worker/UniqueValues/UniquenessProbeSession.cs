@@ -21,7 +21,9 @@ namespace JIM.Worker.UniqueValues;
 /// <item>Bounds every connection and search by <see cref="ProbeTimeout"/>. A connection failure, timeout, refusal or
 /// error makes the system undetermined for the rest of the run, with the reason recorded, and is never retried per
 /// object; a search that completes without returning its control does the same for that attribute only.</item>
-/// <item>Collects one warning per Connected System per run (<see cref="GetRunWarnings"/>), never one per object.</item>
+/// <item>Collects one warning per Connected System per run (<see cref="GetRunWarnings"/>), never one per object, plus
+/// one per distinct caveat a Connector answered with: a probe that searched less than everywhere the value must be
+/// unique (#1940).</item>
 /// </list>
 /// Nothing here fails the run because a target cannot be probed: the probe gate then accepts on JIM's own records.
 /// </summary>
@@ -84,15 +86,24 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
     }
 
     /// <summary>
-    /// One warning per Connected System that could not be probed for a value JIM went on to issue this run, in the
-    /// order the systems were first probed. Empty when every probe answered, or when nothing was issued without one.
+    /// One warning per Connected System that could not be probed for a value JIM went on to issue this run, then one
+    /// per distinct caveat the system's probes answered with, in the order the systems were first probed. Empty when
+    /// every probe answered in full, or when nothing was issued without one.
     /// </summary>
     public IReadOnlyList<string> GetRunWarnings() =>
         _systems.Values
-            .Where(s => s.UndeterminedReason != null && s.ValuesChosenWithoutProbe > 0)
-            .Select(s => string.Create(CultureInfo.InvariantCulture,
-                $"JIM couldn't probe {s.Name} for values already in use. {s.UndeterminedReason}. JIM chose {s.ValuesChosenWithoutProbe} {(s.ValuesChosenWithoutProbe == 1 ? "value" : "values")} using its own records only."))
+            .SelectMany(s => UndeterminedWarnings(s).Concat(s.Caveats.Select(caveat =>
+                $"JIM's probe of {s.Name} for values already in use was incomplete. {caveat}.")))
             .ToList();
+
+    private static IEnumerable<string> UndeterminedWarnings(SystemState system)
+    {
+        if (system.UndeterminedReason == null || system.ValuesChosenWithoutProbe == 0)
+            yield break;
+
+        yield return string.Create(CultureInfo.InvariantCulture,
+            $"JIM couldn't probe {system.Name} for values already in use. {system.UndeterminedReason}. JIM chose {system.ValuesChosenWithoutProbe} {(system.ValuesChosenWithoutProbe == 1 ? "value" : "values")} using its own records only.");
+    }
 
     /// <summary>
     /// Closes every connection the run opened and releases the host. Never throws for a Connector fault: the run is
@@ -189,6 +200,11 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
             attribute.LatchedReason = result.Reason;
             return Undetermined(system, candidates.Count, result.Reason);
         }
+
+        // Answered, but over less than everywhere the value must be unique: the answers stand, and the run says once
+        // what the probe could not reach. Nothing is latched, since the next object's search reaches as far.
+        if (result.Caveat != null && !system.Caveats.Contains(result.Caveat))
+            system.Caveats.Add(result.Caveat);
 
         return new UniquenessProbeSessionResult(system.Name, result.Outcomes);
     }
@@ -334,6 +350,7 @@ public sealed class UniquenessProbeSession : IUniquenessProbeSession, IAsyncDisp
         public string? LatchedReason { get; set; }
         public string? UndeterminedReason { get; set; }
         public int ValuesChosenWithoutProbe { get; set; }
+        public List<string> Caveats { get; } = [];
         public Dictionary<int, AttributeState> Attributes { get; } = [];
     }
 

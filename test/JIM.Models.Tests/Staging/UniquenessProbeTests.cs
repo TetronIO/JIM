@@ -184,6 +184,60 @@ public class UniquenessProbeTests
         Assert.That(() => UniquenessProbeResult.Failed(1, " "), Throws.ArgumentException);
     }
 
+    /// <summary>
+    /// #1940: a probe that answered, but searched less than everywhere the value must be unique (one domain of an
+    /// Active Directory forest with no Global Catalog to search, say), keeps its answers and says what it missed.
+    /// </summary>
+    [Test]
+    public void WithCaveat_AnsweredResult_KeepsTheOutcomesAndCarriesTheCaveat()
+    {
+        var answered = UniquenessProbeResult.FromValuesFound(Request(["jbloggs", "jbloggs2"], controlValue: "asmith"), ["asmith", "jbloggs"]);
+
+        var result = answered.WithCaveat("A value in use in another domain was not looked for");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found, UniquenessProbeOutcome.NotFound }));
+            Assert.That(result.Caveat, Is.EqualTo("A value in use in another domain was not looked for"));
+            Assert.That(result.Reason, Is.Null);
+            Assert.That(result.IsFailure, Is.False);
+        }
+    }
+
+    [Test]
+    public void Caveat_IsNullUnlessOneIsAdded()
+    {
+        var answered = UniquenessProbeResult.FromValuesFound(Request(["jbloggs"], controlValue: null), []);
+
+        Assert.That(answered.Caveat, Is.Null);
+    }
+
+    /// <summary>
+    /// A result that could not answer already says why in its reason; a caveat about how far the search reached adds
+    /// nothing to it, so the result is returned as it was.
+    /// </summary>
+    [Test]
+    public void WithCaveat_UnansweredResult_IsReturnedUnchanged()
+    {
+        var failed = UniquenessProbeResult.Failed(1, "The directory refused the probe");
+
+        var result = failed.WithCaveat("A value in use in another domain was not looked for");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.SameAs(failed));
+            Assert.That(result.Caveat, Is.Null);
+        }
+    }
+
+    [Test]
+    public void WithCaveat_Blank_Throws()
+    {
+        var answered = UniquenessProbeResult.FromValuesFound(Request(["jbloggs"], controlValue: null), []);
+
+        Assert.That(() => answered.WithCaveat(" "), Throws.ArgumentException);
+    }
+
     private static UniquenessProbeRequest Request(IReadOnlyList<string> candidates, string? controlValue) => new()
     {
         AttributeName = "uid",

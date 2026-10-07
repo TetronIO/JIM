@@ -141,6 +141,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
     private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
+    private readonly string _settingGlobalCatalogServer = "Global Catalog Server";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
@@ -179,6 +180,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = LdapConnectorConstants.DEFAULT_CONNECTION_TIMEOUT_SECONDS, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingGlobalCatalogServer, Required = false, Description = "Applies to Active Directory. The Global Catalog server JIM searches when it probes for a value already in use that must be unique across the whole forest (userPrincipalName, servicePrincipalName, mail and proxyAddresses), so a value held in another domain is found. JIM connects on port 3268, or 3269 with LDAPS, with the credentials below. When left blank, JIM uses the domain controller it connects to, if that is a Global Catalog and the forest has more than one domain. For LDAPS, use a name present in the server's certificate.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
 
             new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the directory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
@@ -523,14 +525,24 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// settings. <see cref="Factory"/> is this applied to <see cref="EffectiveServer"/>; the open form exists so
     /// a discovered domain controller can be proven reachable before it is pinned (issue #230 Phase 2).
     /// </param>
+    /// <param name="FactoryForEndpoint">
+    /// Opens a bound connection to an arbitrary server and port with this plan's credentials and TLS settings,
+    /// waiting no longer than the given time. Exists for the uniqueness probe's Global Catalog connection, on a port
+    /// of its own (#1940).
+    /// </param>
+    /// <param name="ConnectionTimeout">The Connection Timeout setting.</param>
+    /// <param name="UseSecureConnection">Whether this plan connects over LDAPS.</param>
     private sealed record ConnectionPlan(
         Func<string, LdapConnection> FactoryFor,
         Func<LdapConnection> Factory,
+        Func<string, int, TimeSpan, LdapConnection> FactoryForEndpoint,
         int MaxRetries,
         int RetryDelayMs,
         List<ConnectedSystemSettingValue> SettingValues,
         string EffectiveServer,
-        LdapServerResolutionSource ResolutionSource);
+        LdapServerResolutionSource ResolutionSource,
+        TimeSpan ConnectionTimeout,
+        bool UseSecureConnection);
 
     private ConnectionPlan BuildConnectionPlan(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
@@ -605,18 +617,22 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
-        LdapConnection ConnectTo(string server) => CreateConnection(
-            new LdapDirectoryIdentifier(server, directoryServerPortValue),
-            credential, authTypeEnumValue, connectionTimeout, useSsl, logger);
+        LdapConnection ConnectToEndpoint(string server, int port, TimeSpan timeout) => CreateConnection(
+            new LdapDirectoryIdentifier(server, port), credential, authTypeEnumValue, timeout, useSsl, logger);
+
+        LdapConnection ConnectTo(string server) => ConnectToEndpoint(server, directoryServerPortValue, connectionTimeout);
 
         return new ConnectionPlan(
             ConnectTo,
             () => ConnectTo(effectiveServer),
+            ConnectToEndpoint,
             maxRetries,
             retryDelayMs,
             settingValues,
             effectiveServer,
-            resolutionSource);
+            resolutionSource,
+            connectionTimeout,
+            useSsl);
     }
 
     /// <summary>
@@ -1457,6 +1473,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapConnection? _probeConnection;
 
     /// <summary>
+    /// The probe's Global Catalog connection (#1940), opened by the probe on its first forest-wide search that needs
+    /// one, and closed with <see cref="_probeConnection"/>.
+    /// </summary>
+    private LdapConnection? _probeGlobalCatalogConnection;
+
+    /// <summary>
     /// The searcher over <see cref="_probeConnection"/>; null until <see cref="OpenUniquenessProbeConnection"/> succeeds.
     /// </summary>
     private LdapConnectorUniquenessProbe? _uniquenessProbe;
@@ -1472,7 +1494,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// Opens exactly as the import path does (the same connection plan: credentials decrypted through the credential
     /// protection service, the JIM certificate store as additional LDAPS trust anchors, the effective server resolved
     /// from the Preferred Domain Controller setting or the persisted pin), so a probe reaches the same directory server
-    /// with the same identity an import would.
+    /// with the same identity an import would. Nothing is opened to a Global Catalog here: the probe does that itself,
+    /// once, on the first forest-wide search that needs one (#1940), so a session that never probes such an attribute
+    /// pays nothing for it, and one that cannot reach a Global Catalog still probes everything else.
     /// </remarks>
     public void OpenUniquenessProbeConnection(ConnectedSystem connectedSystem, ILogger logger)
     {
@@ -1492,7 +1516,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             .Where(p => p.Selected && !string.IsNullOrWhiteSpace(p.ExternalId))
             .Select(p => p.ExternalId)
             .ToList() ?? [];
-        _uniquenessProbe = new LdapConnectorUniquenessProbe(new LdapOperationExecutor(connection), logger);
+
+        var globalCatalogServer = connectedSystem.SettingValues.SingleOrDefault(q => q.Setting.Name == _settingGlobalCatalogServer)?.StringValue?.Trim();
+        var globalCatalogPort = LdapConnectorUniquenessProbe.GlobalCatalogPort(plan.UseSecureConnection);
+        _uniquenessProbe = new LdapConnectorUniquenessProbe(new LdapOperationExecutor(connection), logger, new LdapGlobalCatalogProbeOptions(
+            string.IsNullOrEmpty(globalCatalogServer) ? null : globalCatalogServer,
+            plan.EffectiveServer,
+            globalCatalogPort,
+            (server, timeout) =>
+            {
+                // A single attempt, unlike the import connection: the probe falls back to the domain at once rather
+                // than spend the batch's time on retries, and does not ask again this run. The TCP check first bounds
+                // a dropped port by the timeout, which the LDAP client's own connect does not honour on Linux.
+                var connectionTimeout = timeout < plan.ConnectionTimeout ? timeout : plan.ConnectionTimeout;
+                LdapConnectorUtilities.EnsureAcceptsConnections(server, globalCatalogPort, connectionTimeout);
+                _probeGlobalCatalogConnection = plan.FactoryForEndpoint(server, globalCatalogPort, connectionTimeout);
+                return new LdapOperationExecutor(_probeGlobalCatalogConnection);
+            }));
 
         logger.Debug("OpenUniquenessProbeConnection: Probe connection open; {PartitionCount} partition root(s) to search.", _probeSearchBases.Count);
     }
@@ -1516,6 +1556,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     {
         _uniquenessProbe = null;
         _probeSearchBases = [];
+        _probeGlobalCatalogConnection?.Dispose();
+        _probeGlobalCatalogConnection = null;
         _probeConnection?.Dispose();
         _probeConnection = null;
     }
