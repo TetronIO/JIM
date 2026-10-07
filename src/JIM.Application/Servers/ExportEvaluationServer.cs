@@ -2746,6 +2746,11 @@ public class ExportEvaluationServer
                     return (null, null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
+                // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
+                // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
+                RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id,
+                    SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges));
+
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see
                 // SelectSurvivingDriftChanges).
@@ -2753,11 +2758,6 @@ public class ExportEvaluationServer
                 // child rows via raw SQL and then detaches their tracked instances from the change tracker
                 // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
                 // holds live, attachable entities by the time the new PE is built.
-                // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
-                // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
-                RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id,
-                    SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges));
-
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
