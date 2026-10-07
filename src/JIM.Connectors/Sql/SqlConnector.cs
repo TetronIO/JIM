@@ -25,7 +25,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -57,6 +57,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     private SqlSchemaConfiguration? _exportConfiguration;
     private TimeZoneInfo _exportDatabaseTimeZone = TimeZoneInfo.Utc;
     private SqlTypeMappingOptions _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
+
+    /// <summary>
+    /// What an open probe session needs (#1941): its own connection, held for a synchronisation run that probes this
+    /// database for generated values and released by <see cref="CloseUniquenessProbeConnection"/>. Kept apart from the
+    /// import and export sessions for the reason those are kept apart from each other.
+    /// </summary>
+    private DbConnection? _probeConnection;
+    private SqlConnectorUniquenessProbe? _uniquenessProbe;
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
@@ -125,7 +133,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     public bool SupportsPasswordSet => false;
     public bool SupportsPasswordPolicyDiscovery => false;
 
-    public bool SupportsUniquenessProbe => false;
+    // A synchronisation that generates a value exported unchanged to this database asks it, with a parameterised
+    // lookup against the Object Type's table, whether the value is already in use (#1941).
+    public bool SupportsUniquenessProbe => true;
     public bool SupportsUniquenessRejectionClassification => true;
 
     // Column names are whatever the schema's designer chose, so no standard vocabulary applies and the
@@ -591,6 +601,62 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
 
         return null;
+    }
+    #endregion
+
+    #region IConnectorUniquenessProbe members
+    /// <summary>
+    /// Opens the connection this run's probes search through, exactly as an import opens its own: the same dialect,
+    /// the same Object Types document, the password decrypted through the credential protection service and the
+    /// server's certificate trusted on the same terms. A database that cannot be reached fails here, once, rather than
+    /// on every object.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document is unusable.</exception>
+    public void OpenUniquenessProbeConnection(ConnectedSystem connectedSystem, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        CloseUniquenessProbeConnection();
+
+        var settingValues = connectedSystem.SettingValues.ToList();
+        var provider = TryResolveProvider(settingValues)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before probing for values already in use.");
+
+        // Parsed before connecting, as an import does: a document that cannot be used makes the connection pointless.
+        var configuration = SqlSchemaConfiguration.Parse(GetString(settingValues, SqlConnectorConstants.SettingObjectTypes));
+
+        _probeConnection = OpenConnection(provider, BuildConnectionSettings(settingValues), settingValues, logger);
+        _uniquenessProbe = new SqlConnectorUniquenessProbe(provider, _probeConnection, configuration, logger);
+
+        logger.Debug("OpenUniquenessProbeConnection: Probe connection to the {Database} database open.", provider.DisplayName);
+    }
+
+    /// <summary>
+    /// Any column can be searched by value, and a multi-valued attribute is searched in its related table.
+    /// </summary>
+    public bool CanProbeAttribute(string attributeName) => !string.IsNullOrWhiteSpace(attributeName);
+
+    /// <inheritdoc />
+    public Task<UniquenessProbeResult> ProbeAsync(UniquenessProbeRequest request, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_uniquenessProbe == null)
+            throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAsync()!");
+
+        return _uniquenessProbe.ProbeAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Releases the probe connection. Safe to call when it was never opened, or when opening it failed.
+    /// </summary>
+    public void CloseUniquenessProbeConnection()
+    {
+        _uniquenessProbe = null;
+        _probeConnection?.Dispose();
+        _probeConnection = null;
     }
     #endregion
 
@@ -1150,6 +1216,10 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
             _exportConnection?.Dispose();
             _exportConnection = null;
+
+            _probeConnection?.Dispose();
+            _probeConnection = null;
+            _uniquenessProbe = null;
 
             _trustedServerCertificateFile?.Dispose();
             _trustedServerCertificateFile = null;

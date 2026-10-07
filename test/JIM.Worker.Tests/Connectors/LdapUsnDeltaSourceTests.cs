@@ -170,6 +170,63 @@ public class LdapUsnDeltaSourceTests
         Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
     }
 
+    [Test]
+    public void VerifyContinuity_UsnWentBackwardsOnTheSameInvocationId_ThrowsNamingBothUsnsTheRestoreAndTheRemedy()
+    {
+        // A restore that bypasses Active Directory's own (a file-level or volume snapshot restore) keeps the
+        // invocationId, so only the USN going backwards gives it away (#1869).
+        var invocationId = Guid.NewGuid();
+        var previous = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", HighestCommittedUsn = 5000 };
+        var current = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", HighestCommittedUsn = 4200 };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("5000"), "the recorded watermark");
+            Assert.That(ex.Message, Does.Contain("4200"), "the directory's current USN");
+            Assert.That(ex.Message, Does.Contain("restored from a backup or snapshot"), "the usual cause");
+            Assert.That(ex.Message, Does.Contain("silently miss changes"), "why the run must not carry on");
+            Assert.That(ex.Message, Does.Contain("Run a Full Import to re-establish the delta baseline"), "what to do");
+        }
+    }
+
+    [Test]
+    public void VerifyContinuity_UsnWentBackwardsAndDomainControllerIdentityUnverifiable_Throws()
+    {
+        // With no invocationId or hostname to compare, a watermark the directory has not reached is still proof that
+        // reading from it would miss changes, whichever of a restore or a different domain controller explains it.
+        var previous = new LdapConnectorRootDse { HighestCommittedUsn = 5000 };
+        var current = new LdapConnectorRootDse { HighestCommittedUsn = 4200 };
+
+        Assert.That(() => Source().VerifyContinuity(previous, current),
+            Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("has gone backwards"));
+    }
+
+    [Test]
+    public void VerifyContinuity_InvocationIdChangedAndUsnWentBackwards_ReportsTheInvocationIdChange()
+    {
+        // USNs from two invocationIds are not comparable, so the identity change is the diagnosis to report.
+        var previous = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), HighestCommittedUsn = 5000 };
+        var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), HighestCommittedUsn = 4200 };
+
+        Assert.That(() => Source().VerifyContinuity(previous, current),
+            Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("invocationId has changed"));
+    }
+
+    [TestCase(5000L, 5000L, Description = "nothing has changed since the watermark")]
+    [TestCase(5000L, 5001L, Description = "the directory has moved on")]
+    [TestCase(5000L, null, Description = "the directory did not return its USN, so there is nothing to compare")]
+    [TestCase(null, 4200L, Description = "no watermark was recorded, so the import falls back to a Full Import")]
+    public void VerifyContinuity_UsnNotBehindTheWatermark_DoesNotThrow(long? previousUsn, long? currentUsn)
+    {
+        var invocationId = Guid.NewGuid();
+        var previous = new LdapConnectorRootDse { InvocationId = invocationId, HighestCommittedUsn = previousUsn };
+        var current = new LdapConnectorRootDse { InvocationId = invocationId, HighestCommittedUsn = currentUsn };
+
+        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+    }
+
     #endregion
 
     #region VerifyReadinessAsync

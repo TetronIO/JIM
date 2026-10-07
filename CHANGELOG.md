@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
 - ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
 - ✨ Before choosing a generated value, JIM now asks the LDAP directories it is exported to whether it is in use, catching accounts JIM doesn't import. The Attribute Flow's **Checked for availability in** panel shows how each system is checked and lets you exclude one. (#242)
+- ✨ A generated value exported to a SCIM service or SQL database is now checked there too before JIM chooses it, catching accounts created since the last import. (#1941)
 - ✨ When a target refuses a generated value as already in use, JIM now corrects it (`joe.bloggs` becomes `joe.bloggs1`) and the next synchronisation carries the new value to every target. If another system already uses the value, the export waits for a decision instead. (#242)
 - ✨ See why a generated value is waiting for a decision, allow the rename or try again, from REST (`/generated-values/decisions`) or `Get-JIMGeneratedValueDecision`, `Approve-JIMGeneratedValueRename` and `Reset-JIMGeneratedValueDecision`; each action records who took it. (#242)
 - ✨ Collision Remediation can be switched off per generated Attribute Flow in the portal, via REST (`collisionRemediation`) and `-CollisionRemediation`, and each Connected System it is checked in now says whether it can report a value as already in use. (#242)
@@ -44,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)
+- 🐛 A 389 Directory Server Delta Import now stops and asks for a Full Import when the changelog's newest change number is below the last import's (a restore from backup or snapshot), instead of silently missing the changes made since the restore. (#2004)
 - 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
 - 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)

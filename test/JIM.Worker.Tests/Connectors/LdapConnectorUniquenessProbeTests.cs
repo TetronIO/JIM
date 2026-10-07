@@ -272,16 +272,22 @@ public class LdapConnectorUniquenessProbeTests
 
     // ---- Capability declarations ----
 
+    /// <summary>
+    /// The three Connectors that export to identity stores probe (LDAP in release 3, SCIM and SQL by #1941); a
+    /// declaration without the implementation would have every run report the system as unprobed.
+    /// </summary>
     [Test]
-    public void SupportsUniquenessProbe_IsDeclaredOnlyByTheLdapConnector()
+    public void SupportsUniquenessProbe_IsDeclaredByTheConnectorsThatExportToIdentityStores()
     {
         using (Assert.EnterMultipleScope())
         {
             Assert.That(new LdapConnector().SupportsUniquenessProbe, Is.True);
             Assert.That(new LdapConnector(), Is.InstanceOf<IConnectorUniquenessProbe>());
+            Assert.That(new JIM.Connectors.SCIM.ScimConnector().SupportsUniquenessProbe, Is.True);
+            Assert.That(new JIM.Connectors.SCIM.ScimConnector(), Is.InstanceOf<IConnectorUniquenessProbe>());
+            Assert.That(new JIM.Connectors.Sql.SqlConnector().SupportsUniquenessProbe, Is.True);
+            Assert.That(new JIM.Connectors.Sql.SqlConnector(), Is.InstanceOf<IConnectorUniquenessProbe>());
             Assert.That(new JIM.Connectors.File.FileConnector().SupportsUniquenessProbe, Is.False);
-            Assert.That(new JIM.Connectors.SCIM.ScimConnector().SupportsUniquenessProbe, Is.False);
-            Assert.That(new JIM.Connectors.Sql.SqlConnector().SupportsUniquenessProbe, Is.False);
             Assert.That(new JIM.Connectors.Mock.MockCallConnector().SupportsUniquenessProbe, Is.False);
             Assert.That(new JIM.Connectors.Mock.MockFileConnector().SupportsUniquenessProbe, Is.False);
         }
@@ -289,6 +295,7 @@ public class LdapConnectorUniquenessProbeTests
 
     private static UniquenessProbeRequest Request(IReadOnlyList<string> candidates, string? controlValue, string attributeName = "sAMAccountName") => new()
     {
+        ObjectTypeName = "user",
         AttributeName = attributeName,
         Candidates = candidates,
         ControlValue = controlValue

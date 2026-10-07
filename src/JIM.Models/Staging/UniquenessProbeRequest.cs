@@ -15,6 +15,13 @@ public sealed class UniquenessProbeRequest
     public const int MaximumCandidates = 10;
 
     /// <summary>
+    /// The name of the Connected System Object Type the attribute belongs to. A SCIM service provider is searched at
+    /// that resource type's endpoint and a database in that Object Type's table or view (#1941); an LDAP directory is
+    /// searched by attribute alone and does not read it.
+    /// </summary>
+    public required string ObjectTypeName { get; init; }
+
+    /// <summary>
     /// The attribute's name in the Connected System (for an LDAP directory, the LDAP attribute name).
     /// </summary>
     public required string AttributeName { get; init; }
@@ -40,12 +47,15 @@ public sealed class UniquenessProbeRequest
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Throws <see cref="ArgumentException"/> unless the batch is well formed: an attribute name, one to
+    /// Throws <see cref="ArgumentException"/> unless the batch is well formed: an object type and attribute name, one to
     /// <see cref="MaximumCandidates"/> candidates, and no control value that is itself a candidate (compared
     /// case-insensitively, as the result is).
     /// </summary>
     public void Validate()
     {
+        if (string.IsNullOrWhiteSpace(ObjectTypeName))
+            throw new ArgumentException("A uniqueness probe needs the object type the attribute belongs to.", nameof(ObjectTypeName));
+
         if (string.IsNullOrWhiteSpace(AttributeName))
             throw new ArgumentException("A uniqueness probe needs the attribute to search.", nameof(AttributeName));
 

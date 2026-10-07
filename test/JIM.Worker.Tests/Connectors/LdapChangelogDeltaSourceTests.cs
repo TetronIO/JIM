@@ -553,6 +553,46 @@ public class LdapChangelogDeltaSourceTests
         Assert.That(() => Source().VerifyContinuity(new LdapConnectorRootDse(), new LdapConnectorRootDse { FirstChangeNumber = 150 }), Throws.Nothing);
     }
 
+    [Test]
+    public void VerifyContinuity_AdvertisedLastChangeNumberBelowTheWatermark_ThrowsNamingBothNumbersTheRestoreAndTheRemedy()
+    {
+        // 389 Directory Server restored from a copy of its files taken at change 3, after an import recorded 8 (#2004).
+        var previous = new LdapConnectorRootDse { LastChangeNumber = 8 };
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 3, LastChangeNumber = 3 };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("its newest change number is 3"), "the directory's newest change");
+            Assert.That(ex.Message, Does.Contain("the last import ended at 8"), "the recorded watermark");
+            Assert.That(ex.Message, Does.Contain("restored from a backup or snapshot"), "the usual cause");
+            Assert.That(ex.Message, Does.Contain("silently miss"), "why the run must not carry on");
+            Assert.That(ex.Message, Does.Contain("Run a Full Import"), "what to do");
+        }
+    }
+
+    [Test]
+    public void VerifyContinuity_EnumeratedLastChangeNumberBelowTheWatermark_DoesNotThrow()
+    {
+        // Without an advertised lastChangeNumber the watermark comes from enumerating the changelog, which can stop at
+        // the directory's size limit short of the newest change, so a lower number there proves nothing.
+        var previous = new LdapConnectorRootDse { LastChangeNumber = 8 };
+        var current = new LdapConnectorRootDse { AdvertisedLastChangeNumber = null, LastChangeNumber = 3 };
+
+        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+    }
+
+    [TestCase(8L, 8L, Description = "nothing has changed since the watermark")]
+    [TestCase(8L, 9L, Description = "the changelog has moved on")]
+    public void VerifyContinuity_AdvertisedLastChangeNumberAtOrAboveTheWatermark_DoesNotThrow(long previousWatermark, long advertisedLast)
+    {
+        var previous = new LdapConnectorRootDse { LastChangeNumber = previousWatermark };
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = advertisedLast, LastChangeNumber = advertisedLast };
+
+        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+    }
+
     #endregion
 
     #region HasBaseline

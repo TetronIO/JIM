@@ -37,6 +37,15 @@ public sealed class MockScimProvider
         """^\s*(?<attribute>[\w.:]+)\s+(?<operator>eq|ne|gt|ge|lt|le)\s+"(?<value>[^"]*)"\s*$""",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// Equality on one attribute, any number of times joined by <c>or</c>, which is the shape a uniqueness probe sends
+    /// (<c>userName eq "a" or userName eq "b"</c>). Values are JSON strings (RFC 7644 section 3.4.2.2), so an escaped
+    /// quote stays inside its value.
+    /// </summary>
+    private static readonly Regex EqualityDisjunction = new(
+        """^\s*(?<attribute>[\w.:]+)\s+eq\s+"(?<value>(?:[^"\\]|\\.)*)"(?:\s+or\s+\k<attribute>\s+eq\s+"(?<value>(?:[^"\\]|\\.)*)")*\s*$""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private readonly Dictionary<string, int> _cursors = new(StringComparer.Ordinal);
     private readonly HashSet<string> _expiredCursors = new(StringComparer.Ordinal);
     private int _cursorsIssued;
@@ -344,13 +353,27 @@ public sealed class MockScimProvider
     }
 
     /// <summary>
-    /// Applies a last-modified filter, the only comparison delta import needs. Anything else is
-    /// reported as unparseable rather than quietly ignored, so a test cannot pass on a filter the
-    /// provider never actually applied.
+    /// Applies a last-modified filter, the only comparison delta import needs, or an equality disjunction on one
+    /// attribute, which is what a uniqueness probe sends. Anything else is reported as unparseable rather than quietly
+    /// ignored, so a test cannot pass on a filter the provider never actually applied.
     /// </summary>
     private static bool TryApplyFilter(string filter, List<MockScimResource> candidates, out List<MockScimResource> matching)
     {
         matching = candidates;
+
+        var equality = EqualityDisjunction.Match(filter);
+        if (equality.Success && !string.Equals(equality.Groups["attribute"].Value, "meta.lastModified", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = equality.Groups["attribute"].Value;
+            var values = equality.Groups["value"].Captures
+                .Select(capture => JsonSerializer.Deserialize<string>($"\"{capture.Value}\"")!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Compared without regard to case, as RFC 7643 has it for every attribute this provider holds (none is
+            // caseExact).
+            matching = candidates.Where(resource => ValuesAt(resource, path).Any(values.Contains)).ToList();
+            return true;
+        }
 
         var match = FilterExpression.Match(filter);
         if (!match.Success || !string.Equals(match.Groups["attribute"].Value, "meta.lastModified", StringComparison.OrdinalIgnoreCase))
@@ -373,6 +396,49 @@ public sealed class MockScimProvider
         };
 
         return true;
+    }
+
+    /// <summary>
+    /// The string values a resource holds at a filter's attribute path: a top-level attribute (<c>userName</c>), or a
+    /// sub-attribute of a complex or multi-valued complex attribute (<c>name.givenName</c>, <c>emails.value</c>), read
+    /// from every entry. Attribute names are matched without regard to case (RFC 7643 section 2.1).
+    /// </summary>
+    private static IEnumerable<string> ValuesAt(MockScimResource resource, string path)
+    {
+        var rendered = JsonSerializer.SerializeToElement(resource.Attributes);
+        IEnumerable<JsonElement> current = [rendered];
+
+        // An extension attribute is addressed by its schema URN, which contains dots of its own ("2.0"), so the URN is
+        // peeled off as the first segment rather than split.
+        var segments = new List<string>();
+        if (path.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
+        {
+            var urnEnd = path.LastIndexOf(':');
+            segments.Add(path[..urnEnd]);
+            path = path[(urnEnd + 1)..];
+        }
+
+        segments.AddRange(path.Split('.'));
+
+        foreach (var segment in segments)
+        {
+            current = current
+                .SelectMany(Entries)
+                .Where(element => element.ValueKind == JsonValueKind.Object)
+                .SelectMany(element => element.EnumerateObject()
+                    .Where(property => string.Equals(property.Name, segment, StringComparison.OrdinalIgnoreCase))
+                    .Select(property => property.Value))
+                .ToList();
+        }
+
+        return current
+            .SelectMany(Entries)
+            .Where(element => element.ValueKind == JsonValueKind.String)
+            .Select(element => element.GetString()!);
+
+        // A multi-valued attribute is an array of entries; a single value is its own one entry.
+        static IEnumerable<JsonElement> Entries(JsonElement element) =>
+            element.ValueKind == JsonValueKind.Array ? element.EnumerateArray() : [element];
     }
 
     private static DateTimeOffset Truncate(DateTimeOffset value)
