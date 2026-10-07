@@ -6,6 +6,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Application.Staging;
+using JIM.Application.UniqueValues;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -51,6 +52,14 @@ public class ExportExecutionServer
     private ISyncRepository SyncRepo { get; }
     private readonly ISyncEngine _syncEngine = new SyncEngine();
 
+    /// <summary>
+    /// The current export run's Collision Remediation (Unique Value Generation, #242, release 4), set for the duration
+    /// of a calls-based <see cref="ExecuteExportsAsync(ConnectedSystem, IConnector, SyncRunMode, ExportExecutionOptions?, CancellationToken, Func{ExportProgressInfo, Task}?, Func{IConnector}?, Func{ISyncRepositoryScope}?, Func{List{ProcessedExportItem}, Task}?, UniqueValueReservationSet?)"/>
+    /// and read by every batch that run processes, its parallel batches included. A server instance belongs to one
+    /// unit of work, so it never carries two runs at once.
+    /// </summary>
+    private CollisionRemediationRun? _collisionRemediation;
+
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
@@ -86,6 +95,8 @@ public class ExportExecutionServer
     /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items.
     /// Enables streaming RPEI creation per-batch instead of accumulating all items across the entire run.
     /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
+    /// <param name="uniqueValueReservations">The worker's process-wide reservation set, which values Collision
+    /// Remediation draws are claimed in (Unique Value Generation, #242, release 4); a run-local set when null.</param>
     /// <returns>Export execution result with preview information</returns>
     public async Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -96,7 +107,8 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        UniqueValueReservationSet? uniqueValueReservations = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -175,9 +187,27 @@ public class ExportExecutionServer
         // progresses; count them towards processedCount up front too (see the paging loop below) so
         // the run's progress window still completes even though a withheld type is never attempted.
 
-        // Execute exports using the connector with batch-loading
-        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options, changeLimitLedger,
-            cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
+        // Collision Remediation (Unique Value Generation, #242, release 4) acts on a calls-based export's rejections; a
+        // file-based export records the classified error only. Metaverse Object change tracking is read once, here, on
+        // the main context, because the parallel batches that may revise a value must not touch it.
+        if (connector is IConnectorExportUsingCalls)
+        {
+            var classifies = connectedSystem.ConnectorDefinition?.SupportsUniquenessRejectionClassification == true;
+            var recordMetaverseChanges = classifies && await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+            _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges);
+        }
+
+        try
+        {
+            // Execute exports using the connector with batch-loading
+            await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options, changeLimitLedger,
+                cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
+        }
+        finally
+        {
+            _collisionRemediation?.Complete();
+            _collisionRemediation = null;
+        }
 
         // Second pass: retry any exports with deferred references that might now be resolvable
         if (!cancellationToken.IsCancellationRequested)
@@ -214,6 +244,15 @@ public class ExportExecutionServer
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
                 "recorded as owed an initial password, {FailedCount} that could not be recorded",
                 connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount);
+        }
+
+        // Only when it happened: most export runs meet no value already in use.
+        if (result.GeneratedValuesRemediatedCount > 0 || result.GeneratedValuesNeedingDecisionCount > 0)
+        {
+            Log.Information("ExecuteExportsAsync: Collision Remediation summary for {SystemName}: {RemediatedCount} generated value(s) corrected " +
+                "after being rejected as already in use (their exports stay queued for the next synchronisation), {NeedsDecisionCount} " +
+                "needing an administrator's decision (their exports are parked)",
+                connectedSystem.Name, result.GeneratedValuesRemediatedCount, result.GeneratedValuesNeedingDecisionCount);
         }
 
         // Only when it happened: a Connected System with no class membership would otherwise carry a zero on every
@@ -1466,6 +1505,8 @@ public class ExportExecutionServer
                         result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
                         result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
                         result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
+                        result.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
+                        result.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1750,6 +1791,11 @@ public class ExportExecutionServer
         var provisionedAccounts = new List<PendingExport>();
         var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
+        // Collision Remediation's derived-input marks for this batch, made on the first import-mode revision and flushed
+        // once below, after the batch's writes (#1750 Phase 4).
+        DerivedInputMarkBatch? derivedInputMarks = null;
+        var collisionRemediation = _collisionRemediation;
+
         for (var i = 0; i < batch.Count; i++)
         {
             var export = batch[i];
@@ -1763,6 +1809,47 @@ public class ExportExecutionServer
 
             if (!exportResult.Success)
             {
+                // A value already in use (Unique Value Generation, #242, release 4): Collision Remediation may correct a
+                // generated value behind it, or park the export for an administrator's decision. Either way the export
+                // is not failed and its error count is not consumed.
+                var collision = exportResult.ErrorType == ConnectedSystemExportErrorType.UniqueValueAlreadyInUse && collisionRemediation != null
+                    ? await collisionRemediation.HandleAsync(export, exportResult, repository,
+                        () => derivedInputMarks ??= new DerivedInputMarkBatch(collisionRemediation.DerivedFlowGraph, "Collision Remediation"))
+                    : null;
+
+                if (collision != null)
+                {
+                    exportsToUpdate.Add(export);
+                    if (collision.Handling == GeneratedValueCollisionHandling.Remediated)
+                    {
+                        result.DeferredCount++;
+                        result.GeneratedValuesRemediatedCount++;
+                    }
+                    else
+                    {
+                        result.FailedCount++;
+                        result.GeneratedValuesNeedingDecisionCount++;
+                    }
+
+                    var collisionChanges = CollisionAttributeChanges(collision) ?? writtenChanges;
+                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    {
+                        ChangeType = export.ChangeType,
+                        ConnectedSystemObject = export.ConnectedSystemObject,
+                        PendingExportId = export.Id,
+                        AttributeChangeCount = collisionChanges.Count,
+                        AttributeValueChanges = collisionChanges,
+                        Succeeded = false,
+                        ErrorMessage = collision.Handling == GeneratedValueCollisionHandling.NeedsDecision ? collision.Message : null,
+                        ErrorCount = export.ErrorCount,
+                        ErrorType = exportResult.ErrorType,
+                        RejectedAttributeName = exportResult.RejectedAttributeName,
+                        GeneratedValueCollision = collision,
+                        ExecutionItemId = collision.ExecutionItemId
+                    }.WithCauseFrom(export));
+                    continue;
+                }
+
                 // Export failed - mark as failed
                 MarkExportFailed(export, exportResult.ErrorMessage ?? "Export failed");
                 exportsToUpdate.Add(export);
@@ -1779,7 +1866,8 @@ public class ExportExecutionServer
                     Succeeded = false,
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                     ErrorCount = export.ErrorCount,
-                    ErrorType = exportResult.ErrorType
+                    ErrorType = exportResult.ErrorType,
+                    RejectedAttributeName = exportResult.RejectedAttributeName
                 }.WithCauseFrom(export));
                 continue;
             }
@@ -1906,6 +1994,33 @@ public class ExportExecutionServer
         {
             await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
         }
+
+        // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
+        // derived flow reading them, once for the whole batch, so dependants (an email, a User Principal Name) re-derive
+        // at their next synchronisation (#1750 Phase 4).
+        if (derivedInputMarks != null)
+        {
+            await derivedInputMarks.FlushAsync(repository);
+            derivedInputMarks.LogSummary();
+        }
+    }
+
+    /// <summary>
+    /// The attribute rows a Collision Remediation's export item records: the carrying attribute set from the rejected
+    /// value to the corrected one. Null (record the export's own changes) when a decision is needed, or when the export
+    /// carried only a value derived from the generated one.
+    /// </summary>
+    private static List<PendingExportAttributeValueChange>? CollisionAttributeChanges(GeneratedValueCollisionOutcome collision)
+    {
+        if (collision.Handling != GeneratedValueCollisionHandling.Remediated || collision.CarryingAttribute == null)
+            return null;
+
+        var attribute = collision.CarryingAttribute;
+        return
+        [
+            new PendingExportAttributeValueChange { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.RejectedValue, ChangeType = PendingExportAttributeChangeType.Remove },
+            new PendingExportAttributeValueChange { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.NewValue, ChangeType = PendingExportAttributeChangeType.Update }
+        ];
     }
 
     /// <summary>
@@ -2623,7 +2738,8 @@ public class ExportExecutionServer
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                         ErrorCount = export.ErrorCount,
-                        ErrorType = exportResult.ErrorType
+                        ErrorType = exportResult.ErrorType,
+                        RejectedAttributeName = exportResult.RejectedAttributeName
                     }.WithCauseFrom(export));
                     continue;
                 }
@@ -3063,7 +3179,8 @@ public class ExportExecutionServer
                 Succeeded = false,
                 ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                 ErrorCount = export.ErrorCount,
-                ErrorType = exportResult.ErrorType
+                ErrorType = exportResult.ErrorType,
+                RejectedAttributeName = exportResult.RejectedAttributeName
             }.WithCauseFrom(export));
             return;
         }

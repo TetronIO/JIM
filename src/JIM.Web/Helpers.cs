@@ -368,6 +368,9 @@ public static class Helpers
             // "Refused" rather than "Failed": JIM declined to send the change, naming the configuration to
             // fix, which is a different message from an export the Connected System rejected (#492).
             [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = "Export Refused",
+            // The Connected System refused the export because another object there holds the value; the heading
+            // names the conflict, since that is what an administrator has to resolve.
+            [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened
@@ -570,6 +573,10 @@ public static class Helpers
             ObjectChangeType.Created =>
                 "The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
 
+            // Export scope review
+            ObjectChangeType.ExportScopeReview =>
+                "A change to an export Synchronisation Rule had this Metaverse Object reviewed against the rule's scope, so it was provisioned or deprovisioned as the rule now requires.",
+
             // Other
             ObjectChangeType.NoChange =>
                 "The object was evaluated but no changes were necessary. The existing values already match the expected state.",
@@ -609,6 +616,9 @@ public static class Helpers
 
             // Direct creation
             ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
+
+            // Export scope review
+            ObjectChangeType.ExportScopeReview => Icons.Material.Filled.ManageSearch,
 
             // Other
             ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,

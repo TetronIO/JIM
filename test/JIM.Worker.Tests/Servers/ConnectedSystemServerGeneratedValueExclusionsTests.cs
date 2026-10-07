@@ -52,6 +52,9 @@ public class ConnectedSystemServerGeneratedValueExclusionsTests
         _repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
 
         _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
+        // The stored generation settings a save compares against to release a Needs Decision (#242, release 4): none.
+        _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(() => new Dictionary<int, SyncRuleMappingGeneration>());
         _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
         _csRepo.Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
         _csRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);

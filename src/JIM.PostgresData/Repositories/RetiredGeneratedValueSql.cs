@@ -87,6 +87,23 @@ internal static class RetiredGeneratedValueSql
     }
 
     /// <summary>
+    /// Retires the given assignments' CURRENT values without deleting the assignments: Collision Remediation's path
+    /// (Unique Value Generation, #242, release 4), which issues the object a different value and keeps the assignment.
+    /// The caller runs it inside the revision's transaction and BEFORE the assignment's value is updated, since the
+    /// statement reads the value from the row.
+    /// </summary>
+    internal static Task<IReadOnlyList<GeneratedValueRetirement>> RetireAssignmentsAsync(
+        JimDbContext context, IReadOnlyCollection<Guid> assignmentIds, RetiredGeneratedValueReason reason, Guid? activityId)
+    {
+        if (assignmentIds.Count == 0)
+            return Task.FromResult<IReadOnlyList<GeneratedValueRetirement>>([]);
+
+        return RetireAsync(context, @"a.""Id"" = ANY(@assignmentIds)",
+            command => command.Parameters.Add(new NpgsqlParameter("assignmentIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = assignmentIds.ToArray() }),
+            reason, activityId, deleteAssignments: false);
+    }
+
+    /// <summary>
     /// Deletes the given assignments and retires their values in the same statement: the supersession path, where
     /// the object lives on but its value stopped being generated.
     /// </summary>

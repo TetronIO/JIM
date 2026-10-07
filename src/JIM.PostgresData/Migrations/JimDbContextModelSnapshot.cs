@@ -425,6 +425,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ExternalIdSnapshot")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("NoChangeReason")
                         .HasColumnType("integer");
 
@@ -3846,6 +3849,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SupportsUniquenessProbe")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("SupportsUniquenessRejectionClassification")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")
                         .HasColumnType("boolean");
 
@@ -4118,6 +4124,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("AnchoredByConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("BaseValue")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("CommittedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4212,6 +4221,46 @@ namespace JIM.PostgresData.Migrations
                         {
                             t.HasCheckConstraint("CK_GeneratedValueAssignments_OneMode", "(\"MetaverseObjectId\" IS NOT NULL AND \"MetaverseAttributeId\" IS NOT NULL AND \"ConnectedSystemObjectId\" IS NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NULL) OR (\"ConnectedSystemObjectId\" IS NOT NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL AND \"MetaverseObjectId\" IS NULL AND \"MetaverseAttributeId\" IS NULL)");
                         });
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueRevisionPending", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReasonCode")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RejectedByConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RejectedByConnectedSystemName")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RemediatingActivityRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Created")
+                        .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
+
+                    b.HasIndex("MetaverseAttributeId");
+
+                    b.HasIndex("MetaverseObjectId", "MetaverseAttributeId")
+                        .HasDatabaseName("IX_GeneratedValueRevisionsPending_MvoId_AttributeId");
+
+                    b.ToTable("GeneratedValueRevisionsPending", (string)null);
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueSequence", b =>
@@ -5948,6 +5997,25 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("MetaverseObject");
 
                     b.Navigation("SyncRuleMappingGeneration");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueRevisionPending", b =>
+                {
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany()
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MetaverseAttribute");
+
+                    b.Navigation("MetaverseObject");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueSequence", b =>

@@ -160,6 +160,13 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsUniquenessProbe { get; set; }
 
     /// <summary>
+    /// Does the Connector tell a rejection because a value is already in use apart from every other export failure?
+    /// When true, Unique Value Generation's Collision Remediation can act on such a rejection from this Connected
+    /// System.
+    /// </summary>
+    public bool SupportsUniquenessRejectionClassification { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary Connected Systems using this Connector follow, as declared by the
     /// Connector itself and reconciled on every startup. Advisory metadata: the portal uses it to decide
     /// which Standard Mapping hints to show in the Attribute Flow editor. Never read by the synchronisation

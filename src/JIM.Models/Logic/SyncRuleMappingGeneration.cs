@@ -116,6 +116,34 @@ public class SyncRuleMappingGeneration
     /// </summary>
     public List<SyncRuleMappingGenerationExclusion> Exclusions { get; } = new();
 
+    /// <summary>
+    /// Whether two generation configurations would generate, check and correct values the same way (Unique Value
+    /// Generation, #242, release 4): every setting that decides a value, where it is checked, and whether Collision
+    /// Remediation applies. A save that changes any of them is the administrator's answer to the Needs Decision the
+    /// flow's assignments are waiting on, so it releases them (FR 16), exactly as a changed initial password
+    /// configuration releases parked accounts (#1121); a save that changes nothing here leaves them waiting.
+    /// </summary>
+    public static bool WouldGenerateTheSameAs(SyncRuleMappingGeneration? left, SyncRuleMappingGeneration? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null;
+
+        return left.TokenKind == right.TokenKind
+               && left.SuffixStyle == right.SuffixStyle
+               && left.SuffixStart == right.SuffixStart
+               && left.SequenceStart == right.SequenceStart
+               && left.SequenceIncrement == right.SequenceIncrement
+               && left.FixedWidth == right.FixedWidth
+               && left.OnWidthExceeded == right.OnWidthExceeded
+               && left.RandomFormat == right.RandomFormat
+               && left.RandomLength == right.RandomLength
+               && string.Equals(left.Separator, right.Separator, StringComparison.Ordinal)
+               && left.AttemptLimit == right.AttemptLimit
+               && left.NeverReuse == right.NeverReuse
+               && left.CollisionRemediation == right.CollisionRemediation
+               && left.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet().SetEquals(right.Exclusions.Select(e => e.ConnectedSystemId));
+    }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>

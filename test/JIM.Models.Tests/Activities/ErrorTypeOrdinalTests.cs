@@ -53,7 +53,10 @@ public class ErrorTypeOrdinalTests
         // Unique Value Generation (#242): generation, width and Collision Remediation failures.
         [ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted] = 24,
         [ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded] = 25,
-        [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = 26
+        [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = 26,
+
+        // A Connected System rejected an export because a value is already in use there (#242, release 4).
+        [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27
     };
 
     [Test]

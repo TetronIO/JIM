@@ -388,6 +388,18 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
         => _inner.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(metaverseObjectId);
 
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentByIdAsync(Guid assignmentId)
+        => _inner.GetGeneratedValueAssignmentByIdAsync(assignmentId);
+
+    public Task<List<GeneratedValueRevisionPending>> GetGeneratedValueRevisionsPendingAsync(int maxResults)
+        => _inner.GetGeneratedValueRevisionsPendingAsync(maxResults);
+
+    public Task<bool> AnyGeneratedValueRevisionsPendingAsync()
+        => _inner.AnyGeneratedValueRevisionsPendingAsync();
+
+    public Task<bool> HasGeneratedValueRevisionPendingAsync(Guid metaverseObjectId, int metaverseAttributeId)
+        => _inner.HasGeneratedValueRevisionPendingAsync(metaverseObjectId, metaverseAttributeId);
+
     public Task<HashSet<string>> GetRetiredGeneratedValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
         => _inner.GetRetiredGeneratedValuesInUseAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, normalisedValues);
 
@@ -625,6 +637,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task UpdateGeneratedValueAssignmentAsync(GeneratedValueAssignment assignment)
         => throw new PreviewWriteAttemptedException(nameof(UpdateGeneratedValueAssignmentAsync));
+
+    public Task<GeneratedValueRevisionResult> ApplyGeneratedValueRevisionAsync(GeneratedValueRevision revision)
+        => throw new PreviewWriteAttemptedException(nameof(ApplyGeneratedValueRevisionAsync));
+
+    public Task DeleteGeneratedValueRevisionsPendingAsync(IReadOnlyCollection<Guid> ids)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueRevisionsPendingAsync));
+
+    public Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(ReleaseParkedPendingExportsAsync));
 
     public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
         => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueAssignmentsAsync));

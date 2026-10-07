@@ -134,12 +134,12 @@ internal class LdapConnectorExport
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process Pending Export {Id} ({ChangeType})", pendingExport.Id, pendingExport.ChangeType);
+                LogExportFailure(ex, "LdapConnectorExport.Execute", pendingExport);
 
                 // Return failure result - ExportExecutionServer is responsible for updating
                 // ErrorCount, Status, and retry timing. The connector should
                 // only report success or failure via ConnectedSystemExportResult.
-                results.Add(ConnectedSystemExportResult.Failed(ex.Message));
+                results.Add(FailureFor(ex));
             }
         }
 
@@ -679,9 +679,8 @@ internal class LdapConnectorExport
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process Pending Export {Id} ({ChangeType})",
-                        pendingExport.Id, pendingExport.ChangeType);
-                    results[index] = ConnectedSystemExportResult.Failed(ex.Message);
+                    LogExportFailure(ex, "LdapConnectorExport.ExecuteAsync", pendingExport);
+                    results[index] = FailureFor(ex);
                 }
                 finally
                 {
@@ -1952,9 +1951,38 @@ internal class LdapConnectorExport
         if (response == null)
             return false;
 
+        // A value already in use (a group's mail under OpenLDAP's slapo-unique, say) is a constraint violation too,
+        // but the directory said what it was, and it was not the placeholder.
+        if (LdapUniquenessRejectionClassifier.TryClassify(ex, out _))
+            return false;
+
         return response.ResultCode is ResultCode.ConstraintViolation or ResultCode.NoSuchObject
                                       or ResultCode.UnwillingToPerform;
     }
+
+    /// <summary>
+    /// Logs an export the directory refused. A value already in use is a per-object data conflict the export run reports
+    /// on the object (and may correct, Unique Value Generation's Collision Remediation), so it is logged at Warning; every
+    /// other failure stays an Error, as it always was.
+    /// </summary>
+    private void LogExportFailure(Exception ex, string caller, PendingExport pendingExport)
+    {
+        if (LdapUniquenessRejectionClassifier.TryClassify(ex, out _))
+            _logger.Warning(ex, "{Caller}: Pending Export {Id} ({ChangeType}) was rejected because a value it carries is already in use",
+                caller, pendingExport.Id, pendingExport.ChangeType);
+        else
+            _logger.Error(ex, "{Caller}: Failed to process Pending Export {Id} ({ChangeType})", caller, pendingExport.Id, pendingExport.ChangeType);
+    }
+
+    /// <summary>
+    /// The result for an export the directory refused. A rejection because a value is already in use is classified
+    /// as such, naming the attribute where the directory named it (Unique Value Generation, decision 9); every other
+    /// failure is reported as it always was. The directory's own message is kept whole either way.
+    /// </summary>
+    private static ConnectedSystemExportResult FailureFor(Exception ex) =>
+        LdapUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName)
+            ? ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName)
+            : ConnectedSystemExportResult.Failed(ex.Message);
 
     /// <summary>
     /// Returns a structured export error when the placeholder member DN is rejected by the directory.

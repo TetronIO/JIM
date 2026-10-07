@@ -204,6 +204,8 @@ public class ConnectorCapabilityMirrorTests
 
         public bool SupportsUniquenessProbe => Get<bool>(nameof(SupportsUniquenessProbe));
 
+        public bool SupportsUniquenessRejectionClassification => Get<bool>(nameof(SupportsUniquenessRejectionClassification));
+
         public AttributeStandard SchemaStandard => Get<AttributeStandard>(nameof(SchemaStandard));
     }
 }

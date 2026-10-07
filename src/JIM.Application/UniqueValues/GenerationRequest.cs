@@ -111,6 +111,13 @@ public sealed record GenerationRequest
     public IReadOnlyCollection<string> ProbeExemptValues { get; init; } = [];
 
     /// <summary>
+    /// Values a Connected System has rejected as already in use for this object (Collision Remediation, release 4),
+    /// compared case-insensitively. Treated as taken by the first gate, whatever JIM's own records say: the target
+    /// knows something JIM's connector space does not yet. Empty outside <see cref="UniqueValueGenerationServer.RegenerateAsync"/>.
+    /// </summary>
+    public IReadOnlyCollection<string> RejectedValues { get; init; } = [];
+
+    /// <summary>
     /// When true, the mapping's base expression could not be evaluated for this object (a required input is
     /// missing and the mapping's Missing Input Behaviour is "contribute no value", the default for a generated
     /// mapping per FR 29). <see cref="UniqueValueGenerationServer.ResolveAsync"/> then only checks for an

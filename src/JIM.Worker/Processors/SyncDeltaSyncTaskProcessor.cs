@@ -91,7 +91,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // review (#892, #1925). Those are flagged without any Connected System Object changing (a relative-date boundary
         // crossed, an export rule's scope changed), and a Delta Synchronisation with nothing new to import is the run a
         // schedule makes most often; completing here would leave the review waiting for a Full Synchronisation.
-        if (totalCsosToProcess == 0 && (await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(1)).Count == 0)
+        // The same holds for a generated value an export run corrected (#242, release 4): nothing in this system changed,
+        // but the correction is waiting for whichever synchronisation runs next to reach the queued exports.
+        if (totalCsosToProcess == 0
+            && (await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(1)).Count == 0
+            && !await _syncRepo.AnyGeneratedValueRevisionsPendingAsync())
         {
             Log.Information("PerformDeltaSyncAsync: No CSOs modified since last sync. Completing immediately.");
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No changes to process");
@@ -364,6 +368,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // Objects the reconciler flagged, whose export-rule scope drifted with the clock without a data
             // change (same as full sync; see full sync for the detailed explanation).
             await ProcessScopeReviewPendingMetaverseObjectsAsync();
+
+            // Collision Remediation (#242, release 4): carry generated values an export run corrected to the queued
+            // exports, the rejecting system's included, now that this run's own changes are persisted.
+            await ProcessGeneratedValueRevisionsPendingAsync();
 
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);

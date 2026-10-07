@@ -76,6 +76,8 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     public bool SupportsUniquenessProbe => false;
 
+    public bool SupportsUniquenessRejectionClassification => true;
+
     /// <summary>
     /// The provider's schema is SCIM 2.0 by definition, which is what lets the advisory Standard Mappings
     /// offer Attribute Flow hints against a discovered schema rather than leaving an administrator to

@@ -339,7 +339,7 @@ internal sealed class ScimBulkExporter
         _logger.Warning("SCIM export: the service provider rejected a bulk {Method} of {Path} with HTTP {Status}.",
             prepared.Operation.Method.Method, LogSanitiser.Sanitise(prepared.Operation.Path), LogSanitiser.Sanitise(reported.Status));
 
-        return ConnectedSystemExportResult.Failed(Describe(reported, prepared, error), ScimExportErrorClassifier.Classify(reported.StatusCode, error?.ScimType));
+        return ScimExportErrorClassifier.Failure(Describe(reported, prepared, error), reported.StatusCode, error);
     }
 
     private static ConnectedSystemExportResult Applied(ScimBulkOperationResult reported, ScimBulkExportOperation prepared)

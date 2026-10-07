@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Reflection;
+using JIM.Models.Activities;
+using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Causality;
 using JIM.Web.Pages;
@@ -96,6 +98,91 @@ public class ActivityRunProfileExecutionItemDetailTests
         // ...independently of the object identity, which is unaffected and still resolves.
         Assert.That(context.CsoConnectedSystemId, Is.EqualTo(objectSystem.Id));
         Assert.That(context.CsoConnectedSystemName, Is.EqualTo(objectSystem.Name));
+    }
+
+    [Test]
+    public void BuildCausalityPageContext_ExportScopeReviewItem_NamesTheMetaverseObjectAndNoRecord()
+    {
+        // The item has no Connected System Object. Its name snapshot is the Metaverse Object's, and the record system the
+        // page resolves for it is the run's; passing either as a record made the panel invent a source object (#1982).
+        var metaverseObjectId = Guid.NewGuid();
+        var page = new ActivityRunProfileExecutionItemDetail();
+        SetPrivateField(page, "_activityRunProfileExecutionItem", new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = metaverseObjectId,
+            DisplayNameSnapshot = "Carol Ng",
+            ObjectTypeSnapshot = "Person"
+        });
+        SetPrivateField(page, "_runConnectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
+        SetPrivateField(page, "_connectedSystemHeader", new ConnectedSystemHeader { Id = 1, Name = "HR" });
+        SetPrivateField(page, "_identityHeader", new JIM.Models.Core.DTOs.MetaverseObjectHeader
+        {
+            Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People", CachedDisplayName = "Carol Ng"
+        });
+
+        var context = InvokeBuildCausalityPageContext(page);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.SubjectMetaverseObjectId, Is.EqualTo(metaverseObjectId));
+            Assert.That(context.SubjectMetaverseObjectName, Is.EqualTo("Carol Ng"));
+            Assert.That(context.CsoDisplayName, Is.Null);
+            Assert.That(context.CsoConnectedSystemId, Is.Null);
+            Assert.That(context.CsoObjectTypeName, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ResolveIdentityId_ExportScopeReviewItem_IsTheMetaverseObjectTheItemNames()
+    {
+        // A review item has no Connected System Object and no outcome targeting its Metaverse Object (its outcomes
+        // target the accounts the review provisioned or deprovisioned), so the id it carries is the only way to find
+        // the object it is about (#1971).
+        var metaverseObjectId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = metaverseObjectId,
+            SyncOutcomes =
+            [
+                new ActivityRunProfileExecutionItemSyncOutcome
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                    TargetEntityId = Guid.NewGuid()
+                }
+            ]
+        };
+
+        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(metaverseObjectId));
+    }
+
+    [Test]
+    public void ResolveIdentityId_ItemWithoutAMetaverseObjectId_IsTheObjectItsIdentityOutcomeTargets()
+    {
+        var projectedId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            ObjectChangeType = ObjectChangeType.Projected,
+            SyncOutcomes =
+            [
+                new ActivityRunProfileExecutionItemSyncOutcome
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                    TargetEntityId = projectedId
+                }
+            ]
+        };
+
+        Assert.That(InvokeResolveIdentityId(item), Is.EqualTo(projectedId));
+    }
+
+    private static Guid? InvokeResolveIdentityId(ActivityRunProfileExecutionItem item)
+    {
+        var method = typeof(ActivityRunProfileExecutionItemDetail)
+            .GetMethod("ResolveIdentityId", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.That(method, Is.Not.Null, "Expected private static method 'ResolveIdentityId' to exist on the page.");
+        return (Guid?)method!.Invoke(null, [item]);
     }
 
     private static void SetPrivateField(ActivityRunProfileExecutionItemDetail target, string fieldName, object? value)

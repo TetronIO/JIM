@@ -99,6 +99,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
     public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
     public virtual DbSet<RetiredGeneratedValue> RetiredGeneratedValues { get; set; } = null!;
+    public virtual DbSet<GeneratedValueRevisionPending> GeneratedValueRevisionsPending { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
@@ -1520,5 +1521,31 @@ public class JimDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint(
                 "CK_RetiredGeneratedValues_OneAttribute",
                 "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1"));
+
+        // GeneratedValueRevisionPending (Unique Value Generation, #242, release 4): a Collision Remediation revision
+        // waiting for the next synchronisation to carry it to the queued exports. Both FKs cascade: a revision of an
+        // object or attribute that no longer exists has nothing left to carry. The drain reads them oldest first.
+        modelBuilder.Entity<GeneratedValueRevisionPending>()
+            .ToTable("GeneratedValueRevisionsPending");
+
+        modelBuilder.Entity<GeneratedValueRevisionPending>()
+            .HasOne(r => r.MetaverseObject)
+            .WithMany()
+            .HasForeignKey(r => r.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueRevisionPending>()
+            .HasOne(r => r.MetaverseAttribute)
+            .WithMany()
+            .HasForeignKey(r => r.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueRevisionPending>()
+            .HasIndex(r => new { r.MetaverseObjectId, r.MetaverseAttributeId })
+            .HasDatabaseName("IX_GeneratedValueRevisionsPending_MvoId_AttributeId");
+
+        modelBuilder.Entity<GeneratedValueRevisionPending>()
+            .HasIndex(r => r.Created)
+            .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
     }
 }

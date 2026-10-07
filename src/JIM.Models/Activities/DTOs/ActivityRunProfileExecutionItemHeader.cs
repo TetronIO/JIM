@@ -19,6 +19,12 @@ public class ActivityRunProfileExecutionItemHeader
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
 
     /// <summary>
+    /// The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export
+    /// scope review). Null otherwise.
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
     /// Denormalised outcome summary for stat chip rendering in list views.
     /// Comma-separated outcome types with counts, e.g., "Projected:1,AttributeFlow:12,PendingExportCreated:2".
     /// Null for legacy RPEIs or when outcome tracking is disabled.

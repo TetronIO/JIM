@@ -94,6 +94,20 @@ public class ActivityRunProfileExecutionStats
     /// (Unique Value Generation, #242).
     /// </summary>
     public int TotalGeneratedValueFailures { get; set; }
+
+    /// <summary>
+    /// Count of generated values Collision Remediation corrected during an export run after the target rejected
+    /// them as already in use (Unique Value Generation, #242, release 4):
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated"/> outcomes.
+    /// </summary>
+    public int TotalGeneratedValuesRemediated { get; set; }
+
+    /// <summary>
+    /// Count of generated values a target rejected that could not safely be corrected, so they wait on an
+    /// administrator's decision (Unique Value Generation, #242, release 4): Run Profile Execution Items whose error
+    /// type is <see cref="ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved"/>.
+    /// </summary>
+    public int TotalGeneratedValuesNeedingDecision { get; set; }
     #endregion
 
     #region Export Stats

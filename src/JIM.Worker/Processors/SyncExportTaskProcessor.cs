@@ -60,6 +60,12 @@ public class SyncExportTaskProcessor
     /// </summary>
     private readonly ActivityPhaseReporter _phases;
 
+    /// <summary>
+    /// The worker's process-wide reservation set, which values Collision Remediation draws are claimed in (Unique Value
+    /// Generation, #242, release 4), so a parallel synchronisation can never issue the same value meanwhile.
+    /// </summary>
+    private readonly JIM.Application.UniqueValues.UniqueValueReservationSet? _uniqueValueReservations;
+
     public SyncExportTaskProcessor(
         ISyncServer syncServer,
         ISyncRepository syncRepository,
@@ -71,7 +77,8 @@ public class SyncExportTaskProcessor
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
         Func<ISyncRepositoryScope>? syncRepoFactory = null,
         IConnectorFactory? connectorFactory = null,
-        ActivityPhaseReporter? phaseReporter = null)
+        ActivityPhaseReporter? phaseReporter = null,
+        JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
@@ -87,6 +94,7 @@ public class SyncExportTaskProcessor
         _initiatedById = workerTask.InitiatedById;
         _initiatedByName = workerTask.InitiatedByName;
         _phases = phaseReporter ?? ActivityPhaseReporter.None;
+        _uniqueValueReservations = uniqueValueReservations;
     }
 
     /// <summary>
@@ -224,7 +232,8 @@ public class SyncExportTaskProcessor
                         // Stream RPEI creation per-batch instead of accumulating 100K+ items
                         // across the entire run. This bounds memory to batch size (~100 items).
                         await PersistBatchRpeisAsync(batchItems, _connectedSystem.Id);
-                    });
+                    },
+                    uniqueValueReservations: _uniqueValueReservations);
             }
 
             // The Connector has nothing left to do, so whichever step it last declared stops being
@@ -317,20 +326,24 @@ public class SyncExportTaskProcessor
 
         foreach (var exportItem in batchItems)
         {
+            // A value Collision Remediation corrected (#242, release 4) wrote nothing either: the export stays queued
+            // for the next synchronisation to re-stage with the corrected value.
+            var remediated = exportItem.GeneratedValueCollision?.Handling == GeneratedValueCollisionHandling.Remediated;
             var executionItem = new ActivityRunProfileExecutionItem
             {
+                Id = exportItem.ExecutionItemId ?? Guid.Empty,
                 Activity = _activity,
                 ActivityId = _activity.Id,
                 // An export that wrote nothing this run (deferred whole, issue #1398) is a Pending Export
                 // still staged, not something exported; its item exists to carry why it is waiting.
-                ObjectChangeType = exportItem.Deferred
+                ObjectChangeType = exportItem.Deferred || remediated
                     ? ObjectChangeType.PendingExport
                     : exportItem.ChangeType switch
                     {
                         PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
                         _ => ObjectChangeType.Exported
                     },
-                PendingExportId = exportItem.Deferred ? exportItem.PendingExportId : null
+                PendingExportId = exportItem.Deferred || remediated ? exportItem.PendingExportId : null
             };
 
             // Link to the Connected System Object if available.
@@ -361,16 +374,16 @@ public class SyncExportTaskProcessor
                 ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
-            if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
+            if (exportItem.GeneratedValueCollision?.Handling == GeneratedValueCollisionHandling.NeedsDecision)
             {
-                executionItem.ErrorType = exportItem.ErrorType switch
-                {
-                    ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
-                    // A refusal JIM made deliberately (#492), naming configuration an administrator has to
-                    // act on; the UnhandledError bucket would read as a JIM defect and fail the Activity.
-                    ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet => ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet,
-                    _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
-                };
+                // A rejected generated value that could not safely be corrected (#242, release 4): named for the
+                // decision it waits on, not as a failed export, and worded in full by the export server.
+                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
+                executionItem.ErrorMessage = exportItem.GeneratedValueCollision.Message;
+            }
+            else if (!exportItem.Deferred && !exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
+            {
+                executionItem.ErrorType = ToExecutionItemErrorType(exportItem.ErrorType);
                 executionItem.ErrorMessage = exportItem.ErrorCount > 1
                     ? $"Export failed after {exportItem.ErrorCount} attempts: {exportItem.ErrorMessage}"
                     : exportItem.ErrorCount == 1
@@ -390,7 +403,15 @@ public class SyncExportTaskProcessor
 
             // Build sync outcome. A deferred item wrote nothing, so there is no export outcome to record.
             ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
-            if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            if (remediated && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                // "Value corrected": the item's record is the correction, with the carrying attribute set from the
+                // rejected value to the new one in its change record.
+                exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated,
+                    detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
+                    detailMessage: exportItem.GeneratedValueCollision!.Message);
+            }
+            else if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
                 {
@@ -417,6 +438,12 @@ public class SyncExportTaskProcessor
                     _initiatedByType,
                     _initiatedById,
                     _initiatedByName);
+
+                // A corrected value was not written to the Connected System: the record is of the queued change the
+                // correction made, not of an export (#242, release 4).
+                if (remediated)
+                    change.ChangeType = ObjectChangeType.PendingExport;
+
                 executionItem.ConnectedSystemObjectChange = change;
             }
 
@@ -581,4 +608,21 @@ public class SyncExportTaskProcessor
         // Always use preview mode for this method
         return await _syncServer.ExecuteExportsAsync(_connectedSystem, _connector, SyncRunMode.PreviewOnly);
     }
+
+    /// <summary>
+    /// The error type recorded on an export's Run Profile Execution Item for the way its Connector classified the
+    /// failure. Anything unclassified is an Unhandled Error, which fails the Activity.
+    /// </summary>
+    internal static ActivityRunProfileExecutionItemErrorType ToExecutionItemErrorType(ConnectedSystemExportErrorType? exportErrorType) =>
+        exportErrorType switch
+        {
+            ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
+            // A refusal JIM made deliberately (#492), naming configuration an administrator has to
+            // act on; the UnhandledError bucket would read as a JIM defect and fail the Activity.
+            ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet => ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet,
+            // The Connected System holds the value already: a data conflict for an administrator (or, release 4,
+            // Collision Remediation) to resolve, which the Connector told apart from other failures.
+            ConnectedSystemExportErrorType.UniqueValueAlreadyInUse => ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse,
+            _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
+        };
 }

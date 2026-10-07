@@ -4621,9 +4621,12 @@ public abstract class SyncTaskProcessorBase
                 // Activity. The RPEI is linked to the MVO through _mvoIdToRpei (the same mechanism the per-page
                 // flow uses); provisioning-CSO change records and export outcomes resolve the originating RPEI
                 // via that map. The MVO is loaded no-tracking; provisioning CSOs reference it by FK scalar only.
-                // It is named here because, unlike a page item, it has no Connected System Object to take a
-                // name from, and the Activity would otherwise list it with none.
+                // It is named, classified and pointed at its Metaverse Object here because, unlike a page item, it
+                // has no Connected System Object to take any of those from, and the item page would otherwise read
+                // it as an unclassified operation on a deleted object (#1971).
                 var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.ObjectChangeType = ObjectChangeType.ExportScopeReview;
+                rpei.MetaverseObjectId = mvo.Id;
                 rpei.DisplayNameSnapshot = mvo.NameOrId;
                 rpei.ObjectTypeSnapshot = mvo.Type?.Name;
                 _activity.RunProfileExecutionItems.Add(rpei);
@@ -4695,6 +4698,117 @@ public abstract class SyncTaskProcessorBase
         if (totalProcessed > 0)
             Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} flagged Metaverse Object(s), " +
                 "{Changed} of which were provisioned, deprovisioned or had an export staged (#892, #1925)", totalProcessed, totalChanged);
+    }
+
+    /// <summary>
+    /// Collision Remediation's revision-pending drain (Unique Value Generation, #242, release 4; plan decision 8 as
+    /// revised). An export run that corrected a generated value revised it on the Metaverse Object and left a record; the
+    /// queued exports still carry the rejected value. Runs once after the page loop of every synchronisation, full or
+    /// delta and whatever its Connected System, draining the records in batches through the same export evaluation the
+    /// per-page flow uses, with the revised attribute as changed, so the queued Pending Export of every target (the
+    /// rejecting system's included) is updated to the new value, merged into what is already queued rather than added
+    /// beside it. Each object's item carries the causal edge from the export item that corrected the value; where the
+    /// evaluation staged a new export it is also the item that queued it, so the next export run's causality reads
+    /// rejection, correction, export. (A provisioning Create already attempted is appended to in place, keeping the item
+    /// that first queued it.)
+    /// <para>
+    /// The scope review's flag (#892) could not carry this: it evaluates exports with no changed attributes, which stages
+    /// nothing for an object already in scope. Values derived from the revised one (an email, a User Principal Name) are
+    /// re-derived by their hosting systems' next synchronisation, which the export run marked.
+    /// </para>
+    /// <para>
+    /// A record is deleted only once its batch's writes have persisted; should one throw, the record stays and the next
+    /// synchronisation drains it again. Only meaningful in a sync run (the export evaluation cache is present).
+    /// </para>
+    /// </summary>
+    protected async Task ProcessGeneratedValueRevisionsPendingAsync()
+    {
+        if (_exportEvaluationCache == null)
+            return;
+
+        const int batchSize = 500;
+        var totalRecords = 0;
+        var totalChanged = 0;
+
+        while (!_cancellationTokenSource.IsCancellationRequested)
+        {
+            var records = await _syncRepo.GetGeneratedValueRevisionsPendingAsync(batchSize);
+            if (records.Count == 0)
+                break;
+
+            var recordsByObject = records.GroupBy(r => r.MetaverseObjectId).ToDictionary(g => g.Key, g => g.ToList());
+            var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(recordsByObject.Keys);
+            var revisionItems = new List<(Guid MvoId, ActivityRunProfileExecutionItem Item)>(mvos.Count);
+
+            foreach (var mvo in mvos)
+            {
+                var objectRecords = recordsByObject[mvo.Id];
+                var revisedAttributeIds = objectRecords.Select(r => r.MetaverseAttributeId).ToHashSet();
+                var changedAttributes = mvo.AttributeValues.Where(av => revisedAttributeIds.Contains(av.AttributeId)).ToList();
+
+                // An item per object, named from it, linked through _mvoIdToRpei exactly as the scope review links its
+                // items, so the exports staged below record it as the item that queued them.
+                var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.DisplayNameSnapshot = mvo.NameOrId;
+                rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+                _activity.RunProfileExecutionItems.Add(rpei);
+                _mvoIdToRpei[mvo.Id] = rpei;
+                revisionItems.Add((mvo.Id, rpei));
+
+                foreach (var record in objectRecords)
+                {
+                    rpei.CausalEdges.Add(new CausalCause
+                    {
+                        RunProfileExecutionItemId = record.RemediatingActivityRunProfileExecutionItemId,
+                        MetaverseObjectId = mvo.Id,
+                        DisplayName = mvo.NameOrId,
+                        ObjectTypeName = mvo.Type?.Name,
+                        ObjectTypePluralName = mvo.Type?.PluralName,
+                        EffectAttributeName = changedAttributes.FirstOrDefault(av => av.AttributeId == record.MetaverseAttributeId)?.Attribute?.Name,
+                        ReasonCode = record.ReasonCode,
+                        ConnectedSystemId = record.RejectedByConnectedSystemId,
+                        ConnectedSystemName = record.RejectedByConnectedSystemName
+                    }.ToEdge(CausalEdgeType.ExportRejectionCausedGeneratedValueRevision, effectOutcome: null));
+                }
+
+                _pendingExportEvaluations.Add((mvo, changedAttributes, null));
+            }
+
+            // The per-page export flush sequence, with automatic change detection off for the same reason the scope
+            // review turns it off (see ProcessScopeReviewPendingMetaverseObjectsAsync).
+            _syncRepo.SetAutoDetectChangesEnabled(false);
+            try
+            {
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+                await ResolvePendingExportReferenceSnapshotsAsync();
+
+                // Every revision's item is kept, unlike the scope review's: it carries the causal edge back to the
+                // rejection, which must land even where the evaluation merged the value into an export already queued
+                // (a provisioning Create already attempted is appended to in place, and so is not counted as changed).
+                totalChanged += revisionItems.Count(revision => _mvoIdsChangedByExportEvaluation.Contains(revision.MvoId));
+
+                await FlushRpeisAsync();
+            }
+            finally
+            {
+                _syncRepo.SetAutoDetectChangesEnabled(true);
+            }
+
+            // Deleted only now the batch's writes have persisted (fail-safe, as the scope review clears its flags). A
+            // record whose object has gone was removed with it by the foreign key's cascade.
+            await _syncRepo.DeleteGeneratedValueRevisionsPendingAsync(records.Select(r => r.Id).ToList());
+
+            ClearPageTrackingState();
+            totalRecords += records.Count;
+
+            if (records.Count < batchSize)
+                break;
+        }
+
+        if (totalRecords > 0)
+            Log.Information("ProcessGeneratedValueRevisionsPendingAsync: carried {Count} corrected generated value(s) to the queued exports; " +
+                "{Changed} object(s) had an export staged or replaced (#242 Collision Remediation)", totalRecords, totalChanged);
     }
 
     /// <summary>

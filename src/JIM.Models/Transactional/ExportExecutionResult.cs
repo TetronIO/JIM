@@ -167,6 +167,20 @@ public class ExportExecutionResult
     /// </summary>
     public int InitialPasswordStagingFailedCount { get; set; }
 
+    /// <summary>
+    /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was
+    /// already in use, whose value Collision Remediation revised. Each is left Pending for the next synchronisation
+    /// to re-stage, and is also counted in <see cref="DeferredCount"/>.
+    /// </summary>
+    public int GeneratedValuesRemediatedCount { get; set; }
+
+    /// <summary>
+    /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was
+    /// already in use, whose value could not safely be revised, so the assignment needs an administrator's decision
+    /// and the export is Parked. Also counted in <see cref="FailedCount"/>.
+    /// </summary>
+    public int GeneratedValuesNeedingDecisionCount { get; set; }
+
     #endregion
 
     #region Run Profile Safeguards (issue #1618)
@@ -241,6 +255,26 @@ public class ProcessedExportItem
     /// Null when the export succeeded.
     /// </summary>
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
+
+    /// <summary>
+    /// The attribute the Connected System named when it rejected the export because a value is already in use
+    /// (<see cref="ConnectedSystemExportResult.RejectedAttributeName"/>); null when it named none or the export did
+    /// not fail that way.
+    /// </summary>
+    public string? RejectedAttributeName { get; set; }
+
+    /// <summary>
+    /// What Collision Remediation did with this rejection (Unique Value Generation, #242, release 4); null when the
+    /// export did not fail that way, or the rejection was reported as an ordinary export error.
+    /// </summary>
+    public GeneratedValueCollisionOutcome? GeneratedValueCollision { get; set; }
+
+    /// <summary>
+    /// The id the Run Profile Execution Item for this export must take, when the export server needed to name the item
+    /// before it exists (a Collision Remediation records it on the assignment and the revision-pending record, so the
+    /// next synchronisation's causal edge can point at it). Null lets the item take an id of its own.
+    /// </summary>
+    public Guid? ExecutionItemId { get; set; }
 
     /// <summary>
     /// The Pending Export this item reports on, captured before it is deleted. Set for every item raised by

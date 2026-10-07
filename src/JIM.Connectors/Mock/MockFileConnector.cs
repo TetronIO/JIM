@@ -35,6 +35,8 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorI
 
     public bool SupportsUniquenessProbe => false;
 
+    public bool SupportsUniquenessRejectionClassification => false;
+
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         // if a test has configured an exception to be thrown, throw it to simulate connectivity errors

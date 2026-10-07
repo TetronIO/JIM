@@ -490,6 +490,48 @@ public class SqlConnectorExportTests
         }
     }
 
+    [Test]
+    public async Task ExportAsync_ADuplicateKeyRefusal_IsClassifiedAsAValueAlreadyInUseNamingTheColumn()
+    {
+        // The SQLSTATE and message are what Npgsql raised against PostgreSQL 18 for a duplicate on a unique
+        // column (captured 2026-10-06), so this exercises the provider-neutral DbException path.
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("23505: duplicate key value violates unique constraint \"person_display_name_key\"\n\nDETAIL: Key (DISPLAY_NAME)=(Ada) already exists.", "23505")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.UniqueValueAlreadyInUse));
+            Assert.That(results[0].RejectedAttributeName, Is.EqualTo("DISPLAY_NAME"));
+            Assert.That(results[0].ErrorMessage, Does.Contain("duplicate key value violates unique constraint"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ARefusalThatIsNotADuplicate_StaysAGeneralFailure()
+    {
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("23503: insert or update on table \"person\" violates foreign key constraint \"person_dept_fkey\"", "23503")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+            Assert.That(results[0].RejectedAttributeName, Is.Null);
+        }
+    }
+
     #endregion
 
     #region Update

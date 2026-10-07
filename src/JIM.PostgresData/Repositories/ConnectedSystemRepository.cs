@@ -4834,10 +4834,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (changesToAdd.Count > 0)
         {
+            // Track each change on its own, never through AddRange: AddRange walks the graph, and a change's Attribute
+            // navigation is export evaluation's cached instance, which on the worker's long-lived context is routinely a
+            // different instance of an attribute already tracked, so the walk throws "another instance with the same
+            // key value is already being tracked" (src/CLAUDE.md, "DbSet.Add Walks the Graph; Entry() Does Not"). The
+            // foreign keys are set as scalars, so nothing else needs attaching.
             foreach (var change in changesToAdd)
+            {
                 change.PendingExportId = pendingExportId;
-
-            await Repository.Database.PendingExportAttributeValueChanges.AddRangeAsync(changesToAdd);
+                change.AttributeId = change.Attribute?.Id ?? change.AttributeId;
+                Repository.Database.Entry(change).State = EntityState.Added;
+            }
         }
 
         if (changeIdsToRemove.Count > 0 || changesToAdd.Count > 0)
@@ -6963,6 +6970,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.SyncRuleInitialPasswords
             .AsNoTracking()
             .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
+    }
+
+    public async Task<Dictionary<int, SyncRuleMappingGeneration>> GetSyncRuleMappingGenerationsAsync(IReadOnlyCollection<int> generationIds)
+    {
+        if (generationIds.Count == 0)
+            return [];
+
+        // Read-only comparison input, so no tracking, for the same reason as GetSyncRuleInitialPasswordAsync.
+        var ids = generationIds.ToList();
+        return await Repository.Database.SyncRuleMappingGenerations
+            .AsNoTracking()
+            .Include(g => g.Exclusions)
+            .Where(g => ids.Contains(g.Id))
+            .ToDictionaryAsync(g => g.Id);
     }
 
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)

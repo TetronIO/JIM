@@ -1787,6 +1787,58 @@ public interface ISyncRepository
 
     #endregion
 
+    #region Collision Remediation (#242, release 4)
+
+    /// <summary>
+    /// A live assignment by its id, if it still exists: the target of the Needs Decision exits (authorise a rename,
+    /// retry). <c>AsNoTracking</c>.
+    /// </summary>
+    Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentByIdAsync(Guid assignmentId);
+
+    /// <summary>
+    /// Writes one Collision Remediation revision atomically (plan decision 8, as revised): the assignment's new state
+    /// and value, the previous value's retirement where <see cref="GeneratedValueRevision.RetirePreviousValue"/> asks
+    /// for it, and, in import mode, the Metaverse value (compare-and-swap on <see cref="GeneratedValueRevision.PreviousValue"/>,
+    /// the optimistic concurrency check, with the generated mapping's provenance), the Metaverse Object's change record
+    /// and the revision-pending record; in export mode, the queued Pending Export attribute change carrying the value.
+    /// One transaction: either every part is written or none is.
+    /// </summary>
+    /// <returns><see cref="GeneratedValueRevisionResult.Applied"/>, or why nothing was written.</returns>
+    Task<GeneratedValueRevisionResult> ApplyGeneratedValueRevisionAsync(GeneratedValueRevision revision);
+
+    /// <summary>
+    /// Up to <paramref name="maxResults"/> revision-pending records, oldest first: what each synchronisation drains
+    /// after its page loop. <c>AsNoTracking</c>.
+    /// </summary>
+    Task<List<GeneratedValueRevisionPending>> GetGeneratedValueRevisionsPendingAsync(int maxResults);
+
+    /// <summary>
+    /// Whether any revision-pending record exists: lets a delta synchronisation with no changed objects still run the
+    /// drain instead of returning early.
+    /// </summary>
+    Task<bool> AnyGeneratedValueRevisionsPendingAsync();
+
+    /// <summary>
+    /// Whether a revision of <paramref name="metaverseAttributeId"/> on <paramref name="metaverseObjectId"/> is still
+    /// waiting for a synchronisation: an export rejecting the old value meanwhile is rejecting a value JIM has already
+    /// replaced, and must not be remediated a second time.
+    /// </summary>
+    Task<bool> HasGeneratedValueRevisionPendingAsync(Guid metaverseObjectId, int metaverseAttributeId);
+
+    /// <summary>
+    /// Deletes drained revision-pending records by id.
+    /// </summary>
+    Task DeleteGeneratedValueRevisionsPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
+    /// Returns every Parked Pending Export for the given Connected System Objects to Pending, ready to export at the
+    /// next export run (Needs Decision released: Retry, or the generated mapping's configuration changing). The error
+    /// count is left as it is: parking never consumed it. Returns how many were released.
+    /// </summary>
+    Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    #endregion
+
     #region Retired Values Register (#242, Phase 6)
 
     /// <summary>

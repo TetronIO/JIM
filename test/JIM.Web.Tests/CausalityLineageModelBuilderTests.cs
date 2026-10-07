@@ -34,6 +34,31 @@ public class CausalityLineageModelBuilderTests
     /// </summary>
     private static CausalityLineageObject Sole(CausalityLineageColumn column) => column.Objects.Single();
 
+    // ─── An item that records a Metaverse Object (#1982) ───
+
+    /// <summary>
+    /// An export scope review item records a Metaverse Object, not a Connected System Object: there is no source record
+    /// to draw and no import to join it by. The Metaverse Object is the story's subject, so it is named and linked as
+    /// such, and the account the review disconnected is named by its own current name.
+    /// </summary>
+    [Test]
+    public void Build_ExportScopeReviewItem_DrawsNoRecordOfItsOwnAndNamesTheMetaverseObject()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.ExportScopeReviewItem(), CausalityTestData.ExportScopeReviewContext());
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.ExportScopeReview);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lineage.Columns.Select(c => c.Kind),
+                Is.EqualTo(new[] { CausalityLineageColumnKind.Identity, CausalityLineageColumnKind.Record }));
+            Assert.That(Sole(lineage.Columns[0]).Title, Is.EqualTo("Liam Allen"));
+            Assert.That(Sole(lineage.Columns[0]).Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+            Assert.That(Sole(lineage.Columns[1]).Title, Is.EqualTo("Liam Allen"), "the disconnected account, by its own current name");
+            Assert.That(lineage.Joins.Single().Label, Is.EqualTo("disconnected"), "nothing was exported to the account");
+        }
+    }
+
     // ─── Objects the panel knows are gone (#1495) ───
 
     /// <summary>
