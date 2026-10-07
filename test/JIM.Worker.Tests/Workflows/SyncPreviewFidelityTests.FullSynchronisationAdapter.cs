@@ -365,6 +365,39 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_EstimatesTheDurationFromThisSystemsLastCompletedRunAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+        await CreateCsoAsync(ctx.Source.Id, ctx.SourceObject.Type, "Jane Doe", "EMP002");
+
+        // This system's last completed Full Synchronisation evaluated 10 objects in 100 seconds: ten seconds each, far
+        // slower than the reference. A newer failed run, another system's slower run and a Delta Synchronisation say
+        // nothing about how long this system's Full Synchronisation takes.
+        var executed = DateTime.UtcNow.AddHours(-2);
+        DbContext.Activities.AddRange(
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, executed, objects: 10, seconds: 100),
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.FailedWithError, executed.AddMinutes(30), objects: 10, seconds: 1),
+            RunActivity(ctx.Target.Id, ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, executed.AddMinutes(40), objects: 1, seconds: 1_000),
+            RunActivity(ctx.Source.Id, ConnectedSystemRunType.DeltaSynchronisation, ActivityStatus.Complete, executed.AddMinutes(50), objects: 1, seconds: 1_000));
+        await DbContext.SaveChangesAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration, Is.EqualTo(TimeSpan.FromSeconds(20)), "two objects at ten seconds each");
+    }
+
+    [Test]
+    public async Task FullSynchronisationAdapter_EstimateCostAsync_WithNoCompletedRun_EstimatesAtTheReferenceRateAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+
+        var estimate = await FullSynchronisationAdapter.EstimateCostAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(estimate.EstimatedDuration,
+            Is.EqualTo(TimeSpan.FromSeconds(1 / FullSynchronisationDurationEstimate.ReferenceObjectsPerSecond)));
+    }
+
+    [Test]
     public async Task FullSynchronisationAdapter_EvaluateDeltasAsync_WithACap_StopsAtItAsync()
     {
         var ctx = await SetUpNewSourceObjectAsync();
@@ -418,6 +451,19 @@ public partial class SyncPreviewFidelityTests
     }
 
     private ConnectedSystemFullSynchronisationPreviewAdapter FullSynchronisationAdapter => new(Jim);
+
+    private static Activity RunActivity(int connectedSystemId, ConnectedSystemRunType runType, ActivityStatus status, DateTime executed,
+        int objects, int seconds) => new()
+    {
+        TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+        TargetOperationType = ActivityTargetOperationType.Execute,
+        ConnectedSystemId = connectedSystemId,
+        ConnectedSystemRunType = runType,
+        Status = status,
+        Executed = executed,
+        ExecutionTime = TimeSpan.FromSeconds(seconds),
+        ObjectsToProcess = objects
+    };
 
     private static PreviewContext FullSynchronisationContext(int connectedSystemId, int? maxObjects = null) => new()
     {

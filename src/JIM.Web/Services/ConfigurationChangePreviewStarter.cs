@@ -39,7 +39,7 @@ public class ConfigurationChangePreviewStarter(IJimApplicationFactory jimFactory
         var effectiveRequest = request;
         if (estimate.EstimatedDeltaRows > threshold)
         {
-            var choice = await _prompt.AskAsync(estimate.EstimatedDeltaRows);
+            var choice = await _prompt.AskAsync(estimate);
             if (choice is null)
                 return null;
 

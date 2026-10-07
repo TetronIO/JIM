@@ -532,6 +532,22 @@ public class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<Activity?> GetLatestCompletedFullSynchronisationAsync(int connectedSystemId)
+    {
+        // TargetOperationType must be Execute, as in GetLastFullSynchronisationStartsAsync: Run Profile CRUD Activities
+        // carry the run type too, and editing a Full Synchronisation Run Profile is not having run one.
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemId == connectedSystemId
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.FullSynchronisation
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning))
+            .OrderByDescending(a => a.Executed)
+            .ThenByDescending(a => a.Id)
+            .FirstOrDefaultAsync();
+    }
+
     /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
