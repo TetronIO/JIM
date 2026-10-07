@@ -128,12 +128,10 @@ public class GeneratedValueDecisionServer
         var wanted = syncRuleIds.ToHashSet();
         var attention = new Dictionary<int, GeneratedValueDecisionAttention>();
 
-        foreach (var count in counts)
-        {
-            var syncRuleId = configuration.SyncRuleIdOf(count.GenerationId);
-            if (syncRuleId.HasValue && wanted.Contains(syncRuleId.Value))
-                Add(attention, syncRuleId.Value, count);
-        }
+        foreach (var (syncRuleId, count) in counts
+                     .Select(c => (SyncRuleId: configuration.SyncRuleIdOf(c.GenerationId), Count: c))
+                     .Where(x => x.SyncRuleId.HasValue && wanted.Contains(x.SyncRuleId.Value)))
+            Add(attention, syncRuleId!.Value, count);
 
         return attention;
     }
@@ -199,11 +197,13 @@ public class GeneratedValueDecisionServer
         var released = 0;
         foreach (var row in held)
         {
-            if (await Application.UniqueValues.RetryAsync(row.AssignmentId))
-            {
-                await RecordAsync(row, ActivityTargetOperationType.RetryGeneratedValue, initiatedBy, initiatedByApiKey);
-                released++;
-            }
+            // False when something else released it between the read and now; nothing to record then.
+            var releasedNow = await Application.UniqueValues.RetryAsync(row.AssignmentId);
+            if (!releasedNow)
+                continue;
+
+            await RecordAsync(row, ActivityTargetOperationType.RetryGeneratedValue, initiatedBy, initiatedByApiKey);
+            released++;
         }
 
         Log.Information("TryAgainAsync: {Released} of {Matched} generated value(s) needing a decision were released for the next export to try again.",
