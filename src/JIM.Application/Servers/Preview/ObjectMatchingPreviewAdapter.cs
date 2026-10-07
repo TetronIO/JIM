@@ -158,23 +158,19 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// is not answerable in aggregate, and a count that guessed would be the confident wrong number this preview
     /// exists to prevent.
     /// </summary>
-    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context)
+    public async Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context) =>
+        await PreviewImpactCounter.CountAsync((await CreateImpactCounterAsync(context))!, EvaluateDeltasAsync(context, CancellationToken.None));
+
+    /// <summary>
+    /// Stage 2 counted in the framework's one evaluation pass (#1530): one per delta, per transition, exactly as
+    /// <see cref="CountImpactAsync"/> counts.
+    /// </summary>
+    public async Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var configuration = await LoadAsync(context);
-        var counts = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>();
-
-        await foreach (var delta in EvaluateDeltasAsync(context, CancellationToken.None))
-            counts[delta.TransitionType] = counts.GetValueOrDefault(delta.TransitionType) + 1;
-
-        return
-        [
-            .. counts
-                .OrderByDescending(count => count.Value)
-                .ThenBy(count => count.Key)
-                .Select(count => new PreviewImpactCount(count.Key, count.Value, ConnectedSystemId: configuration.ConnectedSystem.Id))
-        ];
+        return PreviewImpactCounter.PerDelta(connectedSystemId: configuration.ConnectedSystem.Id);
     }
 
     public async IAsyncEnumerable<PreviewDelta> EvaluateDeltasAsync(PreviewContext context,

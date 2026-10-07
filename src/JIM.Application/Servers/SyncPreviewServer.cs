@@ -18,6 +18,7 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using Serilog;
+using System.Runtime.CompilerServices;
 
 namespace JIM.Application.Servers;
 
@@ -326,6 +327,97 @@ public class SyncPreviewServer
         options ??= new FullSyncPreviewOptions();
         var result = new FullSyncPreviewResult { ConnectedSystemId = connectedSystemId };
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var sampleCountsByCategory = new Dictionary<FullSyncPreviewCategory, int>();
+        var bounds = new FullSyncPreviewStreamOptions
+        {
+            MaxObjects = options.MaxObjects,
+            TimeBudget = options.TimeBudget,
+            PageSize = options.PageSize
+        };
+
+        // One consumer of the stream (#1530): the count tier counts every item, and the sample tier keeps a bounded
+        // number of full trees per category, so memory stays flat however large the population.
+        await foreach (var item in StreamFullSyncPreviewAsync(connectedSystemId, bounds, repositoryFactory))
+        {
+            switch (item.Kind)
+            {
+                case FullSyncPreviewItemKind.Population:
+                    result.TotalObjectCount = item.TotalObjectCount ?? 0;
+                    break;
+
+                case FullSyncPreviewItemKind.Refused:
+                    result.Errors.AddRange(item.Preview!.Errors);
+                    return result;
+
+                case FullSyncPreviewItemKind.Obsolete:
+                    result.SkippedObjectCount++;
+                    break;
+
+                case FullSyncPreviewItemKind.Unchanged:
+                    result.UnchangedObjectCount++;
+                    break;
+
+                case FullSyncPreviewItemKind.Evaluated:
+                    result.EvaluatedObjectCount++;
+                    var category = item.Category!.Value;
+                    AddToCounts(result.Counts, category, item.Preview!);
+                    var retained = sampleCountsByCategory.GetValueOrDefault(category);
+                    if (retained < options.SampleTreesPerCategory)
+                    {
+                        sampleCountsByCategory[category] = retained + 1;
+                        result.Samples.Add(new FullSyncPreviewSample
+                        {
+                            Category = category,
+                            ConnectedSystemObjectId = item.ConnectedSystemObjectId!.Value,
+                            Preview = item.Preview!
+                        });
+                    }
+                    break;
+
+                case FullSyncPreviewItemKind.ExportScopeReview:
+                    result.Counts.ExportScopeReviewed++;
+                    AddOutboundToCounts(result.Counts, item.Preview!);
+                    break;
+
+                case FullSyncPreviewItemKind.Truncated:
+                    result.Truncated = true;
+                    result.TruncationReason = item.TruncationReason!.Value;
+                    break;
+            }
+        }
+
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped, {Unchanged} unchanged), " +
+            "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
+            "{Reviewed} Metaverse Object(s) export scope reviewed; " +
+            "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount, result.UnchangedObjectCount,
+            result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
+            result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
+            result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
+            result.Truncated, result.TruncationReason, stopwatch.Elapsed.TotalSeconds);
+        return result;
+    }
+
+    /// <summary>
+    /// Streams what a Full Synchronisation of one Connected System would do (#1530), one object at a time and in the
+    /// order the synchronisation would meet them, so a caller can evaluate the whole population without holding it:
+    /// the population first, then every Connected System Object (evaluated, or skipped as the run would skip it), then
+    /// the export scope review the run drains after its own objects. Read-only throughout, under the same backstops as
+    /// every other preview: a guarded repository and a rollback-only transaction that live as long as the enumeration.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to preview.</param>
+    /// <param name="options">Optional bounds; by default none, and the whole population is evaluated.</param>
+    /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
+    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <param name="cancellationToken">Stops the walk between objects.</param>
+    public async IAsyncEnumerable<FullSyncPreviewItem> StreamFullSyncPreviewAsync(
+        int connectedSystemId,
+        FullSyncPreviewStreamOptions? options = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        options ??= new FullSyncPreviewStreamOptions();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var scope = repositoryFactory?.Invoke();
         var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
@@ -334,20 +426,21 @@ public class SyncPreviewServer
 
         // A system with no objects is still previewed: its synchronisation walks nothing, but it drains the export
         // scope review all the same (below).
-        result.TotalObjectCount = await guardedRepository.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        var totalObjectCount = await guardedRepository.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        yield return new FullSyncPreviewItem { Kind = FullSyncPreviewItemKind.Population, TotalObjectCount = totalObjectCount };
 
         var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
 
         // The real run would refuse to start on a derived flow dependency cycle (#1750, decision 11) and process no
         // object, so the walk is not started either: one error naming the cycle, rather than every object blocked.
-        if (AddDerivedFlowCycleError(result.Errors, context))
+        var refusal = new SyncPreviewResult();
+        if (AddDerivedFlowCycleError(refusal.Errors, context))
         {
-            Log.Warning("PreviewFullSyncAsync: Connected System {SystemId} was not previewed: the enabled derived Attribute Flows contain a dependency cycle.",
+            Log.Warning("StreamFullSyncPreviewAsync: Connected System {SystemId} was not previewed: the enabled derived Attribute Flows contain a dependency cycle.",
                 connectedSystemId);
-            return result;
+            yield return new FullSyncPreviewItem { Kind = FullSyncPreviewItemKind.Refused, Preview = refusal };
+            yield break;
         }
-
-        var sampleCountsByCategory = new Dictionary<FullSyncPreviewCategory, int>();
 
         // The unchanged-object optimisation, decided as the run decides it (SyncFullSyncTaskProcessor): while no
         // configuration has changed since it was last fully applied, the run skips every object unchanged since the
@@ -362,18 +455,14 @@ public class SyncPreviewServer
 
         // Keyset pagination from the zero GUID, matching the sync processors' population walk.
         var afterId = Guid.Empty;
-        var stopped = result.TotalObjectCount == 0;
-        var walked = stopped;
-        while (!stopped)
+        var evaluated = 0;
+        while (totalObjectCount > 0)
         {
             var page = await guardedRepository.GetConnectedSystemObjectsAsync(
                 connectedSystemId, page: 1, pageSize: options.PageSize,
-                knownTotalCount: result.TotalObjectCount, afterId: afterId);
+                knownTotalCount: totalObjectCount, afterId: afterId);
             if (page.Results.Count == 0)
-            {
-                walked = true;
                 break;
-            }
             afterId = page.Results[^1].Id;
 
             // One outbound-cache refresh per page for the joined objects' Metaverse Objects, instead of
@@ -398,73 +487,64 @@ public class SyncPreviewServer
 
             foreach (var cso in page.Results)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Each bound is tested before the next object is evaluated, so none is evaluated past it, and a walk
+                // that reached its bound on the last object is not reported as truncated.
                 if (options.TimeBudget.HasValue && stopwatch.Elapsed >= options.TimeBudget.Value)
                 {
-                    result.Truncated = true;
-                    result.TruncationReason = FullSyncPreviewTruncationReason.TimeBudgetExhausted;
-                    stopped = true;
-                    break;
+                    yield return Truncation(FullSyncPreviewTruncationReason.TimeBudgetExhausted);
+                    yield break;
                 }
-                if (options.MaxObjects.HasValue && result.EvaluatedObjectCount >= options.MaxObjects.Value)
+                if (options.MaxObjects.HasValue && evaluated >= options.MaxObjects.Value)
                 {
-                    result.Truncated = true;
-                    result.TruncationReason = FullSyncPreviewTruncationReason.ObjectCapReached;
-                    stopped = true;
-                    break;
+                    yield return Truncation(FullSyncPreviewTruncationReason.ObjectCapReached);
+                    yield break;
                 }
+
                 if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
                 {
-                    result.SkippedObjectCount++;
+                    yield return Skipped(FullSyncPreviewItemKind.Obsolete, cso);
                     continue;
                 }
                 if (unchangedWatermark.HasValue && cso.IsUnchangedSince(unchangedWatermark.Value))
                 {
-                    result.UnchangedObjectCount++;
+                    yield return Skipped(FullSyncPreviewItemKind.Unchanged, cso);
                     continue;
                 }
 
                 var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false, asTheRunWould: true);
-                result.EvaluatedObjectCount++;
-
-                var category = Categorise(preview);
-                AddToCounts(result.Counts, category, preview);
-
-                var retained = sampleCountsByCategory.GetValueOrDefault(category);
-                if (retained < options.SampleTreesPerCategory)
+                evaluated++;
+                yield return new FullSyncPreviewItem
                 {
-                    sampleCountsByCategory[category] = retained + 1;
-                    result.Samples.Add(new FullSyncPreviewSample
-                    {
-                        Category = category,
-                        ConnectedSystemObjectId = cso.Id,
-                        Preview = preview
-                    });
-                }
+                    Kind = FullSyncPreviewItemKind.Evaluated,
+                    ConnectedSystemObjectId = cso.Id,
+                    DisplayName = cso.NameOrId,
+                    ObjectTypeName = cso.Type?.Name,
+                    Category = Categorise(preview),
+                    Preview = preview
+                };
             }
 
             if (page.Results.Count < options.PageSize)
-            {
-                walked = true;
                 break;
-            }
         }
 
-        // The run drains the export scope review once its own objects are processed, so the preview does too, unless
-        // the walk stopped early: a truncated preview is partial either way, and the review would overrun its budget.
-        if (walked)
-            await PreviewExportScopeReviewAsync(result, context, previewServer, guardedRepository, options, stopwatch);
-
-        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Skipped} skipped, {Unchanged} unchanged), " +
-            "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
-            "{Reviewed} Metaverse Object(s) export scope reviewed; " +
-            "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
-            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.SkippedObjectCount, result.UnchangedObjectCount,
-            result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
-            result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
-            result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
-            result.Truncated, result.TruncationReason, stopwatch.Elapsed.TotalSeconds);
-        return result;
+        // The run drains the export scope review once its own objects are processed, so the preview does too.
+        await foreach (var reviewed in StreamExportScopeReviewAsync(context, previewServer, guardedRepository, options, stopwatch, cancellationToken))
+            yield return reviewed;
     }
+
+    private static FullSyncPreviewItem Truncation(FullSyncPreviewTruncationReason reason) =>
+        new() { Kind = FullSyncPreviewItemKind.Truncated, TruncationReason = reason };
+
+    private static FullSyncPreviewItem Skipped(FullSyncPreviewItemKind kind, ConnectedSystemObject cso) => new()
+    {
+        Kind = kind,
+        ConnectedSystemObjectId = cso.Id,
+        DisplayName = cso.NameOrId,
+        ObjectTypeName = cso.Type?.Name
+    };
 
     #endregion
 
@@ -477,13 +557,13 @@ public class SyncPreviewServer
     /// walk already reviewed is skipped, so its exports are proposed once; the run's second evaluation of it finds the
     /// first one's exports already staged and adds nothing.
     /// </summary>
-    private async Task PreviewExportScopeReviewAsync(
-        FullSyncPreviewResult result,
+    private async IAsyncEnumerable<FullSyncPreviewItem> StreamExportScopeReviewAsync(
         CsoPreviewContext context,
         ExportEvaluationServer previewServer,
         ISyncRepository guardedRepository,
-        FullSyncPreviewOptions options,
-        System.Diagnostics.Stopwatch stopwatch)
+        FullSyncPreviewStreamOptions options,
+        System.Diagnostics.Stopwatch stopwatch,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Read whole rather than in the run's batches: the run clears each batch's flags as it goes, which is how it
         // pages, and the preview clears nothing. The flagged set is what the review evaluates in full either way.
@@ -496,18 +576,24 @@ public class SyncPreviewServer
             await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, batch.ToList());
             foreach (var mvo in await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync(batch))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (options.TimeBudget.HasValue && stopwatch.Elapsed >= options.TimeBudget.Value)
                 {
-                    result.Truncated = true;
-                    result.TruncationReason = FullSyncPreviewTruncationReason.TimeBudgetExhausted;
-                    return;
+                    yield return Truncation(FullSyncPreviewTruncationReason.TimeBudgetExhausted);
+                    yield break;
                 }
 
                 var reviewed = new SyncPreviewResult();
                 ComposeOutbound(reviewed, await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], context.Cache,
                     synchronisationChanges: ([], null)));
-                result.Counts.ExportScopeReviewed++;
-                AddOutboundToCounts(result.Counts, reviewed);
+                yield return new FullSyncPreviewItem
+                {
+                    Kind = FullSyncPreviewItemKind.ExportScopeReview,
+                    MetaverseObjectId = mvo.Id,
+                    DisplayName = mvo.NameOrId,
+                    ObjectTypeName = mvo.Type?.Name,
+                    Preview = reviewed
+                };
             }
         }
     }

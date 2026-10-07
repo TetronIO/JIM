@@ -70,6 +70,30 @@ public class SyncRuleBehaviourTogglePreviewIsolationDatabaseTests
     }
 
     [Test]
+    public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
+    {
+        var seed = await SeedProjectingImportRuleAsync();
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
+        var context = new PreviewContext
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleBehaviour,
+            ActivityId = Guid.CreateVersion7(),
+            TargetId = seed.RuleId,
+            ProposedConfiguration = new SyncRuleBehaviourToggleProposal(
+                Enabled: false,
+                Direction: SyncRuleDirection.Import,
+                ProjectToMetaverse: true,
+                ProvisionToConnectedSystem: false,
+                EnforceState: true)
+        };
+
+        await PreviewImpactCounterEquivalence.AssertCountsFromItsOwnDeltasAsync(new SyncRuleBehaviourTogglePreviewAdapter(jim, new SyncEngine()), context);
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_DisablingTheProjectingRule_ReportsTheIdentityWouldNotBeCreatedAndPersistsNothingAsync()
     {
         // Arrange - an enabled import rule that projects, and one unjoined object it would create an identity for

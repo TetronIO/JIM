@@ -89,6 +89,31 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
+    public async Task StreamFullSyncPreviewAsync_OfAnObjectUnchangedSinceTheLastSynchronisation_SaysItWouldNotChangeAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+        targetCso.Created = DateTime.UtcNow.AddHours(-2);
+        targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
+        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
+        target.LastSyncCompletedAt = DateTime.UtcNow;
+        target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;
+
+        var items = new List<FullSyncPreviewItem>();
+        await foreach (var item in Jim.SyncPreview.StreamFullSyncPreviewAsync(ctx.Target.Id))
+            items.Add(item);
+
+        var unchanged = items.Single(i => i.Kind == FullSyncPreviewItemKind.Unchanged);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(unchanged.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
+            Assert.That(unchanged.DisplayName, Is.EqualTo("Edited in AD"), "named, so the row saying it would not change can be recognised");
+            Assert.That(unchanged.Preview, Is.Null, "the run does not process it, so there is nothing to evaluate");
+            Assert.That(items.Any(i => i.Kind == FullSyncPreviewItemKind.Evaluated), Is.False);
+        }
+    }
+
+    [Test]
     public async Task PreviewSyncForCsoAsync_OfADriftedTargetObject_ProposesTheCorrectionByAttributeAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);

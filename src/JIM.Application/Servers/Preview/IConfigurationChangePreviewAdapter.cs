@@ -63,9 +63,20 @@ public interface IConfigurationChangePreviewAdapter
 
     /// <summary>
     /// Stage 2. Per-transition counts from set-based SQL only, never per-object evaluation. These are what a
-    /// destructive change is confirmed against, so they arrive long before the detail does.
+    /// destructive change is confirmed against, so they arrive long before the detail does. An adapter that can only
+    /// count by evaluating supplies <see cref="CreateImpactCounterAsync"/> instead, and the framework then does not
+    /// call this.
     /// </summary>
     Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context);
+
+    /// <summary>
+    /// Stage 2 for an adapter that can only count by evaluating (#1530): a counter the framework feeds every delta of
+    /// the one evaluation pass, building the counts from the same stream the summary and the delta rows come from,
+    /// rather than evaluating the whole population twice (once to count, once for the detail). Such a count never
+    /// arrived before the detail anyway; it arrives at the same moment, and the detail in half the time. Null, the
+    /// default, keeps <see cref="CountImpactAsync"/> as stage 2 of its own, which is right for set-based counts.
+    /// </summary>
+    Task<IPreviewImpactCounter?> CreateImpactCounterAsync(PreviewContext context) => Task.FromResult<IPreviewImpactCounter?>(null);
 
     /// <summary>
     /// Stages 3 and 4. Streams one delta per affected object, read-only. Streaming rather than returning a list is
