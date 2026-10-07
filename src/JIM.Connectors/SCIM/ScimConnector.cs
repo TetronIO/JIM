@@ -21,7 +21,7 @@ namespace JIM.Connectors.SCIM;
 /// SCIM service providers to discover schemas, import resources, and export provisioning changes.
 /// Implementation plan: engineering/plans/doing/SCIM_CLIENT_CONNECTOR_DESIGN.md (issue #545).
 /// </summary>
-public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint, IConnectorPhases
+public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe
 {
     private ICredentialProtection? _credentialProtection;
     private ICertificateProvider? _certificateProvider;
@@ -41,6 +41,11 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     // Null unless the administrator has opted into bulk operations, which is what tells the export
     // whether to try the provider's Bulk endpoint at all.
     private ScimBulkEndpointState? _bulkEndpointState;
+
+    // Held for the length of a synchronisation run that probes this provider for generated values (#1941), apart
+    // from the import and export clients so a probe session never disturbs either.
+    private ScimHttpClient? _probeClient;
+    private ScimConnectorUniquenessProbe? _uniquenessProbe;
 
     #region IConnector members
     public string Name => ConnectorConstants.ScimClientConnectorName;
@@ -74,7 +79,11 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     public bool SupportsPasswordPolicyDiscovery => false;
 
-    public bool SupportsUniquenessProbe => false;
+    /// <summary>
+    /// A synchronisation that generates a value exported unchanged to this provider asks it, with a filtered search,
+    /// whether the value is already in use (#1941). See <see cref="ScimConnectorUniquenessProbe"/>.
+    /// </summary>
+    public bool SupportsUniquenessProbe => true;
 
     public bool SupportsUniquenessRejectionClassification => true;
 
@@ -468,6 +477,74 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = null;
         _bulkEndpointState = null;
         return null;
+    }
+    #endregion
+
+    #region IConnectorUniquenessProbe members
+    /// <inheritdoc />
+    /// <remarks>
+    /// Builds the client exactly as import and export do (credentials decrypted through the credential protection
+    /// service, JIM's trusted certificates alongside the system store), then discovers the provider, because the probe
+    /// needs each resource type's endpoint and the shape of its attributes. A provider that cannot be reached, refuses
+    /// the credential or presents a certificate JIM does not trust fails here, once, rather than on every object.
+    /// </remarks>
+    public void OpenUniquenessProbeConnection(ConnectedSystem connectedSystem, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        CloseUniquenessProbeConnection();
+
+        var settingValues = connectedSystem.SettingValues.ToList();
+
+        // Task.Run keeps the blocking wait off any caller's synchronisation context; the interface is synchronous
+        // but building the client and discovering the provider are not.
+        var client = Task.Run(async () => await CreateClientAsync(settingValues, logger)).GetAwaiter().GetResult();
+        var opened = false;
+        try
+        {
+            var discovery = Task.Run(async () => await WithCertificateDiagnosisAsync(settingValues, logger,
+                () => new ScimConnectorSchema(client, logger).DiscoverAsync(CancellationToken.None))).GetAwaiter().GetResult();
+
+            _probeClient = client;
+            _uniquenessProbe = new ScimConnectorUniquenessProbe(client, discovery, logger);
+            opened = true;
+        }
+        finally
+        {
+            // Whatever discovery throws, the client it was given must not outlive the failed open; the exception
+            // carries on to the caller unchanged.
+            if (!opened)
+                client.Dispose();
+        }
+
+        logger.Debug("OpenUniquenessProbeConnection: Probe connection to the SCIM service provider open.");
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Any attribute can be searched by value; which ones a given provider will filter on is only known by asking,
+    /// and a provider that refuses is reported against that attribute when the probe runs.
+    /// </remarks>
+    public bool CanProbeAttribute(string attributeName) => !string.IsNullOrWhiteSpace(attributeName);
+
+    /// <inheritdoc />
+    public Task<UniquenessProbeResult> ProbeAsync(UniquenessProbeRequest request, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_uniquenessProbe == null)
+            throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAsync()!");
+
+        return _uniquenessProbe.ProbeAsync(request, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void CloseUniquenessProbeConnection()
+    {
+        _uniquenessProbe = null;
+        _probeClient?.Dispose();
+        _probeClient = null;
     }
     #endregion
 

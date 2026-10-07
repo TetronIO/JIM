@@ -4,7 +4,7 @@
 
 The JIM SQL Connector connects JIM to identity data held in a relational database: an HR or payroll system, a student record system, or any line-of-business application that keeps its users, groups and departments in tables. JIM can read those tables as a source of identity, write to them as a target, or both.
 
-**Capabilities:** Full Import, Delta Import, Export
+**Capabilities:** Full Import, Delta Import, Export, Probe
 
 One Connected System covers one database, and can synchronise several of its tables at once. You describe which tables (or views) hold which kind of object in a short JSON document; JIM discovers the columns and their types from the database itself.
 
@@ -33,6 +33,7 @@ Both databases use the same settings and the same Object Types document, and beh
 | Partitions and Containers | ❌ | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
 | Parallel Export | ❌ | Exports are written one object at a time, each in its own transaction. |
 | Password set | ❌ | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
+| Probe | ✅ | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
 
 ## Before you begin
 
@@ -226,6 +227,16 @@ Because a committed database transaction is a confirmed write, exports to a data
 !!! note "Views and SELECT statements are read-only"
     An Object Type read from a view or a `select` statement cannot be exported to. If the application reads through a view but accepts writes to the table, point the Object Type at the table.
 
+### Probing for values already in use
+
+When a synchronisation generates a value that is exported unchanged to a column of this database, such as an account name sent to a `USERNAME` column, JIM asks the database whether the value is already in use before choosing it. This catches rows JIM has not imported yet: one inserted by the application since the last import, or by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems).
+
+- **One connection per synchronisation**<br /> The connection is made with this Connected System's own settings, credentials and certificate trust, the first time the synchronisation needs it, and closed when the run ends.
+- **One statement per object**<br /> The object's candidate values (up to ten) and a control value JIM already holds for the attribute go in one query, every value bound as a parameter: `SELECT DISTINCT [USERNAME] FROM [HR].[EMPLOYEES] WHERE [USERNAME] IN (@probe0, @probe1, ...)`. The column is compared as it stands, so an index on it serves the query. A control value that does not come back means the account cannot see the rows, and JIM stops trusting the probe for that attribute for the rest of the run.
+- **It searches what the Object Type reads**<br /> The Object Type's table, view or `select` statement, as configured; a multi-valued attribute is searched in its related table. A view or statement that filters rows out (inactive staff, say) hides them from the probe too, so if a value must be unique across every row, point the Object Type at the table.
+- **Case is ignored**<br /> As at every uniqueness check, `JBloggs` in the database stops JIM choosing `jbloggs`, whatever the column's collation. Where the column's collation already ignores case (Microsoft SQL Server's default), JIM compares the column as it stands, so an index on it serves the query. Everywhere else (Oracle Database, a case-sensitive or binary SQL Server collation, or a `select` statement) it compares `LOWER(column)` with the lower-cased values; on a large table, an index on `LOWER(column)` lets the database answer from the index rather than reading every row.
+- **Undetermined is not a failure**<br /> A database that cannot be reached, refuses the query (a missing `SELECT` grant, say) or does not answer in time is reported once on the synchronisation's Activity as a warning naming the reason, and the run continues with JIM's own records for that Connected System.
+
 ### Type mapping
 
 JIM decides each attribute's type from the column's declared SQL type:
@@ -348,6 +359,7 @@ Create a dedicated database account for JIM and grant it only what the Run Profi
 
 - **For schema discovery and import**<br /> `SELECT` on each table or view in the Object Types document, on each related table, and (for Change-Log Table Delta Imports) on each change-log table. JIM reads the database's own catalogue views, which show the account exactly the objects it can already read; no wider catalogue permission is needed.
 - **For export**<br /> `INSERT`, `UPDATE` and `DELETE` on each Object Type's table and each related table, in addition to `SELECT`.
+- **For probing generated values**<br /> `SELECT` on each table or view a generated value is exported to, which import already needs; on Microsoft SQL Server the same grant lets JIM read the column's collation from the catalogue. See [Probing for values already in use](#probing-for-values-already-in-use).
 - **Nothing else.**<br /> JIM creates no objects and changes no schema. It does not need `db_owner`, `DBA`, or `SELECT ANY TABLE`.
 
 ```sql title="Microsoft SQL Server: an import-only account"

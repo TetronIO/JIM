@@ -303,6 +303,19 @@ internal interface ISqlProvider
     /// </summary>
     string ForeignKeyColumnsCommandText { get; }
 
+    /// <summary>
+    /// Answers whether one column of a table or view compares text without regard to case: a single value, 1 where
+    /// its collation ignores case and 0 where it does not, binding <see cref="SqlCatalogueParameters.ObjectName"/>
+    /// (the object's name as <see cref="QualifyObjectName"/> renders it) and
+    /// <see cref="SqlCatalogueParameters.ColumnName"/>. Null where the dialect cannot say, which callers treat as
+    /// comparing case.
+    /// <para>
+    /// The uniqueness probe (#1941) reads it so that a column which already ignores case is compared as it stands,
+    /// where an index on it can serve the query, and any other is compared lower-cased on both sides.
+    /// </para>
+    /// </summary>
+    string? ColumnIgnoresCaseCommandText { get; }
+
     #endregion
 
     #region Type mapping
