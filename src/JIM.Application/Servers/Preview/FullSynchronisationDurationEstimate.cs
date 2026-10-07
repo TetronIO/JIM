@@ -22,7 +22,8 @@ internal static class FullSynchronisationDurationEstimate
     internal const double ReferenceObjectsPerSecond = 50;
 
     /// <param name="objects">How many objects the preview will evaluate.</param>
-    /// <param name="lastRunObjects">How many objects the last completed Full Synchronisation processed, if there was one.</param>
+    /// <param name="lastRunObjects">How many objects the last completed Full Synchronisation went through, if there was one:
+    /// the system's population, since a Full Synchronisation goes through every object.</param>
     /// <param name="lastRunTime">How long that run took, if there was one.</param>
     internal static TimeSpan For(int objects, int? lastRunObjects, TimeSpan? lastRunTime)
     {

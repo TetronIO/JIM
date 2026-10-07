@@ -620,6 +620,15 @@ informed by the preview. If data or configuration has changed since the preview 
 started then records no preview, because what it showed may no longer hold; choose **Run again** first for a current
 answer.
 
+**Automating it.** Scripts get the same evaluation:
+[`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -FullSynchronisation`](../powershell/previews.md#new-jimconfigurationchangepreview)
+in PowerShell, or `POST connected-systems/{id}/full-synchronisation/preview` in the [REST API](../../api/reference/).
+The start result's estimated duration says roughly how long to wait, and `-Wait` waits that long by default. Pass the
+finished preview's Activity id to
+[`Start-JIMRunProfile -PreviewActivityId`](../powershell/run-profiles.md#start-jimrunprofile), or as `previewActivityId`
+when executing the Run Profile through the REST API, to record it on the run; JIM refuses a run citing anything other
+than a completed Full Synchronisation preview of that same system, and queues nothing.
+
 ## Confirming a configuration change
 
 Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).

@@ -324,7 +324,7 @@ Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-
 | `RunProfileName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Run Profile to execute. Must be an exact match. |
 | `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying live progress: current phase, object counts, throughput and estimated time remaining. Polls the lightweight Activity progress endpoint every 2 seconds. |
 | `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the Activity ID for manual follow-up. |
-| `PreviewActivityId` | `guid` | No | | The Full Synchronisation preview read before starting this run. Recorded on the run's Activity, which then shows that the run was informed by it. Only a Full Synchronisation Run Profile can cite one, and it must be a completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is not queued. |
+| `PreviewActivityId` | `guid` | No | | The Full Synchronisation preview read before starting this run, as returned by [`New-JIMConfigurationChangePreview -FullSynchronisation`](previews.md#new-jimconfigurationchangepreview). Recorded on the run's Activity, which then shows that the run was informed by it. Only a Full Synchronisation Run Profile can cite one, and it must be a completed Full Synchronisation preview of the same Connected System; anything else is refused and the run is not queued. |
 | `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
 
 ### Output
@@ -354,6 +354,14 @@ Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait
 
 ```powershell title="Start with a timeout"
 Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -Timeout 300
+```
+
+```powershell title="Preview a Full Synchronisation, then run it and record the preview"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 1 -FullSynchronisation -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+if ($preview.IsComplete) {
+    Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileName "Full Synchronisation" -PreviewActivityId $preview.ActivityId -Wait
+}
 ```
 
 ```powershell title="Capture execution details"

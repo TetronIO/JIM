@@ -102,9 +102,12 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         var cap = Proposal(context).MaxObjects;
         var evaluated = cap is { } limit ? Math.Min(limit, population) : population;
 
+        // The last run is measured over the system's population, not its Activity's ObjectsToProcess: each counting step
+        // of a run resets that counter, so on a completed run it holds whichever step counted last, not the objects the
+        // run went through.
         var lastRun = await _application.Activities.GetLatestCompletedFullSynchronisationAsync(connectedSystemId);
         return new PreviewCostEstimate(evaluated,
-            EstimatedDuration: FullSynchronisationDurationEstimate.For(evaluated, lastRun?.ObjectsToProcess, lastRun?.ExecutionTime));
+            EstimatedDuration: FullSynchronisationDurationEstimate.For(evaluated, lastRun is null ? null : population, lastRun?.ExecutionTime));
     }
 
     /// <remarks>

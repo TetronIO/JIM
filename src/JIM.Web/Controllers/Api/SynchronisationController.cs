@@ -1899,6 +1899,67 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Preview a Full Synchronisation of a Connected System
+    /// </summary>
+    /// <remarks>
+    /// Answers what a Full Synchronisation of the Connected System would do, without running it (#1530): every change
+    /// it would make to Metaverse Objects, every update, provisioning and deprovisioning it would stage for the other
+    /// Connected Systems, the corrections it would make where an export rule enforces state, and how many objects
+    /// would not change at all. The evaluation is the synchronisation itself, run read-only over every object in the
+    /// order the run meets them, so it cannot disagree with what the run then does. Ask for one after changing
+    /// configuration, before running the Full Synchronisation that applies it.
+    ///
+    /// Every object is evaluated unless <c>maxObjects</c> caps it; a capped preview warns that its counts describe
+    /// only the objects it evaluated. The start response's <c>estimatedDuration</c> says how long the evaluation is
+    /// expected to take.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the request has been validated, with the Activity id to
+    /// poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with <c>DELETE /previews/{activityId}</c>.
+    /// Pass the Activity id as <c>previewActivityId</c> when executing the Full Synchronisation Run Profile, so the
+    /// run's Activity records which preview informed it.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">Optional: a cap on the objects evaluated, and how much drill-down detail to keep.</param>
+    /// <response code="202">The preview was started, or its proposal was blocked; check <c>isBlocked</c>. Poll the returned Activity id for results.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/full-synchronisation/preview", Name = "StartConnectedSystemFullSynchronisationPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemFullSynchronisationPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemFullSynchronisationPreviewRequest? request)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = new ConnectedSystemFullSynchronisationProposal(request?.MaxObjects),
+            DeltaPersistence = request?.DeltaPersistence ?? ConfigurationChangePreviewDeltaPersistence.Capped,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started Full Synchronisation preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
     /// Preview a change to a Connected System's schema selection
     /// </summary>
     /// <remarks>

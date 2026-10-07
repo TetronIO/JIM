@@ -1,6 +1,6 @@
 # Connected System Full Synchronisation Preview - Implementation Plan
 
-- **Status:** Doing (Phases 1-5 complete)
+- **Status:** Doing (Phases 1-6 complete)
 - **Issue:** [#1530](https://github.com/TetronIO/JIM/issues/1530)
 - **Gated by:** [#1520](https://github.com/TetronIO/JIM/issues/1520) (engine timing at 100K, on a 20 GB+ host) before release
 - **Engine:** [`engineering/plans/done/SYNC_PREVIEW_ENGINE.md`](../done/SYNC_PREVIEW_ENGINE.md) (#288, `PreviewFullSyncAsync`)
@@ -173,9 +173,14 @@ Scenario: Previewing and running from a script
 - Runtime on the stack (uppercasing Job Title on the APAC import rule): drift notice offers the preview; the Run Profiles action starts it; it reads 990 EMEA accounts updated per title value and 128 objects unchanged; drill-down and object view work; Run Full Synchronisation queued a run whose Activity names the genuine preview; after it, the panel no longer reattaches, and a new preview says the run would change nothing. Reverting showed one gap to follow up: the preview does not list the staged exports a run would withdraw (the reverted titles' uppercase exports), though its end state is right.
 - Public docs (Connected Systems: Previewing a Full Synchronisation) and the changelog entry land here, as the feature becomes reachable; REST and PowerShell follow in Phase 6.
 
-### Phase 6: REST and PowerShell
+### Phase 6: REST and PowerShell ✅
 
-- Start endpoint; `New-JIMConfigurationChangePreview -FullSynchronisation` (optional `-MaxObjects`); Pester tests; docs, including the preview-then-run example for `Start-JIMRunProfile -PreviewActivityId` (the parameter landed in Phase 4).
+- `POST connected-systems/{id}/full-synchronisation/preview`, with an optional body (`maxObjects`, `deltaPersistence`); a cap below one comes back blocked, as on the portal's path. The shared start response gains `estimatedDuration` (null for every other surface), so a script has the number the portal's large-preview dialog shows.
+- `New-JIMConfigurationChangePreview -FullSynchronisation [-MaxObjects]`. `-Wait` defaults its timeout to twice the estimate where that exceeds five minutes, because the fixed five minutes would abandon a working preview of any system above roughly 15,000 objects at the reference rate; an explicit `-TimeoutSeconds` still wins.
+- Docs: Connected Systems (Automating it), PowerShell previews (the parameter set, what the counts and groups say, preview-then-gate-then-run), Run Profiles (`-PreviewActivityId` example). The changelog entry now names the REST API and PowerShell.
+- A Phase 5 fault found on the runtime walk: the duration estimate read the last run's speed as `ObjectsToProcess` over its execution time, but each counting step of a run resets that counter, so a completed run holds whichever step counted last (16 on the dev stack, for a system of 1,118). It estimated six minutes for a five-second preview. The run is now measured over the system's population; a test pins it.
+- A docs fact worth keeping: a Full Synchronisation preview's impact counts are per transition and never split by system (`ConnectedSystemId` is empty); the per-system breakdown is in its groups.
+- Runtime on the stack (Yellowstone APAC, 1,118 objects, Job Title uppercased): the start result carries the estimate (22 s at the reference rate; the real preview took 4 s); a 100-object cap warns; the full preview counts 990 attribute flows, 990 updates staged for Glitterband EMEA and 128 unchanged; the documented gate ran the Full Synchronisation, whose Activity cites that preview; citing a deletion preview is refused with a 400; REST answers 404 for an unknown system and a blocked 202 for a cap of 0. Reverted afterwards, with a Full Synchronisation that withdrew the staged exports.
 
 ### Phase 7: verification and close-out
 
