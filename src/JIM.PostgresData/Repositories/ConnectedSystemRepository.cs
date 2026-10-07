@@ -7134,21 +7134,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
-        // Null out the FK reference in Activities to preserve audit history
-        if (Repository.Database.Database.IsRelational())
+        // History that names the rule (its Activities and the Metaverse Object changes it caused) outlives it. The
+        // database clears those references itself (ON DELETE SET NULL) in the same statement that removes the rule, so
+        // a refused delete can no longer leave the history detached from a rule that still exists (#1990). The
+        // in-memory test provider enforces no foreign keys and so clears nothing; emulate the database there.
+        if (!Repository.Database.Database.IsRelational())
         {
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
-                syncRule.Id);
-        }
-        else
-        {
-            // The in-memory test provider does not support raw SQL; tracked fallback with the same semantics.
             var activities = await Repository.Database.Activities.AsTracking()
                 .Where(a => a.SyncRuleId == syncRule.Id).ToListAsync();
             foreach (var activity in activities)
                 activity.SyncRuleId = null;
-            await Repository.Database.SaveChangesAsync();
+
+            var changes = await Repository.Database.MetaverseObjectChanges.AsTracking()
+                .Where(c => c.SyncRuleId == syncRule.Id).ToListAsync();
+            foreach (var change in changes)
+                change.SyncRuleId = null;
         }
 
         Repository.Database.Remove(syncRule);
