@@ -28,9 +28,10 @@ public class FullSyncPreviewResult
     public int EvaluatedObjectCount { get; set; }
 
     /// <summary>
-    /// How many loaded objects were skipped without evaluation (obsolete objects awaiting cleanup).
+    /// How many obsolete objects the synchronisation would tear down rather than process (#1530). What each teardown
+    /// does (deprovisioning, and the exports a recall causes) is in <see cref="Counts"/>.
     /// </summary>
-    public int SkippedObjectCount { get; set; }
+    public int ObsoleteObjectCount { get; set; }
 
     /// <summary>
     /// How many loaded objects were not evaluated because the run would skip them too: unchanged since the system's
