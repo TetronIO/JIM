@@ -23,6 +23,7 @@ A Full Synchronisation after a configuration change is the moment configuration 
 2. **Evaluate the whole population by default.** Every other preview refuses to show partial counts, because a partial count read as a whole one is how a change gets approved as safe. Above a size threshold the administrator sees an estimate and confirms before it starts. A cap stays available to scripts.
 3. **Close the target-system gap in the same work**, rather than hiding the action on target systems.
 4. **Prove the fidelity question with tests first** (done, below), and fix the engine where it is real.
+5. **"N objects would not change" is a group of its own (2026-10-07)**, not a column on the preview: the adapter yields a would-not-change delta per unchanged object, so the count is exact in the existing per-group counts, the drill-down shows a sample of them, and REST and PowerShell carry it with no new fields. The verdict and the "What would change" grid leave that group out and show it as the "would not change" line.
 
 ## Finding: the whole-system walk does not answer "what would this run do"
 
@@ -141,11 +142,12 @@ Scenario: Previewing and running from a script
 
 - Streaming walk ✅: `SyncPreviewServer.StreamFullSyncPreviewAsync` yields `FullSyncPreviewItem`s in the order the run meets them (the population, a refusal on a derived flow cycle, each object evaluated or skipped as obsolete or unchanged, the export scope review, and a truncation when a bound stopped it), with no bound by default (`FullSyncPreviewStreamOptions`). The read-only scope and rollback-only transaction live as long as the enumeration. `PreviewFullSyncAsync` is now one consumer of it (counts and bounded samples), its semantics unchanged.
 - Single-pass counting ✅: an adapter that can only count by evaluating supplies an `IPreviewImpactCounter` (`CreateImpactCounterAsync`; `PreviewImpactCounter.PerDelta` or `PerSubject`), which the framework feeds during the one evaluation pass and records only when the whole stream completes. Wider than first planned: eight adapters counted by streaming their own deltas, not just the deletion adapter, and all eight adopted it, each with an equivalence test (its counter fed its own deltas equals its `CountImpactAsync`). Runtime: a 1,108-object deletion preview went from 3.8s to 2.1s with identical counts.
-- Evaluated-object count: moved to Phase 3. The stream reports every unchanged object, so the adapter can state "N objects would not change" exactly; whether that needs a column on the preview or fits the existing per-group counts is the adapter's decision, and a column with no reader would be schema built ahead of its need.
+- Evaluated-object count: moved to Phase 3 and decided there (decision 5): no column; the stream reports every unchanged object, and the adapter counts them as a group of their own.
 
 ### Phase 3: adapter and transitions
 
 - Surface, proposal, adapter, estimate, validation, delta mapping; adapter tests and an equivalence test against the real run's Pending Exports and outcomes.
+- The would-not-change group (decision 5): a would-not-change delta per object the run skips or leaves as it is, kept out of the verdict and the change grid.
 
 ### Phase 4: run link
 
