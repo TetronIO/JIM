@@ -10,10 +10,6 @@ namespace JIM.Models.Logic;
 /// currently a generated mapping (<see cref="SyncRuleMapping.Generation"/> is null) is refused, the same as every
 /// other direction-scoped setting on the parent type.
 /// </summary>
-/// <remarks>
-/// Deliberately excludes <see cref="SyncRuleMappingGeneration.CollisionRemediation"/>: Collision Remediation is a
-/// release 4 feature, so it is not settable from any surface yet.
-/// </remarks>
 public class SyncRuleMappingGenerationSettingsUpdate
 {
     /// <summary>Replaces which uniqueness token the mapping appends.</summary>
@@ -67,6 +63,12 @@ public class SyncRuleMappingGenerationSettingsUpdate
     public bool? NeverReuse { get; set; }
 
     /// <summary>
+    /// Whether JIM corrects a value a target rejects as already in use (Collision Remediation, release 4). Changing it
+    /// releases the flow's values held for a decision, through the save path's ordinary release on a generation change.
+    /// </summary>
+    public bool? CollisionRemediation { get; set; }
+
+    /// <summary>
     /// The Connected Systems excluded from the value's availability checks (release 3), by id. Null leaves the
     /// exclusions unchanged; an empty list clears them; a list replaces them. Each must be a Connected System the
     /// generated value is exported to unchanged, which the application layer validates.
@@ -89,5 +91,6 @@ public class SyncRuleMappingGenerationSettingsUpdate
         Separator != null ||
         AttemptLimit.HasValue ||
         NeverReuse.HasValue ||
+        CollisionRemediation.HasValue ||
         Exclusions != null;
 }
