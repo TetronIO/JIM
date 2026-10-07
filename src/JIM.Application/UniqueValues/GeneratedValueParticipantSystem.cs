@@ -16,9 +16,12 @@ namespace JIM.Application.UniqueValues;
 /// <param name="ConnectorCanProbe">Whether the Connector declares and implements the uniqueness probe.</param>
 /// <param name="CanProbeAttribute">The Connector's own answer to whether a system-wide search for the named attribute
 /// means anything. Only asked when <paramref name="ConnectorCanProbe"/> is true.</param>
+/// <param name="ReportsCollisions">Whether the Connector classifies a "value already in use" rejection (release 4), so
+/// Collision Remediation can act on one from this system.</param>
 public sealed record GeneratedValueParticipantSystem(
     int Id,
     string Name,
     string ConnectorName,
     bool ConnectorCanProbe,
-    Func<string, bool> CanProbeAttribute);
+    Func<string, bool> CanProbeAttribute,
+    bool ReportsCollisions = false);

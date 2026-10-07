@@ -35,6 +35,21 @@ public class GeneratedValueOrdinalTests
         [RetiredGeneratedValueReason.Recalled] = 3
     };
 
+    // Persisted on the assignment (release 4, Phase 9) and exposed by name on the REST API and in PowerShell.
+    private static readonly Dictionary<GeneratedValueNeedsDecisionReason, int> ExpectedNeedsDecisionReasonOrdinals = new()
+    {
+        [GeneratedValueNeedsDecisionReason.AnchoredElsewhere] = 0,
+        [GeneratedValueNeedsDecisionReason.CannotTell] = 1,
+        [GeneratedValueNeedsDecisionReason.RemediationLimitReached] = 2,
+        [GeneratedValueNeedsDecisionReason.NoValueAvailable] = 3
+    };
+
+    [Test]
+    public void GeneratedValueNeedsDecisionReason_EveryValue_KeepsItsPersistedOrdinal()
+    {
+        AssertOrdinals(ExpectedNeedsDecisionReasonOrdinals);
+    }
+
     [Test]
     public void GeneratedValueTokenKind_EveryValue_KeepsItsPersistedOrdinal()
     {

@@ -390,10 +390,11 @@ public sealed class UniqueValueGenerationServer
     /// <summary>
     /// Puts an assignment into Needs Decision (plan decisions 11 and 12): a rejected value that could not safely be
     /// revised (anchored, anchoring unknown, or remediation exhausted) waits on an administrator, recording which system
-    /// rejected it, which anchors it, and the execution item that reported it. The caller parks the export.
+    /// rejected it, which anchors it, why it is held, and the execution item that reported it. The caller parks the export.
     /// </summary>
     public async Task EnterNeedsDecisionAsync(
-        GeneratedValueAssignment assignment, int rejectedByConnectedSystemId, int? anchoredByConnectedSystemId, Guid executionItemId)
+        GeneratedValueAssignment assignment, int rejectedByConnectedSystemId, int? anchoredByConnectedSystemId, Guid executionItemId,
+        GeneratedValueNeedsDecisionReason reason)
     {
         ArgumentNullException.ThrowIfNull(assignment);
 
@@ -402,6 +403,7 @@ public sealed class UniqueValueGenerationServer
         assignment.AnchoredByConnectedSystemId = anchoredByConnectedSystemId;
         assignment.NeedsDecisionEnteredAt = DateTime.UtcNow;
         assignment.NeedsDecisionActivityRunProfileExecutionItemId = executionItemId;
+        assignment.NeedsDecisionReason = reason;
         await _repository.UpdateGeneratedValueAssignmentAsync(assignment);
     }
 
@@ -409,7 +411,9 @@ public sealed class UniqueValueGenerationServer
     /// "Allow the rename" (plan decision 11): records that an administrator has authorised JIM to rename every system
     /// holding the value, and releases the Needs Decision so the next export run reaches the rejection again, where the
     /// worker performs the rename instead of stopping (the portal cannot probe, so the new value is decided there).
-    /// Returns false when the assignment no longer exists or does not need a decision.
+    /// Why and since when the value was held are kept, so the allowed rename still says what was decided about until the
+    /// next export spends it. Returns false when the assignment no longer exists or does not need a decision. Records
+    /// only the authorisation: the audited Activity is the caller's (<c>GeneratedValueDecisionServer</c>).
     /// </summary>
     public async Task<bool> AuthoriseRenameAsync(Guid assignmentId, string authorisedByName)
     {
@@ -422,7 +426,7 @@ public sealed class UniqueValueGenerationServer
         assignment.RenameAuthorised = true;
         assignment.RenameAuthorisedAt = DateTime.UtcNow;
         assignment.RenameAuthorisedByName = authorisedByName;
-        await ReleaseNeedsDecisionAsync(assignment);
+        await ReleaseNeedsDecisionAsync(assignment, keepDecisionContext: true);
         return true;
     }
 
@@ -460,14 +464,19 @@ public sealed class UniqueValueGenerationServer
         return waiting.Count;
     }
 
-    private async Task ReleaseNeedsDecisionAsync(GeneratedValueAssignment assignment)
+    private async Task ReleaseNeedsDecisionAsync(GeneratedValueAssignment assignment, bool keepDecisionContext = false)
     {
         var rejectedBy = assignment.RejectedByConnectedSystemId;
 
         assignment.State = GeneratedValueAssignmentState.Committed;
-        assignment.NeedsDecisionEnteredAt = null;
         assignment.NeedsDecisionActivityRunProfileExecutionItemId = null;
-        assignment.AnchoredByConnectedSystemId = null;
+        if (!keepDecisionContext)
+        {
+            assignment.NeedsDecisionEnteredAt = null;
+            assignment.AnchoredByConnectedSystemId = null;
+            assignment.NeedsDecisionReason = null;
+        }
+
         await _repository.UpdateGeneratedValueAssignmentAsync(assignment);
 
         // The Parked export is the rejecting system's: export mode, the object's own Connected System Object; import

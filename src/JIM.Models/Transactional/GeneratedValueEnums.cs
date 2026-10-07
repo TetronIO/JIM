@@ -141,3 +141,80 @@ public enum GeneratedValueCollisionHandling
     /// </summary>
     NeedsDecision = 1
 }
+
+/// <summary>
+/// Why a generated value is waiting on an administrator's decision (Unique Value Generation, #242, release 4; plan
+/// decisions 10, 11 and 15): recorded when the assignment enters <see cref="GeneratedValueAssignmentState.NeedsDecision"/>,
+/// so the decision surfaces can say why without re-deriving it from state that has since moved on. Persisted by ordinal
+/// and exposed by name on the REST API and in PowerShell; append-only, so new members are added at the end and existing
+/// values are never renumbered.
+/// </summary>
+public enum GeneratedValueNeedsDecisionReason
+{
+    /// <summary>
+    /// Another Connected System the value is exported to has already accepted it for the same object, so correcting it
+    /// would rename an account already in use. <see cref="GeneratedValueAssignment.AnchoredByConnectedSystemId"/> names it.
+    /// </summary>
+    AnchoredElsewhere = 0,
+
+    /// <summary>
+    /// JIM cannot tell whether another Connected System the value is exported to holds it, because that system's
+    /// connector space was cleared and it has not completed a Full Import since. Missing knowledge never permits a
+    /// rename. <see cref="GeneratedValueAssignment.AnchoredByConnectedSystemId"/> names the system.
+    /// </summary>
+    CannotTell = 1,
+
+    /// <summary>
+    /// The value has already been corrected <see cref="GeneratedValueAssignment.RemediationCount"/> times (the limit),
+    /// and the target still rejects it: a target that refuses every value JIM issues is telling an administrator
+    /// something a further rename will not fix.
+    /// </summary>
+    RemediationLimitReached = 2,
+
+    /// <summary>
+    /// JIM looked for another value and found none it could issue (the flow's attempt limit, a full fixed width, or
+    /// every candidate taken).
+    /// </summary>
+    NoValueAvailable = 3
+}
+
+/// <summary>
+/// Where a generated value decision stands, as the decision surfaces show it (Unique Value Generation, #242, release 4,
+/// Phase 9). Derived from the assignment, never persisted; exposed by name on the REST API and in PowerShell.
+/// </summary>
+public enum GeneratedValueDecisionStatus
+{
+    /// <summary>
+    /// A target rejected the value and JIM did not correct it: its export is held until an administrator allows the
+    /// rename, tries again, or changes the flow.
+    /// </summary>
+    NeedsDecision = 0,
+
+    /// <summary>
+    /// An administrator allowed the rename; the next export run that meets the rejection chooses the next free value
+    /// and applies it everywhere.
+    /// </summary>
+    RenameAllowed = 1,
+
+    /// <summary>
+    /// Not held: nothing is waiting on an administrator for this value (for example, straight after "Try again"). The
+    /// decision lists never return such a row; a read of one value by id can.
+    /// </summary>
+    Released = 2
+}
+
+/// <summary>
+/// What became of an administrator's action on one generated value decision (Unique Value Generation, #242, release 4,
+/// Phase 9). Not persisted.
+/// </summary>
+public enum GeneratedValueDecisionActionOutcome
+{
+    /// <summary>The action was carried out.</summary>
+    Done = 0,
+
+    /// <summary>No generated value has that id (it may have been deleted with its object or its flow).</summary>
+    NotFound = 1,
+
+    /// <summary>The value exists but is not waiting on a decision, so there is nothing to act on.</summary>
+    NotWaitingForDecision = 2
+}

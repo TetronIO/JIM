@@ -4664,4 +4664,140 @@ public class SyncRepository : ISyncRepository
     }
 
     #endregion
+
+    #region Generated value decisions (#242, release 4, Phase 9)
+
+    /// <inheritdoc />
+    public Task<RangeResultSet<GeneratedValueDecisionHeader>> GetGeneratedValueDecisionHeadersAsync(
+        GeneratedValueDecisionQuery query, int offset, int count, bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var matching = MatchDecisions(query);
+        return Task.FromResult(new RangeResultSet<GeneratedValueDecisionHeader>
+        {
+            Results = matching.Skip(offset).Take(count).Select(ToDecisionHeader).ToList(),
+            TotalResults = includeTotalCount ? matching.Count : null
+        });
+    }
+
+    /// <inheritdoc />
+    public Task<List<Guid>> GetGeneratedValueDecisionIdsAsync(GeneratedValueDecisionQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return Task.FromResult(MatchDecisions(query).Select(a => a.Id).ToList());
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueDecisionCount>> GetGeneratedValueDecisionCountsAsync(DateTime correctedSince)
+    {
+        var counts = _generatedValueAssignments.Values
+            .Where(a => a.State == GeneratedValueAssignmentState.NeedsDecision || a.RenameAuthorised || a.RemediatedAt >= correctedSince)
+            .GroupBy(a => (a.SyncRuleMappingGenerationId, a.RejectedByConnectedSystemId, a.AnchoredByConnectedSystemId))
+            .Select(g => new GeneratedValueDecisionCount
+            {
+                GenerationId = g.Key.SyncRuleMappingGenerationId,
+                RejectedByConnectedSystemId = g.Key.RejectedByConnectedSystemId,
+                AnchoredByConnectedSystemId = g.Key.AnchoredByConnectedSystemId,
+                NeedsDecisionCount = g.Count(a => a.State == GeneratedValueAssignmentState.NeedsDecision),
+                RenameAllowedCount = g.Count(a => a.State != GeneratedValueAssignmentState.NeedsDecision && a.RenameAuthorised),
+                CorrectedCount = g.Count(a => a.RemediatedAt >= correctedSince)
+            })
+            .ToList();
+
+        return Task.FromResult(counts);
+    }
+
+    private List<GeneratedValueAssignment> MatchDecisions(GeneratedValueDecisionQuery query)
+    {
+        IEnumerable<GeneratedValueAssignment> matching = _generatedValueAssignments.Values;
+        matching = query.Status switch
+        {
+            GeneratedValueDecisionStatus.NeedsDecision => matching.Where(a => a.State == GeneratedValueAssignmentState.NeedsDecision),
+            GeneratedValueDecisionStatus.RenameAllowed => matching.Where(a => a.State != GeneratedValueAssignmentState.NeedsDecision && a.RenameAuthorised),
+            GeneratedValueDecisionStatus.Released => matching.Where(a => a.State != GeneratedValueAssignmentState.NeedsDecision && !a.RenameAuthorised),
+            _ when query.IncludeReleased => matching,
+            _ => matching.Where(a => a.State == GeneratedValueAssignmentState.NeedsDecision || a.RenameAuthorised)
+        };
+
+        if (query.GenerationIds != null)
+        {
+            var generationIds = query.GenerationIds.ToHashSet();
+            matching = matching.Where(a => generationIds.Contains(a.SyncRuleMappingGenerationId));
+        }
+
+        if (query.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = query.ConnectedSystemId.Value;
+            var participating = query.GenerationIdsParticipatingInConnectedSystem.ToHashSet();
+            matching = matching.Where(a => a.RejectedByConnectedSystemId == connectedSystemId
+                                           || a.AnchoredByConnectedSystemId == connectedSystemId
+                                           || participating.Contains(a.SyncRuleMappingGenerationId));
+        }
+
+        if (query.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = query.MetaverseObjectId.Value;
+            matching = matching.Where(a => a.MetaverseObjectId == metaverseObjectId || JoinedMetaverseObjectId(a) == metaverseObjectId);
+        }
+
+        if (query.Ids != null)
+        {
+            var ids = query.Ids.ToHashSet();
+            matching = matching.Where(a => ids.Contains(a.Id));
+        }
+
+        return matching
+            .OrderBy(a => a.NeedsDecisionEnteredAt == null)
+            .ThenByDescending(a => a.NeedsDecisionEnteredAt)
+            .ThenBy(a => a.Id)
+            .ToList();
+    }
+
+    private Guid? JoinedMetaverseObjectId(GeneratedValueAssignment assignment) =>
+        assignment.ConnectedSystemObjectId.HasValue && _csos.TryGetValue(assignment.ConnectedSystemObjectId.Value, out var cso)
+            ? cso.MetaverseObjectId
+            : null;
+
+    private GeneratedValueDecisionHeader ToDecisionHeader(GeneratedValueAssignment a)
+    {
+        var mapping = _syncRules.Values.SelectMany(r => r.AttributeFlowRules).FirstOrDefault(m => m.Generation?.Id == a.SyncRuleMappingGenerationId);
+        var rule = mapping?.SyncRule ?? (mapping != null ? _syncRules.GetValueOrDefault(mapping.SyncRuleId) : null);
+        var metaverseObjectId = a.MetaverseObjectId ?? JoinedMetaverseObjectId(a);
+        var mvo = metaverseObjectId.HasValue ? _mvos.GetValueOrDefault(metaverseObjectId.Value) : null;
+        var cso = a.ConnectedSystemObjectId.HasValue ? _csos.GetValueOrDefault(a.ConnectedSystemObjectId.Value) : null;
+        var allowed = a.State != GeneratedValueAssignmentState.NeedsDecision && a.RenameAuthorised;
+
+        return new GeneratedValueDecisionHeader
+        {
+            AssignmentId = a.Id,
+            Status = a.State == GeneratedValueAssignmentState.NeedsDecision
+                ? GeneratedValueDecisionStatus.NeedsDecision
+                : a.RenameAuthorised ? GeneratedValueDecisionStatus.RenameAllowed : GeneratedValueDecisionStatus.Released,
+            MetaverseObjectId = metaverseObjectId,
+            MetaverseObjectDisplayName = mvo?.CachedDisplayName,
+            MetaverseObjectTypeName = mvo?.Type?.Name,
+            MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
+            ConnectedSystemObjectId = a.ConnectedSystemObjectId,
+            ConnectedSystemObjectConnectedSystemId = cso?.ConnectedSystemId,
+            AttributeName = a.MetaverseAttributeId.HasValue
+                ? a.MetaverseAttribute?.Name ?? mapping?.TargetMetaverseAttribute?.Name ?? _metaverseAttributeNames.GetValueOrDefault(a.MetaverseAttributeId.Value) ?? string.Empty
+                : a.ConnectedSystemObjectTypeAttribute?.Name ?? mapping?.TargetConnectedSystemAttribute?.Name ?? string.Empty,
+            Value = a.Value,
+            Reason = a.NeedsDecisionReason,
+            RemediationCount = a.RemediationCount,
+            RejectedByConnectedSystemId = a.RejectedByConnectedSystemId,
+            RejectedByConnectedSystemName = a.RejectedByConnectedSystemId.HasValue ? _connectedSystems.GetValueOrDefault(a.RejectedByConnectedSystemId.Value)?.Name : null,
+            AnchoredByConnectedSystemId = a.AnchoredByConnectedSystemId,
+            AnchoredByConnectedSystemName = a.AnchoredByConnectedSystemId.HasValue ? _connectedSystems.GetValueOrDefault(a.AnchoredByConnectedSystemId.Value)?.Name : null,
+            Since = a.NeedsDecisionEnteredAt,
+            RenameAllowedAt = allowed ? a.RenameAuthorisedAt : null,
+            RenameAllowedBy = allowed ? a.RenameAuthorisedByName : null,
+            SyncRuleId = rule?.Id ?? mapping?.SyncRuleId ?? 0,
+            SyncRuleName = rule?.Name,
+            SyncRuleMappingId = mapping?.Id ?? 0
+        };
+    }
+
+    #endregion
 }

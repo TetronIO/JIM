@@ -141,6 +141,7 @@ internal sealed class CollisionRemediationRun
 
         if (assignment.RemediationCount >= UniqueValueGenerationServer.MaximumRemediations && !assignment.RenameAuthorised)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
+                GeneratedValueNeedsDecisionReason.RemediationLimitReached,
                 $"it has already been corrected {assignment.RemediationCount} times, so JIM has stopped correcting it");
 
         var generationServer = new UniqueValueGenerationServer(repository);
@@ -154,7 +155,10 @@ internal sealed class CollisionRemediationRun
             var why = verdict.Anchoring == GeneratedValueAnchoring.Anchored
                 ? $"{anchoringName} has already accepted it for this object, so changing it would rename an account already in use"
                 : $"JIM cannot tell whether {anchoringName} already holds it, because {anchoringName} has not completed a Full Import since its connector space was cleared";
-            return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, verdict.ConnectedSystemId, executionItemId, repository, why);
+            var reason = verdict.Anchoring == GeneratedValueAnchoring.Anchored
+                ? GeneratedValueNeedsDecisionReason.AnchoredElsewhere
+                : GeneratedValueNeedsDecisionReason.CannotTell;
+            return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, verdict.ConnectedSystemId, executionItemId, repository, reason, why);
         }
 
         var request = new GenerationRequest
@@ -173,10 +177,10 @@ internal sealed class CollisionRemediationRun
         var outcome = await generationServer.RegenerateAsync(request, Options);
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
-                $"no other value could be found for it: {outcome.FailureMessage}");
+                GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
 
         var reasonCode = assignment.RenameAuthorised ? CausalReasonCode.GeneratedValueRenameAuthorised : CausalReasonCode.GeneratedValueAlreadyInUse;
-        var revised = Revise(assignment, outcome, executionItemId);
+        var revised = Revise(assignment, outcome, executionItemId, _connectedSystem.Id);
 
         var metaverseObject = (await repository.GetMetaverseObjectsByIdsNoTrackingAsync([metaverseObjectId.Value])).SingleOrDefault();
         if (metaverseObject == null)
@@ -245,6 +249,7 @@ internal sealed class CollisionRemediationRun
         // An export-mode value is never anchored (plan decision 10): only this one system holds it.
         if (assignment.RemediationCount >= UniqueValueGenerationServer.MaximumRemediations && !assignment.RenameAuthorised)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
+                GeneratedValueNeedsDecisionReason.RemediationLimitReached,
                 $"it has already been corrected {assignment.RemediationCount} times, so JIM has stopped correcting it");
 
         var generationServer = new UniqueValueGenerationServer(repository);
@@ -263,9 +268,9 @@ internal sealed class CollisionRemediationRun
         var outcome = await generationServer.RegenerateAsync(request, Options);
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
-                $"no other value could be found for it: {outcome.FailureMessage}");
+                GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
 
-        var revised = Revise(assignment, outcome, executionItemId);
+        var revised = Revise(assignment, outcome, executionItemId, _connectedSystem.Id);
         var revision = new GeneratedValueRevision
         {
             Assignment = revised,
@@ -324,9 +329,9 @@ internal sealed class CollisionRemediationRun
 
     private async Task<GeneratedValueCollisionOutcome> EnterNeedsDecisionAsync(
         PendingExport export, GeneratedValueAssignment assignment, string attributeName, string rejectedValue, int? anchoredBy,
-        Guid executionItemId, ISyncRepository repository, string why)
+        Guid executionItemId, ISyncRepository repository, GeneratedValueNeedsDecisionReason reason, string why)
     {
-        await new UniqueValueGenerationServer(repository).EnterNeedsDecisionAsync(assignment, _connectedSystem.Id, anchoredBy, executionItemId);
+        await new UniqueValueGenerationServer(repository).EnterNeedsDecisionAsync(assignment, _connectedSystem.Id, anchoredBy, executionItemId, reason);
 
         var message = $"{_connectedSystem.Name} rejected the {attributeName} \"{rejectedValue}\" because another object there already holds it, " +
                       $"and JIM has not changed it: {why}. Allow the rename, retry once the conflict is resolved in {_connectedSystem.Name}, or leave it.";
@@ -363,7 +368,7 @@ internal sealed class CollisionRemediationRun
     /// The assignment as revised, on a copy: the original is left as read, so nothing in memory claims a revision the
     /// repository may yet refuse.
     /// </summary>
-    private static GeneratedValueAssignment Revise(GeneratedValueAssignment assignment, GenerationOutcome outcome, Guid executionItemId) => new()
+    private static GeneratedValueAssignment Revise(GeneratedValueAssignment assignment, GenerationOutcome outcome, Guid executionItemId, int rejectedByConnectedSystemId) => new()
     {
         Id = assignment.Id,
         MetaverseObjectId = assignment.MetaverseObjectId,
@@ -381,8 +386,10 @@ internal sealed class CollisionRemediationRun
         RenameAuthorised = false,
         RenameAuthorisedAt = assignment.RenameAuthorisedAt,
         RenameAuthorisedByName = assignment.RenameAuthorisedByName,
-        RejectedByConnectedSystemId = assignment.RejectedByConnectedSystemId,
+        // The system this correction answered, so the decision surfaces can count it against that system.
+        RejectedByConnectedSystemId = rejectedByConnectedSystemId,
         RemediatedByActivityRunProfileExecutionItemId = executionItemId,
+        RemediatedAt = DateTime.UtcNow,
         Created = assignment.Created,
         CommittedAt = assignment.CommittedAt,
         LastUpdated = DateTime.UtcNow

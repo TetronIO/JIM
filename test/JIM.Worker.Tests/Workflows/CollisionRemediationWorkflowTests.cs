@@ -58,6 +58,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Remediated));
             Assert.That(assignment.RemediationCount, Is.EqualTo(1));
             Assert.That(assignment.RemediatedByActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));
+            Assert.That(assignment.RemediatedAt, Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromMinutes(5)),
+                "\"corrected in the last 7 days\" counts from when the value was corrected");
+            Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ctx.Directory.Id), "the correction records which system rejected the value");
 
             Assert.That(record.MetaverseObjectId, Is.EqualTo(Mvo().Id));
             Assert.That(record.MetaverseAttributeId, Is.EqualTo(ctx.AccountName.Id));
@@ -265,6 +268,7 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
             Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ctx.Directory.Id));
             Assert.That(assignment.AnchoredByConnectedSystemId, Is.EqualTo(ctx.Contractor.Id));
+            Assert.That(assignment.NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.AnchoredElsewhere));
             Assert.That(assignment.NeedsDecisionActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));
             Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked));
             Assert.That(SyncRepo.PendingExports[export.Id].ErrorCount, Is.Zero);
@@ -291,6 +295,8 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         {
             Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"), "missing knowledge never permits a rename");
             Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.CannotTell));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().AnchoredByConnectedSystemId, Is.EqualTo(ctx.Contractor.Id));
             Assert.That(ExecutionItems(activity).Single().ErrorMessage, Does.Contain("cannot tell"));
         }
     }
@@ -309,6 +315,7 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         {
             Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"));
             Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.RemediationLimitReached));
         }
     }
 
@@ -460,6 +467,8 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports[ticketingExport.Id].Status, Is.EqualTo(PendingExportStatus.Pending));
             Assert.That(assignment.Value, Is.EqualTo("e11"));
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Remediated));
+            Assert.That(assignment.RemediatedAt, Is.Not.Null);
+            Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ticketing.Id));
             Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty, "no Metaverse Object is involved");
             Assert.That(ExecutionItems(activity).Single().SyncOutcomes.Select(o => o.OutcomeType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated));
         }
