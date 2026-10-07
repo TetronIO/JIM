@@ -185,6 +185,67 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         }
     }
 
+    [TestCase(PendingExportStatus.Pending)]
+    [TestCase(PendingExportStatus.ExportNotConfirmed)]
+    [TestCase(PendingExportStatus.Failed)]
+    [TestCase(PendingExportStatus.Parked)]
+    public async Task FullSync_AfterTheDeprovisioningActionSwitchesToDisconnect_WithdrawsTheQueuedDeleteAndDisconnectsAsync(PendingExportStatus deleteStatus)
+    {
+        // #1970: Carol's Delete was queued while the rule said Delete. Switching to Disconnect before it is carried out
+        // must keep her account, not delete it at the next export while reporting it disconnected.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+        var carolsAccount = DirectoryAccountOf(ctx, "Carol");
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        await RunFullSyncAsync(ctx.Hr);
+        Assert.That(DeletesFor(ctx), Is.EqualTo(new[] { "Carol" }), "arrange: Carol's Delete is queued");
+        PendingExportsFor(ctx.Directory).Single().Status = deleteStatus;
+
+        SettleSynchronisationChanges();
+        ctx.ExportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DeletesFor(ctx), Is.Empty, "the Delete is withdrawn");
+            Assert.That(carolsAccount.MetaverseObjectId, Is.Null, "Carol's account is disconnected instead");
+            Assert.That(item?.SyncOutcomes.Select(o => o.OutcomeType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected), DescribeItems(activity));
+        }
+    }
+
+    [TestCase(PendingExportStatus.Executing)]
+    [TestCase(PendingExportStatus.Exported)]
+    public async Task FullSync_AfterTheDeprovisioningActionSwitchesToDisconnect_LeavesADeleteAlreadySentAsync(PendingExportStatus deleteStatus)
+    {
+        // The Delete has reached the Directory (or is reaching it): Carol's account is gone or going, so disconnecting
+        // it and reporting it kept would be false. The confirming import finishes the Delete as it would have.
+        SyncRepo.SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+        var carolsAccount = DirectoryAccountOf(ctx, "Carol");
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        await RunFullSyncAsync(ctx.Hr);
+        PendingExportsFor(ctx.Directory).Single().Status = deleteStatus;
+
+        SettleSynchronisationChanges();
+        ctx.ExportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DeletesFor(ctx), Is.EqualTo(new[] { "Carol" }), "the Delete stands");
+            Assert.That(carolsAccount.MetaverseObjectId, Is.Not.Null, "Carol's account stays joined until the Delete is confirmed");
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(i => i.SyncOutcomes).Select(o => o.OutcomeType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected), DescribeItems(activity));
+            Assert.That(FlaggedForReview(ctx), Is.Empty, "the review completed");
+        }
+    }
+
     [Test]
     public async Task FullSync_AfterTheExportRuleIsDisabled_DeprovisionsNothingAsync()
     {
@@ -213,6 +274,18 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
 
         Assert.That(FlaggedForReview(ctx), Is.Empty);
+    }
+
+    [Test]
+    public async Task Save_ThatChangesTheDeprovisioningAction_FlagsObjectsForReviewAsync()
+    {
+        // The new action applies to objects already out of scope only when something reviews them (#1970).
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+
+        ctx.ExportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+
+        Assert.That(FlaggedForReview(ctx), Is.EquivalentTo(new[] { "Alice", "Bob", "Carol" }));
     }
 
     [Test]
@@ -329,6 +402,31 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         }
     }
 
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task FullSync_AfterScopingCriteriaAreNarrowed_RecordsTheItemAsAReviewOfTheMetaverseObjectAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        // The review's item has no Connected System Object of its own, so unless it says what it is and whose it is,
+        // the item page reads it as an unclassified operation on an object that has been deleted (#1971).
+        SyncRepo.SetSyncOutcomeTrackingLevel(trackingLevel);
+        var ctx = await SetUpAsync(directoryAccounts: true, provisioning: false);
+        var carol = MetaverseObjectOf(ctx, "Carol");
+
+        ctx.ExportRule.ObjectScopingCriteriaGroups.Add(EmployeesOnly(ctx));
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var item = activity.RunProfileExecutionItems.SingleOrDefault();
+        Assert.That(item, Is.Not.Null, "one item, for Carol: " + DescribeItems(activity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item!.ObjectChangeType, Is.EqualTo(ObjectChangeType.ExportScopeReview));
+            Assert.That(item!.MetaverseObjectId, Is.EqualTo(carol.Id), "the item names the Metaverse Object it reviewed");
+            Assert.That(item!.ConnectedSystemObjectId, Is.Null);
+        }
+    }
+
     [Test]
     public async Task FullSync_AfterScopingCriteriaAreNarrowedWithOutcomeTrackingOff_StillRecordsAnItemForTheDisconnectedObjectAsync()
     {
@@ -431,10 +529,12 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
     /// How an item names a person's Metaverse Object. The fixture's attribute is "DisplayName" rather than the
     /// built-in "Display Name", so the object has no name of its own here and is named by its id instead.
     /// </summary>
-    private string ItemNameOf(Context ctx, string displayName) => SyncRepo.MetaverseObjects.Values
+    private string ItemNameOf(Context ctx, string displayName) => MetaverseObjectOf(ctx, displayName).NameOrId;
+
+    /// <summary>A person's Metaverse Object, by the DisplayName it holds.</summary>
+    private MetaverseObject MetaverseObjectOf(Context ctx, string displayName) => SyncRepo.MetaverseObjects.Values
         .Single(mvo => mvo.Type?.Id == ctx.MvType.Id &&
-            mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDisplayName.Id && av.StringValue == displayName))
-        .NameOrId;
+            mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvDisplayName.Id && av.StringValue == displayName));
 
     private static string DescribeItems(Activity activity) => "items: [" + string.Join("; ", activity.RunProfileExecutionItems.Select(i =>
         $"{i.DisplayNameSnapshot ?? "(unnamed)"} {i.ObjectChangeType} {i.ErrorType} [{string.Join(", ", i.SyncOutcomes.Select(o => o.OutcomeType))}]")) + "]";

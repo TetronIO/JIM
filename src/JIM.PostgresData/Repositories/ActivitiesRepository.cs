@@ -1406,6 +1406,7 @@ public class ActivityRepository : IActivityRepository
                 i.DisplayNameSnapshot,
                 i.ExternalIdSnapshot,
                 i.ObjectTypeSnapshot,
+                i.MetaverseObjectId,
                 DisplayNameLive =
                     i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
                     ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
@@ -1434,6 +1435,7 @@ public class ActivityRepository : IActivityRepository
             ConnectedSystemObjectType = p.TypeLive ?? p.ObjectTypeSnapshot,
             ErrorType = p.ErrorType,
             ObjectChangeType = p.ObjectChangeType,
+            MetaverseObjectId = p.MetaverseObjectId,
             OutcomeSummary = p.OutcomeSummary
         }).ToList();
 

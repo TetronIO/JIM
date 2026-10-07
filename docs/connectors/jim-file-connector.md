@@ -115,7 +115,7 @@ On Podman, add the host folder to the pod file, `/opt/jim/jim.yaml`: a `hostPath
       hostPath: { path: /mnt/hr-extracts, type: Directory }
 ```
 
-Then restart JIM: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`. An upgrade replaces `jim.yaml`, so carry the addition into each new release's copy.
+Then restart JIM: `sudo systemctl restart jim.service`, or for a rootless installation, `jim-systemctl restart jim.service` (see [Rootless commands](../administration/podman.md#rootless-commands)). An upgrade replaces `jim.yaml`, so carry the addition into each new release's copy.
 
 Two things can differ from Docker:
 

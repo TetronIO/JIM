@@ -4621,9 +4621,12 @@ public abstract class SyncTaskProcessorBase
                 // Activity. The RPEI is linked to the MVO through _mvoIdToRpei (the same mechanism the per-page
                 // flow uses); provisioning-CSO change records and export outcomes resolve the originating RPEI
                 // via that map. The MVO is loaded no-tracking; provisioning CSOs reference it by FK scalar only.
-                // It is named here because, unlike a page item, it has no Connected System Object to take a
-                // name from, and the Activity would otherwise list it with none.
+                // It is named, classified and pointed at its Metaverse Object here because, unlike a page item, it
+                // has no Connected System Object to take any of those from, and the item page would otherwise read
+                // it as an unclassified operation on a deleted object (#1971).
                 var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.ObjectChangeType = ObjectChangeType.ExportScopeReview;
+                rpei.MetaverseObjectId = mvo.Id;
                 rpei.DisplayNameSnapshot = mvo.NameOrId;
                 rpei.ObjectTypeSnapshot = mvo.Type?.Name;
                 _activity.RunProfileExecutionItems.Add(rpei);

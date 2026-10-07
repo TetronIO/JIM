@@ -81,9 +81,15 @@ public static class CausalityLineageModelBuilder
         // The page's own record column exists whenever the context names a record: the record is the
         // item's subject, so it anchors the graph even when no loaded event happens to land on it (a
         // synchronisation's events all land on the Identity and the staging targets).
+        // An item that records a Metaverse Object (an export scope review) has no record of its own: the Identity is
+        // its subject and anchors the graph instead (#1982).
         ColumnState? pageRecordColumn = null;
-        if (context.CsoConnectedSystemId.HasValue
-            || ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) != null)
+        if (context.SubjectMetaverseObjectId != null)
+        {
+            GetIdentityColumn();
+        }
+        else if (context.CsoConnectedSystemId.HasValue
+                 || ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) != null)
         {
             pageRecordColumn = GetRecordColumn(context.CsoConnectedSystemId, context.CsoConnectedSystemName,
                 isSourceSide: !pageRecordIsTarget);
@@ -189,7 +195,7 @@ public static class CausalityLineageModelBuilder
         }
 
         if (chain != null)
-            Walk(chain.Cohorts, context.CsoDisplayName, chain.RunProfileExecutionItemId);
+            Walk(chain.Cohorts, context.CsoDisplayName ?? context.SubjectMetaverseObjectName, chain.RunProfileExecutionItemId);
 
         // The Identity column also exists when the story spans both sides of the Metaverse with no
         // loaded event on the Identity itself and no creation cohort resolved either (a create export
@@ -331,7 +337,7 @@ public static class CausalityLineageModelBuilder
         switch (state.Kind)
         {
             case CausalityLineageColumnKind.Identity:
-                head = GetIdentityHead(state, chain);
+                head = GetIdentityHead(state, chain, context);
                 // A single-object Identity head carries the page's Metaverse Object Type name for
                 // its subtitle ("User · Metaverse"); a role head is already a type noun.
                 if (!head.IsRoleHead)
@@ -390,12 +396,17 @@ public static class CausalityLineageModelBuilder
     }
 
     /// <summary>
-    /// The Identity column's head: the single object where the story has one (this run's own Identity
-    /// link first, then a sole-cause hop's snapshot, then any sole cause anywhere in the chain for a
-    /// column that exists purely to complete the graph), and the plural role where it does not.
+    /// The Identity column's head: the single object where the story has one (the item's own subject where it
+    /// records a Metaverse Object, then this run's own Identity link, then a sole-cause hop's snapshot, then any sole
+    /// cause anywhere in the chain for a column that exists purely to complete the graph), and the plural role where
+    /// it does not.
     /// </summary>
-    private static ColumnHead GetIdentityHead(ColumnState state, CausalChain? chain)
+    private static ColumnHead GetIdentityHead(ColumnState state, CausalChain? chain, CausalityPageContext context)
     {
+        if (context.SubjectMetaverseObjectId != null)
+            return new ColumnHead(context.SubjectMetaverseObjectName ?? "Metaverse Object", IsRoleHead: false,
+                context.SubjectMetaverseObjectHref, ObjectTypeName: null);
+
         var identityLink = state.ThisRunEvents
             .SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity && !string.IsNullOrWhiteSpace(l.Label));
@@ -463,8 +474,10 @@ public static class CausalityLineageModelBuilder
         // record's does above, so a target reads "user: EMP001746" rather than the name alone.
         var recordLink = state.ThisRunEvents.SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Record && l.Href != null);
+        // Where the item names no record of its own (an export scope review), the target is named by its own link.
         return new ColumnHead(
-            ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? state.SystemName ?? "Connected System Object",
+            ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? recordLink?.Label ?? state.SystemName
+            ?? "Connected System Object",
             IsRoleHead: false, recordLink?.Href, ObjectTypeName: recordLink?.ObjectTypeName);
     }
 
@@ -493,8 +506,8 @@ public static class CausalityLineageModelBuilder
     /// The relationship label between two adjacent columns. A record feeding the Identity reads as
     /// what this run proved ("projected", "joined") or as the standing "imported" relationship; the
     /// Identity feeding records reads "provisioned" where they were created (this run's provisioning
-    /// event, or the chain's create-staged decision) and "exported" otherwise. Pairs touching the
-    /// trailing column state no relationship.
+    /// event, or the chain's create-staged decision), "disconnected" where this run disconnected them, and
+    /// "exported" otherwise. Pairs touching the trailing column state no relationship.
     /// </summary>
     /// <remarks>
     /// One label now covers a whole side, so it may only claim what is true of every record on it:
@@ -539,7 +552,12 @@ public static class CausalityLineageModelBuilder
         }
 
         if (left[0].Kind == CausalityLineageColumnKind.Identity && right[0].Kind == CausalityLineageColumnKind.Record)
-            return right.All(WasProvisioned) ? "provisioned" : "exported";
+        {
+            if (right.All(WasProvisioned))
+                return "provisioned";
+            // A Disconnect exports nothing: the account stays in the target system, unmanaged (#1966, #1982).
+            return right.All(WasDisconnected) ? "disconnected" : "exported";
+        }
 
         return null;
     }
@@ -551,6 +569,12 @@ public static class CausalityLineageModelBuilder
     private static bool WasProvisioned(ColumnState state) =>
         state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)
         || state.Hops.Any(h => h.Hop.Cohort.ReasonCode == CausalReasonCode.ExportCreateStaged);
+
+    /// <summary>
+    /// Whether this run disconnected the record this column state stands for, under a Disconnect Deprovisioning Action.
+    /// </summary>
+    private static bool WasDisconnected(ColumnState state) =>
+        state.ThisRunEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
 
     /// <summary>
     /// A column under construction: its identity, side, cards-in-progress and endings, before heads

@@ -148,7 +148,7 @@ For a port other than 443, change the port threshold too.
 
 To change a setting, renew the certificate or change the client secret, update it and run the play again: the role restarts the services that use it. To upgrade, replace `jim.yaml` (and `jim-database.yaml`) with the new release's copies and run the play again; the Worker applies any database changes as JIM starts, as on any installation (see [Upgrading](upgrading.md)).
 
-The `restarts` keys need a recent version of the role. With an older one, restart JIM yourself after a change: `sudo systemctl restart jim.service`, or rootless, `sudo systemctl --user -M jim@ restart jim.service`.
+The `restarts` keys need a recent version of the role. With an older one, restart JIM yourself after a change: `sudo systemctl restart jim.service`, or rootless, `jim-systemctl restart jim.service` (see [Rootless commands](podman.md#rootless-commands)).
 
 !!! note "The bundled database keeps its first password"
     PostgreSQL takes the database password from `jim-secrets` only when it creates the database, on first start. To change it later, change it in PostgreSQL first (`ALTER USER jim WITH PASSWORD '...'`), then in Ansible Vault.

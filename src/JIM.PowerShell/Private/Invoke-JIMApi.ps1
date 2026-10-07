@@ -264,7 +264,7 @@ function Invoke-JIMApiRequest {
                     throw "Authentication failed. Token refresh was already attempted. Please run Connect-JIM to re-authenticate."
                 }
                 else {
-                    throw "Authentication failed. Your API key may be invalid or expired. Use Connect-JIM to reconnect."
+                    throw "JIM rejected the API key: JIM has no record of it, or it is disabled or has expired."
                 }
             }
             403 {

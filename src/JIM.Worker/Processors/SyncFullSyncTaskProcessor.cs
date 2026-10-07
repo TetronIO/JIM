@@ -160,20 +160,19 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // because another system's priority affects this system's resolution), disable the optimisation for
         // this run by loading without a watermark, so every object is fully evaluated against the new
         // configuration.
+        // The rule lives on the model, shared with the Full Synchronisation preview (#1530).
         var fullSyncStartedAt = DateTime.UtcNow;
-        var csoLoadWatermark = _connectedSystem.LastSyncCompletedAt;
-        if (csoLoadWatermark.HasValue)
+        DateTime? csoLoadWatermark = null;
+        if (_connectedSystem.LastSyncCompletedAt.HasValue)
         {
-            var configurationBaseline = _connectedSystem.ConfigurationLastFullyAppliedAt;
             var configChangedAt = await _syncRepo.GetLatestSyncRuleConfigurationChangeAsync();
-            if (configurationBaseline == null ||
-                (configChangedAt.HasValue && configChangedAt.Value > configurationBaseline.Value))
+            csoLoadWatermark = _connectedSystem.GetUnchangedObjectWatermark(configChangedAt);
+            if (csoLoadWatermark == null)
             {
                 Log.Information("PerformFullSyncAsync: Synchronisation Rule configuration changed at {ConfigChangedAt:O}, " +
                     "after it was last fully applied at {Baseline:O}. Disabling the unchanged-object optimisation for " +
                     "this run so the new configuration is applied to every object.",
-                    configChangedAt, configurationBaseline);
-                csoLoadWatermark = null;
+                    configChangedAt, _connectedSystem.ConfigurationLastFullyAppliedAt);
             }
         }
 

@@ -10,11 +10,13 @@
 
       1. Installs JIM with the bundle's setup.sh, offline, with a certificate the installer generates.
       2. Waits until JIM answers ready over HTTPS, trusting only the installer's certificate authority.
-      3. Waits until every container's own health check passes (podman healthcheck run on Podman).
+      3. Waits until every container's own health check passes (podman healthcheck run on Podman), and checks
+         that JIM accepts the infrastructure API key the installer was given, and refuses a key it was not.
       4. Writes a marker to the database and to the File Connector volume, stops JIM and starts it again
          (docker compose down and up; systemctl stop and start of the Quadlet units), and checks that JIM
          came back as new containers, ready over HTTPS, with both markers still there.
-      5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host.
+      5. Checks the bundled PostgreSQL runs with the memory settings the installer sized for the host, and with
+         the TCP keepalives that drop a session whose client has gone.
       6. Backs up and restores the encryption keys with the commands in Backup & Disaster Recovery, as written
          (rootless, with jim-podman as Running on Podman says), checks the archive with the page's own check,
          and checks the commands fetched no image, which an air-gapped host could not, and put the key volume
@@ -26,7 +28,13 @@
       8. Saves the containers' inspect output, for Compare-RuntimeParity.ps1.
       9. Stops JIM, freeing its port for the next leg, unless -KeepRunning.
 
-    On failure it saves each container's log to the output folder before rethrowing.
+    Before stopping JIM in step 4, and again before step 8, it checks that no container restarted, and that the
+    kernel logged no AppArmor denial under a container's or a runtime's profile and no process killed for a fault
+    since the leg began (Select-KernelFault.ps1). A service that crashes is restarted and soon passes its health
+    check again, so readiness alone cannot show a crash (#1953).
+
+    It saves the kernel's log for the leg to the output folder, and on failure each container's log too, before
+    rethrowing.
 
 .PARAMETER BundlePath
     The extracted release bundle, which holds setup.sh.
@@ -93,6 +101,12 @@ $OutputPath = (Resolve-Path $OutputPath).Path
 $isRoot = (id -u) -eq '0'
 # Always an array, possibly empty, so that it prefixes command lines rather than joining their words.
 $elevate = @(if (-not $isRoot) { 'sudo' })
+# The functions the documentation defines for operating a rootless JIM, read before installing anything, so a page
+# that lost them fails the leg at once.
+$rootlessHelpers = if ($Rootless) {
+    & (Join-Path $PSScriptRoot 'Get-DocumentedCommand.ps1') -Heading 'Rootless commands' `
+        -Path (Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'administration' 'podman.md')
+}
 
 function Write-Step {
     param([string]$Message)
@@ -170,8 +184,14 @@ function Invoke-Documented {
 
 function Invoke-Systemctl {
     param([string[]]$Arguments)
-    $systemctl = @(if ($Rootless) { $elevate + @('systemctl', '--user', '-M', "$account@") } else { $elevate + 'systemctl' })
-    Invoke-Native -Command ($systemctl + $Arguments) | Out-Null
+    if (-not $Rootless) {
+        Invoke-Native -Command ($elevate + 'systemctl' + $Arguments) | Out-Null
+        return
+    }
+    # As Running JIM on Podman has an administrator do it: with its jim-systemctl, from the page's own text. Until
+    # #1955 the page gave systemctl --user -M jim@, which fails on a minimal RHEL-family host. The function runs
+    # sudo itself.
+    Invoke-Native -Command (@('bash', '-ec', "$rootlessHelpers`njim-systemctl `"`$@`"", 'bash') + $Arguments) | Out-Null
 }
 
 function Invoke-Compose {
@@ -206,6 +226,15 @@ function Wait-Until {
     Write-Step "$Description ($([int]((Get-Date) - $started).TotalSeconds)s)"
 }
 
+# The status JIM answers an API call that needs authentication with, made with the given API key.
+function Get-ApiKeyStatus {
+    param([string]$Key)
+    Invoke-Native -AllowFailure -Command @(
+        'curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '10', '--noproxy', $hostName,
+        '--cacert', $caPath, '--resolve', "${hostName}:443:127.0.0.1", '-H', "X-API-Key: $Key",
+        "https://${hostName}/api/v1/userinfo")
+}
+
 # Ready over HTTPS, at the certificate's name, trusting only the certificate authority the installer created.
 function Test-ReadyOverHttps {
     $code = Invoke-Native -AllowFailure -Command @(
@@ -232,6 +261,38 @@ function Wait-AllHealthy {
     }
 }
 
+# What the kernel and the audit system logged since the leg began: AppArmor's denials go to one or the other,
+# depending on whether auditd runs.
+function Get-KernelLog {
+    $log = Invoke-Native ($elevate + @('journalctl', '--no-pager', '--quiet', '--output', 'short-iso',
+        '--since', "@$legStarted", '_TRANSPORT=kernel', '+', '_TRANSPORT=audit'))
+    @($log -split "`n" | Where-Object { $_ })
+}
+
+# No container restarted, and the kernel logged nothing against them, since the leg began. A service that crashes is
+# restarted by its runtime and soon passes its health check again, so readiness alone hid JIM's .NET services aborting
+# on every start under rootful Podman on Ubuntu 24.04, until #1953.
+function Assert-NoCrash {
+    param([Parameter(Mandatory)][string]$Stage)
+    $restarts = @(foreach ($name in $containers.Values) {
+        $count = [int](Invoke-Runtime @('inspect', '-f', '{{.RestartCount}}', $name))
+        if ($count -gt 0) { "$name restarted $count times" }
+    })
+    $faults = @(Get-KernelLog | & (Join-Path $PSScriptRoot 'Select-KernelFault.ps1'))
+    if ($restarts.Count -gt 0 -or $faults.Count -gt 0) {
+        $found = $restarts + @($faults | Select-Object -First 10)
+        if ($faults.Count -gt 10) {
+            $found += "... and $($faults.Count - 10) more in $leg-kernel.log"
+        }
+        throw "JIM's containers crashed, or the kernel denied them, by the end of $Stage`:`n$($found -join "`n")"
+    }
+    Write-Step "no container restarted by the end of $Stage, and the kernel logged no AppArmor denial or fault against them"
+}
+
+function Save-KernelLog {
+    Get-KernelLog | Set-Content (Join-Path $OutputPath "$leg-kernel.log")
+}
+
 function Invoke-Sql {
     param([string]$Sql)
     Invoke-Runtime @('exec', $containers.database, 'psql', '-U', 'jim', '-d', 'jim', '-v', 'ON_ERROR_STOP=1', '-Atc', $Sql)
@@ -251,6 +312,7 @@ function Save-Diagnostics {
             Invoke-Native -AllowFailure ($elevate + @('journalctl', "_UID=$uid", '--no-pager', '-n', '200')) |
                 Set-Content (Join-Path $OutputPath "$leg-journal.log")
         }
+        Save-KernelLog
     }
     catch {
         Write-Warning "Could not save the containers' logs: $_"
@@ -258,6 +320,10 @@ function Save-Diagnostics {
 }
 
 $caPath = Join-Path $OutputPath "$leg-ca.crt"
+# An infrastructure API key for the installer to give JIM, which until #1950 it did only on Podman.
+$infrastructureKey = 'jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true)
+# Whole seconds, as journalctl --since takes them; a second early rather than late.
+$legStarted = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 1
 try {
     # 1. Install, as a customer does, answering every question in advance.
     Write-Step "installing from $BundlePath"
@@ -278,10 +344,12 @@ try {
         'JIM_SSO_INITIAL_ADMIN=00000000-0000-0000-0000-000000000001'
         'JIM_WEB_PORT=443'
         'JIM_SETUP_TLS_MODE=generate'
+        "JIM_INFRASTRUCTURE_API_KEY=$infrastructureKey"
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
         'JIM_SETUP_OPEN_FIREWALL=false'
-        # On Ubuntu, GitHub's runners among them, the installer must add a network rule to Podman's AppArmor profiles.
+        # On Ubuntu 24.04, GitHub's runners among them, the installer must add the network and signal rules that
+        # rootful Podman's AppArmor profiles need.
         'JIM_SETUP_FIX_APPARMOR=true'
     )
     $installLog = Join-Path $OutputPath "$leg-install.log"
@@ -299,15 +367,25 @@ try {
 
     Invoke-Native ($elevate + @('cat', "$installPath/tls/ca.crt")) | Set-Content $caPath
 
-    # 2 and 3. Ready over HTTPS, and every container's own health check passing.
+    # 2 and 3. Ready over HTTPS, every container's own health check passing, and the installer's API key working.
     Wait-Until -Description 'ready over HTTPS' -Condition { Test-ReadyOverHttps }
     Wait-AllHealthy
+    Wait-Until -TimeoutMinutes 2 -Description 'JIM accepts the API key the installer was given' -Condition {
+        (Get-ApiKeyStatus $infrastructureKey) -eq '200'
+    }
+    $unknownKeyStatus = Get-ApiKeyStatus ('jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true))
+    if ($unknownKeyStatus -ne '401') {
+        throw "JIM answered an API key it was never given with $unknownKeyStatus, not 401"
+    }
 
     # 4. Data survives JIM being stopped and started, as new containers.
     $marker = [Guid]::NewGuid().ToString('N')
     Invoke-Sql "CREATE TABLE ci_boot_marker (token text); INSERT INTO ci_boot_marker VALUES ('$marker');" | Out-Null
     Invoke-Runtime @('exec', $containers.worker, 'sh', '-c', "echo $marker > /connector-files/ci-boot-marker") | Out-Null
     $webIdBefore = Invoke-Runtime @('inspect', '-f', '{{.Id}}', $containers.web)
+    # The first start, which prepares the database, is where the services work hardest; the restart below replaces
+    # the containers, and their restart counts with them.
+    Assert-NoCrash -Stage 'the first start'
 
     Write-Step 'stopping and starting JIM'
     if ($Runtime -eq 'docker') {
@@ -360,6 +438,17 @@ try {
         $sized += "shm_size ${chosen}mb"
     }
     Write-Step "PostgreSQL runs with the memory the installer sized: $($sized -join ', ')"
+
+    # And with the TCP keepalives that drop a session whose client has gone within two minutes: on Podman every stop of
+    # JIM leaves its sessions so, since the pod's network goes before JIM's services close their connections (#1980).
+    # Read over TCP, since on a local socket, which has none, PostgreSQL reports each of them as 0.
+    $keepalives = Invoke-Runtime @('exec', $containers.database, 'sh', '-c',
+        'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U jim -d jim -v ON_ERROR_STOP=1 -Atc "$1"', 'sh',
+        "SELECT string_agg(name || '=' || setting, ' ' ORDER BY name) FROM pg_settings WHERE name LIKE 'tcp_keepalives%';")
+    if ($keepalives -ne 'tcp_keepalives_count=6 tcp_keepalives_idle=60 tcp_keepalives_interval=10') {
+        throw "PostgreSQL does not run with the TCP keepalives that drop a session whose client has gone: $keepalives"
+    }
+    Write-Step "PostgreSQL drops a session whose client has gone within two minutes: $keepalives"
 
     # 6. The key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped as the page
     # and the upgrade guide have it, and fetch no image. Until #1949 the Docker ones ran an image JIM does not ship,
@@ -507,12 +596,15 @@ try {
     }
     Write-Step 'the documented database restore put back the database the backup took, over a newer release''s changes'
 
+    Assert-NoCrash -Stage 'the leg'
+    Save-KernelLog
+
     # 8. What each container runs, for the parity comparison.
     Invoke-Runtime (@('inspect') + @($containers.Values)) | Set-Content (Join-Path $OutputPath "$leg.inspect.json")
     Write-Step "saved $leg.inspect.json"
 
     if ($env:GITHUB_STEP_SUMMARY) {
-        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, data kept through a stop and start, PostgreSQL sized to the host, the documented key backup and restore worked offline, the documented database restore rolled back a newer release's changes" |
+        "- ✅ **$leg**: installed from the bundle, ready over HTTPS, $($containers.Count) of $($containers.Count) containers healthy, none restarted and none denied by the kernel, the installer's API key accepted, data kept through a stop and start, PostgreSQL sized to the host, the documented key backup and restore worked offline, the documented database restore rolled back a newer release's changes" |
             Add-Content $env:GITHUB_STEP_SUMMARY
     }
 }

@@ -31,6 +31,22 @@ public class CausalitySummaryBuilderTests
         CausalitySummaryBuilder.Build(CausalityModelBuilder.Build(item, context));
 
     [Test]
+    public void Build_ExportScopeReviewItem_OpensWithTheMetaverseObjectNotARecord()
+    {
+        // The item records a Metaverse Object, so the sentence names and links that, rather than describing a Connected
+        // System Object the item does not have (#1982).
+        var summary = BuildSummary(CausalityTestData.ExportScopeReviewItem(), CausalityTestData.ExportScopeReviewContext());
+
+        var subject = summary.Segments.OfType<SummarySegment.Entity>().FirstOrDefault(e => e.Label == "Liam Allen");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(subject?.Kind, Is.EqualTo(CausalityEntityKind.Identity));
+            Assert.That(subject?.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+            Assert.That(RenderSentence(summary.Segments), Does.Not.Contain("Connected System Object"));
+        }
+    }
+
+    [Test]
     public void Build_NewJoinerScenario_ProducesTheMockUpSentence()
     {
         var summary = BuildSummary(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());

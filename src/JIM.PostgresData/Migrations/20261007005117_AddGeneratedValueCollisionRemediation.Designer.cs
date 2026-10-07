@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261006210305_AddGeneratedValueCollisionRemediation")]
+    [Migration("20261007005117_AddGeneratedValueCollisionRemediation")]
     partial class AddGeneratedValueCollisionRemediation
     {
         /// <inheritdoc />
@@ -427,6 +427,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("ExternalIdSnapshot")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("NoChangeReason")
                         .HasColumnType("integer");

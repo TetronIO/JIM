@@ -25,6 +25,24 @@ namespace JIM.Web.Tests;
 public class CausalityTableModelBuilderTests
 {
     [Test]
+    public void Build_ExportScopeReviewItem_ListsNoSourceObjectAndNamesTheMetaverseObject()
+    {
+        // The item records a Metaverse Object, not a Connected System Object, so there is no source object to list; the
+        // Metaverse Object is named and linked (#1982).
+        var model = CausalityModelBuilder.Build(CausalityTestData.ExportScopeReviewItem(), CausalityTestData.ExportScopeReviewContext());
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var identity = table.Objects.Single(o => o.Role == CausalityTableObjectRole.Identity);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(table.Objects.Any(o => o.Role == CausalityTableObjectRole.Source), Is.False);
+            Assert.That(identity.DisplayName, Is.EqualTo("Liam Allen"));
+            Assert.That(identity.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+        }
+    }
+
+    [Test]
     public void Build_RecordedModel_UsesBeforeAfterHeadings()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());

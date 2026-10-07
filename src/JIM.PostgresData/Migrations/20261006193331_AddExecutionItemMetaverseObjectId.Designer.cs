@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261006201710_AddSupportsUniquenessRejectionClassificationCapability")]
-    partial class AddSupportsUniquenessRejectionClassificationCapability
+    [Migration("20261006193331_AddExecutionItemMetaverseObjectId")]
+    partial class AddExecutionItemMetaverseObjectId
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -427,6 +427,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("ExternalIdSnapshot")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("NoChangeReason")
                         .HasColumnType("integer");
@@ -3847,9 +3850,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUniquenessProbe")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("SupportsUniquenessRejectionClassification")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")

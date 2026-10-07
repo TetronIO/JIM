@@ -304,6 +304,35 @@ public class ActivityRunProfileExecutionItemHeaderRangeTests
         }
     }
 
+    [Test]
+    public async Task GetActivityRunProfileExecutionItemHeadersRangeAsync_ExportScopeReviewItem_CarriesTheMetaverseObjectItIsAboutAsync()
+    {
+        // A review item has no Connected System Object, so the Metaverse Object id is how the REST API and PowerShell
+        // tell a caller whose item it is (#1971).
+        var activity = await SeedActivityAsync();
+        var metaverseObjectId = Guid.NewGuid();
+        _dbContext.ActivityRunProfileExecutionItems.Add(new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activity.Id,
+            ObjectChangeType = ObjectChangeType.ExportScopeReview,
+            MetaverseObjectId = metaverseObjectId,
+            DisplayNameSnapshot = "Carol Ng",
+            ObjectTypeSnapshot = "Person"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.Activity.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            activity.Id, offset: 0, count: 10, sortBy: DisplayNameSortKey);
+
+        var header = result.Results.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.ObjectChangeType, Is.EqualTo(ObjectChangeType.ExportScopeReview));
+            Assert.That(header.MetaverseObjectId, Is.EqualTo(metaverseObjectId));
+        }
+    }
+
     /// <summary>
     /// Seeds an Activity and <paramref name="count"/> Run Profile Execution Items whose display-name snapshots
     /// are "Item 001", "Item 002", ... (zero-padded so lexical order matches numeric order under the display

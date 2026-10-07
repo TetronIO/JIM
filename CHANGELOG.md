@@ -40,12 +40,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
+- 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
+- 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
+- 🐛 An export scope review item's causality panel now starts from its Metaverse Object; it showed a Connected System Object that took no part in the run, as though the review had imported it. (#1982)
+- 🐛 An export scope review's execution item now reads as an **Export Scope Review** of its Metaverse Object and links it; it showed "Operation: Not Set" and said the Connected System Object had been deleted. (#1971)
 - 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation, not when each next changes. Changes saved before upgrading need saving again. (#1925)
 - 🐛 Objects moved into or out of scope by a relative date are now provisioned or deprovisioned by the next Delta Synchronisation even when it has nothing new to import, and are no longer missed when two Synchronisation Rules with relative dates cover them. (#1925)
 - 🐛 A synchronisation no longer fails with a duplicate key error when it deprovisions objects a relative date has moved out of an export rule's scope. (#1925)
 - 🐛 An export scope change that lands while a synchronisation is running (a saved rule change, or a relative date being crossed) now reaches every object it affects; objects that run updated could miss it. (#1925)
 - 🐛 A delete queued because an object left an export rule's scope now shows on that object's execution item and in the run's Pending Exports total, as a provisioning does. (#1925)
 - 🐛 An object leaving an export rule's scope under a Disconnect Deprovisioning Action is now reported on its execution item as **Disconnected from target system**, in synchronisation, recall and Sync Preview; it was visible only in the service log. (#1966)
+- 🐛 Sync Preview of a Connected System Object now shows what synchronising it would do: it no longer proposes corrections to values changed in other systems, which the synchronisation leaves alone, and now shows the drift corrections the synchronisation makes where an export rule enforces state. (#1530)
+- 🐛 Switching an export rule's Deprovisioning Action from Delete to Disconnect now withdraws its queued deletes not yet exported and disconnects those objects instead; they were still deleted at the next export. (#1970)
+- 🐛 PowerShell: `-MetaverseAttributeName` now works on `New-JIMScopingCriterion`, `Set-JIMScopingCriterion`, `New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion`; it always reported the attribute as not found. (#1965)
 - 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
 - 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
 - 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
@@ -60,8 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Following a reference from one Metaverse Object to another now shows the new object's Changes, Connections, Password and Properties details; previously the first object's could stay on screen, and Load more could mix two objects' change history. (#348)
 - 🐛 When JIM is not ready after installing or upgrading, `setup.sh` now names each container that is not running properly, the bundled database included, with the end of its log, instead of pointing at the web and worker logs only. (#1944)
 - 🐛 `setup.sh` now stops before starting anything when given a `JIM_DB_SHARED_BUFFERS` the host cannot hold, which the bundled PostgreSQL could not start with, and warns above half the host's memory; its summary marks the sizes it was given. (#1948)
+- 🐛 The commands for operating a rootless Podman JIM now work on a minimal RHEL-family host such as AlmaLinux 9; `systemctl --user -M jim@`, which the documentation and installer gave, fails there without `systemd-container`. Use the documented `jim-systemctl` instead. (#1955)
 - 🐛 The bundled PostgreSQL now starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum and 8 GB recommendation included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
 - 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; in every earlier release it failed on every line, because each file was listed under the build machine's folders. The bundle also no longer carries a development notes file. (#1942)
+- 🐛 Running `setup.sh` again over a Docker installation now restarts `jim.web` when it has to, so JIM serves the certificate that run issued instead of the previous one. (#1956)
+- 🐛 Declining `setup.sh`'s **Start JIM now?** now prints commands that work: on Podman with systemd they no longer fail to find JIM's unit, and a JIM already running is restarted on the new settings and certificate instead of left as it was. (#1984)
+- 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 
 ## [0.16.0] - 2026-09-29
 

@@ -73,7 +73,8 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled] =
             new OutcomeDisplay("Metaverse Object deletion cancelled", CausalityTone.Success, Icons.Material.Filled.HourglassDisabled),
         [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] =
-            new OutcomeDisplay("Drift corrected", CausalityTone.Warning, Icons.Material.Filled.CompareArrows),
+            new OutcomeDisplay("Drift corrected", CausalityTone.Warning, Icons.Material.Filled.CompareArrows,
+                SpeculativeLabel: "Drift would be corrected"),
 
         // Sync outcomes; outbound (Pending Export creation during sync)
         [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] =
