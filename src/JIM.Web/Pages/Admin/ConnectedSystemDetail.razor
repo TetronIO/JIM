@@ -245,7 +245,7 @@
         <div class="d-flex align-center flex-wrap gap-2 mt-2">
             @if (HasFullSynchronisationRunProfile)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" DropShadow="false"
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
                            data-testid="jim-drift-preview-full-synchronisation">
                     Preview Full Synchronisation
@@ -267,7 +267,7 @@ else if (_drift is { NeverFullySynchronised: true })
         @if (HasFullSynchronisationRunProfile)
         {
             <div class="mt-2">
-                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" DropShadow="false"
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
                     Preview Full Synchronisation
                 </MudButton>
