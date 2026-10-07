@@ -2708,6 +2708,94 @@ upgrade_installation() {
     fi
 }
 
+# --- Put the installation back when the installer stops ---
+# The files and folders an installation run writes in the installation before it starts JIM. The run replaces .env
+# (on Podman, jim-config.yaml) with the release's template before the questions and checks that fill it in, so a run
+# that stopped part way, refusing a setting or at Ctrl+C, used to leave a running JIM whose next start read the
+# template (#1994). Until the run goes on to start JIM, they are set aside, and put back if it stops.
+INSTALLATION_FILES=("${SHIPPED_COMPOSE_FILES[@]}" .env "$COMPOSE_CHECKSUMS" "${PODMAN_FILES[@]}" setup.sh tls)
+SET_ASIDE_DIR=""      # where they are, while the run may still put them back
+SET_ASIDE_ABSENT=""   # those the installation did not have, which putting it back removes
+SET_ASIDE_CREATED=""  # "true" when the run created the installation's folder
+PODMAN_DOWNLOAD=""    # Podman: the folder the release's Podman files were downloaded to
+
+# Moves the installation's files aside and leaves copies in their place for the run to work on, so that whatever it
+# does to the copies, the files can go back exactly as they were. A folder (tls) is copied file by file, leaving out
+# any this script cannot read: on Docker, run other than as root, the server key belongs to JIM's user, and the run
+# always replaces it before it starts JIM.
+set_aside_installation() {
+    local install_dir="$1"
+    local aside="${install_dir}/.before-setup"
+    [ ! -e "$aside" ] \
+        || fatal "${aside} holds JIM's files as they were before an earlier run of this script, which stopped without putting them back. Move them back into ${install_dir}, replacing the ones there, or delete ${aside} if the installation is as you want it, then run this again."
+
+    if [ ! -d "$install_dir" ]; then
+        mkdir -p "$install_dir"
+        SET_ASIDE_CREATED="true"
+    fi
+    local name
+    for name in "${INSTALLATION_FILES[@]}"; do
+        [ -e "${install_dir}/${name}" ] || SET_ASIDE_ABSENT+=" ${name} "
+    done
+    (umask 077 && mkdir "$aside")
+    SET_ASIDE_DIR="$aside"
+
+    local file
+    for name in "${INSTALLATION_FILES[@]}"; do
+        [ -e "${install_dir}/${name}" ] || continue
+        mv "${install_dir}/${name}" "${aside}/${name}"
+        if [ -d "${aside}/${name}" ]; then
+            mkdir -m 700 "${install_dir}/${name}"
+            for file in "${aside}/${name}"/*; do
+                [ -f "$file" ] && [ -r "$file" ] || continue
+                cp -p "$file" "${install_dir}/${name}/"
+            done
+        else
+            cp -p "${aside}/${name}" "${install_dir}/${name}"
+        fi
+    done
+}
+
+# Puts each file back by moving it, owner and permissions as they were, and removes those the installation did not
+# have. Run on exit, so it carries on past a failure, and leaves what it cannot put back where the message says.
+put_back_installation() {
+    local install_dir="${SET_ASIDE_DIR%/*}"
+    local name failed=""
+    for name in "${INSTALLATION_FILES[@]}"; do
+        if [ -e "${SET_ASIDE_DIR}/${name}" ]; then
+            { rm -rf "${install_dir:?}/${name}" && mv "${SET_ASIDE_DIR}/${name}" "${install_dir}/${name}"; } || failed="true"
+        elif [[ "$SET_ASIDE_ABSENT" == *" ${name} "* ]]; then
+            rm -rf "${install_dir:?}/${name}" || failed="true"
+        fi
+    done
+    if [ -n "$failed" ] || ! rmdir "$SET_ASIDE_DIR"; then
+        error "Could not put ${install_dir} back as it was before this run. Its files as they were are in ${SET_ASIDE_DIR}: move them back into ${install_dir}, replacing the ones there, then delete ${SET_ASIDE_DIR}."
+        return 0
+    fi
+    if [ "$SET_ASIDE_CREATED" = "true" ]; then
+        rmdir "$install_dir" 2>/dev/null || true
+    fi
+    warn "Stopped before starting JIM, so put ${install_dir} back as it was before this run."
+}
+
+# The run goes on to start JIM: from here the installation is the new one, and a failure leaves it to be started
+# again rather than put back, as with an upgrade.
+keep_installation() {
+    local aside="$SET_ASIDE_DIR"
+    SET_ASIDE_DIR=""
+    rm -rf "$aside"
+}
+
+# Runs as the installer exits, however it stops.
+finish_install() {
+    if [ -n "$SET_ASIDE_DIR" ]; then
+        put_back_installation
+    fi
+    if [ -n "$PODMAN_DOWNLOAD" ]; then
+        rm -rf "$PODMAN_DOWNLOAD"
+    fi
+}
+
 # --- Main ---
 main() {
     # When piped (curl ... | bash), stdin is the pipe, not the terminal.
@@ -2803,14 +2891,17 @@ main() {
 
     EXISTING_DB_PASSWORD=$(existing_database_password "$install_dir")
 
+    # From here the run writes the installation, which is put back if the run stops before starting JIM.
+    trap finish_install EXIT
+    set_aside_installation "$install_dir"
+
     if [ "$RUNTIME" = "podman" ]; then
         if [ -n "$BUNDLE_DIR" ]; then
             PODMAN_SOURCE="${BUNDLE_DIR}/podman"
             [ -f "${PODMAN_SOURCE}/jim.yaml" ] || fatal "This bundle has no Podman files (podman/jim.yaml). Podman installations need a bundle of a release that supports Podman."
         else
             PODMAN_SOURCE=$(mktemp -d)
-            # shellcheck disable=SC2064 # Expanded now, deliberately: the folder to remove is this one.
-            trap "rm -rf '${PODMAN_SOURCE}'" EXIT
+            PODMAN_DOWNLOAD="$PODMAN_SOURCE"
             download_podman_files "$PODMAN_SOURCE"
         fi
         install_podman_files "$install_dir"
@@ -2851,6 +2942,13 @@ main() {
     configure_port
     configure_certificate "$install_dir"
     configure_proxy
+    # The host's last questions and checks, before anything is stored in Podman, which putting the installation
+    # back would not undo.
+    if [ "$RUNTIME" = "podman" ]; then
+        configure_apparmor
+        configure_firewall
+    fi
+    keep_installation
 
     if [ "$RUNTIME" = "podman" ]; then
         store_podman_secrets
@@ -2859,8 +2957,6 @@ main() {
             install_podman_units "$install_dir"
         fi
         write_install_state "$install_dir"
-        configure_apparmor
-        configure_firewall
     fi
 
     launch_jim "$install_dir"

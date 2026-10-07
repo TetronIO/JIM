@@ -318,7 +318,7 @@ sudo /opt/jim/setup.sh --certificate         # change its names, or move to your
 
 On Docker, it also upgrades JIM, to the latest release or, run inside a newer release's bundle, to that release; see [Upgrading with the installer](upgrading.md#with-the-installer).
 
-For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with.
+For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with. If it stops before starting JIM, because it refuses a setting, a step fails or you press Ctrl+C, it puts the installation's files back as they were, so JIM carries on as before; a first installation that stops leaves nothing behind. Should the installer itself be killed part way, the files as they were stay in `.before-setup` in the installation's folder, and its next run stops and says what to do with them.
 
 ---
 
