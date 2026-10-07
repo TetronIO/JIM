@@ -1796,6 +1796,30 @@ public interface ISyncRepository
     Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentByIdAsync(Guid assignmentId);
 
     /// <summary>
+    /// One window of the generated values held for an administrator's decision, or released from one where the query asks
+    /// (Unique Value Generation, #242, release 4, Phase 9): the Generated Values tab, the Metaverse Object banner and the
+    /// REST and PowerShell lists. Ordered by when each value began waiting, newest first, then by id. Every row is named in
+    /// the one query (object, type, attribute, systems, Synchronisation Rule), so no row needs a second read. An EF
+    /// projection (a UI read). A null total means "not counted".
+    /// </summary>
+    Task<RangeResultSet<GeneratedValueDecisionHeader>> GetGeneratedValueDecisionHeadersAsync(GeneratedValueDecisionQuery query, int offset, int count, bool includeTotalCount);
+
+    /// <summary>
+    /// The ids of every generated value <paramref name="query"/> matches, in the list's order: what a bulk "Try again"
+    /// acts on. Held values are few by nature (each is a rejected export), so this is not windowed.
+    /// </summary>
+    Task<List<Guid>> GetGeneratedValueDecisionIdsAsync(GeneratedValueDecisionQuery query);
+
+    /// <summary>
+    /// Every held, allowed-rename and recently corrected generated value, counted in one grouped read by generated flow,
+    /// rejecting system and anchoring system (Unique Value Generation, #242, release 4, Phase 9). The application layer
+    /// folds the groups into the summary tiles and the per-Synchronisation Rule and per-Connected System indicators.
+    /// Groups with nothing to count are absent.
+    /// </summary>
+    /// <param name="correctedSince">Values Collision Remediation corrected on or after this instant (UTC) count as corrected.</param>
+    Task<List<GeneratedValueDecisionCount>> GetGeneratedValueDecisionCountsAsync(DateTime correctedSince);
+
+    /// <summary>
     /// Writes one Collision Remediation revision atomically (plan decision 8, as revised): the assignment's new state
     /// and value, the previous value's retirement where <see cref="GeneratedValueRevision.RetirePreviousValue"/> asks
     /// for it, and, in import mode, the Metaverse value (compare-and-swap on <see cref="GeneratedValueRevision.PreviousValue"/>,
@@ -1836,6 +1860,20 @@ public interface ISyncRepository
     /// count is left as it is: parking never consumed it. Returns how many were released.
     /// </summary>
     Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Clears every "Allow the rename" authorisation a successful export has made moot (Unique Value Generation, #242,
+    /// release 4): an allowance answers one rejection by one Connected System, so once an export to that system succeeds
+    /// for the object the value belongs to (its Metaverse Object's account there, or in export mode the Connected System
+    /// Object itself), the clash it answered no longer exists. Left in place, it would let a later, unrelated rejection
+    /// rename a live account without asking again. The assignment returns to Committed with the authorisation, who gave
+    /// it and when, and the held-decision context cleared. One set-based statement per export batch over the
+    /// <c>RenameAuthorised</c> partial index. Returns how many allowances were cleared.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the exports succeeded against.</param>
+    /// <param name="metaverseObjectIds">The Metaverse Objects whose accounts in that system exported successfully.</param>
+    /// <param name="connectedSystemObjectIds">The Connected System Objects that exported successfully.</param>
+    Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     #endregion
 

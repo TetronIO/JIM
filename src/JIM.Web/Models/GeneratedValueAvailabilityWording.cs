@@ -37,7 +37,7 @@ public static class GeneratedValueAvailabilityWording
     public static string? ReasonText(GeneratedValueParticipantReason reason) => reason switch
     {
         GeneratedValueParticipantReason.ConnectorCannotProbe => "This Connector can't probe its target.",
-        GeneratedValueParticipantReason.AttributeNotProbed => "JIM doesn't probe this attribute: its values only need to be unique within their container.",
+        GeneratedValueParticipantReason.AttributeNotProbed => "JIM doesn't probe this attribute: it identifies the account in this system (its external ID or DN), or its values only need to be unique within their container.",
         GeneratedValueParticipantReason.NotTextValue => "Only text values are probed.",
         GeneratedValueParticipantReason.ExportedThroughExpression =>
             "Exported through an expression, so the value here differs from the generated one. JIM doesn't check it; if it's already in use here, the export fails.",

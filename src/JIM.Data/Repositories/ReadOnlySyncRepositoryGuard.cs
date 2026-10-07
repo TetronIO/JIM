@@ -391,6 +391,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentByIdAsync(Guid assignmentId)
         => _inner.GetGeneratedValueAssignmentByIdAsync(assignmentId);
 
+    public Task<RangeResultSet<GeneratedValueDecisionHeader>> GetGeneratedValueDecisionHeadersAsync(GeneratedValueDecisionQuery query, int offset, int count, bool includeTotalCount)
+        => _inner.GetGeneratedValueDecisionHeadersAsync(query, offset, count, includeTotalCount);
+
+    public Task<List<Guid>> GetGeneratedValueDecisionIdsAsync(GeneratedValueDecisionQuery query)
+        => _inner.GetGeneratedValueDecisionIdsAsync(query);
+
+    public Task<List<GeneratedValueDecisionCount>> GetGeneratedValueDecisionCountsAsync(DateTime correctedSince)
+        => _inner.GetGeneratedValueDecisionCountsAsync(correctedSince);
+
     public Task<List<GeneratedValueRevisionPending>> GetGeneratedValueRevisionsPendingAsync(int maxResults)
         => _inner.GetGeneratedValueRevisionsPendingAsync(maxResults);
 
@@ -646,6 +655,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<int> ReleaseParkedPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseParkedPendingExportsAsync));
+
+    public Task<int> ClearRenameAuthorisationsAfterSuccessfulExportAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(ClearRenameAuthorisationsAfterSuccessfulExportAsync));
 
     public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
         => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueAssignmentsAsync));

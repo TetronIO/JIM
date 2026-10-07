@@ -329,6 +329,9 @@ public class SyncExportTaskProcessor
             // A value Collision Remediation corrected (#242, release 4) wrote nothing either: the export stays queued
             // for the next synchronisation to re-stage with the corrected value.
             var remediated = exportItem.GeneratedValueCollision?.Handling == GeneratedValueCollisionHandling.Remediated;
+            // Nor did one held for a decision: it is parked, still queued, and must not count as exported.
+            var heldForDecision = exportItem.GeneratedValueCollision?.Handling == GeneratedValueCollisionHandling.NeedsDecision;
+            var stillQueued = exportItem.Deferred || remediated || heldForDecision;
             var executionItem = new ActivityRunProfileExecutionItem
             {
                 Id = exportItem.ExecutionItemId ?? Guid.Empty,
@@ -336,14 +339,14 @@ public class SyncExportTaskProcessor
                 ActivityId = _activity.Id,
                 // An export that wrote nothing this run (deferred whole, issue #1398) is a Pending Export
                 // still staged, not something exported; its item exists to carry why it is waiting.
-                ObjectChangeType = exportItem.Deferred || remediated
+                ObjectChangeType = stillQueued
                     ? ObjectChangeType.PendingExport
                     : exportItem.ChangeType switch
                     {
                         PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
                         _ => ObjectChangeType.Exported
                     },
-                PendingExportId = exportItem.Deferred || remediated ? exportItem.PendingExportId : null
+                PendingExportId = stillQueued ? exportItem.PendingExportId : null
             };
 
             // Link to the Connected System Object if available.
@@ -411,7 +414,7 @@ public class SyncExportTaskProcessor
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
                     detailMessage: exportItem.GeneratedValueCollision!.Message);
             }
-            else if (!exportItem.Deferred && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            else if (!stillQueued && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
                 {

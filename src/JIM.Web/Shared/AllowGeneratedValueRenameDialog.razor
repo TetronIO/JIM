@@ -1,0 +1,155 @@
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Allow the rename" (Unique Value Generation, #242, release 4, Phase 9; plan decision 11). The new value is chosen by
+   the worker at the next export, after checking every system again (the portal cannot probe), so the dialog does not
+   promise a value: it names every Connected System that will change and how, offers the likely value where that is
+   cheap to say, and says when the value is decided. Confirmed here, never through a browser confirm(); the dialog
+   performs the action and closes with true when the rename was allowed. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Allow the rename</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_preview == null)
+        {
+            <div class="d-flex justify-center align-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                <MudText Class="ml-4">Working out what will change...</MudText>
+            </div>
+        }
+        else
+        {
+            var decision = _preview.Decision;
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.body1" data-testid="allow-rename-intro">
+                    @(decision.RejectedByConnectedSystemName ?? "A Connected System") rejected <code class="jim-code-inline">@decision.Value</code> as already in use@(AnchorClause(decision)).
+                    If you allow the rename, JIM chooses the next free value at the next export and applies it everywhere@(RenameClause(decision)).
+                </MudText>
+
+                @if (_preview.Changes.Count > 0)
+                {
+                    <MudSimpleTable Elevation="0" Outlined="true" Dense="true" data-testid="allow-rename-changes">
+                        <thead>
+                            <tr>
+                                <th>Connected System</th>
+                                <th>Change</th>
+                                <th>When</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var change in _preview.Changes)
+                            {
+                                <tr @key="change.ConnectedSystemId" data-testid="allow-rename-change" data-kind="@change.Kind">
+                                    <td>
+                                        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@change.ConnectedSystemName"
+                                                    Href="@($"/admin/connected-systems/{change.ConnectedSystemId}")" Class="ma-0" />
+                                    </td>
+                                    <td>
+                                        <MudChip T="string" Variant="Variant.Text" Color="@ChangeColour(change.Kind)" Class="ma-0">@change.Kind</MudChip>
+                                    </td>
+                                    <td class="mud-text-secondary">Next export run</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">New value</MudText>
+                    <dl class="jim-allow-rename-value">
+                        @if (!string.IsNullOrEmpty(_preview.LikelyValue))
+                        {
+                            <dt>Likely</dt>
+                            <dd><code class="jim-code-inline" data-testid="allow-rename-likely">@_preview.LikelyValue</code></dd>
+                        }
+                        <dt>Decided</dt>
+                        <dd>At the next export, after checking every system again</dd>
+                    </dl>
+                </MudPaper>
+
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Recorded in @(decision.MetaverseObjectDisplayName ?? "the object")'s history and as an Activity, as allowed by you.
+                </MudText>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AllowAsync" Disabled="@(_busy || _preview == null)"
+                   data-testid="allow-rename-confirm">
+            Allow the rename
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>The held value whose rename to allow.</summary>
+    [Parameter, EditorRequired]
+    public Guid AssignmentId { get; set; }
+
+    private GeneratedValueRenamePreview? _preview;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _preview = await jim.GeneratedValueDecisions.GetRenamePreviewAsync(AssignmentId);
+        if (_preview == null)
+        {
+            Snackbar.Add("That generated value no longer exists.", Severity.Info);
+            MudDialog.Close(DialogResult.Ok(false));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task AllowAsync()
+    {
+        _busy = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var outcome = await jim.GeneratedValueDecisions.AllowRenameAsync(AssignmentId, user, null);
+            Snackbar.Add(outcome == GeneratedValueDecisionActionOutcome.Done
+                    ? "Rename allowed. The next export run chooses the new value."
+                    : "Nothing was changed; the value is no longer waiting on a decision.",
+                outcome == GeneratedValueDecisionActionOutcome.Done ? Severity.Success : Severity.Info);
+            MudDialog.Close(DialogResult.Ok(outcome == GeneratedValueDecisionActionOutcome.Done));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string AnchorClause(GeneratedValueDecisionHeader decision) =>
+        decision.Reason == GeneratedValueNeedsDecisionReason.AnchoredElsewhere && decision.AnchoredByConnectedSystemName != null
+            ? $", and {decision.AnchoredByConnectedSystemName} has an account with that value"
+            : string.Empty;
+
+    private static string RenameClause(GeneratedValueDecisionHeader decision) =>
+        decision.Reason == GeneratedValueNeedsDecisionReason.AnchoredElsewhere && decision.AnchoredByConnectedSystemName != null
+            ? $", renaming the {decision.AnchoredByConnectedSystemName} account"
+            : string.Empty;
+
+    private static Color ChangeColour(GeneratedValueRenameChangeKind kind) => kind switch
+    {
+        GeneratedValueRenameChangeKind.Rename => Color.Warning,
+        GeneratedValueRenameChangeKind.Create => Color.Success,
+        _ => Color.Info
+    };
+}

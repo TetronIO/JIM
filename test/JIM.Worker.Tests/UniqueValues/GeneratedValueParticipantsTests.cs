@@ -351,6 +351,45 @@ public class GeneratedValueParticipantsTests
     }
 
     [Test]
+    public void DescribeParticipants_SystemWhoseConnectorReportsCollisions_SaysSoOnEveryRowForIt()
+    {
+        var attribute = Generated();
+        var rules = new[]
+        {
+            ExportRule(2, Direct(attribute, Attribute(20, "sAMAccountName"))),
+            ExportRule(3, Direct(attribute, Attribute(30, "AccountName")))
+        };
+        var systems = Systems(
+            new GeneratedValueParticipantSystem(2, "Corporate AD", "JIM LDAP Connector", true, _ => true, ReportsCollisions: true),
+            NotProbing(3, "Payroll Feed"));
+
+        var rows = GeneratedValueParticipation.DescribeParticipants(ImportGeneratedMapping(attribute), HostSystemId, rules, systems)
+            .ToDictionary(r => r.ConnectedSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows[2].ReportsCollisions, Is.True, "Collision Remediation can act on a rejection from Corporate AD");
+            Assert.That(rows[3].ReportsCollisions, Is.False, "a collision in Payroll Feed is an ordinary export error");
+        }
+    }
+
+    [Test]
+    public void DescribeParticipants_ExportModeGeneratedValue_ReportsWhetherItsOwnSystemReportsCollisions()
+    {
+        var target = Attribute(20, "loginName");
+        var mapping = new SyncRuleMapping
+        {
+            Id = 101, TargetConnectedSystemAttribute = target, TargetConnectedSystemAttributeId = target.Id,
+            Generation = new SyncRuleMappingGeneration { Id = 2 }
+        };
+        var systems = Systems(new GeneratedValueParticipantSystem(HostSystemId, "Ticketing", "JIM SCIM 2.0 Client Connector", false, _ => false, ReportsCollisions: true));
+
+        var row = GeneratedValueParticipation.DescribeParticipants(mapping, HostSystemId, [], systems).Single();
+
+        Assert.That(row.ReportsCollisions, Is.True);
+    }
+
+    [Test]
     public void GeneratedValueParticipantEnums_Ordinals_ArePinned()
     {
         using (Assert.EnterMultipleScope())

@@ -21,7 +21,9 @@
    Graph views. *@
 
 <div class="causality-panel @(_model?.IsSpeculative == true ? "speculative" : null)">
-    @if (Item != null && Item.SyncOutcomes.Count == 0)
+    @* An export held for a decision about a generated value (#242, release 4) records nothing because nothing was
+       exported: it is not missing tracking, and its band says why it is held. *@
+    @if (Item != null && Item.SyncOutcomes.Count == 0 && Item.ErrorType != ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved)
     {
         <div class="pa-4">
             <MudAlert Severity="Severity.Info">

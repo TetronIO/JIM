@@ -194,4 +194,4 @@ Every password feature (policy discovery, Initial Password, park then release, P
 - Windows Server 2025 LDAP defaults: https://learn.microsoft.com/windows-server/identity/ad-ds/ldap-signing
 - Virtualised domain controller safe restore: https://learn.microsoft.com/windows-server/identity/ad-ds/get-started/virtual-dc/virtualized-domain-controller-architecture
 - Automatic Virtual Machine Activation: https://learn.microsoft.com/windows-server/get-started/automatic-vm-activation
-- Related: `engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md` names "a real Active Directory lab" as a validation gap; `engineering/plans/doing/UNIQUE_VALUE_GENERATION.md` asks for real Active Directory collision strings.
+- Related: `engineering/prd/doing/PRD_PASSWORD_SYNCHRONISATION.md` names "a real Active Directory lab" as a validation gap; `engineering/plans/done/UNIQUE_VALUE_GENERATION.md` asks for real Active Directory collision strings.

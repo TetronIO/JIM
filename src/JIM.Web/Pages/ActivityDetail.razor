@@ -574,6 +574,16 @@
     {
         @if (_activityRunProfileExecutionStats != null)
         {
+            @* Collision Remediation on an export run (#242, release 4): what became of the generated values the target
+               rejected as already in use, before the counts. *@
+            @if (IsExportRun())
+            {
+                <GeneratedValueExportSummary Corrected="_activityRunProfileExecutionStats.TotalGeneratedValuesRemediated"
+                                             NeedingDecision="_activityRunProfileExecutionStats.TotalGeneratedValuesNeedingDecision"
+                                             ConnectedSystemId="_activity.ConnectedSystemId" ConnectedSystemName="@_connectedSystemHeader?.Name"
+                                             Class="mt-6" />
+            }
+
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
             <MudStack Row="true" Class="mt-4 mb-5 flex-wrap" Spacing="3">
@@ -711,6 +721,22 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary" title="Connected System Objects Deprovisioned">CSOs Deprovisioned</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalDeprovisioned.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* Collision Remediation (#242, release 4): generated values the target rejected as already in use *@
+                    @if (_activityRunProfileExecutionStats.TotalGeneratedValuesRemediated > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="border-left: 4px solid var(--mud-palette-warning); min-width: 120px;">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Values Corrected</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalGeneratedValuesRemediated.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+                    @if (_activityRunProfileExecutionStats.TotalGeneratedValuesNeedingDecision > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="border-left: 4px solid var(--mud-palette-error); min-width: 120px;">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Needs a Decision</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalGeneratedValuesNeedingDecision.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
                 }
 
                 @* Unchanged card - always show for Run Profile executions (housekeeping deletes MVOs, not CSOs) *@
@@ -872,7 +898,7 @@
                                          Color="@(IsErrorTypeSelected(errorType.Key) ? Color.Default : Color.Error)"
                                          Variant="@(IsErrorTypeSelected(errorType.Key) ? Variant.Filled : Variant.Outlined)"
                                          SelectedColor="Color.Error">
-                                    @errorType.Key.ToString().SplitOnCapitalLetters()
+                                    @Helpers.GetErrorTypeChipLabel(errorType.Key)
                                     <MudText Typo="Typo.caption" Class="ml-1">(@errorType.Value.ToString("N0"))</MudText>
                                 </MudChip>
                             }
@@ -970,7 +996,7 @@
                                 {
                                     var errorType = itemErrorType!.Value;
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                        @errorType.ToString().SplitOnCapitalLetters()
+                                        @Helpers.GetErrorTypeChipLabel(errorType)
                                     </MudChip>
                                 }
                             </MudStack>
@@ -979,7 +1005,7 @@
                         {
                             var errorType = itemErrorType!.Value;
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                @errorType.ToString().SplitOnCapitalLetters()
+                                @Helpers.GetErrorTypeChipLabel(errorType)
                             </MudChip>
                         }
                         else
@@ -1628,6 +1654,8 @@
         // Export outcomes
         if (s.TotalExported > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Exported, s.TotalExported);
         if (s.TotalDeprovisioned > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, s.TotalDeprovisioned);
+        // Collision Remediation (#242, release 4): values a target rejected as already in use that JIM corrected.
+        if (s.TotalGeneratedValuesRemediated > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, s.TotalGeneratedValuesRemediated);
     }
 
     /// <summary>

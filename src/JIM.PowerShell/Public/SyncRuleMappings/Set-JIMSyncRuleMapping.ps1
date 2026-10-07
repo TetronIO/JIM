@@ -102,6 +102,11 @@ function Set-JIMSyncRuleMapping {
         Whether a value whose assignment is deleted is retired and never issued again by this flow.
         Always treated as true for a Sequence token, whatever is supplied.
 
+    .PARAMETER CollisionRemediation
+        Whether JIM corrects a generated value a target rejects as already in use (Collision Remediation). Omit to
+        leave it unchanged. Changing it releases any of this Attribute Flow's values held for a decision, so the next
+        export tries again under the new setting.
+
     .PARAMETER ExcludeConnectedSystemId
         Generated import mappings only: replaces the IDs of the Connected Systems left out of the value's
         availability checks. Values already in use in an excluded Connected System do not stop JIM choosing
@@ -237,6 +242,8 @@ function Set-JIMSyncRuleMapping {
 
         [bool]$NeverReuse,
 
+        [bool]$CollisionRemediation,
+
         # Exclusions (release 3): replaces them; @() clears them, and is sent as an empty JSON array.
         [int[]]$ExcludeConnectedSystemId,
 
@@ -279,13 +286,14 @@ function Set-JIMSyncRuleMapping {
         if ($PSBoundParameters.ContainsKey('Separator')) { $generation.separator = $Separator }
         if ($PSBoundParameters.ContainsKey('AttemptLimit')) { $generation.attemptLimit = $AttemptLimit }
         if ($PSBoundParameters.ContainsKey('NeverReuse')) { $generation.neverReuse = $NeverReuse }
+        if ($PSBoundParameters.ContainsKey('CollisionRemediation')) { $generation.collisionRemediation = $CollisionRemediation }
         # Always a JSON array: @() keeps a single ID from serialising as a bare number, and an empty list
         # from being dropped, since [] is what tells the API to clear the exclusions.
         if ($PSBoundParameters.ContainsKey('ExcludeConnectedSystemId')) { $generation.exclusions = @($ExcludeConnectedSystemId) }
         if ($generation.Count -gt 0) { $body.generation = $generation }
 
         if ($body.Count -eq 0) {
-            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse)."
+            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse, -CollisionRemediation)."
             return
         }
 

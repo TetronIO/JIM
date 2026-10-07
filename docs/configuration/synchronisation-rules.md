@@ -601,7 +601,32 @@ The refused value is [retired](#retired-values) when the flow never reuses value
 - JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
 - JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
 
-The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings releases the parked export for the next export run to try again under the new settings. The decisions themselves (allowing the rename, which JIM then performs at the next refusal; retrying once the clash has been resolved in the target; or leaving it) are coming to the portal, the REST API and PowerShell in a later release.
+The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, releases the parked export for the next export run to try again under the new settings.
+
+**Acting on a held value.** Three answers are open to you:
+
+- **Allow the rename.** JIM records that you allowed it and releases the export. At the next export that meets the refusal, JIM checks every system again, chooses the next free value and applies it everywhere the value is used, renaming the account that already holds the current one. The new value is decided then, not when you allow it. The allowance covers one rename; the history of the object and the export run's Activity both record that you allowed it. If that export succeeds instead, because the clash was resolved some other way, the allowance lapses: a later refusal asks you again rather than renaming the account.
+- **Try again.** For when the clash has been resolved in the target (the other account renamed or removed there). The export is released and the next export run tries the same value; if the target refuses it again, it is held again.
+- **Leave it.** Nothing needs doing to keep it held: the export stays parked until you act or change the Attribute Flow.
+
+Every allowed rename and every try again is recorded as an Activity naming who took it.
+
+In the portal, **Operations > Generated Values** lists every value waiting for a decision and every allowed rename still waiting for its export, with counts of each and of the values corrected in the last seven days. Filter it by Connected System, Synchronisation Rule or status; each row says why the value is held and offers **Allow the rename…** and **Try again**, and **Try again for all** acts on everything the filters match. **Allow the rename…** opens a confirmation naming every Connected System that will change and how (the account renamed, created or updated), the value JIM is likely to choose where it can say, and that the value is decided at the next export. The tab is badged with the number waiting. A warning chip on the **Synchronisation Rules** and **Connected Systems** lists counts the values held for each and opens the tab filtered to it, and a Metaverse Object with a held value shows it above its tabs, with both actions.
+
+In PowerShell, `Get-JIMGeneratedValueDecision` lists what is held (with why, since when, and which systems are involved), `Approve-JIMGeneratedValueRename` allows the rename (it asks first, because it renames a live account), and `Reset-JIMGeneratedValueDecision` tries again, for one value, a pipeline of them, or everything matching a Connected System or Synchronisation Rule; see [Generated value decisions](../powershell/synchronisation-rules.md#generated-value-decisions). On the REST API:
+
+| Request | What it does |
+|---|---|
+| `GET /generated-values/decisions` | The held values, newest first, paged; narrowed by `connectedSystemId` (the system that refused the value, the one anchoring it, or any system the value is exported to and checked in), `syncRuleId`, `status` (`NeedsDecision` or `RenameAllowed`) and `metaverseObjectId` |
+| `GET /generated-values/decisions/summary` | How many need a decision, how many renames are allowed and waiting, and how many values were corrected in the last seven days |
+| `GET /generated-values/decisions/{id}` | One value, whatever its state |
+| `POST /generated-values/{id}/allow-rename` | Allows the rename; answers with the value as it now stands |
+| `POST /generated-values/{id}/try-again` | Tries again; answers with the value as it now stands |
+| `POST /generated-values/decisions/try-again` | Tries again every held value matching `connectedSystemId`, `syncRuleId`, `metaverseObjectId` or `ids` in the body; a body naming none of these must set `applyToAllDecisions` |
+
+Both actions take effect at once (they release the export for the next export run), so they answer `200` rather than queueing work; a value that is not waiting on a decision answers `409`.
+
+**Which systems can report a collision.** A generated mapping's participants (the "Checked for availability in" list, `participants[].reportsCollisions` on the REST API, `Generation.Participants` in PowerShell) say for each Connected System whether its Connector reports a value as already in use. Collision Remediation acts only on refusals from those that do. Switch it off per Attribute Flow with the **Collision Remediation** switch below the panel, `collisionRemediation` on the mapping's `generation` object or `-CollisionRemediation $false` in PowerShell, and a refusal is reported as an ordinary export error instead. When none of the systems the value is exported to can report a collision, the portal's switch is unavailable and says so.
 
 **When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, or an Attribute Flow with Collision Remediation switched off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
 

@@ -1,0 +1,61 @@
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Metaverse Object's generated values held for a decision (Unique Value Generation, #242, release 4, Phase 9): one
+   notice per value, worded by GeneratedValueDecisionWhy exactly as the Operations tab words it. A value waiting on a
+   decision is a warning carrying "Allow the rename…" and "Try again"; an allowed rename is information, since it waits
+   on the next export rather than on anyone. The actions are the page's (it re-reads the object afterwards), so this
+   component only hands over the value they were pressed for. Renders nothing when nothing is held. *@
+
+@foreach (var decision in Decisions)
+{
+    var waiting = GeneratedValueDecisionDisplay.OffersActions(decision);
+    <MudAlert @key="decision.AssignmentId" Severity="@(waiting ? Severity.Warning : Severity.Info)" Class="@Class" data-testid="generated-value-banner">
+        <MudText Typo="Typo.subtitle2">
+            @decision.AttributeName @(waiting ? "needs a decision" : "will be renamed at the next export")
+            <code class="jim-code-inline ml-1">@decision.Value</code>
+        </MudText>
+        <div class="mt-1">
+            <GeneratedValueDecisionWhy Decision="decision" />
+        </div>
+        @if (waiting)
+        {
+            <MudStack Row="true" Spacing="2" Class="mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="Busy"
+                           OnClick="@(() => OnAllowRename.InvokeAsync(decision))" data-testid="generated-value-allow-rename">
+                    Allow the rename…
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Size="Size.Small" Disabled="Busy"
+                           OnClick="@(() => OnTryAgain.InvokeAsync(decision))" data-testid="generated-value-try-again">
+                    Try again
+                </MudButton>
+            </MudStack>
+        }
+    </MudAlert>
+}
+
+@code {
+    /// <summary>The object's held values and allowed renames; empty renders nothing.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<GeneratedValueDecisionHeader> Decisions { get; set; } = [];
+
+    /// <summary>"Allow the rename…" was pressed for this value.</summary>
+    [Parameter]
+    public EventCallback<GeneratedValueDecisionHeader> OnAllowRename { get; set; }
+
+    /// <summary>"Try again" was pressed for this value.</summary>
+    [Parameter]
+    public EventCallback<GeneratedValueDecisionHeader> OnTryAgain { get; set; }
+
+    /// <summary>Disables the actions while one is in flight.</summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    /// <summary>Each notice's geometry, the call site's to set.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+}

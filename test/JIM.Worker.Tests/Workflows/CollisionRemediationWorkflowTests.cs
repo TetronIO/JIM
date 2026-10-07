@@ -58,6 +58,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Remediated));
             Assert.That(assignment.RemediationCount, Is.EqualTo(1));
             Assert.That(assignment.RemediatedByActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));
+            Assert.That(assignment.RemediatedAt, Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromMinutes(5)),
+                "\"corrected in the last 7 days\" counts from when the value was corrected");
+            Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ctx.Directory.Id), "the correction records which system rejected the value");
 
             Assert.That(record.MetaverseObjectId, Is.EqualTo(Mvo().Id));
             Assert.That(record.MetaverseAttributeId, Is.EqualTo(ctx.AccountName.Id));
@@ -265,10 +268,14 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
             Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ctx.Directory.Id));
             Assert.That(assignment.AnchoredByConnectedSystemId, Is.EqualTo(ctx.Contractor.Id));
+            Assert.That(assignment.NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.AnchoredElsewhere));
             Assert.That(assignment.NeedsDecisionActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));
             Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked));
             Assert.That(SyncRepo.PendingExports[export.Id].ErrorCount, Is.Zero);
             Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved));
+            Assert.That(item.ObjectChangeType, Is.EqualTo(ObjectChangeType.PendingExport), "a held export wrote nothing; it is still queued");
+            Assert.That(item.SyncOutcomes.Select(o => o.OutcomeType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Exported),
+                "nothing was exported, so the Activity must not count it as exported");
             Assert.That(item.ErrorMessage, Does.Contain("Directory").And.Contain("joe.bloggs").And.Contain("Contractor"),
                 "the error names the rejecting system, the value and the system that has provisioned it");
             Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty);
@@ -291,6 +298,8 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         {
             Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"), "missing knowledge never permits a rename");
             Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.CannotTell));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().AnchoredByConnectedSystemId, Is.EqualTo(ctx.Contractor.Id));
             Assert.That(ExecutionItems(activity).Single().ErrorMessage, Does.Contain("cannot tell"));
         }
     }
@@ -309,6 +318,7 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         {
             Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"));
             Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.RemediationLimitReached));
         }
     }
 
@@ -335,6 +345,77 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(assignment.RenameAuthorisedByName, Is.EqualTo("Ada Admin"));
             Assert.That(SyncRepo.GeneratedValueRevisionsPending.Values.Single().ReasonCode, Is.EqualTo(CausalReasonCode.GeneratedValueRenameAuthorised));
         }
+    }
+
+    [Test]
+    public async Task Export_AfterTheRenameIsAuthorisedTheExportSucceeds_ClearsTheAllowanceAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+
+        // The clash was fixed some other way, so the released export goes through with the same value.
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        var assignment = SyncRepo.GeneratedValueAssignments[assignmentId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"));
+            Assert.That(assignment.RenameAuthorised, Is.False, "the allowance answered a clash that no longer exists");
+            Assert.That(assignment.RenameAuthorisedAt, Is.Null);
+            Assert.That(assignment.RenameAuthorisedByName, Is.Null);
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(assignment.NeedsDecisionReason, Is.Null, "nothing is held any more");
+            Assert.That(assignment.NeedsDecisionEnteredAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task Export_AllowanceOutlivedByASuccessfulExport_ALaterRejectionEntersNeedsDecisionRatherThanRenamingAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        // Later, an unrelated clash: the same export is queued again and rejected.
+        var export = DirectoryExport(ctx);
+        export.Status = PendingExportStatus.Pending;
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+
+        var assignment = SyncRepo.GeneratedValueAssignments[assignmentId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"), "a spent allowance must never rename a live account without asking again");
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Export_AllowanceForAnotherSystemsRejection_IsKeptWhenThisSystemExportsSuccessfullyAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        await Jim.UniqueValues.AuthoriseRenameAsync(assignmentId, "Ada Admin");
+        SyncRepo.GeneratedValueAssignments[assignmentId].RejectedByConnectedSystemId = ctx.Contractor.Id;
+
+        await RunExportAsync(ctx.Directory, new MockCallConnector().WithConnectedSystemExportResultFactory(_ => ConnectedSystemExportResult.Succeeded()));
+
+        Assert.That(SyncRepo.GeneratedValueAssignments[assignmentId].RenameAuthorised, Is.True,
+            "only the system whose rejection the allowance answered can make it moot");
     }
 
     [Test]
@@ -460,6 +541,8 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports[ticketingExport.Id].Status, Is.EqualTo(PendingExportStatus.Pending));
             Assert.That(assignment.Value, Is.EqualTo("e11"));
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Remediated));
+            Assert.That(assignment.RemediatedAt, Is.Not.Null);
+            Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(ticketing.Id));
             Assert.That(SyncRepo.GeneratedValueRevisionsPending, Is.Empty, "no Metaverse Object is involved");
             Assert.That(ExecutionItems(activity).Single().SyncOutcomes.Select(o => o.OutcomeType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated));
         }

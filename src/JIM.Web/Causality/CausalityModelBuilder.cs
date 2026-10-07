@@ -88,7 +88,7 @@ public static class CausalityModelBuilder
         if (BuildDeclinedDeletionEvent(item, deletionPolicySnapshot, isSynchronisationRun) is { } declined)
             roots.Add(declined);
 
-        return new CausalityModel { Context = context, Roots = roots };
+        return new CausalityModel { Context = context, Roots = roots, ItemErrorType = item.ErrorType };
     }
 
     /// <summary>

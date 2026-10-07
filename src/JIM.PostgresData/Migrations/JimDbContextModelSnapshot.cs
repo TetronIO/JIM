@@ -4154,6 +4154,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("NeedsDecisionEnteredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("NeedsDecisionReason")
+                        .HasColumnType("integer");
+
                     b.Property<string>("NormalisedValue")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4163,6 +4166,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("RejectedByConnectedSystemId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RemediatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("RemediatedByActivityRunProfileExecutionItemId")
                         .HasColumnType("uuid");
@@ -4190,6 +4196,14 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RemediatedAt")
+                        .HasDatabaseName("IX_GeneratedValueAssignments_RemediatedAt")
+                        .HasFilter("\"RemediatedAt\" IS NOT NULL");
+
+                    b.HasIndex("RenameAuthorised")
+                        .HasDatabaseName("IX_GeneratedValueAssignments_RenameAuthorised")
+                        .HasFilter("\"RenameAuthorised\"");
 
                     b.HasIndex("State")
                         .HasDatabaseName("IX_GeneratedValueAssignments_State");

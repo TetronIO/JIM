@@ -104,6 +104,7 @@ public class GeneratedValueCollisionRemediationDatabaseTests
             Assert.That(assignment.RemediationCount, Is.EqualTo(1));
             Assert.That(assignment.RejectedByConnectedSystemId, Is.EqualTo(estate.ConnectedSystemId));
             Assert.That(assignment.RemediatedByActivityRunProfileExecutionItemId, Is.EqualTo(executionItemId));
+            Assert.That(assignment.RemediatedAt, Is.EqualTo(RevisedAt).Within(TimeSpan.FromSeconds(1)), "what \"corrected in the last 7 days\" counts");
             Assert.That(assignment.BaseValue, Is.EqualTo("jbloggs"));
 
             Assert.That(retired.Value, Is.EqualTo("jbloggs"), "the refused value is retired, read before the assignment is overwritten");
@@ -623,7 +624,10 @@ public class GeneratedValueCollisionRemediationDatabaseTests
         assignment.RemediationCount++;
         assignment.RejectedByConnectedSystemId = rejectedBy;
         assignment.RemediatedByActivityRunProfileExecutionItemId = executionItemId;
+        assignment.RemediatedAt = RevisedAt;
     }
+
+    private static readonly DateTime RevisedAt = new(2026, 10, 7, 9, 14, 0, DateTimeKind.Utc);
 
     private async Task<Guid> AddRevisionPendingAsync(Estate estate, DateTime created)
     {

@@ -75,6 +75,9 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
                 It.IsAny<PendingPasswordChangeFilter>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(),
                 It.IsAny<bool>(), It.IsAny<bool>()))
             .ReturnsAsync(new RangeResultSet<PendingPasswordChangeHeader>());
+        // The banner of generated values held for a decision (#242, release 4) is read with the page for administrators.
+        sync.Setup(r => r.GetGeneratedValueDecisionHeadersAsync(It.IsAny<GeneratedValueDecisionQuery>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new RangeResultSet<GeneratedValueDecisionHeader>());
 
         _connectedSystems
             .Setup(r => r.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(It.IsAny<IEnumerable<Guid>>()))
