@@ -99,7 +99,7 @@
 
                 @switch (_previewState.Status)
                 {
-                    case DeletionImpactPreviewStatus.Running:
+                    case ConnectedSystemPreviewStatus.Running:
                         @if (_previewState.PercentComplete is { } percentComplete)
                         {
                             <MudProgressLinear Color="Color.Primary" Value="@percentComplete" Class="mt-3" />
@@ -118,7 +118,7 @@
                         </MudButton>
                         break;
 
-                    case DeletionImpactPreviewStatus.Current:
+                    case ConnectedSystemPreviewStatus.Current:
                         @if (_deleteImmediately)
                         {
                             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
@@ -154,7 +154,7 @@
                         </div>
                         break;
 
-                    case DeletionImpactPreviewStatus.Stale:
+                    case ConnectedSystemPreviewStatus.Stale:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
                             @_previewState.StaleReason since this preview ran, so it may no longer describe what deleting would do. Run it
                             again for a current answer; the deletion will record that no current preview informed it.
@@ -166,7 +166,7 @@
                         </MudButton>
                         break;
 
-                    case DeletionImpactPreviewStatus.DidNotFinish:
+                    case ConnectedSystemPreviewStatus.DidNotFinish:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
                             The last preview did not finish, so it says nothing about what deleting would do. The deletion
                             will record that no preview informed it.
@@ -261,7 +261,7 @@
     private DeleteConnectedSystemWorkerTask? _fencedTask;
 
     // The system's latest deletion impact preview (#134), and so which preview, if any, the deletion records.
-    private DeletionImpactPreviewState _previewState = new(DeletionImpactPreviewStatus.NotPreviewed);
+    private ConnectedSystemPreviewState _previewState = new(ConnectedSystemPreviewStatus.NotPreviewed);
 
     protected override async Task OnInitializedAsync()
     {
@@ -277,30 +277,30 @@
     /// <summary>
     /// Reads the system's latest deletion impact preview and, for a finished one, whether anything has overtaken it.
     /// </summary>
-    private async Task<DeletionImpactPreviewState> LoadPreviewStateAsync(JimApplication jim)
+    private async Task<ConnectedSystemPreviewState> LoadPreviewStateAsync(JimApplication jim)
     {
         var preview = await jim.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(
             ConfigurationChangePreviewSurface.ConnectedSystemDeletion, ConnectedSystem.Id);
         var staleness = preview is { IsComplete: true }
             ? await jim.ConfigurationChangePreviews.GetPreviewStalenessAsync(preview.ActivityId)
             : null;
-        return DeletionImpactPreviewState.From(preview, staleness);
+        return ConnectedSystemPreviewState.From(preview, staleness);
     }
 
     private Color PreviewChipColour => _previewState.Status switch
     {
-        DeletionImpactPreviewStatus.Running => Color.Info,
-        DeletionImpactPreviewStatus.Current => Color.Success,
-        DeletionImpactPreviewStatus.Stale => Color.Warning,
+        ConnectedSystemPreviewStatus.Running => Color.Info,
+        ConnectedSystemPreviewStatus.Current => Color.Success,
+        ConnectedSystemPreviewStatus.Stale => Color.Warning,
         _ => Color.Default
     };
 
     private string PreviewChipLabel => _previewState.Status switch
     {
-        DeletionImpactPreviewStatus.Running => "Running",
-        DeletionImpactPreviewStatus.Current => "Complete",
-        DeletionImpactPreviewStatus.Stale => "Stale",
-        DeletionImpactPreviewStatus.DidNotFinish => "Did not finish",
+        ConnectedSystemPreviewStatus.Running => "Running",
+        ConnectedSystemPreviewStatus.Current => "Complete",
+        ConnectedSystemPreviewStatus.Stale => "Stale",
+        ConnectedSystemPreviewStatus.DidNotFinish => "Did not finish",
         _ => "Not previewed"
     };
 
@@ -337,7 +337,7 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
             // A preview still running would go on describing a system that no longer exists (#134).
-            if (_previewState is { Status: DeletionImpactPreviewStatus.Running, ActivityId: { } runningPreviewId })
+            if (_previewState is { Status: ConnectedSystemPreviewStatus.Running, ActivityId: { } runningPreviewId })
                 await jim.ConfigurationChangePreviews.CancelPreviewAsync(runningPreviewId);
 
             var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason,

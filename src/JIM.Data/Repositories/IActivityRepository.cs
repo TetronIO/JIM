@@ -42,6 +42,13 @@ public interface IActivityRepository
     public Task<Activity?> GetLatestCompletedExportActivityAsync(int connectedSystemId);
 
     /// <summary>
+    /// The newest Full Synchronisation of this Connected System that completed (with or without warnings), or null when
+    /// it has never completed one. Read for how long a Full Synchronisation of the system takes, and for whether one has
+    /// run since a preview of it (#1530). Runs that failed or were cancelled are left out: they say neither.
+    /// </summary>
+    public Task<Activity?> GetLatestCompletedFullSynchronisationAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
     /// </summary>

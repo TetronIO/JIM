@@ -1,5 +1,6 @@
 @using JIM.Application.Servers
 @using JIM.Models.Preview
+@using JIM.Utilities
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -16,6 +17,10 @@
         <MudText Typo="Typo.body1">
             This preview would produce about @EstimatedDeltaRows.ToString("N0") object-level rows
             (roughly @ApproximateStorage of preview data).
+            @if (EstimatedDuration is { } duration)
+            {
+                <span>It runs in the background and changes nothing; expect it to take about @Approximately(duration).</span>
+            }
         </MudText>
         <MudText Typo="Typo.body1" Class="mt-3">
             The summary counts are exact either way. The choice is how much of it you can drill into, and how much
@@ -55,6 +60,13 @@
     public long EstimatedDeltaRows { get; set; }
 
     /// <summary>
+    /// About how long the preview will take, where its surface can say (a Full Synchronisation preview, #1530). Stated
+    /// beside the rows because time is part of the cost being agreed to; absent, the dialog says nothing about it.
+    /// </summary>
+    [Parameter]
+    public TimeSpan? EstimatedDuration { get; set; }
+
+    /// <summary>
     /// Rough bytes per stored delta row: two snapshotted names, an attribute name, two values and the keys beside
     /// them. Deliberately approximate and deliberately generous; the sentence it produces is meant to convey an
     /// order of magnitude, and a figure precise enough to be argued with would be a false precision over values
@@ -74,6 +86,12 @@
                 : $"{megabytes:N0} MB";
         }
     }
+
+    /// <summary>
+    /// An estimate stated to the minute, and never under one: "0 minutes" would read as no time at all.
+    /// </summary>
+    public static string Approximately(TimeSpan duration) =>
+        TimeSpan.FromMinutes(Math.Max(1, Math.Round(duration.TotalMinutes, MidpointRounding.AwayFromZero))).ToFriendlyDuration();
 
     private void Confirm() => MudDialog.Close(DialogResult.Ok(_choice));
 
