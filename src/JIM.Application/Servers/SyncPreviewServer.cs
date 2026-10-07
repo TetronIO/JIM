@@ -782,7 +782,7 @@ public class SyncPreviewServer
             // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
             // join intact, so nothing downstream changes, and the tree states only the retained join (#1649).
             if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
-                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context);
+                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context, refreshCacheForWorkingMvo);
             else if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.RemainJoined)
                 await BuildRetainedJoinRootAsync(result, cso, importRules, context);
 
@@ -1448,11 +1448,14 @@ public class SyncPreviewServer
     /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule
     /// attribution (#1085): the same first-applicable rule the real run attributes the disconnect to.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the Metaverse Object before
+    /// evaluating the recall's exports; see <see cref="PreviewCsoCoreAsync"/>.</param>
     private async Task BuildOutOfScopeCascadeAsync(
         SyncPreviewResult result,
         ConnectedSystemObject cso,
         List<SyncRule> importRules,
-        CsoPreviewContext context)
+        CsoPreviewContext context,
+        bool refreshCacheForWorkingMvo)
     {
         var guardedRepository = context.GuardedRepository;
         var mvoId = cso.MetaverseObjectId!.Value;
@@ -1560,6 +1563,19 @@ public class SyncPreviewServer
             {
                 clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(
                     workingMvo, workingMvo.PendingAttributeValueAdditions, workingMvo.PendingAttributeValueRemovals).Count;
+
+                // The run queues the recall for export evaluation (HandleCsoOutOfScopeAsync), so every target holding a
+                // recalled value is sent the change (#1530). Evaluated over the same change set, additions first and
+                // every removal in the removed set, so a genuine clear null-clears the target and a re-elected value
+                // exports as a change of value. The run records no outcome node for these exports on the departing
+                // object's item, so they are proposed without one.
+                var changedAttributes = workingMvo.PendingAttributeValueAdditions.Concat(workingMvo.PendingAttributeValueRemovals).ToList();
+                var removedAttributes = workingMvo.PendingAttributeValueRemovals.ToHashSet();
+                _syncEngine.ApplyPendingAttributeChanges(workingMvo);
+                if (refreshCacheForWorkingMvo)
+                    await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+                ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                    synchronisationChanges: (changedAttributes, removedAttributes)));
             }
         }
 
