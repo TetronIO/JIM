@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261007070921_AddGeneratedValueDecisionDetail")]
+    [Migration("20261007092753_AddGeneratedValueDecisionDetail")]
     partial class AddGeneratedValueDecisionDetail
     {
         /// <inheritdoc />
@@ -4877,7 +4877,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
-                        .HasForeignKey("SyncRuleId");
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
@@ -5038,7 +5039,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
                         .WithMany()
-                        .HasForeignKey("SyncRuleId");
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("ActivityRunProfileExecutionItem");
 
