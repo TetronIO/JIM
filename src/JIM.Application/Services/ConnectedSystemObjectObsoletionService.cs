@@ -75,6 +75,9 @@ public static class ConnectedSystemObjectObsoletionService
     /// comment (Unique Value Generation, #242, Phase 2 work package H fix). Its return value (work package J)
     /// is recorded as <c>GeneratedValueAssigned</c> children of the disconnection
     /// root outcome built below, exactly as the worker's own ordinary Attribute Flow path records them.</param>
+    /// <param name="leaveSurvivorsAsFound">Threaded straight through to
+    /// <see cref="ContributorReElectionService.ReElectSurvivingContributorsAsync"/>: true for a preview, whose Metaverse
+    /// Object is its own working copy (#1899).</param>
     /// <returns>The staged outcome of the operation, as data; see <see cref="ConnectedSystemObjectObsoletionResult"/>.</returns>
     public static async Task<ConnectedSystemObjectObsoletionResult> ProcessObsoleteConnectedSystemObjectAsync(
         ConnectedSystemObject connectedSystemObject,
@@ -91,7 +94,8 @@ public static class ConnectedSystemObjectObsoletionService
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel syncOutcomeTrackingLevel,
         Func<MetaverseObject, int, IReadOnlyCollection<int>, Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)>> processMvoDeletionRuleAsync,
         Action<MetaverseObject> recordPreRecallAttributeSnapshot,
-        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null)
+        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null,
+        bool leaveSurvivorsAsFound = false)
     {
         var result = new ConnectedSystemObjectObsoletionResult();
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
@@ -242,7 +246,8 @@ public static class ConnectedSystemObjectObsoletionService
                     isCsoInScopeForImportRule,
                     objectTypes,
                     expressionEvaluator,
-                    resolvePendingGeneratedValues);
+                    resolvePendingGeneratedValues,
+                    leaveSurvivorsAsFound);
             }
 
             // The no-source preservation applies only to disappearances, never to a deliberate deletion of a
