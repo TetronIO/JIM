@@ -1,0 +1,377 @@
+@using JIM.Models.Activities
+@using JIM.Models.Preview
+@using JIM.Models.Transactional
+@using JIM.Models.Staging
+@using JIM.Models.Tasking
+@using JIM.Web.Causality
+@using JIM.Web.Models
+@using JIM.Web.Services
+@using JIM.Web.Shared.Causality
+@using Serilog
+@inject IJimApplicationFactory JimFactory
+@inject IConfigurationChangePreviewStarter PreviewStarter
+@inject ISnackbar Snackbar
+@inject NavigationManager NavManager
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Full Synchronisation preview of the Connected System on show (#1530), hosted at the top of its Details tab. Started
+   from the drift notice or a Run Profile's Preview action, which hand this host a request; found again on return, until
+   a Full Synchronisation has run since it, when its job is done. The run is started from here too, recording the
+   preview on its Activity while nothing has overtaken it. Renders nothing while there is no preview to show. *@
+
+@if (_loading)
+{
+    <span data-testid="jim-full-sync-preview-loading" hidden></span>
+}
+else if (_previewActivityId is { } previewActivityId)
+{
+    @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-6" data-testid="jim-full-sync-preview-stale">
+            @_previewState.StaleReason since this preview ran, so it may no longer be accurate. Run it again before
+            running a Full Synchronisation; a run started now would record that no current preview informed it.
+        </MudAlert>
+    }
+
+    <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                     Title="Full Synchronisation preview"
+                                     OnPreviewChanged="OnPreviewChangedAsync"
+                                     OnClose="DiscardPreview"
+                                     HeaderActions="@HeaderActions"
+                                     OnObjectSelected="ShowObjectAsync"
+                                     Class="mb-6" />
+
+    @if (_objectPreviewLoading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Class="mb-6" />
+    }
+    else if (_objectPreview != null && _objectPreviewContext != null)
+    {
+        <div class="mb-6" data-testid="jim-full-sync-preview-object">
+            <SyncPreviewPanel PreviewResult="_objectPreview" Context="_objectPreviewContext" OnClose="CloseObjectPreview" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    /// <summary>
+    /// A request to start a preview, from the drift notice or a Run Profile. Handled once: the host raises
+    /// <see cref="StartRequestHandled"/> so the page clears it, and a later render of the same request starts nothing.
+    /// </summary>
+    [Parameter]
+    public FullSynchronisationPreviewRequest? StartRequest { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> StartRequestHandled { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private Guid? _previewActivityId;
+    private ConnectedSystemPreviewState _previewState = new(ConnectedSystemPreviewStatus.NotPreviewed);
+    private bool _previewSettled;
+    private bool _loading = true;
+    private bool _starting;
+    private bool _queueing;
+    private Guid? _handledRequestId;
+
+    /// <summary>The Full Synchronisation Run Profiles the panel can run, and the one asked from, if any.</summary>
+    private List<ConnectedSystemRunProfile> _fullSynchronisationRunProfiles = [];
+    private int? _preferredRunProfileId;
+
+    // One object's own preview, opened from a drill-down row: what the run would do to it, as its page shows it.
+    private SyncPreviewResult? _objectPreview;
+    private CausalityPageContext? _objectPreviewContext;
+    private bool _objectPreviewLoading;
+
+    private bool IsRunning => _previewState.Status == ConnectedSystemPreviewStatus.Running;
+
+    /// <summary>A finished preview that answered can be run from; one still evaluating, or one that did not finish, cannot.</summary>
+    private bool CanRun => _previewState.Status is ConnectedSystemPreviewStatus.Current or ConnectedSystemPreviewStatus.Stale
+                           && _fullSynchronisationRunProfiles.Count > 0;
+
+    /// <summary>
+    /// The Run Profiles the Run button offers: the one the preview was asked from where there was one, else every Full
+    /// Synchronisation Run Profile of the system.
+    /// </summary>
+    private List<ConnectedSystemRunProfile> RunnableProfiles =>
+        _fullSynchronisationRunProfiles.Where(p => p.Id == _preferredRunProfileId).ToList() is { Count: > 0 } preferred
+            ? preferred
+            : _fullSynchronisationRunProfiles;
+
+    private RenderFragment HeaderActions => @<text>
+        @if (CanRun)
+        {
+            var runnable = RunnableProfiles;
+            @if (runnable.Count == 1)
+            {
+                var only = runnable[0];
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.PlayArrow" Disabled="@_queueing"
+                           OnClick="@(() => RunAsync(only))" data-testid="jim-full-sync-run">
+                    Run Full Synchronisation
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                         StartIcon="@Icons.Material.Filled.PlayArrow" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                         Disabled="@_queueing" data-testid="jim-full-sync-run-menu">
+                    @foreach (var profile in runnable)
+                    {
+                        <MudMenuItem OnClick="@(() => RunAsync(profile))">@profile.Name</MudMenuItem>
+                    }
+                </MudMenu>
+            }
+        }
+        @if (!IsRunning)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                       Disabled="@_starting" OnClick="StartPreviewAsync" data-testid="jim-full-sync-preview-again">
+                Run again
+            </MudButton>
+        }
+    </text>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            _fullSynchronisationRunProfiles = (await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(ConnectedSystem.Id))
+                .Where(p => p.RunType == ConnectedSystemRunType.FullSynchronisation)
+                .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            await ReloadPreviewStateAsync(attachToLatest: true);
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            Log.Error(ex, "Failed to read the Full Synchronisation preview of Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (StartRequest is not { } request || request.Id == _handledRequestId)
+            return;
+
+        _handledRequestId = request.Id;
+        _preferredRunProfileId = request.RunProfileId;
+        await StartRequestHandled.InvokeAsync(request.Id);
+        await StartPreviewAsync();
+    }
+
+    /// <summary>
+    /// Reads the latest Full Synchronisation preview and whether anything has overtaken it. Attaches the panel to it when
+    /// asked (on arrival), unless a Full Synchronisation has completed since it started: the run it previewed has then
+    /// happened, and showing what that run would do would describe the past as the future.
+    /// </summary>
+    private async Task ReloadPreviewStateAsync(bool attachToLatest)
+    {
+        using var jim = JimFactory.Create();
+        var preview = await jim.ConfigurationChangePreviews.GetLatestConnectedSystemPreviewAsync(
+            ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation, ConnectedSystem.Id);
+
+        if (attachToLatest && preview?.Activity is { } previewActivity)
+        {
+            var lastRun = await jim.Activities.GetLatestCompletedFullSynchronisationAsync(ConnectedSystem.Id);
+            if (lastRun is { } run && run.Executed > previewActivity.Created)
+                return;
+        }
+
+        var staleness = preview is { IsComplete: true }
+            ? await jim.ConfigurationChangePreviews.GetPreviewStalenessAsync(preview.ActivityId)
+            : null;
+
+        _previewState = ConnectedSystemPreviewState.From(preview, staleness);
+        _previewSettled = _previewState.Status is not (ConnectedSystemPreviewStatus.Running or ConnectedSystemPreviewStatus.NotPreviewed);
+        if (attachToLatest && preview != null)
+            _previewActivityId = preview.ActivityId;
+    }
+
+    /// <summary>
+    /// Starts a preview of a Full Synchronisation of this system, through the starter so a large one states its size and
+    /// duration and is confirmed first, as every preview is.
+    /// </summary>
+    private async Task StartPreviewAsync()
+    {
+        if (_starting)
+            return;
+
+        _starting = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation,
+                TargetId = ConnectedSystem.Id,
+                TargetName = ConnectedSystem.Name,
+                ProposedConfiguration = new ConnectedSystemFullSynchronisationProposal(),
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user.Id,
+                InitiatedByName = user.Name
+            });
+
+            // Null means the administrator declined the large-preview confirmation, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewState = new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.Running, activityId);
+            _previewSettled = false;
+            CloseObjectPreview();
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            Log.Error(ex, "Failed to start a Full Synchronisation preview of Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    /// <summary>
+    /// Re-reads the preview's state when it settles, so the Run button appears and staleness is judged. Re-renders only on
+    /// that transition, for the reason recorded on the Danger Zone's equivalent handler.
+    /// </summary>
+    private async Task OnPreviewChangedAsync(ConfigurationChangePreview? preview)
+    {
+        var settled = preview is { IsComplete: true } || preview is { HasFailed: true } || preview == null;
+        if (settled == _previewSettled)
+            return;
+
+        await ReloadPreviewStateAsync(attachToLatest: false);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Queues a Full Synchronisation, recording the preview on its Activity while it is current. Staleness is judged
+    /// again first: data may have moved since the preview finished and the page last looked.
+    /// </summary>
+    private async Task RunAsync(ConnectedSystemRunProfile runProfile)
+    {
+        if (_queueing)
+            return;
+
+        _queueing = true;
+        try
+        {
+            await ReloadPreviewStateAsync(attachToLatest: false);
+            var informingPreview = _previewState.ActivityId == _previewActivityId ? _previewState.InformingPreviewActivityId : null;
+
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var task = SynchronisationWorkerTask.ForUser(ConnectedSystem.Id, runProfile.Id, user.Id, user.NameOrId);
+            task.PreviewActivityId = informingPreview;
+            var result = await jim.Tasking.CreateWorkerTaskAsync(task);
+
+            if (!result.Success)
+            {
+                Snackbar.Add(result.ErrorMessage ?? "Failed to queue the Full Synchronisation.", Severity.Error);
+                return;
+            }
+
+            foreach (var warning in result.Warnings)
+                Snackbar.Add(warning, Severity.Warning);
+
+            var runActivityId = task.Activity?.Id;
+            Snackbar.Add($"{runProfile.Name} queued.", Severity.Success, config =>
+            {
+                if (runActivityId is not { } activityId)
+                    return;
+
+                config.Action = "View";
+                config.OnClick = _ =>
+                {
+                    NavManager.NavigateTo($"/activity/{activityId}");
+                    return Task.CompletedTask;
+                };
+            });
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            Log.Error(ex, "Failed to queue a Full Synchronisation of Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to queue the Full Synchronisation: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _queueing = false;
+        }
+    }
+
+    /// <summary>
+    /// Shows what the run would do to the object a drill-down row is about: the synchronised object itself, or, for a row
+    /// about a target system, the synchronised object of the same identity, whose preview shows the whole chain.
+    /// </summary>
+    private async Task ShowObjectAsync(ConfigurationChangePreviewDelta row)
+    {
+        _objectPreviewLoading = true;
+        _objectPreview = null;
+        _objectPreviewContext = null;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var subject = await jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ConnectedSystem.Id,
+                ConfigurationChangePreviewWording.ObjectConnectedSystemId(row, ConnectedSystem.Id),
+                row.ConnectedSystemObjectId, row.MetaverseObjectId);
+
+            if (subject == null)
+            {
+                Snackbar.Add($"{row.ObjectDisplayName ?? "This object"} has no Connected System Object in {ConnectedSystem.Name} to preview.", Severity.Info);
+                return;
+            }
+
+            _objectPreview = await jim.SyncPreview.PreviewSyncForCsoAsync(ConnectedSystem.Id, subject.Id);
+            _objectPreviewContext = new CausalityPageContext(
+                ConnectedSystemId: ConnectedSystem.Id,
+                ConnectedSystemName: ConnectedSystem.Name,
+                RunProfileName: "Full Synchronisation",
+                CsoId: subject.Id,
+                CsoConnectedSystemId: ConnectedSystem.Id,
+                CsoConnectedSystemName: ConnectedSystem.Name,
+                CsoDisplayName: subject.Name,
+                CsoExternalId: subject.ExternalIdAttributeValue?.ToStringNoName(),
+                CsoObjectTypeName: subject.Type?.Name,
+                MvoTypeName: null,
+                MvoTypePluralName: null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _objectPreviewLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseObjectPreview()
+    {
+        _objectPreview = null;
+        _objectPreviewContext = null;
+    }
+
+    private void DiscardPreview()
+    {
+        _previewActivityId = null;
+        _previewState = new ConnectedSystemPreviewState(ConnectedSystemPreviewStatus.NotPreviewed);
+        _previewSettled = false;
+        CloseObjectPreview();
+    }
+}

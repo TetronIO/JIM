@@ -450,6 +450,45 @@ public partial class SyncPreviewFidelityTests
         return new NewSourceObjectContext(source, target, sourceObject);
     }
 
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowAboutTheSynchronisedObject_IsThatObjectAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var sourceObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Source.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Source.Id, connectedSystemObjectId: sourceObject.Id, metaverseObjectId: sourceObject.MetaverseObjectId);
+
+        Assert.That(subject?.Id, Is.EqualTo(sourceObject.Id));
+    }
+
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowAboutATargetObject_IsTheSynchronisedObjectOfTheSameIdentityAsync()
+    {
+        // A row about an account in Active Directory is a consequence of synchronising the HR object joined to the same
+        // Metaverse Object, and that object's preview is what shows the whole chain.
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var sourceObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Source.Id);
+        var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Target.Id, connectedSystemObjectId: targetObject.Id, metaverseObjectId: targetObject.MetaverseObjectId);
+
+        Assert.That(subject?.Id, Is.EqualTo(sourceObject.Id));
+    }
+
+    [Test]
+    public async Task GetFullSynchronisationRowSubjectAsync_RowNamingNoObjectOfTheSystem_IsNoneAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+
+        var subject = await Jim.SyncPreview.GetFullSynchronisationRowSubjectAsync(ctx.Source.Id,
+            objectConnectedSystemId: ctx.Target.Id, connectedSystemObjectId: targetObject.Id, metaverseObjectId: null);
+
+        Assert.That(subject, Is.Null, "an object elsewhere with no identity to follow names nothing in this system");
+    }
+
     private ConnectedSystemFullSynchronisationPreviewAdapter FullSynchronisationAdapter => new(Jim);
 
     private static Activity RunActivity(int connectedSystemId, ConnectedSystemRunType runType, ActivityStatus status, DateTime executed,
