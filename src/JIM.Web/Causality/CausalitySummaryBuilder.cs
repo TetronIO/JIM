@@ -264,6 +264,9 @@ public static class CausalitySummaryBuilder
             }
         }
 
+        if (BuildWithdrawnChangesClause(allEvents, isSpeculative: true) is { } withdrawnClause)
+            clauses.Add(withdrawnClause);
+
         return clauses;
     }
 
@@ -423,6 +426,9 @@ public static class CausalitySummaryBuilder
         var exportClause = BuildQueuedExportClause(allEvents);
         if (exportClause != null)
             clauses.Add(exportClause);
+
+        if (BuildWithdrawnChangesClause(allEvents, isSpeculative: false) is { } withdrawnClause)
+            clauses.Add(withdrawnClause);
 
         return clauses;
     }
@@ -707,8 +713,9 @@ public static class CausalitySummaryBuilder
 
         // The filter (not a generated-value outcome, and its label not seen yet) lives in the Where clause so
         // the loop body is never guard-shaped; seenLabels.Add doubles as the predicate and the dedup record.
+        // Withdrawn changes get the sentence that says where and why, below, rather than their bare label.
         foreach (var causalityEvent in allEvents.Where(e =>
-            e.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
+            e.OutcomeType is not (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
             && seenLabels.Add(e.Label)))
         {
             clauses.Add([new SummarySegment.Text(causalityEvent.Label)]);
@@ -719,7 +726,47 @@ public static class CausalitySummaryBuilder
 
         clauses.InsertRange(insertIndex >= 0 ? insertIndex : clauses.Count, BuildGeneratedValueClauses(allEvents, isSpeculative));
 
+        if (BuildWithdrawnChangesClause(allEvents, isSpeculative) is { } withdrawnClause)
+            clauses.Add(withdrawnClause);
+
         return clauses;
+    }
+
+    /// <summary>
+    /// The clause stating that changes queued for target systems were withdrawn, and why (#2001): the systems already
+    /// hold the values the Metaverse now wants, so the changes never go out. Names the system where there is one, as
+    /// the queued export clause does, so an administrator expecting those changes to be exported can see where they
+    /// went. Null when nothing was withdrawn.
+    /// </summary>
+    private static List<SummarySegment>? BuildWithdrawnChangesClause(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
+    {
+        var withdrawals = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn).ToList();
+        if (withdrawals.Count == 0)
+            return null;
+
+        var changeCount = withdrawals.Sum(e => e.DetailCount ?? 0);
+        var changes = $"{changeCount} change{(changeCount == 1 ? string.Empty : "s")} queued for ";
+        var systems = withdrawals.Select(e => (e.SystemId, e.SystemName)).Distinct().ToList();
+
+        if (systems.Count == 1)
+        {
+            var (systemId, systemName) = systems[0];
+            var target = systemName != null
+                ? new SummarySegment.Entity(systemName,
+                    systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
+                    CausalityEntityKind.ConnectedSystem)
+                : (SummarySegment)new SummarySegment.Text("a downstream system");
+            var verb = isSpeculative ? "would be" : changeCount == 1 ? "was" : "were";
+            return
+            [
+                new SummarySegment.Text(changes),
+                target,
+                new SummarySegment.Text($" {verb} withdrawn, since it already holds the value{(changeCount == 1 ? string.Empty : "s")}")
+            ];
+        }
+
+        return [new SummarySegment.Text(
+            $"{changes}{systems.Count} systems {(isSpeculative ? "would be" : "were")} withdrawn, since they already hold the values")];
     }
 
     /// <summary>

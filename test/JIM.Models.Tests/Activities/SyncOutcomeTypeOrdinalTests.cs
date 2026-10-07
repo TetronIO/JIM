@@ -131,7 +131,8 @@ public class SyncOutcomeTypeOrdinalTests
         // Full Synchronisation preview (#1530): an object the run would leave as it is, and one it would fail with an
         // error no more specific transition names.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = 56,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = 57
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = 57,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = 58
     };
 
     [Test]

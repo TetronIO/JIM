@@ -164,7 +164,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(withdrawn, Has.Count.EqualTo(1));
             Assert.That(pe.AttributeValueChanges, Is.Empty);
         }
     }
@@ -179,7 +179,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(withdrawn, Has.Count.EqualTo(1));
             Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { keep }));
         }
     }
@@ -196,7 +196,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(withdrawn, Has.Count.EqualTo(1));
             Assert.That(pe.AttributeValueChanges, Is.Empty);
         }
     }
@@ -211,7 +211,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(withdrawn, Is.Empty);
             Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { keep }));
         }
     }
@@ -232,7 +232,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(2));
+            Assert.That(withdrawn, Has.Count.EqualTo(2));
             Assert.That(pe.AttributeValueChanges, Is.Empty);
         }
     }
@@ -250,7 +250,7 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(withdrawn, Is.Empty);
             Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { sent }));
         }
     }
@@ -264,9 +264,80 @@ public class SyncEngineExportMergeTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(withdrawn, Is.Empty);
             Assert.That(pe.AttributeValueChanges, Has.Count.EqualTo(1));
         }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_ReturnsTheWithdrawnChangesThemselves()
+    {
+        // The run records what it withdrew on the object's execution item (#2001), so it needs the changes, not a count.
+        var stale = SingleValuedChange(attributeId: 1, "B");
+        var pe = PendingExportWith(stale, SingleValuedChange(attributeId: 2, "Architect"));
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { stale }));
+    }
+
+    // ---- Selecting the queued changes an evaluation would withdraw (#2001) ----
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_QueuedChangeForAValueTheTargetAlreadyHolds_IsWithdrawn()
+    {
+        var stale = SingleValuedChange(attributeId: 1, "ANALYST");
+        var keep = SingleValuedChange(attributeId: 2, "Architect");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [stale, keep], [SingleValuedChange(attributeId: 1, "Analyst")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { stale }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_QueuedChangeReplacedByANewlyStagedOne_IsNotWithdrawn()
+    {
+        // A queued change superseded by the evaluation's own new change is replaced, not withdrawn: the new change goes
+        // out instead, and the preview states that as an update. Only the change the target already makes unnecessary
+        // is withdrawn.
+        var stale = SingleValuedChange(attributeId: 1, "ANALYST");
+        var replaced = SingleValuedChange(attributeId: 2, "Sales");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [SingleValuedChange(attributeId: 2, "Commercial")], [stale, replaced], [SingleValuedChange(attributeId: 1, "Analyst")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { stale }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_MultiValuedRemoveOfAValueTheMetaverseWantsAgain_IsWithdrawn()
+    {
+        var staleRemove = MultiValuedRemove(attributeId: 7, "cn=alice");
+        var otherValue = MultiValuedAdd(attributeId: 7, "cn=bob");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [staleRemove, otherValue], [MultiValuedAdd(attributeId: 7, "cn=alice")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { staleRemove }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_ChangeAlreadySentAndAwaitingConfirmation_IsNotWithdrawn()
+    {
+        var sent = SingleValuedChange(attributeId: 1, "Analyst");
+        sent.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [sent], [SingleValuedChange(attributeId: 1, "Analyst")]);
+
+        Assert.That(withdrawn, Is.Empty);
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_NothingAlreadyCurrent_WithdrawsNothing()
+    {
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [SingleValuedChange(attributeId: 1, "C")], [SingleValuedChange(attributeId: 1, "B")], []);
+
+        Assert.That(withdrawn, Is.Empty, "a change replaced by a new one is not a withdrawal");
     }
 
     [Test]

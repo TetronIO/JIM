@@ -69,6 +69,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, "Disconnected from target system")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn, "Pending Export changes withdrawn")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired")]
@@ -154,6 +155,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, Color.Primary)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, Color.Warning)]
@@ -226,7 +228,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport] = Icons.Material.Filled.CloudUpload,
             [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = Icons.Material.Filled.LinkOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = Icons.Material.Filled.CheckCircleOutline,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = Icons.Material.Filled.ErrorOutline
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = Icons.Material.Filled.ErrorOutline,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = Icons.Material.Filled.PlaylistRemove
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
