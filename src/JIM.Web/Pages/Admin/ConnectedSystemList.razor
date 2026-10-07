@@ -114,6 +114,7 @@
                         </MudTooltip>
                     }
                     <ConfigurationDriftIndicator Status="@GetDrift(context.Item.Id)" ConnectedSystemName="@context.Item.Name" />
+                    <GeneratedValueAttentionIndicator Attention="@GetGeneratedValueAttention(context.Item.Id)" ConnectedSystemId="@context.Item.Id" />
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
@@ -186,6 +187,7 @@
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private Dictionary<int, PasswordSynchronisationState>? _passwordSynchronisationStates;
     private Dictionary<int, PasswordQueueAttention>? _passwordQueueAttention;
+    private Dictionary<int, GeneratedValueDecisionAttention>? _generatedValueAttention;
     private PasswordSynchronisationFilter _passwordSyncFilter = PasswordSynchronisationFilter.Any;
 
     /// <summary>
@@ -241,6 +243,9 @@
             // much of its queued work is waiting on a person.
             _passwordSynchronisationStates = await jim.ConnectedSystems.GetPasswordSynchronisationStatesAsync(ids);
             _passwordQueueAttention = await jim.PasswordSynchronisation.GetAttentionByConnectedSystemAsync(ids);
+
+            // Generated values held for a decision that involve each system (Unique Value Generation, #242, release 4).
+            _generatedValueAttention = await jim.GeneratedValueDecisions.GetAttentionByConnectedSystemAsync(ids);
         }
     }
 
@@ -295,6 +300,9 @@
 
     private PasswordSynchronisationState? GetPasswordSynchronisationState(int connectedSystemId) =>
         _passwordSynchronisationStates != null && _passwordSynchronisationStates.TryGetValue(connectedSystemId, out var state) ? state : null;
+
+    private GeneratedValueDecisionAttention? GetGeneratedValueAttention(int connectedSystemId) =>
+        _generatedValueAttention != null && _generatedValueAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
 
     private PasswordQueueAttention? GetPasswordQueueAttention(int connectedSystemId) =>
         _passwordQueueAttention != null && _passwordQueueAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;

@@ -1,0 +1,50 @@
+@using JIM.Models.Transactional.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The generated values needing a decision on one Synchronisation Rule or Connected System (Unique Value Generation, #242,
+   release 4, Phase 9), shaped after InitialPasswordAttentionIndicator: a warning chip with the count, which here also
+   links to the Generated Values tab of Operations filtered to that rule or system. Only values waiting on a decision are
+   counted; an allowed rename waits on the next export, not on anyone. Renders nothing when nothing is held, so silence
+   is the reward for needing no action. *@
+
+@if (NeedsDecisionCount > 0)
+{
+    <MudTooltip Arrow="true" Placement="Placement.Top">
+        <TooltipContent><TooltipText Text="@TooltipText" /></TooltipContent>
+        <ChildContent>
+            <a href="@Href" style="text-decoration: none;" data-testid="generated-value-attention">
+                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                         Icon="@Icons.Material.Filled.Fingerprint" Class="jim-stat-chip">
+                    @NeedsDecisionCount.ToString("N0")
+                </MudChip>
+            </a>
+        </ChildContent>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>The counts to render. Null (not yet loaded) renders nothing, so a list does not flash an indicator.</summary>
+    [Parameter]
+    public GeneratedValueDecisionAttention? Attention { get; set; }
+
+    /// <summary>The Synchronisation Rule the counts belong to; the link filters the tab to it.</summary>
+    [Parameter]
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>The Connected System the counts belong to; the link filters the tab to it.</summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    private int NeedsDecisionCount => Attention?.NeedsDecisionCount ?? 0;
+
+    private string Href => SyncRuleId is { } syncRuleId
+        ? $"/admin/operations?t=generated-values&syncRuleId={syncRuleId}"
+        : $"/admin/operations?t=generated-values&connectedSystemId={ConnectedSystemId}";
+
+    private string TooltipText =>
+        $"{(NeedsDecisionCount == 1 ? "1 generated value needs" : $"{NeedsDecisionCount:N0} generated values need")} a decision. " +
+        "A target rejected each as already in use and JIM could not safely correct it, so its export is held. " +
+        "Open Generated Values to allow the rename or try again.";
+}

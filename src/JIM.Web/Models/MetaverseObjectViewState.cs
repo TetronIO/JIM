@@ -49,6 +49,15 @@ public sealed class MetaverseObjectViewState(Guid objectId)
     /// <summary>The generated values retired from this object (#242): events on the Changes timeline.</summary>
     public List<RetiredGeneratedValueHeader> Retirements { get; set; } = [];
 
+    /// <summary>
+    /// This object's generated values held for a decision, or with their rename allowed (#242, release 4): the banner
+    /// above the tabs. Read with the page, for administrators only.
+    /// </summary>
+    public List<GeneratedValueDecisionHeader> GeneratedValueDecisions { get; set; } = [];
+
+    /// <summary>Whether a banner action (Allow the rename, Try again) is in flight.</summary>
+    public bool GeneratedValueActionRunning { get; set; }
+
     // Inspect view (#399): the object's attribute provenance, the source filter chosen from the contribution bar,
     // and the attribute opened in the inspector.
     public MetaverseObjectProvenance? Provenance { get; set; }

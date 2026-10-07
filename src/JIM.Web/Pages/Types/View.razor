@@ -39,6 +39,19 @@
 <MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
+@* Generated values held for a decision (#242, release 4): above the tabs, because a held export is work JIM has stopped
+   doing for this person and must be seen without opening anything. Administrators only: it names the systems the
+   person has accounts in, and both actions are administrative. mt-2 mb-6 per the notice-between-breadcrumbs-and-tabs
+   rule. *@
+<AuthorizeView Roles="Administrator" Context="generatedValueAuth">
+    @if (_object.GeneratedValueDecisions.Count > 0)
+    {
+        <div class="d-flex flex-column gap-3 mt-2 mb-6">
+            <GeneratedValueDecisionBanner Decisions="_object.GeneratedValueDecisions" Busy="_object.GeneratedValueActionRunning"
+                                          OnAllowRename="AllowGeneratedValueRenameAsync" OnTryAgain="TryGeneratedValueAgainAsync" />
+        </div>
+    }
+</AuthorizeView>
 
 @if (MetaverseObject != null)
 {
@@ -568,6 +581,40 @@
             user, null);
     }
 
+    /// <summary>"Allow the rename…" from the banner: the confirmation names every system that will change, then acts.</summary>
+    private async Task AllowGeneratedValueRenameAsync(GeneratedValueDecisionHeader decision)
+    {
+        var state = _object;
+        if (await GeneratedValueDecisionActions.AllowRenameAsync(DialogService, decision.AssignmentId))
+            await ReloadGeneratedValueDecisionsAsync(state);
+    }
+
+    /// <summary>"Try again" from the banner: releases the held export so the next export run tries the same value.</summary>
+    private async Task TryGeneratedValueAgainAsync(GeneratedValueDecisionHeader decision)
+    {
+        var state = _object;
+        if (state.GeneratedValueActionRunning)
+            return;
+
+        state.GeneratedValueActionRunning = true;
+        try
+        {
+            if (await GeneratedValueDecisionActions.TryAgainAsync(JimFactory, Snackbar, AuthenticationStateTask, decision.AssignmentId))
+                await ReloadGeneratedValueDecisionsAsync(state);
+        }
+        finally
+        {
+            state.GeneratedValueActionRunning = false;
+        }
+    }
+
+    private async Task ReloadGeneratedValueDecisionsAsync(MetaverseObjectViewState state)
+    {
+        using var jim = JimFactory.Create();
+        state.GeneratedValueDecisions = await jim.GeneratedValueDecisions.GetDecisionsForMetaverseObjectAsync(state.ObjectId);
+        StateHasChanged();
+    }
+
     [Parameter]
     public string TypeNameUrlParam { get; set; } = null!;
     [Parameter]
@@ -684,7 +731,10 @@
         // Only the Password tab's badge is read with the page; the rest of the tab loads on its first activation
         // (see LoadTabAsync). One bounded read, and only for the readers who can see the tab.
         if (await IsAdministratorAsync())
+        {
             await LoadQueuedPasswordChangesAsync(jim, state);
+            state.GeneratedValueDecisions = await jim.GeneratedValueDecisions.GetDecisionsForMetaverseObjectAsync(state.ObjectId);
+        }
 
         if (MetaverseObject.NameOrId != null)
             _breadcrumbs = new List<BreadcrumbItem>
