@@ -7,6 +7,7 @@ using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -25,6 +26,7 @@ namespace JIM.Worker.Tests.Servers;
 [TestFixture]
 public class ConfigurationSnapshotServiceTests
 {
+    private Mock<IRepository> _repository = null!;
     private JimApplication _jim = null!;
     private ConfigurationSnapshotService _service = null!;
     private RoundTripCredentialProtection _protection = null!;
@@ -35,7 +37,8 @@ public class ConfigurationSnapshotServiceTests
     {
         TestUtilities.SetEnvironmentVariables();
         _protection = new RoundTripCredentialProtection();
-        _jim = new JimApplication(new Mock<IRepository>().Object) { CredentialProtection = _protection };
+        _repository = new Mock<IRepository>();
+        _jim = new JimApplication(_repository.Object) { CredentialProtection = _protection };
         _service = _jim.ConfigurationSnapshots;
     }
 
@@ -284,6 +287,79 @@ public class ConfigurationSnapshotServiceTests
             Assert.That(connectedSystemIdNode.DisplayValue, Is.EqualTo("Payroll"));
             Assert.That(connectedSystemIdNode.Label, Is.EqualTo("Connected System"));
         }
+    }
+
+    // An exclusion normally arrives carrying only its Connected System's id: neither the rule an edit surface saves nor
+    // GetSyncRuleAsync loads the navigation, so the name has to be looked up for the change history to show it (#1947).
+    [Test]
+    public async Task CreateSnapshotAsync_SyncRule_ExclusionWithoutItsConnectedSystemLoaded_RecordsTheConnectedSystemNameAsync()
+    {
+        UseConnectedSystemNames(new Dictionary<int, string> { [8] = "Payroll", [9] = "Active Directory" });
+
+        var snapshot = await _service.CreateSnapshotAsync(RuleWithGeneratedMapping(excludedConnectedSystemIds: 8), HashKey);
+
+        var node = ExcludedConnectedSystemNode(snapshot);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.Value, Is.EqualTo("8"), "the id stays the value that is diffed");
+            Assert.That(node.DisplayValue, Is.EqualTo("Payroll"));
+        }
+    }
+
+    [Test]
+    public async Task CreateSnapshotAsync_SyncRule_ExclusionOfAConnectedSystemThatNoLongerExists_RecordsItsIdAsync()
+    {
+        UseConnectedSystemNames(new Dictionary<int, string> { [9] = "Active Directory" });
+
+        var snapshot = await _service.CreateSnapshotAsync(RuleWithGeneratedMapping(excludedConnectedSystemIds: 8), HashKey);
+
+        var node = ExcludedConnectedSystemNode(snapshot);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.Value, Is.EqualTo("8"));
+            Assert.That(node.DisplayValue, Is.Null, "with no name to show, the change history shows the id");
+        }
+    }
+
+    [Test]
+    public async Task CreateSnapshotAsync_SyncRule_WithNoExclusions_DoesNotLookUpConnectedSystemNamesAsync()
+    {
+        var connectedSystems = UseConnectedSystemNames(new Dictionary<int, string> { [8] = "Payroll" });
+
+        await _service.CreateSnapshotAsync(RuleWithGeneratedMapping(), HashKey);
+
+        connectedSystems.Verify(r => r.GetConnectedSystemNamesAsync(), Times.Never);
+    }
+
+    private Mock<IConnectedSystemRepository> UseConnectedSystemNames(Dictionary<int, string> names)
+    {
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(names);
+        _repository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+        return connectedSystems;
+    }
+
+    private static SyncRule RuleWithGeneratedMapping(params int[] excludedConnectedSystemIds)
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = GeneratedValueTokenKind.Random }
+        };
+        foreach (var id in excludedConnectedSystemIds)
+            mapping.Generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion { ConnectedSystemId = id });
+
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+        return rule;
+    }
+
+    private static ConfigurationSnapshotNode ExcludedConnectedSystemNode(ConfigurationSnapshot snapshot)
+    {
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        var exclusion = Child(Child(flow, "generation")!, "exclusions")!.Children!.Single();
+        return Child(exclusion, "connectedSystemId")!;
     }
 
     [Test]
