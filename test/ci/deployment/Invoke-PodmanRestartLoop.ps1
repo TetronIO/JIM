@@ -14,10 +14,14 @@
     Each round stops JIM (systemctl stop jim.service jim-database.service), waits, starts it again (systemctl start
     jim-database.service jim.service), and waits for JIM to answer ready inside its pod. Every round records a small
     snapshot of JIM's network in rounds.jsonl: the database pod's address, what the jim pod resolves jim-database to,
-    the records aardvark-dns holds, whether each pod is attached to the network's bridge, firewalld's trust of the
-    network, and how a connection to port 5432 fares by name and at the database's own address, with how long it
-    took. A connection refused within milliseconds is a firewall's reject; one failing after about three seconds is
-    a host nobody answers for.
+    the records aardvark-dns holds, whether each pod's veth is attached to the network's bridge and what NetworkManager
+    makes of it, firewalld's trust of the network, and how a connection to port 5432 fares by name and at the
+    database's own address, with the jim pod's neighbour entry for the address. The neighbour entry, not the time a
+    connection took, tells "no route to host" from an address nobody answers for (FAILED, INCOMPLETE) apart from one
+    a firewall rejects (resolved).
+
+    The cause it found for #2009: NetworkManager took the database pod's veth for itself, starting DHCP on it, which
+    released it from the bridge. setup.sh now tells NetworkManager to leave Podman's interfaces alone.
 
     The first ready round is captured in full as a baseline, in round-NN-baseline. A round where JIM is not ready in
     time is captured in full in round-NN-failed: everything the snapshot reads, plus each pod's interfaces, routes and
@@ -26,7 +30,8 @@
     by hand, unless -Continue. Restart JIM the documented way to bring it back.
 
     Rootful only, with the bundled database: the fault has only been seen there. Needs PowerShell 7 on the host; on
-    an air-gapped host, install it from Microsoft's RPM package carried in.
+    an air-gapped host, install it from Microsoft's RPM package carried in, with libicu, which AlmaLinux's cloud images
+    leave out. Without libicu, run pwsh with DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 set.
 
 .PARAMETER Rounds
     How many restarts to make. Default 20.
@@ -163,21 +168,42 @@ function Get-PodNetworkPid {
     $processId
 }
 
-# Whether the pod's interface is attached to the bridge: its peer, named by index after "@if" inside the pod, must
-# be the bridge's port on the host.
-function Test-PodOnBridge {
+# The pod's veth on the host, and whether it is attached to the bridge: the pod's interface names its peer by index,
+# after "@if", and the peer must be the bridge's port on the host. Nothing when the pod is not running.
+function Get-PodVeth {
     param([string]$Pod, [string]$Bridge)
     $processId = Get-PodNetworkPid $Pod
     if (-not $processId -or -not $Bridge) { return $null }
     $links = Invoke-Native -AllowFailure @('nsenter', '-t', $processId, '-n', 'ip', '-o', 'link', 'show')
     $peers = @([regex]::Matches($links, '@if(\d+)') | ForEach-Object { $_.Groups[1].Value })
-    if ($peers.Count -eq 0) { return $false }
     $hostLinks = @((Invoke-Native -AllowFailure @('ip', '-o', 'link', 'show')) -split "`n")
     foreach ($peer in $peers) {
         $hostLink = $hostLinks | Where-Object { $_ -match "^${peer}: " } | Select-Object -First 1
-        if ($hostLink -and $hostLink -match "\bmaster $([regex]::Escape($Bridge))\b") { return $true }
+        if ($hostLink -and $hostLink -match "^${peer}: ([^@:]+)") {
+            return [pscustomobject]@{ Name = $Matches[1]; OnBridge = $hostLink -match "\bmaster $([regex]::Escape($Bridge))\b" }
+        }
     }
-    $false
+    [pscustomobject]@{ Name = $null; OnBridge = $false }
+}
+
+# NetworkManager's device list, as nmcli prints it with colons escaped inside values; nothing without NetworkManager.
+function Get-NetworkManagerDevice {
+    if (-not (Test-CommandAvailable 'nmcli')) { return @() }
+    $lines = Invoke-Native -AllowFailure @('nmcli', '-t', '-f', 'DEVICE,STATE,CONNECTION', 'device')
+    if ($LASTEXITCODE -ne 0) { return @() }
+    @($lines -split "`n" | Where-Object { $_ } | ForEach-Object {
+        $fields = @($_ -split '(?<!\\):' | ForEach-Object { $_ -replace '\\:', ':' })
+        [pscustomobject]@{ Device = $fields[0]; State = $fields[1]; Connection = ($fields | Select-Object -Skip 2) -join ':' }
+    })
+}
+
+# What NetworkManager logged since the round began about releasing a device from a bridge, as it does when it takes
+# a veth for a connection of its own.
+function Get-NetworkManagerRelease {
+    param([long]$Since)
+    $journal = Invoke-Native -AllowFailure @('journalctl', '--no-pager', '--quiet', '-o', 'cat', '-u', 'NetworkManager.service',
+        '--since', "@$Since")
+    @($journal -split "`n" | Where-Object { $_ -match 'released from controller' })
 }
 
 # The state of the pod's neighbour entry for an address (REACHABLE, STALE, FAILED, ...), or nothing if it has none.
@@ -232,6 +258,8 @@ function Get-NetworkSnapshot {
     param([long]$Since)
     $network = Get-Network
     $bridge = $network.Bridge
+    $databaseVeth = Get-PodVeth -Pod $databaseName -Bridge $bridge
+    $jimVeth = Get-PodVeth -Pod 'jim' -Bridge $bridge
     $databaseAddress = (Invoke-Native -AllowFailure @('podman', 'inspect', $databaseContainer, '--format',
             "{{(index .NetworkSettings.Networks `"$networkName`").IPAddress}}")).Trim()
     if ($LASTEXITCODE -ne 0 -or $databaseAddress -notmatch '^\d+\.\d+\.\d+\.\d+$') { $databaseAddress = $null }
@@ -264,8 +292,12 @@ function Get-NetworkSnapshot {
         TcpByAddress = if ($databaseAddress) { Test-DatabasePort -Container $container -Target $databaseAddress } else { $null }
         # Read after the attempt above, so that it says how the attempt found the address.
         DatabaseNeighbour = Get-NeighbourState -Pod 'jim' -Address $databaseAddress
-        DatabasePodOnBridge = Test-PodOnBridge -Pod $databaseName -Bridge $bridge
-        JimPodOnBridge = Test-PodOnBridge -Pod 'jim' -Bridge $bridge
+        DatabasePodOnBridge = $databaseVeth.OnBridge
+        JimPodOnBridge = $jimVeth.OnBridge
+        DatabaseVeth = $databaseVeth.Name
+        JimVeth = $jimVeth.Name
+        NetworkManagerDevices = @(Get-NetworkManagerDevice)
+        NetworkManagerReleases = @(Get-NetworkManagerRelease $Since)
         Bridge = $bridge
         FirewalldRunning = $firewalldRunning
         Subnet = $network.Subnet
@@ -307,6 +339,10 @@ function Save-Capture {
             @('podman', 'exec', $Snapshot.ProbeContainer, 'cat', '/etc/resolv.conf', '/etc/hosts'),
             @('podman', 'exec', $Snapshot.ProbeContainer, 'getent', 'ahosts', $databaseName))
     }
+    Save-Command (Join-Path $Folder 'networkmanager.txt') @(
+        @('nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device'), @('nmcli', '-t', '-f', 'NAME,UUID,TYPE,DEVICE', 'connection', 'show'),
+        @('NetworkManager', '--print-config'),
+        @('journalctl', '--no-pager', '--output', 'short-iso', '-u', 'NetworkManager.service', '--since', "@$Since"))
     Save-Command (Join-Path $Folder 'firewall.txt') @(
         @('firewall-cmd', '--state'), @('firewall-cmd', '--get-default-zone'), @('firewall-cmd', '--get-active-zones'),
         @('firewall-cmd', '--list-all-zones'), @('systemctl', 'status', '--no-pager', 'firewalld', 'netavark-firewalld-reload'),

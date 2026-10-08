@@ -111,11 +111,19 @@ Each container has a health check, which `podman ps` shows. Podman 5 restarts a 
 
 None of these checks starts until its service has finished starting, however long a first start or an upgrade's database changes take, so Podman never restarts a service part-way through starting.
 
-## Firewall, SELinux and AppArmor
+## Firewall, SELinux, AppArmor and NetworkManager {#firewall-selinux-and-apparmor}
 
 - **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https` (or `--add-port=<port>/tcp` for another port), which opens it now and for good without reloading firewalld.
 
     A firewalld reload, or a restart, removes the rules Podman adds for a rootful JIM's network: JIM's services can then neither resolve names on their network nor, on some hosts, reach their database, and JIM stays down until you restart it. Podman ships `netavark-firewalld-reload.service` to put the rules back after every reload, but leaves it disabled. The installer enables it; by hand, as root: `systemctl enable --now netavark-firewalld-reload.service`. A rootless JIM needs neither: firewalld does not touch its network.
+- **NetworkManager, on RHEL and its derivatives**<br /> NetworkManager sometimes takes the network interface (veth) Podman has just plugged one of a rootful JIM's pods in with: it gives the interface a "Wired connection" of its own and starts DHCP on it, which unplugs the pod from JIM's network. When that pod is the database's, JIM's services log `No route to host` for their database, and JIM stays down until you restart it; it happens at random, after a restart or a reboot. The installer tells NetworkManager to leave Podman's interfaces alone; by hand, as root:
+
+    ```bash
+    printf '[keyfile]\nunmanaged-devices+=interface-name:veth*;interface-name:podman*\n' > /etc/NetworkManager/conf.d/90-jim-podman.conf
+    nmcli general reload conf
+    ```
+
+    The `+=` keeps any interfaces the host already tells NetworkManager to leave alone, and the reload applies the setting without restarting NetworkManager. Do not delete the "Wired connection" profiles it made: they go away with their interfaces, and a server's own network card can use a profile with the same kind of name. A rootless JIM needs neither: NetworkManager cannot see its network.
 - **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
 - **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
 
@@ -172,11 +180,13 @@ If your organisation's policy requires every step by hand, these steps do what t
       "$(base64 -w0 /opt/jim/tls/tls.crt)" "$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
     ```
 
-5. **Open the port** in firewalld, and keep JIM's network through a firewalld reload; on Ubuntu 24.04, add the AppArmor rules JIM's containers need instead (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
+5. **Prepare the host's network.** On RHEL and its derivatives, open the port in firewalld, keep JIM's network through a firewalld reload, and keep NetworkManager off Podman's interfaces; on Ubuntu 24.04, add the AppArmor rules JIM's containers need instead (see [Firewall, SELinux, AppArmor and NetworkManager](#firewall-selinux-and-apparmor)):
 
     ```bash
     firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https
     systemctl enable --now netavark-firewalld-reload.service
+    printf '[keyfile]\nunmanaged-devices+=interface-name:veth*;interface-name:podman*\n' > /etc/NetworkManager/conf.d/90-jim-podman.conf
+    nmcli general reload conf
     ```
 
 6. **Start JIM**, then wait until `podman healthcheck run jim-web` succeeds:

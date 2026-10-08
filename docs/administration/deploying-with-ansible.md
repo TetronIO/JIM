@@ -99,6 +99,23 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
       - port: 443/tcp
         state: enabled
 
+  pre_tasks:
+    # Before JIM's pods start: NetworkManager would otherwise sometimes take the interface Podman plugs a pod into
+    # JIM's network with, and unplug it. += keeps any interfaces the host already lists; the reload applies it without
+    # restarting NetworkManager.
+    - name: Keep NetworkManager off Podman's interfaces
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/90-jim-podman.conf
+        content: |
+          [keyfile]
+          unmanaged-devices+=interface-name:veth*;interface-name:podman*
+        mode: "0644"
+      register: jim_networkmanager
+
+    - name: Apply it
+      ansible.builtin.command: nmcli general reload conf
+      when: jim_networkmanager.changed
+
   roles:
     - redhat.rhel_system_roles.podman
 

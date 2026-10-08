@@ -488,12 +488,15 @@ printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.c
 ``````
 
 If firewalld is running, open JIM's port without reloading firewalld, and have
-Podman restore its rules for JIM's network whenever firewalld reloads. Then
-start JIM:
+Podman restore its rules for JIM's network whenever firewalld reloads. If
+NetworkManager is running, tell it to leave Podman's interfaces alone, or it can
+unplug JIM's database from JIM's network. Then start JIM:
 
 ``````bash
 firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https
 systemctl enable --now netavark-firewalld-reload.service
+printf '[keyfile]\nunmanaged-devices+=interface-name:veth*;interface-name:podman*\n' > /etc/NetworkManager/conf.d/90-jim-podman.conf
+nmcli general reload conf
 systemctl daemon-reload
 systemctl start jim-database.service jim.service
 ``````
