@@ -117,6 +117,22 @@ public class ConfigurationChangePreviewWordingTests
         }));
     }
 
+    [Test]
+    public void ValueColumnTitles_WithdrawnPendingExportChanges_AreNotTheRunsBeforeAndAfter()
+    {
+        // A withdrawal row's values are the change that was queued and the value the target already holds; neither is the
+        // object "now" or "after the synchronisation", which is what the Full Synchronisation preview's other groups show.
+        const ConfigurationChangePreviewSurface surface = ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation;
+        var withdrawn = ConfigurationChangePreviewWording.ValueColumnTitles(surface, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn);
+        var exported = ConfigurationChangePreviewWording.ValueColumnTitles(surface, ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn.Current, Is.Not.EqualTo(exported.Current));
+            Assert.That(withdrawn.Proposed, Is.Not.EqualTo(exported.Proposed));
+        }
+    }
+
     private static ConfigurationChangePreviewGroup Group(ActivityRunProfileExecutionItemSyncOutcomeType transition, int objects) =>
         new() { TransitionType = transition, ObjectCount = objects };
 }

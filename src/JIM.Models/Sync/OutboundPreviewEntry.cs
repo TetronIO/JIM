@@ -89,9 +89,18 @@ public class OutboundPreviewEntry
     public List<PendingExportAttributeValueChange> NoNetChangeSkippedChanges { get; init; } = [];
 
     /// <summary>
-    /// The target object's current values for every attribute <see cref="AttributeChanges"/> writes, read from the same
-    /// cache the no-net-change check reads (#1530), so a preview can state an update as an old-to-new pair. Empty for a
-    /// provisioning, whose object does not exist yet.
+    /// The changes queued on the target object's Pending Export that a real evaluation would withdraw, because the
+    /// target already holds the values the Metaverse now wants (#2001), unpersisted and read-only: the preview withdraws
+    /// nothing. A queued change replaced by one in <see cref="AttributeChanges"/> is not listed. Empty when nothing is
+    /// queued, for a provisioning, and for a recall, whose executors record no withdrawal.
+    /// </summary>
+    public List<PendingExportAttributeValueChange> WithdrawnChanges { get; init; } = [];
+
+    /// <summary>
+    /// The target object's current values for every attribute <see cref="AttributeChanges"/> writes or
+    /// <see cref="WithdrawnChanges"/> withdraws, read from the same cache the no-net-change check reads (#1530, #2001),
+    /// so a preview can state an update as an old-to-new pair, and a withdrawal as what was queued against what the
+    /// target keeps. Empty for a provisioning, whose object does not exist yet.
     /// </summary>
     public List<ConnectedSystemObjectAttributeValue> CurrentTargetValues { get; init; } = [];
 

@@ -70,6 +70,7 @@ public sealed record CausalityTableRow(
         CausalityTableChangeKind.Provision => "Provision",
         CausalityTableChangeKind.ExportQueued => "Export queued",
         CausalityTableChangeKind.ProvisioningCancelled => "Provisioning cancelled",
+        CausalityTableChangeKind.QueuedChangesWithdrawn => "Queued changes withdrawn",
         CausalityTableChangeKind.NoContributor => "No contributor",
         CausalityTableChangeKind.ValuesPreserved => "Values preserved",
         CausalityTableChangeKind.AttributeChange => "Attribute change",

@@ -111,6 +111,13 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] =
             new OutcomeDisplay("Disconnected from target system", CausalityTone.Warning, Icons.Material.Filled.LinkOff,
                 SpeculativeLabel: "Would be disconnected from its target Connected System"),
+        // Changes queued for a target system that it already holds, withdrawn rather than exported (#2001). Info: the
+        // target keeps the value it has and nothing is sent, so this explains why an expected update never went out
+        // rather than warning of anything lost. PlaylistRemove reads as items taken off a queue.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] =
+            new OutcomeDisplay("Pending Export changes withdrawn", CausalityTone.Info, Icons.Material.Filled.PlaylistRemove,
+                "have changes withdrawn from their Pending Export",
+                SpeculativeLabel: "Changes queued for its target Connected System would be withdrawn"),
 
         // Export execution outcomes
         [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] =
@@ -477,8 +484,9 @@ public static class OutcomeDisplayMap
             // MvoDeletionCancelled (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
             // (attribute-priority housekeeping, not an object operation), ProvisioningCancelled (nothing was
             // ever created, updated or deleted anywhere: the whole point of a cancellation is that no
-            // operation reached the target system) and anything unmapped all fall through here: null rather
-            // than a guess. PendingExportCreated never reaches this switch; it is handled above.
+            // operation reached the target system), PendingExportChangesWithdrawn (likewise: what it withdrew is
+            // exactly what will not reach the target system) and anything unmapped all fall through here: null
+            // rather than a guess. PendingExportCreated never reaches this switch; it is handled above.
             _ => null
         };
     }

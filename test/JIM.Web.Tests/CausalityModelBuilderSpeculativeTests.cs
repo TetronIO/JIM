@@ -205,6 +205,93 @@ public class CausalityModelBuilderSpeculativeTests
         Assert.That(node.AttributeRows[0].Value, Is.EqualTo("liam.allen@example.com"));
     }
 
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)]
+    public void BuildSpeculative_OutboundNodeCarryingItsSystemId_DoesNotShowTheIdAsADetailMessage(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        // An outbound preview node carries its target Connected System's id in DetailMessage, which names the system;
+        // it is not display text, so it must not surface on the event as a stray "2".
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode { OutcomeType = outcomeType, TargetEntityDescription = "Glitterband EMEA", DetailMessage = "2" }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.Roots[0].DetailMessage, Is.Null);
+            Assert.That(model.Roots[0].SystemId, Is.EqualTo(2), "the id still names the system");
+        }
+    }
+
+    [Test]
+    public void BuildSpeculative_WithdrawalBesideAStagedExport_ShowsTheWithdrawnChangesNotTheStagedOnes()
+    {
+        // One rule's entry carries both what it would stage and what it would withdraw (#2001); each node shows its own.
+        var title = new ConnectedSystemObjectTypeAttribute { Id = 7, Name = "title", Type = AttributeDataType.Text };
+        var displayName = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "displayName", Type = AttributeDataType.Text };
+        var preview = new SyncPreviewResult
+        {
+            OutboundDecisions = new OutboundPreviewResult
+            {
+                Entries =
+                [
+                    new OutboundPreviewEntry
+                    {
+                        Kind = OutboundPreviewEntryKind.Staging,
+                        SyncRuleId = 42,
+                        SyncRuleName = "Export to Glitterband",
+                        ConnectedSystemId = 2,
+                        EffectiveChangeType = PendingExportChangeType.Update,
+                        AttributeChanges =
+                        [
+                            new PendingExportAttributeValueChange
+                            {
+                                Attribute = title, AttributeId = title.Id, StringValue = "Director", ChangeType = PendingExportAttributeChangeType.Update
+                            }
+                        ],
+                        WithdrawnChanges =
+                        [
+                            new PendingExportAttributeValueChange
+                            {
+                                Attribute = displayName, AttributeId = displayName.Id, StringValue = "Alicia", ChangeType = PendingExportAttributeChangeType.Update
+                            }
+                        ]
+                    }
+                ]
+            },
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncRuleId = 42, SyncRuleName = "Export to Glitterband", DetailMessage = "2", DetailCount = 1,
+                    StagedChangeType = PendingExportChangeType.Update, Ordinal = 0
+                },
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+                    SyncRuleId = 42, SyncRuleName = "Export to Glitterband", DetailMessage = "2", DetailCount = 1, Ordinal = 1
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(model.Roots[0].AttributeRows.Select(r => (r.Name, r.Value)), Is.EqualTo(new[] { ("title", (string?)"Director") }));
+            Assert.That(model.Roots[1].AttributeRows.Select(r => (r.Name, r.Value)), Is.EqualTo(new[] { ("displayName", (string?)"Alicia") }),
+                "the withdrawal shows what would be withdrawn");
+        }
+    }
+
     /// <summary>
     /// A queued-export child node carries no Synchronisation Rule of its own (the engine attributes the
     /// rule to the Provisioned parent), so its effective pair must fall back to the parent's, mirroring

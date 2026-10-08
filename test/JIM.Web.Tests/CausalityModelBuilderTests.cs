@@ -139,6 +139,8 @@ public class CausalityModelBuilderTests
             // The Full Synchronisation preview's (#1530): never in a recorded tree, so they take the default lane.
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = CausalityLane.Identity,
+            // Changes withdrawn from a target system's Pending Export because it already holds the values (#2001).
+            [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = CausalityLane.Downstream,
 
             // Unique Value Generation (#242): Assigned, Retired (and the retired Adopted outcome) happen on the
             // Metaverse Object's attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the

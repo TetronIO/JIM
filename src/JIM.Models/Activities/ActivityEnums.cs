@@ -423,7 +423,17 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// ambiguous match <see cref="WouldMatchAmbiguously"/>). The run records the error and applies nothing to the
     /// object; the delta carries the error's detail as its new value.
     /// </summary>
-    WouldFail
+    WouldFail,
+
+    /// <summary>
+    /// Changes queued on an object's Pending Export in a target Connected System were withdrawn, because export
+    /// evaluation found the target already holds the values the Metaverse now wants (#2001): a queued "set ANALYST"
+    /// when the Metaverse has returned to the "Analyst" the target holds. Recorded on the item of the object whose
+    /// Attribute Flow made them unnecessary, where its Pending Export outcomes go, with the withdrawn changes as its
+    /// attribute rows; the Sync Preview and the Full Synchronisation preview report the same. Like
+    /// <see cref="ProvisioningCancelled"/> it queues nothing, so it is not counted as a Pending Export.
+    /// </summary>
+    PendingExportChangesWithdrawn
 }
 
 /// <summary>

@@ -298,28 +298,48 @@ public partial class SyncEngine
     /// cn=alice again. It is the same supersede rule <see cref="MergeAttributeChangesIntoPendingExport"/> applies to
     /// a newly evaluated change (merge keys, and #1199's whole-attribute rule), applied when the evaluation's answer
     /// for the attribute is "no change". A change already sent and awaiting its confirming import is kept: it is
-    /// the confirmation of what the target now holds. Mutates in place; returns how many staged changes were
-    /// withdrawn.
+    /// the confirmation of what the target now holds. Mutates in place; returns the staged changes withdrawn.
     /// </summary>
-    public int WithdrawChangesAlreadyCurrent(
+    public List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
         IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges)
     {
         ArgumentNullException.ThrowIfNull(stagedPendingExport);
         ArgumentNullException.ThrowIfNull(alreadyCurrentChanges);
 
-        if (alreadyCurrentChanges.Count == 0 || stagedPendingExport.AttributeValueChanges.Count == 0)
-            return 0;
-
-        var survivors = SelectSurvivingDriftChanges([], stagedPendingExport.AttributeValueChanges, alreadyCurrentChanges);
-        if (survivors.Count == stagedPendingExport.AttributeValueChanges.Count)
-            return 0;
-
-        var withdrawn = stagedPendingExport.AttributeValueChanges.Except(survivors).ToList();
+        var withdrawn = SelectChangesWithdrawnAsAlreadyCurrent([], stagedPendingExport.AttributeValueChanges, alreadyCurrentChanges);
         foreach (var change in withdrawn)
             stagedPendingExport.AttributeValueChanges.Remove(change);
 
-        return withdrawn.Count;
+        return withdrawn;
+    }
+
+    /// <summary>
+    /// The queued changes an export evaluation withdraws because the target already holds what the Metaverse now
+    /// wants (#2001): the changes on <paramref name="existingChanges"/> that would survive a merge with
+    /// <paramref name="incomingChanges"/> but not the evaluation's <paramref name="alreadyCurrentChanges"/>. A queued
+    /// change the evaluation's own new change supersedes is replaced, not withdrawn, so it is not among them; neither
+    /// is one already sent and awaiting confirmation. The same rules as <see cref="SelectSurvivingDriftChanges"/>,
+    /// which is what the run applies, so the run and the previews agree on what is withdrawn.
+    /// </summary>
+    /// <param name="incomingChanges">The changes the evaluation stages.</param>
+    /// <param name="existingChanges">The changes already queued on the object's Pending Export.</param>
+    /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <returns>The withdrawn changes, in their original order.</returns>
+    internal static List<PendingExportAttributeValueChange> SelectChangesWithdrawnAsAlreadyCurrent(
+        IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
+        IReadOnlyCollection<PendingExportAttributeValueChange> existingChanges,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges)
+    {
+        ArgumentNullException.ThrowIfNull(incomingChanges);
+        ArgumentNullException.ThrowIfNull(existingChanges);
+        ArgumentNullException.ThrowIfNull(alreadyCurrentChanges);
+
+        if (alreadyCurrentChanges.Count == 0 || existingChanges.Count == 0)
+            return [];
+
+        var survivors = SelectSurvivingDriftChanges(incomingChanges, existingChanges, alreadyCurrentChanges).ToHashSet();
+        return [.. SelectSurvivingDriftChanges(incomingChanges, existingChanges).Where(change => !survivors.Contains(change))];
     }
 
     /// <summary>
