@@ -238,14 +238,16 @@
         : driftCount == 1
             ? "Run a Full Synchronisation for it to take effect."
             : "Run a Full Synchronisation for them to take effect.";
-    <MudAlert Severity="@(driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning)"
+    var driftDestructive = driftClass == ConfigurationChangeClass.Destructive;
+    <MudAlert Severity="@(driftDestructive ? Severity.Error : Severity.Warning)"
               Class="mt-2 mb-6" data-testid="jim-configuration-drift-notice">
         <span>@driftLead @driftGuidance</span>
         @* Reviewing the changes reads what was configured; previewing reads what the run would then do (#1530). *@
         <div class="d-flex align-center flex-wrap gap-2 mt-2">
             @if (HasFullSynchronisationRunProfile)
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                @* Filled in the notice's own severity colour, so the action reads as part of the message it answers. *@
+                <MudButton Variant="Variant.Filled" Color="@(driftDestructive ? Color.Error : Color.Warning)" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
                            data-testid="jim-drift-preview-full-synchronisation">
                     Preview Full Synchronisation
@@ -267,7 +269,7 @@ else if (_drift is { NeverFullySynchronised: true })
         @if (HasFullSynchronisationRunProfile)
         {
             <div class="mt-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                <MudButton Variant="Variant.Filled" Color="Color.Info" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
                     Preview Full Synchronisation
                 </MudButton>
