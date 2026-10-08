@@ -18,6 +18,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// unique across an Active Directory forest (userPrincipalName above all) is searched through a Global Catalog when
 /// the forest has more than one domain, or when the administrator names one; otherwise, or when the Global Catalog
 /// cannot be searched, the Connected System's own partition is searched and the answer says what it could not reach.
+/// In Active Directory a probe of mail also searches proxyAddresses, where an address used as an alias is kept.
 /// </summary>
 [TestFixture]
 public class LdapConnectorUniquenessProbeGlobalCatalogTests
@@ -352,6 +353,92 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
         }
     }
 
+    // ---- Email addresses and proxyAddresses ----
+
+    /// <summary>
+    /// In Active Directory an address is in use if any mailbox, group or contact routes mail for it, and Exchange keeps
+    /// those addresses in proxyAddresses (<c>SMTP:</c> for the primary, <c>smtp:</c> for the rest), not only in mail.
+    /// A secondary alias on someone else's mailbox is invisible to a search of mail alone.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_MailInActiveDirectory_FindsAnAddressHeldAsAnotherMailboxsAliasAsync()
+    {
+        var directory = new FakeDomainController(domainCount: 1, isGlobalCatalog: true)
+            .Holding(Root, "asmith@corp.local")
+            .HoldingProxyAddresses(Root, "SMTP:joe.b@corp.local", "smtp:jbloggs@corp.local");
+        var globalCatalog = new FakeGlobalCatalog();
+
+        var result = await Probe(directory, globalCatalog).ProbeAsync(Request(["jbloggs@corp.local", "jbloggs2@corp.local"], "asmith@corp.local", "mail"), [Root], CancellationToken.None);
+
+        var search = directory.Requests.Single(r => r.DistinguishedName == Root);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found, UniquenessProbeOutcome.NotFound }));
+            Assert.That(search.Filter, Is.EqualTo("(|(mail=jbloggs@corp.local)(proxyAddresses=smtp:jbloggs@corp.local)(mail=jbloggs2@corp.local)(proxyAddresses=smtp:jbloggs2@corp.local)(mail=asmith@corp.local)(proxyAddresses=smtp:asmith@corp.local))"));
+            Assert.That(search.Attributes, Is.EqualTo(new[] { "mail", "proxyAddresses" }));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAsync_MailInActiveDirectory_FindsAnAddressHeldAsAPrimarySmtpAddressAsync()
+    {
+        var directory = new FakeDomainController(domainCount: 1, isGlobalCatalog: true)
+            .Holding(Root, "asmith@corp.local")
+            .HoldingProxyAddresses(Root, "SMTP:jbloggs@corp.local");
+
+        var result = await Probe(directory, new FakeGlobalCatalog()).ProbeAsync(Request(["jbloggs@corp.local"], "asmith@corp.local", "mail"), [Root], CancellationToken.None);
+
+        Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found }));
+    }
+
+    /// <summary>
+    /// proxyAddresses also holds addresses that are not email addresses (<c>SIP:</c>, <c>X500:</c>); one of those
+    /// matching a candidate's text does not make the email address taken.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_MailInActiveDirectory_IgnoresProxyAddressesThatAreNotEmailAddressesAsync()
+    {
+        var directory = new FakeDomainController(domainCount: 1, isGlobalCatalog: true)
+            .Holding(Root, "asmith@corp.local")
+            .HoldingProxyAddresses(Root, "SMTP:alias@corp.local", "sip:jbloggs@corp.local");
+
+        var result = await Probe(directory, new FakeGlobalCatalog()).ProbeAsync(Request(["jbloggs@corp.local", "alias@corp.local"], "asmith@corp.local", "mail"), [Root], CancellationToken.None);
+
+        Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.NotFound, UniquenessProbeOutcome.Found }));
+    }
+
+    [Test]
+    public async Task ProbeAsync_MailOutsideActiveDirectory_SearchesMailAloneAsync()
+    {
+        var directory = new FakeDomainController(domainCount: 1, isGlobalCatalog: false, activeDirectory: false).Holding(Root, "asmith@corp.local");
+
+        await Probe(directory, new FakeGlobalCatalog()).ProbeAsync(Request(["jbloggs@corp.local"], "asmith@corp.local", "mail"), [Root], CancellationToken.None);
+
+        var search = directory.Requests.Single(r => r.DistinguishedName == Root);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(search.Filter, Is.EqualTo("(|(mail=jbloggs@corp.local)(mail=asmith@corp.local))"));
+            Assert.That(search.Attributes, Is.EqualTo(new[] { "mail" }));
+        }
+    }
+
+    [Test]
+    public async Task ProbeAsync_MailThroughTheGlobalCatalog_FindsAnAliasInAnotherDomainAsync()
+    {
+        var directory = new FakeDomainController(domainCount: 2, isGlobalCatalog: true).Holding(Root, "asmith@corp.local");
+        var globalCatalog = new FakeGlobalCatalog()
+            .Holding("asmith@corp.local")
+            .HoldingProxyAddresses("SMTP:joe.b@emea.corp.local", "smtp:jbloggs@corp.local");
+
+        var result = await Probe(directory, globalCatalog).ProbeAsync(Request(["jbloggs@corp.local"], "asmith@corp.local", "mail"), [Root], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found }));
+            Assert.That(globalCatalog.Requests.Single().Attributes, Is.EqualTo(new[] { "mail", "proxyAddresses" }));
+        }
+    }
+
     // ---- Cost ----
 
     [Test]
@@ -409,6 +496,7 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
         private readonly bool _activeDirectory;
         private readonly bool _inPartialAttributeSet;
         private readonly Dictionary<string, List<string>> _held = [];
+        private readonly Dictionary<string, List<string[]>> _proxyEntries = [];
 
         public FakeDomainController(int domainCount, bool isGlobalCatalog, bool activeDirectory = true, bool inPartialAttributeSet = true)
         {
@@ -432,6 +520,17 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
         public FakeDomainController Holding(string partition, params string[] values)
         {
             _held[partition] = [.. values];
+            return this;
+        }
+
+        /// <summary>
+        /// Adds one entry under <paramref name="partition"/> whose proxyAddresses holds <paramref name="proxyAddresses"/>.
+        /// </summary>
+        public FakeDomainController HoldingProxyAddresses(string partition, params string[] proxyAddresses)
+        {
+            if (!_proxyEntries.TryGetValue(partition, out var entries))
+                _proxyEntries[partition] = entries = [];
+            entries.Add(proxyAddresses);
             return this;
         }
 
@@ -460,9 +559,11 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
 
             var attribute = request.Attributes[0]!;
             var values = _held.TryGetValue(request.DistinguishedName, out var held) ? held : [];
+            var proxyEntries = _proxyEntries.TryGetValue(request.DistinguishedName, out var proxies) ? proxies : [];
             return LdapTestResponses.SearchResponseWithEntries(values
                 .Where(v => request.Filter.ToString()!.Contains($"({attribute}={v})", StringComparison.OrdinalIgnoreCase))
                 .Select(v => LdapTestResponses.Entry($"CN={v},{request.DistinguishedName}", (attribute, v)))
+                .Concat(MatchingProxyEntries(request, proxyEntries, request.DistinguishedName))
                 .ToArray());
         }
 
@@ -484,6 +585,7 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
     private sealed class FakeGlobalCatalog
     {
         private readonly List<string> _held = [];
+        private readonly List<string[]> _proxyEntries = [];
 
         public Exception? OpenThrows { get; init; }
 
@@ -498,6 +600,15 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
         public FakeGlobalCatalog Holding(params string[] values)
         {
             _held.AddRange(values);
+            return this;
+        }
+
+        /// <summary>
+        /// Adds one entry, in another domain, whose proxyAddresses holds <paramref name="proxyAddresses"/>.
+        /// </summary>
+        public FakeGlobalCatalog HoldingProxyAddresses(params string[] proxyAddresses)
+        {
+            _proxyEntries.Add(proxyAddresses);
             return this;
         }
 
@@ -524,7 +635,18 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
             return LdapTestResponses.SearchResponseWithEntries(_held
                 .Where(v => request.Filter.ToString()!.Contains($"({attribute}={v})", StringComparison.OrdinalIgnoreCase))
                 .Select(v => LdapTestResponses.Entry($"CN={v},DC=elsewhere,DC=local", (attribute, v)))
+                .Concat(MatchingProxyEntries(request, _proxyEntries, "DC=elsewhere,DC=local"))
                 .ToArray());
         }
     }
+
+    /// <summary>
+    /// The entries whose proxyAddresses the filter asks for, each returned with all of its proxy addresses, as a
+    /// directory returns them. Matching ignores case, as Active Directory's does for this attribute, so a filter for
+    /// <c>smtp:x</c> finds a primary <c>SMTP:x</c>.
+    /// </summary>
+    private static IEnumerable<SearchResultEntry> MatchingProxyEntries(SearchRequest request, List<string[]> entries, string container) =>
+        entries
+            .Where(e => e.Any(v => request.Filter.ToString()!.Contains($"(proxyAddresses={v})", StringComparison.OrdinalIgnoreCase)))
+            .Select((e, n) => LdapTestResponses.EntryWithValues($"CN=Mailbox {n},{container}", ("proxyAddresses", e)));
 }

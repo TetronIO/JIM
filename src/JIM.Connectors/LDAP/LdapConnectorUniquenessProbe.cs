@@ -27,6 +27,11 @@ namespace JIM.Connectors.LDAP;
 /// the partition is searched as before and the result carries a caveat saying what it could not reach, so the run
 /// says so rather than presenting a domain's answer as the forest's.
 /// </para>
+/// <para>
+/// In Active Directory and Samba AD a probe of <c>mail</c> also searches <c>proxyAddresses</c> for the same addresses
+/// with the <c>smtp:</c> prefix, because an address held as another object's alias is in use too, and is invisible to a
+/// search of mail alone.
+/// </para>
 /// </summary>
 internal sealed partial class LdapConnectorUniquenessProbe
 {
@@ -42,6 +47,14 @@ internal sealed partial class LdapConnectorUniquenessProbe
     /// Configuration, Schema and application partitions, which a forest has however many domains it holds.
     /// </summary>
     private const int CrossRefDomainFlag = 0x2;
+
+    /// <summary>
+    /// Where Active Directory, with Exchange, keeps every address an object receives mail at: <c>SMTP:</c> marks the
+    /// primary address and <c>smtp:</c> the rest, beside other kinds such as <c>SIP:</c> and <c>X500:</c>.
+    /// </summary>
+    private const string ProxyAddressesAttribute = "proxyAddresses";
+
+    private const string SmtpProxyAddressPrefix = "smtp:";
 
     /// <summary>
     /// Naming attributes whose values are unique only within their container, plus the Distinguished Name itself.
@@ -137,14 +150,31 @@ internal sealed partial class LdapConnectorUniquenessProbe
     /// <summary>
     /// The OR filter for one batch: an equality assertion per value, every value escaped per RFC 4515.
     /// </summary>
-    internal static string BuildFilter(string attributeName, IEnumerable<string> values)
+    internal static string BuildFilter(string attributeName, IEnumerable<string> values) => BuildFilter(attributeName, values, includeProxyAddresses: false);
+
+    /// <summary>
+    /// The OR filter for one batch, with a <c>proxyAddresses</c> assertion beside each value's when
+    /// <paramref name="includeProxyAddresses"/> (see <see cref="IsEmailAttribute"/>). The directory compares that
+    /// attribute without regard to case, so <c>smtp:</c> also finds a primary <c>SMTP:</c> address.
+    /// </summary>
+    internal static string BuildFilter(string attributeName, IEnumerable<string> values, bool includeProxyAddresses)
     {
         var filter = new StringBuilder("(|");
-        foreach (var value in values)
-            filter.Append('(').Append(attributeName).Append('=').Append(LdapConnectorUtilities.EscapeLdapFilterValue(value)).Append(')');
+        foreach (var escaped in values.Select(LdapConnectorUtilities.EscapeLdapFilterValue))
+        {
+            filter.Append('(').Append(attributeName).Append('=').Append(escaped).Append(')');
+            if (includeProxyAddresses)
+                filter.Append('(').Append(ProxyAddressesAttribute).Append('=').Append(SmtpProxyAddressPrefix).Append(escaped).Append(')');
+        }
 
         return filter.Append(')').ToString();
     }
+
+    /// <summary>
+    /// Whether <paramref name="attributeName"/> holds an email address, which in Active Directory may also be held in any
+    /// object's <c>proxyAddresses</c>.
+    /// </summary>
+    internal static bool IsEmailAttribute(string attributeName) => string.Equals(attributeName, "mail", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Searches for the batch, and reports an outcome per candidate: through the Global Catalog for a forest-wide
@@ -166,7 +196,14 @@ internal sealed partial class LdapConnectorUniquenessProbe
             return Task.FromResult(UniquenessProbeResult.Failed(request.Candidates.Count,
                 "No partition is selected, so there is nowhere to probe"));
 
-        var filter = BuildFilter(request.AttributeName, request.ControlValue == null ? request.Candidates : request.Candidates.Append(request.ControlValue));
+        // An email address is in use in Active Directory whether an object holds it as mail or as one of its
+        // proxyAddresses, so both are searched; outside Active Directory, mail is an ordinary attribute.
+        var includeProxyAddresses = IsEmailAttribute(request.AttributeName)
+            && (_forest ??= ReadForestLayout(ForestTimeout(request.Timeout))).IsActiveDirectory;
+        var search = new ProbeSearch(
+            BuildFilter(request.AttributeName, request.ControlValue == null ? request.Candidates : request.Candidates.Append(request.ControlValue), includeProxyAddresses),
+            includeProxyAddresses ? [request.AttributeName, ProxyAddressesAttribute] : [request.AttributeName],
+            includeProxyAddresses);
 
         string? caveat = null;
         if (_globalCatalogOptions != null && IsForestWideAttribute(request.AttributeName))
@@ -176,7 +213,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
 
             if (route.GlobalCatalog != null)
             {
-                var forestResult = SearchGlobalCatalog(route.GlobalCatalog, route.Endpoint!, request, filter, cancellationToken, out caveat);
+                var forestResult = SearchGlobalCatalog(route.GlobalCatalog, route.Endpoint!, request, search, cancellationToken, out caveat);
                 if (forestResult != null)
                     return Task.FromResult(forestResult);
             }
@@ -187,14 +224,14 @@ internal sealed partial class LdapConnectorUniquenessProbe
         if (_forest?.DomainCount == 1)
             caveat = null;
 
-        var result = SearchPartitions(request, searchBases, filter, cancellationToken);
+        var result = SearchPartitions(request, searchBases, search, cancellationToken);
         return Task.FromResult(caveat == null ? result : result.WithCaveat(caveat));
     }
 
     /// <summary>
     /// Searches every partition root for the batch (the release 3 probe, unchanged by #1940).
     /// </summary>
-    private UniquenessProbeResult SearchPartitions(UniquenessProbeRequest request, IReadOnlyList<string> searchBases, string filter, CancellationToken cancellationToken)
+    private UniquenessProbeResult SearchPartitions(UniquenessProbeRequest request, IReadOnlyList<string> searchBases, ProbeSearch search, CancellationToken cancellationToken)
     {
         var valuesFound = new List<string>();
 
@@ -205,7 +242,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
             SearchResponse response;
             try
             {
-                response = (SearchResponse)_executor.SendRequest(CreateSearchRequest(searchBase, request, filter, request.Timeout), request.Timeout);
+                response = (SearchResponse)_executor.SendRequest(CreateSearchRequest(searchBase, search, request.Timeout), request.Timeout);
             }
             catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
             {
@@ -234,7 +271,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
                     $"The directory answered the probe of {searchBase} with {response.ResultCode}");
             }
 
-            valuesFound.AddRange(ValuesIn(response, request.AttributeName));
+            valuesFound.AddRange(ValuesIn(response, request.AttributeName, search.IncludesProxyAddresses));
         }
 
         _logger.Debug("LdapConnectorUniquenessProbe: Searched {PartitionCount} partition(s) for {CandidateCount} {Attribute} candidate(s); {ValueCount} value(s) returned.",
@@ -248,7 +285,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
     /// <paramref name="caveat"/> set when the Global Catalog cannot give one and the partitions are to be searched
     /// instead.
     /// </summary>
-    private UniquenessProbeResult? SearchGlobalCatalog(ILdapOperationExecutor globalCatalog, string endpoint, UniquenessProbeRequest request, string filter, CancellationToken cancellationToken, out string? caveat)
+    private UniquenessProbeResult? SearchGlobalCatalog(ILdapOperationExecutor globalCatalog, string endpoint, UniquenessProbeRequest request, ProbeSearch search, CancellationToken cancellationToken, out string? caveat)
     {
         cancellationToken.ThrowIfCancellationRequested();
         caveat = null;
@@ -260,7 +297,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
         SearchResponse response;
         try
         {
-            response = (SearchResponse)globalCatalog.SendRequest(CreateSearchRequest(string.Empty, request, filter, timeout), timeout);
+            response = (SearchResponse)globalCatalog.SendRequest(CreateSearchRequest(string.Empty, search, timeout), timeout);
         }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
         {
@@ -292,7 +329,7 @@ internal sealed partial class LdapConnectorUniquenessProbe
             return null;
         }
 
-        var valuesFound = ValuesIn(response, request.AttributeName).ToList();
+        var valuesFound = ValuesIn(response, request.AttributeName, search.IncludesProxyAddresses).ToList();
         var result = UniquenessProbeResult.FromValuesFound(request, valuesFound);
 
         if (result.Reason != null)
@@ -501,16 +538,30 @@ internal sealed partial class LdapConnectorUniquenessProbe
         return replicated;
     }
 
-    private static SearchRequest CreateSearchRequest(string searchBase, UniquenessProbeRequest request, string filter, TimeSpan timeout) =>
-        new(searchBase, filter, SearchScope.Subtree, request.AttributeName)
+    private static SearchRequest CreateSearchRequest(string searchBase, ProbeSearch search, TimeSpan timeout) =>
+        new(searchBase, search.Filter, SearchScope.Subtree, search.Attributes)
         {
             SizeLimit = SizeLimit,
             TimeLimit = timeout
         };
 
-    private static IEnumerable<string> ValuesIn(SearchResponse response, string attributeName) =>
-        response.Entries.Cast<SearchResultEntry>()
-            .SelectMany(entry => LdapConnectorUtilities.GetEntryAttributeStringValues(entry, attributeName) ?? []);
+    /// <summary>
+    /// The values a search returned for the probed attribute and, where it was searched, the email addresses among the
+    /// returned <c>proxyAddresses</c> without their <c>smtp:</c> prefix. Other kinds of proxy address are not email
+    /// addresses, and are left out.
+    /// </summary>
+    private static IEnumerable<string> ValuesIn(SearchResponse response, string attributeName, bool includeProxyAddresses) =>
+        response.Entries.Cast<SearchResultEntry>().SelectMany(entry =>
+        {
+            var values = LdapConnectorUtilities.GetEntryAttributeStringValues(entry, attributeName) ?? [];
+            if (!includeProxyAddresses)
+                return values;
+
+            var addresses = (LdapConnectorUtilities.GetEntryAttributeStringValues(entry, ProxyAddressesAttribute) ?? [])
+                .Where(a => a.StartsWith(SmtpProxyAddressPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a[SmtpProxyAddressPrefix.Length..]);
+            return values.Concat(addresses);
+        });
 
     private static UniquenessProbeResult NotUnique(UniquenessProbeRequest request) =>
         UniquenessProbeResult.Undetermined(request.Candidates.Count,
@@ -540,6 +591,11 @@ internal sealed partial class LdapConnectorUniquenessProbe
 
     [GeneratedRegex(@"^(?:[A-Za-z][A-Za-z0-9-]*|[0-9]+(?:\.[0-9]+)+)$", RegexOptions.CultureInvariant)]
     private static partial Regex AttributeDescriptionPattern();
+
+    /// <summary>
+    /// One batch's search: the filter, the attributes to return, and whether proxyAddresses is among them.
+    /// </summary>
+    private sealed record ProbeSearch(string Filter, string[] Attributes, bool IncludesProxyAddresses);
 
     /// <summary>
     /// What the probe connection showed of the forest (#1940).
