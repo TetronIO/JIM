@@ -38,6 +38,28 @@ public class RepositoryTryConnectTests
         }
     }
 
+    [Test]
+    public async Task TryConnectAsync_HostNameNothingListening_NamesTheAddressTriedAsync()
+    {
+        // A host name stands for whichever address it resolved to on that attempt. Naming the address tells a stale
+        // name (one the server no longer holds) from a reachable address something is refusing (#2009).
+        var port = UnusedLocalPort();
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql($"Host=localhost;Port={port};Database=jim;Username=jim;Password=unused;Timeout=5")
+            .Options;
+        await using var context = new JimDbContext(options);
+        using var repository = new PostgresDataRepository(context);
+
+        var result = await repository.TryConnectAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsConnected, Is.False);
+            Assert.That(result.FailureReason, Does.Match($@"^localhost:{port} \((127\.0\.0\.1|\[::1\])\): "));
+            Assert.That(result.FailureReason, Does.Contain("refused").IgnoreCase);
+        }
+    }
+
     private static int UnusedLocalPort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

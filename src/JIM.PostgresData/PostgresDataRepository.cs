@@ -112,8 +112,28 @@ public class PostgresDataRepository : IRepository
             // Refused, unresolvable, timed out, or "the database system is starting up": all worth retrying. Anything
             // else (rejected credentials, a refused TLS handshake) is not caught, so the service stops with it.
             var server = new NpgsqlConnectionStringBuilder(connectionString);
-            return DatabaseConnectionResult.Failed($"{server.Host}:{server.Port}: {InnermostMessage(ex)}");
+            return DatabaseConnectionResult.Failed($"{DescribeServer(server, ex)}: {InnermostMessage(ex)}");
         }
+    }
+
+    /// <summary>
+    /// The server as configured, followed by the address Npgsql tried when the configured host is a name. A name stands
+    /// for whatever it resolved to on that attempt (Npgsql resolves it afresh for every new connection), so the address
+    /// is what tells a name still pointing at a server that has moved from an address something is refusing (#2009).
+    /// Npgsql gives the address only in its message: "Failed to connect to {endpoint}".
+    /// </summary>
+    private static string DescribeServer(NpgsqlConnectionStringBuilder server, NpgsqlException ex)
+    {
+        const string failedToConnect = "Failed to connect to ";
+        var configured = $"{server.Host}:{server.Port}";
+        if (!ex.Message.StartsWith(failedToConnect, StringComparison.Ordinal))
+            return configured;
+
+        var address = ex.Message[failedToConnect.Length..];
+        var portSuffix = $":{server.Port}";
+        if (address.EndsWith(portSuffix, StringComparison.Ordinal))
+            address = address[..^portSuffix.Length];
+        return address == server.Host ? configured : $"{configured} ({address})";
     }
 
     /// <summary>

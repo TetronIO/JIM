@@ -347,6 +347,105 @@ apparmor_parser() {
     }
 }
 
+Describe 'setup.sh configure_firewall' -Skip:$script:NoBash {
+    It 'opens the port now and for good without reloading firewalld, which would take the network from running containers' {
+        $log = Join-Path $TestDrive 'firewall-cmd.log'
+        $arrange = @"
+JIM_WEB_PORT=443
+JIM_SETUP_OPEN_FIREWALL=true
+id() { if [ "`$1" = "-u" ]; then echo 0; else command id "`$@"; fi; }
+firewall-cmd() {
+    case "`$1" in
+        --state) echo running ;;
+        --query-*) return 1 ;;
+        *) echo "`$*" >> '$log' ;;
+    esac
+}
+"@
+
+        $result = Invoke-SetupFunction 'configure_firewall' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $calls = @(Get-Content $log)
+        $calls | Should -Contain '--add-port=443/tcp'
+        $calls | Should -Contain '--permanent --add-port=443/tcp'
+        $calls | Should -Not -Contain '--reload'
+    }
+}
+
+Describe 'setup.sh keep_network_through_firewall_reload' -Skip:$script:NoBash {
+    BeforeAll {
+        # A host where firewalld is installed unless -NoFirewalld, running unless -FirewalldStopped, and Podman ships
+        # netavark-firewalld-reload.service unless -NoReloadUnit; systemctl records what it is asked to change.
+        function New-FirewalldHost {
+            param([switch]$NoFirewalld, [switch]$FirewalldStopped, [switch]$NoReloadUnit, [string]$Account = '')
+            $log = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).log"
+            $firewallCmd = if ($NoFirewalld) { '' } else {
+                "firewall-cmd() { [ `"`$1`" = --state ] && echo $(if ($FirewalldStopped) { 'not running' } else { 'running' }); }"
+            }
+            $unitExists = if ($NoReloadUnit) { 'return 1' } else { 'return 0' }
+            $arrange = @"
+PODMAN_ACCOUNT='$Account'
+id() { if [ "`$1" = "-u" ]; then echo 0; else command id "`$@"; fi; }
+$firewallCmd
+systemctl() {
+    case "`$1" in
+        cat) $unitExists ;;
+        *) echo "`$*" >> '$log' ;;
+    esac
+}
+"@
+            [pscustomobject]@{ Arrange = $arrange; Log = $log }
+        }
+    }
+
+    It 'enables and starts netavark-firewalld-reload.service on a rootful installation where firewalld runs' {
+        $hostState = New-FirewalldHost
+
+        $result = Invoke-SetupFunction 'keep_network_through_firewall_reload' $hostState.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        @(Get-Content $hostState.Log) | Should -Be @('enable --now netavark-firewalld-reload.service')
+    }
+
+    It 'enables it without starting it where firewalld is installed but stopped, so that it starts with firewalld' {
+        $hostState = New-FirewalldHost -FirewalldStopped
+
+        $result = Invoke-SetupFunction 'keep_network_through_firewall_reload' $hostState.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        @(Get-Content $hostState.Log) | Should -Be @('enable netavark-firewalld-reload.service')
+    }
+
+    It 'changes nothing for a rootless installation, whose network a firewalld reload does not touch' {
+        $hostState = New-FirewalldHost -Account 'jim'
+
+        $result = Invoke-SetupFunction 'keep_network_through_firewall_reload' $hostState.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $hostState.Log | Should -Not -Exist
+    }
+
+    It 'changes nothing on a host without firewalld' {
+        $hostState = New-FirewalldHost -NoFirewalld
+
+        $result = Invoke-SetupFunction 'keep_network_through_firewall_reload' $hostState.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $hostState.Log | Should -Not -Exist
+    }
+
+    It 'warns, naming the remedy, where Podman does not ship the service' {
+        $hostState = New-FirewalldHost -NoReloadUnit
+
+        $result = Invoke-SetupFunction 'keep_network_through_firewall_reload' $hostState.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*restart JIM*'
+        $hostState.Log | Should -Not -Exist
+    }
+}
+
 Describe 'setup.sh size_database' -Skip:$script:NoBash {
     BeforeAll {
         $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path

@@ -48,6 +48,7 @@ public class LdapAccesslogDeltaSourceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090000.000001Z"));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True, "the watermark is a logged entry's reqStart, so the next Delta Import can read it back");
             executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r) && ((SearchRequest)r).SizeLimit == 1), Timeout), Times.Once,
                 "the sort asks for the single latest entry rather than the whole log");
             executor.VerifyNoOtherCalls();
@@ -93,6 +94,7 @@ public class LdapAccesslogDeltaSourceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090200.000003Z"));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True, "found by walking the size limit, it is still a logged entry's reqStart");
             executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearch(r)), Timeout), Times.Exactly(3), "the sort attempt, the capped first batch and the narrowed second");
         }
     }
@@ -114,6 +116,7 @@ public class LdapAccesslogDeltaSourceTests
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Does.Match(@"^\d{14}\.\d{6}Z$"), "a generalised-time watermark so the next Delta Import has a baseline");
             Assert.That(ParseGeneralisedTime(rootDse.LastAccesslogTimestamp!), Is.InRange(before, DateTime.UtcNow.AddSeconds(1)));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.False, "a generated timestamp names no entry, so there is nothing to read back");
             Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Information && e.MessageTemplate.Text.Contains("empty")), Is.True,
                 "an empty accesslog is ordinary and is said so at Information, not as a warning");
         }
@@ -127,7 +130,7 @@ public class LdapAccesslogDeltaSourceTests
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
             .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights"));
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark, LastAccesslogTimestampIsLogged = true };
         var log = new CapturingSink();
 
         await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
@@ -135,6 +138,7 @@ public class LdapAccesslogDeltaSourceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Is.Null, "no baseline, so the next Delta Import performs a Full Import and says why");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.Null, "with no watermark there is no entry to say anything about");
             Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("cn=accesslog") && e.RenderMessage().Contains("insufficient access rights")), Is.True);
         }
     }
@@ -190,15 +194,118 @@ public class LdapAccesslogDeltaSourceTests
 
     #region Continuity, readiness and baseline
 
-    [Test]
-    public void VerifyContinuity_Always_DoesNothing()
+    [TestCase(null, Description = "a record from before JIM kept whether the watermark names a logged entry")]
+    [TestCase(false, Description = "a timestamp generated because the accesslog was empty, which names no entry")]
+    public void VerifyContinuity_WatermarkNotKnownToNameALoggedEntry_ReadsNothing(bool? isLogged)
     {
-        var previous = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, DnsHostName = "ldap-a.corp.local", LastAccesslogTimestamp = Watermark };
-        var current = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, DnsHostName = "ldap-b.corp.local", LastAccesslogTimestamp = "20260921070000.000000Z" };
+        var executor = new Mock<ILdapOperationExecutor>();
+        var previous = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark, LastAccesslogTimestampIsLogged = isLogged };
 
-        Assert.DoesNotThrow(() => Source(new Mock<ILdapOperationExecutor>()).VerifyContinuity(previous, current),
-            "a timestamp carries no server identity to verify, so nothing can invalidate it here");
+        Assert.That(() => Source(executor).VerifyContinuity(previous, new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }), Throws.Nothing);
+        executor.VerifyNoOtherCalls();
     }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryStillLogged_ReadsItByItsOwnNameAndPasses()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        SearchRequest? sent = null;
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, WatermarkEntryDn))))
+            .Callback<DirectoryRequest>(r => sent = (SearchRequest)r)
+            .Returns(LdapTestResponses.SearchResponseWith(WatermarkEntryDn));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }), Throws.Nothing);
+        Assert.That(sent!.Attributes.Cast<string>(), Is.EqualTo(new[] { "1.1" }), "existence is all that is asked");
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryPurged_ThrowsNamingTheWatermarkThePurgeTheRestoreAndTheRemedy()
+    {
+        // slapo-accesslog purged the entry the last import ended at (olcAccessLogPurge), or the directory was
+        // restored to before it; either way the changes after it may be gone too (#2008).
+        var executor = ExecutorWhereTheWatermarkEntryIsMissingButTheAccesslogIsThere(
+            new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() =>
+            Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain(Watermark), "the change the last import ended at");
+            Assert.That(ex.Message, Does.Contain("olcAccessLogPurge"), "the usual cause, by the setting that controls it");
+            Assert.That(ex.Message, Does.Contain("restored from a backup or snapshot"), "the other cause");
+            Assert.That(ex.Message, Does.Contain("silently miss"), "why the run must not carry on");
+            Assert.That(ex.Message, Does.Contain("Run a Full Import"), "what to do");
+        }
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryMissingAsLdapException32_Throws()
+    {
+        var executor = ExecutorWhereTheWatermarkEntryIsMissingButTheAccesslogIsThere(new LdapException(32, "No Such Object"));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }),
+            Throws.TypeOf<CannotPerformDeltaImportException>());
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryReadAnswersNoEntry_Throws()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, WatermarkEntryDn)))).Returns(LdapTestResponses.EmptySearchResponse());
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, "cn=accesslog")))).Returns(LdapTestResponses.SearchResponseWith("cn=accesslog"));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }),
+            Throws.TypeOf<CannotPerformDeltaImportException>());
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryMissingBecauseTheAccesslogIsGone_LeavesItToTheReadinessCheck()
+    {
+        // With cn=accesslog itself missing the watermark's entry is bound to be too; the readiness check that runs
+        // next names the real problem (the overlay, or the account's access) rather than a purge.
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>()))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }), Throws.Nothing);
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkEntryReadRefused_LeavesItToTheReadinessCheck()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, WatermarkEntryDn))))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access"));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }), Throws.Nothing);
+    }
+
+    [Test]
+    public void VerifyContinuity_ConnectionFailure_Propagates()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>())).Throws(new LdapException(81, "Server down"));
+
+        Assert.That(() => Source(executor).VerifyContinuity(LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }),
+            Throws.TypeOf<LdapException>(), "a failed connection is an error, not evidence about the accesslog");
+    }
+
+    private const string WatermarkEntryDn = $"reqStart={Watermark},cn=accesslog";
+
+    private static LdapConnectorRootDse LoggedWatermark() =>
+        new() { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark, LastAccesslogTimestampIsLogged = true };
+
+    private static Mock<ILdapOperationExecutor> ExecutorWhereTheWatermarkEntryIsMissingButTheAccesslogIsThere(Exception missing)
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, WatermarkEntryDn)))).Throws(missing);
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseReadOf(r, "cn=accesslog")))).Returns(LdapTestResponses.SearchResponseWith("cn=accesslog"));
+        return executor;
+    }
+
+    private static bool IsBaseReadOf(DirectoryRequest request, string distinguishedName) =>
+        request is SearchRequest { Scope: SearchScope.Base } search && string.Equals(search.DistinguishedName, distinguishedName, StringComparison.OrdinalIgnoreCase);
 
     [Test]
     public async Task VerifyReadinessAsync_AccesslogEntryReadable_ReportsAvailableAsync()
