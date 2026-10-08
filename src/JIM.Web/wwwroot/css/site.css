@@ -4056,10 +4056,10 @@ html[lang] .jim-kv-table td:first-child {
    "Alert text" near the top of this file), so the button reads as part of the message it sits in and keeps the
    contrast ThemeContrastTests measures for that text in every theme.
 
-   Scoped to buttons that asked to inherit their colour. A button that names its own Color has made a deliberate
-   choice and keeps it, which is what the filled Primary/Warning/Info buttons already sitting inside alerts rely
-   on. Filled alerts need no rule: an inheriting button already takes their text colour. The alert's own severity
-   icon is left alone.
+   Scoped to buttons that inherit their colour: an <AlertButton Secondary="true">, the text button for a lesser
+   action beside an alert's main one. The main action is a filled AlertButton in the alert's severity colour and
+   needs no rule here. Filled alerts need no rule either: an inheriting button already takes their text colour.
+   The alert's own severity icon is left alone.
 
    Written against the alert rather than any one component, so every button placed in one from here on picks the
    behaviour up without anybody having to remember it. */

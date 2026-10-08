@@ -14,7 +14,8 @@
 @foreach (var decision in Decisions)
 {
     var waiting = GeneratedValueDecisionDisplay.OffersActions(decision);
-    <MudAlert @key="decision.AssignmentId" Severity="@(waiting ? Severity.Warning : Severity.Info)" Class="@Class" data-testid="generated-value-banner">
+    var severity = waiting ? Severity.Warning : Severity.Info;
+    <MudAlert @key="decision.AssignmentId" Severity="@severity" Class="@Class" data-testid="generated-value-banner">
         <MudText Typo="Typo.subtitle2">
             @decision.AttributeName @(waiting ? "needs a decision" : "will be renamed at the next export")
             <code class="jim-code-inline ml-1">@decision.Value</code>
@@ -25,14 +26,14 @@
         @if (waiting)
         {
             <MudStack Row="true" Spacing="2" Class="mt-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="Busy"
+                <AlertButton Severity="@severity" Size="Size.Small" Disabled="Busy"
                            OnClick="@(() => OnAllowRename.InvokeAsync(decision))" data-testid="generated-value-allow-rename">
                     Allow the rename…
-                </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Size="Size.Small" Disabled="Busy"
+                </AlertButton>
+                <AlertButton Severity="@severity" Secondary="true" Size="Size.Small" Disabled="Busy"
                            OnClick="@(() => OnTryAgain.InvokeAsync(decision))" data-testid="generated-value-try-again">
                     Try again
-                </MudButton>
+                </AlertButton>
             </MudStack>
         }
     </MudAlert>

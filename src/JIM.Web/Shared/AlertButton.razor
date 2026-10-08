@@ -1,0 +1,104 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A button inside an alert: filled in the colour of the alert's severity, so the action reads as part of the message
+   it answers; or, marked Secondary, a text button that inherits that colour, for a lesser action beside it. The colour
+   is a function of the severity rather than a choice at each call site, which is the whole point: before this, alert
+   buttons were filled Primary, filled in their alert's colour, outlined or plain text, depending on who wrote the page.
+   Unmatched attributes (data-testid and the like) are passed first, so nothing a call site adds can override the
+   variant or colour. AlertButtonConventionTests holds every alert in JIM.Web to it. *@
+<MudButton @attributes="AdditionalAttributes"
+           Variant="@(Secondary ? Variant.Text : Variant.Filled)"
+           Color="@(Secondary ? Color.Inherit : ColourFor(Severity))"
+           DropShadow="false"
+           Size="@Size"
+           StartIcon="@StartIcon"
+           EndIcon="@EndIcon"
+           Disabled="@Disabled"
+           Href="@Href"
+           Class="@Class"
+           OnClick="@OnClick">
+    @ChildContent
+</MudButton>
+
+@code {
+    /// <summary>
+    /// The severity of the alert the button sits in. Pass the alert's own value (or the same expression), so the button
+    /// takes its colour.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Severity Severity { get; set; }
+
+    /// <summary>
+    /// A lesser action beside the alert's main one: a text button inheriting the alert's colour rather than a filled one.
+    /// </summary>
+    [Parameter]
+    public bool Secondary { get; set; }
+
+    /// <summary>
+    /// Raised when the button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    /// <summary>
+    /// Makes the button a link to this address.
+    /// </summary>
+    [Parameter]
+    public string? Href { get; set; }
+
+    /// <summary>
+    /// An icon before the label.
+    /// </summary>
+    [Parameter]
+    public string? StartIcon { get; set; }
+
+    /// <summary>
+    /// An icon after the label.
+    /// </summary>
+    [Parameter]
+    public string? EndIcon { get; set; }
+
+    /// <summary>
+    /// Whether the button is disabled.
+    /// </summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>
+    /// The button's size; the standard size unless the alert is dense.
+    /// </summary>
+    [Parameter]
+    public Size Size { get; set; } = Size.Medium;
+
+    /// <summary>
+    /// Classes for the surrounding geometry (margins), never for restyling the button.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// The label.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Any other attribute (a data-testid), passed to the button.
+    /// </summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    /// <summary>
+    /// The filled colour for an alert of the given severity: the severity's own colour, and the default (neutral) colour
+    /// for a Normal alert.
+    /// </summary>
+    public static Color ColourFor(Severity severity) => severity switch
+    {
+        Severity.Info => Color.Info,
+        Severity.Success => Color.Success,
+        Severity.Warning => Color.Warning,
+        Severity.Error => Color.Error,
+        _ => Color.Default
+    };
+}
