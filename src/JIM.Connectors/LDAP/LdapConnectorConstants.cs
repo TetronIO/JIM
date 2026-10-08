@@ -64,6 +64,10 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_LDAPS_PORT = 636;
     internal const int DEFAULT_LDAP_PORT = 389;
 
+    // Active Directory Global Catalog ports (#1940): searched for forest-wide values by the uniqueness probe.
+    internal const int GLOBAL_CATALOG_PORT = 3268;
+    internal const int GLOBAL_CATALOG_SSL_PORT = 3269;
+
     // How long to wait for a connection when the administrator has not said, in seconds.
     internal const int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 10;
 
