@@ -271,7 +271,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_StalePreview_SaysSoAndRecordsNone()
+    public void DeleteConnectedSystemDialog_StalePreview_SaysSoAndRecordsItAsTheOneRead()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
@@ -280,9 +280,11 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         Assert.That(slot.TextContent, Does.Contain("may no longer"));
+        Assert.That(slot.TextContent, Does.Contain("HR Users"), "the dialog names what overtook the preview");
         ConfirmDeletion(provider);
 
-        VerifyDeletionRecorded(null);
+        // The deletion cites the preview the administrator read; the server records that it was out of date (#2022).
+        VerifyDeletionRecorded(_latestPreview.ActivityId);
     }
 
     [Test]

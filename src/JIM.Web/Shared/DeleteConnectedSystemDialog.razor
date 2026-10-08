@@ -156,8 +156,9 @@
 
                     case ConnectedSystemPreviewStatus.Stale:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                            @_previewState.StaleReason since this preview ran, so it may no longer describe what deleting would do. Run it
-                            again for a current answer; the deletion will record that no current preview informed it.
+                            @_previewState.StaleReason since this preview ran (@_previewState.OvertakenBy), so it may no longer describe
+                            what deleting would do. Run it again for a current answer; a deletion now records that the preview informing
+                            it was out of date.
                         </MudText>
                         <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"

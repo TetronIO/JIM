@@ -80,7 +80,7 @@ public class ConnectedSystemPreviewStateTests
     }
 
     [Test]
-    public void From_FinishedButOvertaken_IsStaleAndRecordsNone()
+    public void From_FinishedButOvertaken_IsStaleAndIsStillTheOneRecorded()
     {
         var preview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
         var staleness = new ConfigurationChangePreviewStaleness(null, new PreviewOvertakingActivity(Guid.NewGuid(), Started.AddMinutes(2), ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null));
@@ -91,7 +91,9 @@ public class ConnectedSystemPreviewStateTests
         {
             Assert.That(state.Status, Is.EqualTo(ConnectedSystemPreviewStatus.Stale));
             Assert.That(state.Staleness, Is.EqualTo(staleness), "the host says which kind of change overtook it");
-            Assert.That(state.InformingPreviewActivityId, Is.Null);
+            Assert.That(state.InformingPreviewActivityId, Is.EqualTo(preview.ActivityId),
+                "a change made on an out-of-date preview still cites it, and records that it was out of date (#2022)");
+            Assert.That(state.OvertakenBy, Does.Contain("HR Users"), "the host names what overtook it");
         }
     }
 

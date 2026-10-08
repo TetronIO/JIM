@@ -198,22 +198,82 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_RunFullSynchronisationFromAStalePreview_QueuesTheRunWithoutCitingIt()
+    public void FullSyncPreview_RunFullSynchronisationFromAStalePreview_AsksFirstNamingWhatOvertookIt()
     {
-        // An audit trail claiming the administrator was shown what the run would do, when what they were shown no
-        // longer held, is worse than one saying they went ahead without looking.
-        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
-        _staleness = new ConfigurationChangePreviewStaleness(new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow, ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import"), null);
+        // Staleness is judged across the whole deployment, so a preview is usually overtaken before anyone acts on it
+        // (#2022). The administrator is asked before the run queues, and told what overtook the preview.
+        var (provider, cut) = RenderStaleHost();
 
-        var cut = RenderHost();
+        cut.Find($"[data-testid='{RunMarker}']").Click();
+        provider.WaitForState(() => provider.FindAll("button").Any(b => b.TextContent.Contains("Run anyway")), TimeSpan.FromSeconds(2));
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.FindAll($"[data-testid='{StaleMarker}']"), Has.Count.EqualTo(1));
+            Assert.That(provider.Markup, Does.Contain("Delta Import"), "the question names what overtook the preview");
+            Assert.That(_queuedRun, Is.Null, "nothing queues until the administrator answers");
         }
+    }
+
+    [Test]
+    public void FullSyncPreview_RunAnywayFromAStalePreview_QueuesTheRunCitingIt()
+    {
+        // The run cites the preview its administrator read; the server records that the preview was out of date, rather
+        // than the link being dropped and the run reading as though no preview was read at all.
+        var (provider, cut) = RenderStaleHost();
+
+        cut.Find($"[data-testid='{RunMarker}']").Click();
+        ClickDialogButton(provider, "Run anyway");
+        cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
+
+        Assert.That(_queuedRun!.PreviewActivityId, Is.EqualTo(_latestPreview!.ActivityId));
+    }
+
+    [Test]
+    public void FullSyncPreview_PreviewAgainFromAStalePreview_StartsAPreviewAndQueuesNoRun()
+    {
+        _starter.Setup(s => s.StartAsync(It.IsAny<ConfigurationChangePreviewRequest>())).ReturnsAsync(Guid.CreateVersion7());
+        var (provider, cut) = RenderStaleHost();
+
+        cut.Find($"[data-testid='{RunMarker}']").Click();
+        ClickDialogButton(provider, "Preview again");
+        cut.WaitForState(() => _starter.Invocations.Count > 0, TimeSpan.FromSeconds(2));
+
+        using (Assert.EnterMultipleScope())
+        {
+            _starter.Verify(s => s.StartAsync(It.Is<ConfigurationChangePreviewRequest>(r =>
+                r.Surface == ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation)), Times.Once);
+            Assert.That(_queuedRun, Is.Null);
+        }
+    }
+
+    [Test]
+    public void FullSyncPreview_RunFullSynchronisationFromACurrentPreview_AsksNothing()
+    {
+        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
+        var provider = Render<MudBlazor.MudDialogProvider>();
+
+        var cut = RenderHost();
         cut.Find($"[data-testid='{RunMarker}']").Click();
         cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
 
-        Assert.That(_queuedRun!.PreviewActivityId, Is.Null);
+        Assert.That(provider.FindAll("button").Where(b => b.TextContent.Contains("Run anyway")), Is.Empty);
+    }
+
+    private (IRenderedComponent<MudBlazor.MudDialogProvider> Provider, IRenderedComponent<ConnectedSystemFullSynchronisationPreview> Host) RenderStaleHost()
+    {
+        _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
+        _staleness = new ConfigurationChangePreviewStaleness(new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow,
+            ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import"), null);
+        var provider = Render<MudBlazor.MudDialogProvider>();
+        var cut = RenderHost();
+        Assert.That(cut.FindAll($"[data-testid='{StaleMarker}']"), Has.Count.EqualTo(1));
+        return (provider, cut);
+    }
+
+    private static void ClickDialogButton(IRenderedComponent<MudBlazor.MudDialogProvider> provider, string text)
+    {
+        provider.WaitForState(() => provider.FindAll("button").Any(b => b.TextContent.Contains(text)), TimeSpan.FromSeconds(2));
+        provider.FindAll("button").First(b => b.TextContent.Contains(text)).Click();
     }
 
     [Test]
