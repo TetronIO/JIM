@@ -29,6 +29,10 @@ BeforeAll {
             DatabaseNeighbour = $null
             DatabasePodOnBridge = $true
             JimPodOnBridge = $true
+            DatabaseVeth = 'veth0'
+            JimVeth = 'veth1'
+            NetworkManagerDevices = @()
+            NetworkManagerReleases = @()
             FirewalldRunning = $true
             Subnet = '10.89.1.0/24'
             TrustedSources = @('10.89.1.0/24')
@@ -88,6 +92,32 @@ Describe 'Get-PodmanNetworkFinding' {
         $findings[0] | Should -BeLike '*database pod*not attached to the bridge*'
     }
 
+    It 'names NetworkManager, and the fix, when it holds a connection on the veth of a pod that is off the bridge (#2009)' {
+        $snapshot = New-Snapshot @{
+            DatabasePodOnBridge = $false
+            NetworkManagerDevices = @(
+                [pscustomobject]@{ Device = 'veth1'; State = 'unmanaged'; Connection = '' }
+                [pscustomobject]@{ Device = 'veth0'; State = 'connecting (getting IP configuration)'; Connection = 'Wired connection 1' })
+        }
+
+        $findings = Get-Finding $snapshot
+
+        $findings | Should -HaveCount 1
+        $findings[0] | Should -BeLike '*NetworkManager*veth0*off the bridge*Wired connection 1*unmanaged-devices*'
+    }
+
+    It 'names NetworkManager from its journal when it released the veth from the bridge' {
+        $snapshot = New-Snapshot @{
+            DatabasePodOnBridge = $false
+            NetworkManagerReleases = @('<info>  [1791442581.2] device (veth0): released from controller device podman2')
+        }
+
+        $findings = Get-Finding $snapshot
+
+        $findings | Should -HaveCount 1
+        $findings[0] | Should -BeLike '*NetworkManager*veth0*off the bridge*'
+    }
+
     It 'names firewalld no longer trusting the network, and the missing reload helper' {
         $snapshot = New-Snapshot @{ TrustedSources = @(); BridgeTrafficFiltered = $true; ReloadHelperActive = $false }
 
@@ -116,12 +146,18 @@ Describe 'Get-PodmanNetworkFinding' {
         $missing[0] | Should -BeLike '*3064 ms*nothing on the network answered*'
     }
 
-    It 'falls back on the time a connection took where the neighbour entry is unknown' {
+    It 'draws no conclusion from the time a connection took where the neighbour entry is unknown' {
+        # Once the neighbour entry has failed, the kernel can refuse the next connections at once, so a quick "no route
+        # to host" is no sign of a firewall (#2009, where it was a pod taken off its bridge).
         $instant = New-Snapshot @{ TcpByAddress = [pscustomobject]@{ ExitCode = 1; Message = 'bash: connect: No route to host'; Milliseconds = 3 } }
         $slow = New-Snapshot @{ TcpByAddress = [pscustomobject]@{ ExitCode = 1; Message = 'bash: connect: No route to host'; Milliseconds = 3064 } }
 
-        (Get-Finding $instant)[0] | Should -BeLike '*probably rejected*'
-        (Get-Finding $slow)[0] | Should -BeLike '*probably nothing on the network answered*'
+        foreach ($snapshot in $instant, $slow) {
+            $finding = (Get-Finding $snapshot)[0]
+            $finding | Should -BeLike '*no route to host*'
+            $finding | Should -Not -BeLike '*reject*'
+            $finding | Should -Not -BeLike '*answered*'
+        }
     }
 
     It 'names PostgreSQL not listening, and a connection dropped without an answer' {
