@@ -341,8 +341,8 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
     /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
-    /// <returns>How many staged changes were withdrawn.</returns>
-    int WithdrawChangesAlreadyCurrent(
+    /// <returns>The staged changes withdrawn, which the run records on the object's execution item (#2001).</returns>
+    List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
         IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
 

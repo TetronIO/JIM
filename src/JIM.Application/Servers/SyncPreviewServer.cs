@@ -2416,6 +2416,24 @@ public class SyncPreviewServer
                     });
                     break;
             }
+
+            // Changes queued on the target's Pending Export that the run would withdraw, because the target already
+            // holds the values (#2001). The run records them after what it stages for the object, whether or not it
+            // stages anything new, so the node follows the entry's own export node.
+            if (entry is { Kind: OutboundPreviewEntryKind.Staging, WithdrawnChanges.Count: > 0 })
+            {
+                siblings.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+                    TargetEntityId = entry.ExistingTargetCsoId,
+                    TargetEntityDescription = systemName,
+                    SyncRuleId = entry.SyncRuleId,
+                    SyncRuleName = entry.SyncRuleName,
+                    DetailCount = entry.WithdrawnChanges.Count,
+                    DetailMessage = entry.ConnectedSystemId.ToString(),
+                    Ordinal = siblings.Count
+                });
+            }
         }
     }
 

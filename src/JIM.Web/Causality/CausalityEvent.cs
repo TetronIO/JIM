@@ -132,11 +132,14 @@ public sealed class CausalityEvent
     /// drawer reported the DN as "Set", which read as an attribute update rather than an account being
     /// removed.
     /// </summary>
-    public string? AttributeRowsCaption =>
-        OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
-            ? "Target identified by"
-            : null;
+    public string? AttributeRowsCaption => OutcomeType switch
+    {
+        ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "Target identified by",
+        // The rows are the changes taken off the queue (#2001), not changes made, so they are captioned as such.
+        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn => "Withdrawn from the Pending Export",
+        _ => null
+    };
 
     /// <summary>
     /// Child events ordered by Ordinal.

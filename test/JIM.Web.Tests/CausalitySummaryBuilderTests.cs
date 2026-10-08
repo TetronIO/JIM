@@ -47,6 +47,45 @@ public class CausalitySummaryBuilderTests
     }
 
     [Test]
+    public void Build_AttributeFlowThatMadeQueuedChangesUnnecessary_SaysTheyWereWithdrawnAndWhy()
+    {
+        // #2001: a run that withdraws queued changes because the target already holds the values says so, naming the
+        // system, so an administrator expecting those changes to be exported can see why they never were.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var attributeFlow = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 1, syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+            parent: attributeFlow, ordinal: 0, targetEntityId: CausalityTestData.ProvisionedCsoId,
+            targetEntityDescription: "Glitterband EMEA", detailCount: 1, detailMessage: "2|person",
+            syncRuleId: 9, syncRuleName: "Glitterband People - Outbound");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(RenderSentence(summary.Segments), Does.Contain("1 change queued for Glitterband EMEA was withdrawn, since it already holds the value"));
+            Assert.That(summary.Segments.OfType<SummarySegment.Entity>().Any(e => e.Label == "Glitterband EMEA" && e.Kind == CausalityEntityKind.ConnectedSystem),
+                Is.True, "the system is named as an entity, as the queued export clause names it");
+        }
+    }
+
+    [Test]
+    public void Build_ChangesWithdrawnAcrossTwoSystems_CountsChangesAndSystems()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var attributeFlow = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 2);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+            parent: attributeFlow, ordinal: 0, targetEntityDescription: "Glitterband EMEA", detailCount: 2, detailMessage: "2|person");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+            parent: attributeFlow, ordinal: 1, targetEntityDescription: "Payroll", detailCount: 1, detailMessage: "4|employee");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Does.Contain("3 changes queued for 2 systems were withdrawn, since they already hold the values"));
+    }
+
+    [Test]
     public void Build_NewJoinerScenario_ProducesTheMockUpSentence()
     {
         var summary = BuildSummary(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());

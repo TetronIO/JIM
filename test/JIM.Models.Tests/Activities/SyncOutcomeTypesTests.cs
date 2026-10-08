@@ -51,6 +51,7 @@ public class SyncOutcomeTypesTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, false)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, false)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, false)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn, false)]
     public void IsPendingExport_ClassifiesTheStagingOutcomeTypes(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
         bool expected)

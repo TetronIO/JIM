@@ -609,9 +609,12 @@ unchanged since the one before, so its own speed would understate a run that has
 
 **Reading it.** The preview leads with the worst consequence, then lists each change by Connected System and attribute
 under **What would change**, including updates, provisioning and deprovisioning in the target systems the run reaches,
-drift corrections, and objects the run would fail. Objects the run would leave as they are are counted on one line
-under the list rather than as rows of it. Select a change to see the objects it applies to, with each value **Now**
-and **After the synchronisation**; select an object to see everything the run would do to it, as its own
+drift corrections, and objects the run would fail. Updates already queued for a target that would no longer be exported,
+because the target already holds the value, are listed as **Pending Export changes withdrawn**. Objects the run would
+leave as they are are counted on one line under the list rather than as rows of it. Select a change to see the objects
+it applies to, with each value **Now** and **After the synchronisation**; for withdrawn changes the columns are
+**Queued**, the change that was waiting to be exported, and **Target keeps**, the value the target already holds and
+keeps. Select an object to see everything the run would do to it, as its own
 [Sync Preview](sync-preview.md) shows it. Where every object would stay as it is, the preview says the Full
 Synchronisation would change nothing.
 

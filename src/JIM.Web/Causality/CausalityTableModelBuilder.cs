@@ -224,6 +224,10 @@ public static class CausalityTableModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Disconnect, null, effectiveVia, effectiveSyncRuleId),
 
+            // Changes queued for a downstream target withdrawn because it already holds the values (#2001).
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn => Row(
+                causalityEvent, objectKey, CausalityTableChangeKind.QueuedChangesWithdrawn, null, effectiveVia, effectiveSyncRuleId),
+
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.NoContributor, AttributeSubject(causalityEvent), null, null),
 
@@ -257,6 +261,12 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static IEnumerable<CausalityTableRow> BuildAttributeRows(CausalityEvent causalityEvent, string objectKey)
     {
+        // Withdrawn changes (#2001) are exactly the values that will not reach the target system: listed as attribute
+        // changes they would read as values being exported. The object-level row says what happened, and the event's
+        // drawer still lists them under its own caption.
+        if (causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
+            yield break;
+
         var (eventVia, eventSyncRuleId) = ResolveVia(causalityEvent);
 
         foreach (var attributeRow in causalityEvent.AttributeRows)

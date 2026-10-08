@@ -96,13 +96,21 @@ public static class ConfigurationChangePreviewWording
         transition == ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange;
 
     /// <summary>
-    /// The drill-down's two value column headings. A proposed configuration has a current and a proposed value; a Full
-    /// Synchronisation proposes no configuration, so its values are the object's now and after the run.
+    /// The drill-down's two value column headings for one group. A proposed configuration has a current and a proposed
+    /// value; a Full Synchronisation proposes no configuration, so its values are the object's now and after the run. A
+    /// group of withdrawn Pending Export changes is neither (#2001): its values are the change that was queued and the
+    /// value the target already holds, which it keeps.
     /// </summary>
-    public static (string Current, string Proposed) ValueColumnTitles(ConfigurationChangePreviewSurface surface) =>
-        surface == ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation
+    public static (string Current, string Proposed) ValueColumnTitles(ConfigurationChangePreviewSurface surface,
+        ActivityRunProfileExecutionItemSyncOutcomeType transition)
+    {
+        if (transition == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
+            return ("Queued", "Target keeps");
+
+        return surface == ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation
             ? ("Now", "After the synchronisation")
             : ("Current value", "Proposed value");
+    }
 
     /// <summary>
     /// The Connected System a drill-down row's Connected System Object is in. A provisioning names an object that does

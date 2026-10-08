@@ -116,6 +116,9 @@ public enum CausalityTableChangeKind
     /// <summary>A downstream account's provisioning was withdrawn before it was ever exported (ProvisioningCancelled): nothing was created, updated or removed in the target system.</summary>
     ProvisioningCancelled,
 
+    /// <summary>Changes queued for a downstream target were withdrawn because it already holds the values (PendingExportChangesWithdrawn, #2001): nothing is sent.</summary>
+    QueuedChangesWithdrawn,
+
     /// <summary>An attribute value was cleared because no import source contributes it any more.</summary>
     NoContributor,
 

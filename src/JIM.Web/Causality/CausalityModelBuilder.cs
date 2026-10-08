@@ -175,8 +175,10 @@ public static class CausalityModelBuilder
             DetailCount = node.DetailCount,
             // DetailMessage on an outbound node carries the raw target Connected System id (decoded
             // above into SystemId), not display text; every other node's DetailMessage is already plain
-            // contextual text, exactly as the recorded tree treats it.
-            DetailMessage = SyncOutcomeTypes.IsPendingExport(node.OutcomeType) ? null : node.DetailMessage,
+            // contextual text, exactly as the recorded tree treats it. The id channel's types are the
+            // recorded tree's, so a disconnection, a cancelled provisioning or a withdrawal never shows
+            // its system's id as a stray number.
+            DetailMessage = UsesDetailMessageIdChannel(node.OutcomeType) ? null : node.DetailMessage,
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
             EffectiveSyncRuleId = effectiveSyncRuleId,
@@ -276,13 +278,20 @@ public static class CausalityModelBuilder
         if (node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
             return BuildInboundFlowAttributeRows(inbound?.AttributeFlowChanges);
 
-        if (!SyncOutcomeTypes.IsPendingExport(node.OutcomeType))
+        // Changes a run would withdraw from the target's Pending Export (#2001) come from the same rule's entry as what it
+        // would stage, so the outcome type decides which of the entry's lists the node shows.
+        var isWithdrawal = node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn;
+        if (!isWithdrawal && !SyncOutcomeTypes.IsPendingExport(node.OutcomeType))
             return [];
 
         List<PendingExportAttributeValueChange>? changes = null;
         if (effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
         {
-            changes = entry.AttributeChanges;
+            changes = isWithdrawal ? entry.WithdrawnChanges : entry.AttributeChanges;
+        }
+        else if (isWithdrawal)
+        {
+            return [];
         }
         else if (int.TryParse(node.DetailMessage, out var connectedSystemId))
         {
@@ -532,6 +541,7 @@ public static class CausalityModelBuilder
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
             or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn
             || SyncOutcomeTypes.IsPendingExport(outcomeType);
     }
 
@@ -576,6 +586,8 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
                 // The Disconnect sibling of DeprovisionQueued (#1966): the object it names is in the target system.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
+                // Changes withdrawn from a target system's Pending Export (#2001): the object it names is there too.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
@@ -747,8 +759,10 @@ public static class CausalityModelBuilder
                 break;
 
             case ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected:
-                // The object disconnected stays in the target system (#1966), so it links to its connector space page,
-                // named as a Provisioned outcome's record is: its current name where the page resolved one.
+            case ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn:
+                // The object disconnected stays in the target system (#1966), as does the object whose queued changes were
+                // withdrawn (#2001), so each links to its connector space page, named as a Provisioned outcome's record
+                // is: its current name where the page resolved one.
                 if (parsedDetail.ConnectedSystemId.HasValue)
                 {
                     var disconnectedSystemId = parsedDetail.ConnectedSystemId.Value;
@@ -919,7 +933,7 @@ public static class CausalityModelBuilder
 
     /// <summary>
     /// Selects the attribute rows for an event by the change set it owns: the Pending Export staging
-    /// outcomes (PendingExportCreated and DeprovisionQueued) use
+    /// outcomes (PendingExportCreated and DeprovisionQueued), and a withdrawal of queued changes (#2001), use
     /// its persisted CSO change snapshot, record-side events (import changes and export executions)
     /// use the item's CSO change rows, and Attribute Flow uses the item's MVO change rows. Events
     /// never share the combined item-level list, so each event's row count agrees with its own
@@ -930,7 +944,8 @@ public static class CausalityModelBuilder
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
     {
-        if (SyncOutcomeTypes.IsPendingExport(outcome.OutcomeType))
+        if (SyncOutcomeTypes.IsPendingExport(outcome.OutcomeType)
+            || outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
             return NormaliseAttributeRows(outcome.ConnectedSystemObjectChange?.AttributeChanges, null);
 
         return outcome.OutcomeType switch
