@@ -225,7 +225,12 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
         ClickDialogButton(provider, "Run anyway");
         cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
 
-        Assert.That(_queuedRun!.PreviewActivityId, Is.EqualTo(_latestPreview!.ActivityId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_queuedRun!.PreviewActivityId, Is.EqualTo(_latestPreview!.ActivityId));
+            Assert.That(Services.GetRequiredService<MudBlazor.ISnackbar>().ShownSnackbars.Where(s => s.Severity == MudBlazor.Severity.Warning),
+                Is.Empty, "the administrator has just been asked about the out-of-date preview; warning again says it twice");
+        }
     }
 
     [Test]

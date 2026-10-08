@@ -126,7 +126,8 @@ public class TaskingServerRunPreviewLinkTests
             Assert.That(run.PreviewActivityId, Is.EqualTo(previewActivityId));
             Assert.That(run.PreviewOvertakenAt, Is.EqualTo(overtakingRun.Created));
             Assert.That(run.PreviewOvertakenBy, Does.Contain("Delta Import"));
-            Assert.That(result.Warnings, Has.Some.Contain("Delta Import"));
+            Assert.That(result.CitedPreviewWarning, Does.Contain("Delta Import"),
+                "kept apart from other warnings, so a surface that has already asked about it need not say it twice");
         }
     }
 
@@ -141,6 +142,7 @@ public class TaskingServerRunPreviewLinkTests
         {
             Assert.That(_createdActivities.Single().PreviewOvertakenAt, Is.Null);
             Assert.That(result.Warnings, Is.Empty);
+            Assert.That(result.CitedPreviewWarning, Is.Null);
         }
     }
 

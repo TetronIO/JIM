@@ -48,6 +48,7 @@ public class SynchronisationControllerRunPreviewLinkTests
     private SynchronisationController _controller = null!;
     private readonly List<Activity> _createdActivities = [];
     private readonly Dictionary<Guid, Activity> _storedActivities = [];
+    private ConfigurationChangePreviewStaleness _staleness = new(null, null);
     private readonly Dictionary<Guid, ConfigurationChangePreview> _storedPreviews = [];
 
     [SetUp]
@@ -91,8 +92,9 @@ public class SynchronisationControllerRunPreviewLinkTests
                 _createdActivities.Add(a);
             })
             .Returns(Task.CompletedTask);
-        // Nothing has happened since the preview started, so the cited preview is current (#2022).
-        _activities.Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>())).ReturnsAsync(new ConfigurationChangePreviewStaleness(null, null));
+        // Nothing has happened since the preview started, so the cited preview is current (#2022), unless a test says otherwise.
+        _staleness = new ConfigurationChangePreviewStaleness(null, null);
+        _activities.Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>())).ReturnsAsync(() => _staleness);
         _activities.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _storedActivities.GetValueOrDefault(id));
         _previews.Setup(r => r.GetPreviewAsync(It.IsAny<Guid>()))
@@ -118,6 +120,22 @@ public class SynchronisationControllerRunPreviewLinkTests
 
         Assert.That(result, Is.InstanceOf<AcceptedResult>());
         Assert.That(_createdActivities.Single().PreviewActivityId, Is.EqualTo(previewActivityId));
+    }
+
+    [Test]
+    public async Task ExecuteRunProfileAsync_CitingAnOutOfDatePreview_QueuesTheRunAndWarnsAsync()
+    {
+        // A script citing a preview that something has since overtaken still gets its run, and is told (#2022).
+        var previewActivityId = StorePreview(ConnectedSystemId);
+        _staleness = new ConfigurationChangePreviewStaleness(new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow,
+            ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import"), null);
+
+        var result = await _controller.ExecuteRunProfileAsync(ConnectedSystemId, RunProfileId,
+            new ExecuteRunProfileRequest { PreviewActivityId = previewActivityId });
+
+        Assert.That(result, Is.InstanceOf<AcceptedResult>());
+        var response = (RunProfileExecutionResponse)((AcceptedResult)result).Value!;
+        Assert.That(response.Warnings, Has.Some.Contain("Delta Import"));
     }
 
     [Test]

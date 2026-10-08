@@ -279,7 +279,8 @@ else if (_previewActivityId is { } previewActivityId)
         {
             await ReloadPreviewStateAsync(attachToLatest: false);
             var showingLatest = _previewState.ActivityId == _previewActivityId;
-            if (showingLatest && _previewState.Status == ConnectedSystemPreviewStatus.Stale)
+            var askedAboutStaleness = showingLatest && _previewState.Status == ConnectedSystemPreviewStatus.Stale;
+            if (askedAboutStaleness)
             {
                 StateHasChanged();
                 var previewAgain = await DialogService.ShowMessageBoxAsync(
@@ -311,6 +312,10 @@ else if (_previewActivityId is { } previewActivityId)
 
             foreach (var warning in result.Warnings)
                 Snackbar.Add(warning, Severity.Warning);
+
+            // Only where the administrator was not just asked: a preview overtaken between the click and the queue.
+            if (!askedAboutStaleness && result.CitedPreviewWarning is { } previewWarning)
+                Snackbar.Add(previewWarning, Severity.Warning);
 
             var runActivityId = task.Activity?.Id;
             Snackbar.Add($"{runProfile.Name} queued.", Severity.Success, config =>

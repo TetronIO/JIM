@@ -3131,7 +3131,8 @@ public class SynchronisationController(
             ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
             TaskId = workerTask.Id,
             Message = $"Run Profile '{runProfile.Name}' has been queued for execution.",
-            Warnings = result.Warnings
+            // A script is told when the preview it cites was out of date (#2022), with every other warning.
+            Warnings = result.CitedPreviewWarning is { } previewWarning ? [.. result.Warnings, previewWarning] : result.Warnings
         };
 
         return Accepted(response);

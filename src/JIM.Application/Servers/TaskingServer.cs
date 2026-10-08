@@ -99,6 +99,7 @@ namespace JIM.Application.Servers
         public async Task<WorkerTaskCreationResult> CreateWorkerTaskAsync(WorkerTask workerTask)
         {
             var warnings = new List<string>();
+            string? citedPreviewWarning = null;
 
             if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
@@ -138,8 +139,7 @@ namespace JIM.Application.Servers
                 var activity = NewRunProfileExecutionActivity(synchronisationWorkerTask.ConnectedSystemId, connectedSystem?.Name, runProfile);
 
                 // Judged before the run's own Activity exists, so the run cannot count as having overtaken its preview.
-                if (await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, synchronisationWorkerTask.PreviewActivityId) is { } previewWarning)
-                    warnings.Add(previewWarning);
+                citedPreviewWarning = await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, synchronisationWorkerTask.PreviewActivityId);
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -220,8 +220,7 @@ namespace JIM.Application.Servers
 
                 // Likewise the preview that informed the deletion (#134), so the Activity answers whether the
                 // administrator looked first however the task ends, and whether it was out of date (#2022).
-                if (await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, deleteConnectedSystemTask.PreviewActivityId) is { } previewWarning)
-                    warnings.Add(previewWarning);
+                citedPreviewWarning = await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, deleteConnectedSystemTask.PreviewActivityId);
 
                 // A finish-immediately deletion on a fenced system abandons the remaining Synchronised
                 // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
@@ -333,9 +332,11 @@ namespace JIM.Application.Servers
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
 
-            return warnings.Count > 0
+            var result = warnings.Count > 0
                 ? WorkerTaskCreationResult.SucceededWithWarnings(workerTask.Id, [.. warnings])
                 : WorkerTaskCreationResult.Succeeded(workerTask.Id);
+            result.CitedPreviewWarning = citedPreviewWarning;
+            return result;
         }
 
         /// <summary>

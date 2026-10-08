@@ -1375,7 +1375,7 @@ public partial class ConnectedSystemServer
             deleteTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         if (synchronisedDeprovisioning)
@@ -1392,7 +1392,7 @@ public partial class ConnectedSystemServer
             deprovisioningTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Get CSO count to determine sync vs async deletion
@@ -1412,7 +1412,7 @@ public partial class ConnectedSystemServer
             deleteTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Small system - execute synchronously
@@ -1537,7 +1537,7 @@ public partial class ConnectedSystemServer
             deleteTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         if (synchronisedDeprovisioning)
@@ -1551,7 +1551,7 @@ public partial class ConnectedSystemServer
             deprovisioningTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Get CSO count to determine sync vs async deletion
@@ -1568,7 +1568,7 @@ public partial class ConnectedSystemServer
             deleteTask.PreviewActivityId = previewActivityId;
             var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Small system - execute synchronously
