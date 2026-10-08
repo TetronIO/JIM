@@ -73,8 +73,8 @@ public class ExportEvaluationResult
 
     /// <summary>
     /// Changes queued on target objects' Pending Exports that this evaluation withdrew, because the targets already
-    /// hold the values the Metaverse now wants (#2001). Nothing new is staged for them; the worker records each as a
-    /// Pending Export Changes Withdrawn outcome on the object's execution item.
+    /// hold the values the Metaverse now wants (#2001). Nothing new is staged for them; the worker and the recall
+    /// executors (#2011) record each as a Pending Export Changes Withdrawn outcome on the object's execution item.
     /// </summary>
     public List<PendingExportChangesWithdrawal> Withdrawals { get; set; } = [];
 }

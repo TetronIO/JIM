@@ -239,6 +239,146 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_QueuedChangeTheTargetAlreadyHolds_RecordsTheWithdrawalOnTheObjectsItemAsync()
+    {
+        // The target holds Training's Description, and HR's revised one is queued for it, unexported. Deprovisioning HR
+        // hands Description to Training, whose value the target already holds, so the queued change is withdrawn
+        // (#2011). That changes what the next export does, so the run must say so on the object's item, exactly as a
+        // synchronisation does (#2001), not only in the service log.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var item = activity.RunProfileExecutionItems.Single();
+        var withdrawal = item.SyncOutcomes
+            .SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn);
+        Assert.That(withdrawal, Is.Not.Null,
+            "the withdrawal is recorded on the object's item: " + string.Join(", ", item.SyncOutcomes.Select(o => o.OutcomeType)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.TargetEntityId, Is.EqualTo(targetCso.Id), "naming the account whose queued change was withdrawn");
+            Assert.That(withdrawal!.TargetEntityDescription, Is.EqualTo("AD Target"), "and the system it is in");
+            Assert.That(withdrawal!.DetailCount, Is.EqualTo(1), "counting the changes withdrawn");
+            Assert.That(withdrawal!.SyncRuleName, Is.EqualTo("AD Export"), "attributed to the export rule that queued them");
+            Assert.That(withdrawal!.ParentSyncOutcome, Is.Null, "at root level, where the run records the recall's other export outcomes");
+            Assert.That(WithdrawnSnapshot(withdrawal!), Is.EqualTo(new[] { $"Description={RevisedHrDescription}" }),
+                "showing what was withdrawn");
+            Assert.That(result.PendingExportChangesWithdrawn, Is.EqualTo(1), "and the run's summary statistics");
+
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id)
+                    .SelectMany(pe => pe.AttributeValueChanges)
+                    .Where(c => c.AttributeId == ctx.TargetDescriptionAttribute.Id),
+                Is.Empty, "arrange check: the queued Description was withdrawn");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_QueuedChangeWithdrawnFromTheDeletedSystemsOwnObject_RecordsNothingForItAsync()
+    {
+        // HR also writes Description back to its own objects, and a writeback is queued for its object. The deletion
+        // hands Description to Training with the value HR's object already holds, so evaluating HR's own export rule
+        // withdraws that queued writeback. The object is deleted in the same batch, so recording the withdrawal would
+        // name (and snapshot, by foreign key) a row that is gone; it goes with the system, as the preview says of every
+        // export to it.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync(trainingDescription: HrDescription);
+        var hrCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id);
+        var hrDescriptionAttribute = hrCso.Type.Attributes.Single(a => a.Name == "HrDescription");
+        var mvType = ctx.HrImportRule.MetaverseObjectType!;
+        var mvDescription = mvType.Attributes.First(a => a.Id == ctx.MvDescriptionAttributeId);
+        var hrExport = new SyncRule
+        {
+            ConnectedSystemId = ctx.Hr.Id,
+            Name = "HR Writeback",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = hrCso.Type.Id,
+            ConnectedSystemObjectType = hrCso.Type,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType
+        };
+        hrExport.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrExport,
+            TargetConnectedSystemAttribute = hrDescriptionAttribute,
+            TargetConnectedSystemAttributeId = hrDescriptionAttribute.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescription, MetaverseAttributeId = mvDescription.Id } }
+        });
+        DbContext.SyncRules.Add(hrExport);
+        await DbContext.SaveChangesAsync();
+        SyncRepo.SeedSyncRule(hrExport);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Hr.Id,
+            ConnectedSystemObjectId = hrCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = hrDescriptionAttribute.Id,
+                    Attribute = hrDescriptionAttribute,
+                    StringValue = "Queued writeback",
+                    ChangeType = PendingExportAttributeChangeType.Update
+                }
+            ]
+        });
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(item => item.SyncOutcomes)
+                    .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
+                    .Select(o => o.TargetEntityId),
+                Has.None.EqualTo(hrCso.Id), "the deleted system's own object goes with it");
+            Assert.That(result.PendingExportChangesWithdrawn, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_QueuedChangeWithdrawnWithOutcomeTrackingOff_RecordsNoOutcomeAsync()
+    {
+        // The run reads the level from the service settings, as it does for the recall's other outcomes.
+        DbContext.ServiceSettingItems.Add(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+            DisplayName = "Sync outcome tracking level",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Enum,
+            DefaultValue = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        });
+        await DbContext.SaveChangesAsync();
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        var result = await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(item => item.SyncOutcomes)
+                    .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn),
+                Is.Empty, "outcome tracking is off");
+            Assert.That(result.PendingExportChangesWithdrawn, Is.EqualTo(1), "the summary statistics still count it");
+        }
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Executor: Metaverse Object deletion rules
     // -----------------------------------------------------------------------------------------------------------------

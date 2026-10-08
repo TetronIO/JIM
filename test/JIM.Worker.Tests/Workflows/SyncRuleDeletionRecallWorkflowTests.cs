@@ -279,6 +279,67 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task ExecuteSyncRuleDeletionRecallAsync_QueuedChangeTheTargetAlreadyHolds_RecordsTheWithdrawalOnTheObjectsItemAsync()
+    {
+        // The target holds Training's Description, and HR's revised one is queued for it, unexported. Recalling HR's
+        // values hands Description to Training, whose value the target already holds, so the queued change is withdrawn
+        // (#2011). That changes what the next export does, so the recall must say so on the object's item, exactly as a
+        // synchronisation does (#2001), not only in the service log.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var (task, activity) = await DisableRuleAndBuildTaskAsync(ctx.HrImportRule);
+        var recallResult = await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
+
+        var item = activity.RunProfileExecutionItems.Single();
+        var withdrawal = item.SyncOutcomes
+            .SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn);
+        Assert.That(withdrawal, Is.Not.Null,
+            "the withdrawal is recorded on the object's item: " + string.Join(", ", item.SyncOutcomes.Select(o => o.OutcomeType)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.TargetEntityId, Is.EqualTo(targetCso.Id), "naming the account whose queued change was withdrawn");
+            Assert.That(withdrawal!.TargetEntityDescription, Is.EqualTo("AD Target"), "and the system it is in");
+            Assert.That(withdrawal!.DetailCount, Is.EqualTo(1), "counting the changes withdrawn");
+            Assert.That(withdrawal!.SyncRuleName, Is.EqualTo("AD Export"), "attributed to the export rule that queued them");
+            Assert.That(withdrawal!.ParentSyncOutcome, Is.Null, "at root level, where the recall records its other outcomes");
+            Assert.That(WithdrawnSnapshot(withdrawal!), Is.EqualTo(new[] { $"Description={RevisedHrDescription}" }),
+                "showing what was withdrawn");
+            Assert.That(item.OutcomeSummary, Does.Contain(nameof(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)),
+                "the item's summary counts it");
+            Assert.That(recallResult.PendingExportChangesWithdrawn, Is.EqualTo(1), "and the recall's summary statistics");
+
+            Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id)
+                    .SelectMany(pe => pe.AttributeValueChanges)
+                    .Where(c => c.AttributeId == ctx.TargetDescriptionAttribute.Id),
+                Is.Empty, "arrange check: the queued Description was withdrawn");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteSyncRuleDeletionRecallAsync_NothingQueued_RecordsNoWithdrawalAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+
+        var (task, activity) = await DisableRuleAndBuildTaskAsync(ctx.HrImportRule);
+        var recallResult = await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(item => item.SyncOutcomes)
+                    .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn),
+                Is.Empty, "the target already holds Training's value and nothing was queued for it");
+            Assert.That(recallResult.PendingExportChangesWithdrawn, Is.Zero);
+        }
+    }
+
+    [Test]
     public async Task ExecuteSyncRuleDeletionRecallAsync_FailurePartway_RuleSurvivesDisabledAndActivityFailsAsync()
     {
         var ctx = await SetUpSoleContributorWithExportTargetAsync();
@@ -613,6 +674,32 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
         SyncRepo.ClearAllPendingExports();
         return targetCso;
     }
+
+    private const string RevisedHrDescription = "HR Description, revised";
+
+    /// <summary>
+    /// Revises HR's Description and synchronises HR, so the target's Pending Export queues the revised value, unexported.
+    /// </summary>
+    private async Task QueueRevisedHrDescriptionAsync(RecallExecutionContext ctx)
+    {
+        var hrCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id);
+        hrCso.AttributeValues.Single(av => av.Attribute.Name == "HrDescription").StringValue = RevisedHrDescription;
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == ctx.Target.Id)
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .Select(c => c.StringValue),
+            Is.EqualTo(new[] { RevisedHrDescription }), "arrange check: the revised Description is queued for the target");
+    }
+
+    /// <summary>
+    /// The withdrawn values a Pending Export Changes Withdrawn outcome carries, as attribute=value.
+    /// </summary>
+    private static List<string> WithdrawnSnapshot(ActivityRunProfileExecutionItemSyncOutcome outcome) =>
+        outcome.ConnectedSystemObjectChange?.AttributeChanges
+            .SelectMany(a => a.ValueChanges.Select(v => $"{a.AttributeName}={v.StringValue}"))
+            .ToList() ?? [];
 
     private static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue)
     {

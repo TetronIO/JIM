@@ -6197,14 +6197,7 @@ public abstract class SyncTaskProcessorBase
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
         // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
-        var mvoGuids = pendingExport.AttributeValueChanges
-            .Where(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue)
-                       && avc.Attribute?.Type == AttributeDataType.Reference)
-            .Select(avc => Guid.TryParse(avc.UnresolvedReferenceValue, out var g) ? g : (Guid?)null)
-            .Where(g => g.HasValue)
-            .Select(g => g!.Value)
-            .Distinct()
-            .ToList();
+        var mvoGuids = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(pendingExport.AttributeValueChanges);
 
         if (mvoGuids.Count > 0)
         {

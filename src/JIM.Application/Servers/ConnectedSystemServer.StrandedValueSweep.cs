@@ -190,6 +190,7 @@ public partial class ConnectedSystemServer
             result.MetaverseObjectsPreserved += ruleResult.MetaverseObjectsPreserved;
             result.ValuesPreserved += ruleResult.ValuesPreserved;
             result.PendingExportsStaged += ruleResult.PendingExportsStaged;
+            result.PendingExportChangesWithdrawn += ruleResult.PendingExportChangesWithdrawn;
         }
 
         derivedInputMarks.LogSummary();
@@ -222,11 +223,12 @@ public partial class ConnectedSystemServer
             "{ObjectCount} Metaverse Object(s) processed, {ValueCount} value(s) recalled, {ReElectedCount} attribute(s) re-elected, " +
             "{ClearedCount} attribute(s) cleared, {PreservedObjectCount} Metaverse Object(s) preserved ({PreservedValueCount} value(s)); " +
             "{EvaluatedCount} Metaverse Object(s) evaluated against their Deletion Rules ({MarkedCount} marked, {DeletedCount} deleted); " +
-            "{NoConnectorCount} object(s) with no connector remaining marked for deletion; {PendingExportCount} Pending Export(s) staged.",
+            "{NoConnectorCount} object(s) with no connector remaining marked for deletion; {PendingExportCount} Pending Export(s) staged, " +
+            "{WithdrawnCount} queued Pending Export change(s) withdrawn as already current.",
             connectedSystem.Id, result.SyncRulesSwept, result.MetaverseObjectsProcessed, result.ValuesRecalled,
             result.AttributesReElected, result.AttributesCleared, result.MetaverseObjectsPreserved, result.ValuesPreserved,
             result.MetaverseObjectsEvaluatedForDeletion, result.MetaverseObjectsMarkedForDeletion, result.MetaverseObjectsDeleted,
-            result.MetaverseObjectsMarkedWithNoConnector, result.PendingExportsStaged);
+            result.MetaverseObjectsMarkedWithNoConnector, result.PendingExportsStaged, result.PendingExportChangesWithdrawn);
 
         return result;
     }

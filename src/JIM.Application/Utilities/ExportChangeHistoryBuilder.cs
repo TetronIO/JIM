@@ -95,6 +95,20 @@ public static class ExportChangeHistoryBuilder
     }
 
     /// <summary>
+    /// The Metaverse Object ids that Pending Export reference changes still carry unresolved, which a snapshot resolves
+    /// to the referenced objects in the target Connected System (the <c>resolvedReferences</c> of
+    /// <see cref="BuildFromPendingExport"/>) so the Causality Tree can name them rather than show raw ids.
+    /// </summary>
+    public static List<Guid> GetUnresolvedReferenceMetaverseObjectIds(IEnumerable<PendingExportAttributeValueChange> changes) =>
+        changes
+            .Where(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue) && avc.Attribute?.Type == AttributeDataType.Reference)
+            .Select(avc => Guid.TryParse(avc.UnresolvedReferenceValue, out var mvoId) ? mvoId : (Guid?)null)
+            .Where(mvoId => mvoId.HasValue)
+            .Select(mvoId => mvoId!.Value)
+            .Distinct()
+            .ToList();
+
+    /// <summary>
     /// Maps <see cref="PendingExportAttributeValueChange"/> records into the normalised
     /// <see cref="ConnectedSystemObjectChangeAttribute"/> / <see cref="ConnectedSystemObjectChangeAttributeValue"/>
     /// hierarchy on the given change record.

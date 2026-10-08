@@ -194,6 +194,48 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         }
     }
 
+    [Test]
+    public async Task PreviewSynchronisedDeprovisioningAsync_QueuedChangeTheTargetAlreadyHolds_ReportsItsWithdrawalByAttributeAsync()
+    {
+        // The target holds Training's Description, and HR's revised one is queued for it. The deletion hands Description
+        // to Training, so the queued change is withdrawn rather than exported (#2011), and the preview must say so: an
+        // administrator deciding whether to delete needs to see queued exports that would disappear.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var deltas = await PreviewAsync(ctx.Hr);
+
+        var withdrawal = Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn).SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, "the preview states the withdrawal: " + string.Join("; ", deltas.Select(d => d.TransitionType)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.ConnectedSystemId, Is.EqualTo(ctx.Target.Id), "in the system whose queue loses the change");
+            Assert.That(withdrawal!.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id), "for the account the change was queued for");
+            Assert.That(withdrawal!.AttributeName, Is.EqualTo("Description"));
+            Assert.That(withdrawal!.OldValue, Is.EqualTo(RevisedHrDescription), "what was queued");
+            Assert.That(withdrawal!.NewValue, Is.EqualTo(TrainingDescription), "what the account keeps");
+            Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport).Select(d => d.AttributeName),
+                Is.EqualTo(new[] { "DisplayName" }), "Description is not staged anew; only the cleared DisplayName is");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSynchronisedDeprovisioningAsync_NothingQueued_ReportsNoWithdrawalAsync()
+    {
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+
+        var deltas = await PreviewAsync(ctx.Hr);
+
+        Assert.That(Of(deltas, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn), Is.Empty,
+            "the target already holds Training's value and nothing is queued for it, so nothing is withdrawn");
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Leaving an export rule's scope
     // -----------------------------------------------------------------------------------------------------------------
@@ -404,6 +446,22 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         await AssertPreviewEqualsExecutionAsync(ctx.Hr);
     }
 
+    [Test]
+    public async Task PreviewEqualsExecution_QueuedChangeTheTargetAlreadyHoldsAsync()
+    {
+        // The queued change stays queued into the run, so the run has something to withdraw.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        SimulateTargetExportExecuted(ctx, "John Smith", TrainingDescription);
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var facts = await AssertPreviewEqualsExecutionAsync(ctx.Hr, keepQueuedExports: true);
+
+        Assert.That(facts, Has.Some.Matches<string>(f => f.StartsWith("withdrawn|")),
+            "precondition: the scenario must actually withdraw the queued change");
+    }
+
     [TestCase(true, TestName = "PreviewEqualsExecution_ReferenceTakenOverByAnotherContributor_ExportsTheNewReferenceAsync")]
     [TestCase(false, TestName = "PreviewEqualsExecution_ReferenceWithNoOtherContributor_ExportsItsRemovalAsync")]
     public async Task PreviewEqualsExecution_ReferenceRecallAsync(bool trainingMentorsJohn)
@@ -425,15 +483,19 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
     /// Previews deleting the system, then really deprovisions it, and asserts the two describe the same facts. Returns
     /// the facts, so a test can also check its scenario exercised what it set out to.
     /// </summary>
-    private async Task<HashSet<string>> AssertPreviewEqualsExecutionAsync(ConnectedSystem connectedSystem)
+    /// <param name="keepQueuedExports">Leaves Pending Exports queued before the deletion in place for the run, for a
+    /// scenario about what the run does with them; otherwise the run starts from an empty queue, so every export fact is
+    /// one the deletion staged.</param>
+    private async Task<HashSet<string>> AssertPreviewEqualsExecutionAsync(ConnectedSystem connectedSystem, bool keepQueuedExports = false)
     {
         var before = CaptureObservableState();
         var previewed = FactsFromPreview(await PreviewAsync(connectedSystem));
 
-        SyncRepo.ClearAllPendingExports();
-        var (task, _) = await FenceSystemAndBuildTaskAsync(connectedSystem);
+        if (!keepQueuedExports)
+            SyncRepo.ClearAllPendingExports();
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(connectedSystem);
         await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
-        var executed = FactsFromExecution(before, CaptureObservableState(), connectedSystem.Id);
+        var executed = FactsFromExecution(before, CaptureObservableState(), connectedSystem.Id, activity);
 
         using (Assert.EnterMultipleScope())
         {
@@ -475,6 +537,9 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
                 case ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject:
                     facts.Add($"disconnect|{delta.ConnectedSystemObjectId}");
                     break;
+                case ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn:
+                    facts.Add($"withdrawn|{delta.ConnectedSystemObjectId}|{delta.AttributeName}|{delta.OldValue}");
+                    break;
                 default:
                     facts.Add($"unexpected|{delta.TransitionType}|{delta.MetaverseObjectId}|{delta.AttributeName}");
                     break;
@@ -483,9 +548,22 @@ public class ConnectedSystemDeletionPreviewWorkflowTests : SynchronisedDeprovisi
         return facts;
     }
 
-    private HashSet<string> FactsFromExecution(ObservableState before, ObservableState after, int deletedSystemId)
+    private HashSet<string> FactsFromExecution(ObservableState before, ObservableState after, int deletedSystemId, Activity activity)
     {
         var facts = new HashSet<string>();
+
+        // A withdrawn change leaves no state behind to compare, so it is read from what the run recorded: the outcome
+        // naming the account, and the snapshot of what it withdrew, by attribute.
+        foreach (var withdrawal in activity.RunProfileExecutionItems
+                     .SelectMany(item => item.SyncOutcomes)
+                     .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn))
+        {
+            foreach (var attributeChange in withdrawal.ConnectedSystemObjectChange?.AttributeChanges ?? [])
+            {
+                var value = JIM.Application.Servers.Preview.PreviewValueRenderer.Join(attributeChange.ValueChanges.Select(v => v.StringValue));
+                facts.Add($"withdrawn|{withdrawal.TargetEntityId}|{attributeChange.AttributeName}|{value}");
+            }
+        }
 
         foreach (var (mvoId, beforeObject) in before.MetaverseObjects)
         {

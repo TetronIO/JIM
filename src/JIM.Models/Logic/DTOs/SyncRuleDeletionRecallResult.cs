@@ -38,6 +38,12 @@ public class SyncRuleDeletionRecallResult
     public int PendingExportsStaged { get; set; }
 
     /// <summary>
+    /// How many changes already queued on target objects' Pending Exports the recall withdrew, because the targets
+    /// already hold the values the Metaverse now has (#2011). Each is recorded on its object's execution item.
+    /// </summary>
+    public int PendingExportChangesWithdrawn { get; set; }
+
+    /// <summary>
     /// How many Metaverse Objects had their recall skipped because no remaining joined Connected System
     /// carries an enabled import Synchronisation Rule for the object's type (#1570 last-known-state
     /// preservation): their values were kept as-is rather than withdrawn. Only ever non-zero when the recall

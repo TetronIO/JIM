@@ -92,7 +92,8 @@ public class OutboundPreviewEntry
     /// The changes queued on the target object's Pending Export that a real evaluation would withdraw, because the
     /// target already holds the values the Metaverse now wants (#2001), unpersisted and read-only: the preview withdraws
     /// nothing. A queued change replaced by one in <see cref="AttributeChanges"/> is not listed. Empty when nothing is
-    /// queued, for a provisioning, and for a recall, whose executors record no withdrawal.
+    /// queued and for a provisioning. A recall withdraws under the same rules as a synchronisation, and its executors
+    /// record the withdrawal as a synchronisation does (#2011), so it is listed for a recall too.
     /// </summary>
     public List<PendingExportAttributeValueChange> WithdrawnChanges { get; init; } = [];
 

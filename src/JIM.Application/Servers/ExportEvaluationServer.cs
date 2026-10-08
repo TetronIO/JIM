@@ -3391,9 +3391,9 @@ public class ExportEvaluationServer
                 await ResolvePreviewGeneratedExportValuesAsync(effectiveExistingCso, attributeChanges);
         }
 
-        // What a real evaluation would withdraw from the object's queued Pending Export (#2001). Not for a recall: its
-        // executors withdraw the same way but record no outcome for it, and a preview proposes only what the run records.
-        var withdrawnChanges = recallSemantics || wouldJoinCsoId.HasValue
+        // What a real evaluation would withdraw from the object's queued Pending Export (#2001), for a synchronisation and
+        // a recall alike: the recall executors record the same withdrawal (#2011).
+        var withdrawnChanges = wouldJoinCsoId.HasValue
             ? []
             : await PreviewQueuedChangesWithdrawnAsync(cache, existingCso, effectiveChangeType, attributeChanges, noNetChangeSkippedChanges);
 
