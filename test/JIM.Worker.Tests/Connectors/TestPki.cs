@@ -40,9 +40,10 @@ internal static class TestPki
 
     /// <summary>
     /// A server certificate for <paramref name="hostName"/>, issued by <paramref name="issuer"/>, and in date whatever the
-    /// issuer's own dates, as a server whose issuing CA has expired would present.
+    /// issuer's own dates, as a server whose issuing CA has expired would present. Passing <paramref name="notAfter"/>
+    /// in the past gives an expired one instead, valid for the day before it.
     /// </summary>
-    internal static X509Certificate2 CreateServer(string hostName, X509Certificate2 issuer, string? issuerDownloadUrl = null)
+    internal static X509Certificate2 CreateServer(string hostName, X509Certificate2 issuer, string? issuerDownloadUrl = null, DateTimeOffset? notAfter = null)
     {
         using var key = RSA.Create(2048);
         var request = NewRequest(hostName, key, isCertificateAuthority: false);
@@ -51,7 +52,8 @@ internal static class TestPki
         request.CertificateExtensions.Add(names.Build());
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.1")], false));
         AddAuthorityExtensions(request, issuer, issuerDownloadUrl);
-        using var certificate = SignedBy(request, issuer, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddDays(30));
+        var notBefore = notAfter?.AddDays(-1) ?? DateTimeOffset.UtcNow.AddHours(-1);
+        using var certificate = SignedBy(request, issuer, notBefore, notAfter ?? DateTimeOffset.UtcNow.AddDays(30));
         using var withKey = certificate.CopyWithPrivateKey(key);
         return Exportable(withKey);
     }
