@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
+- 🐛 Deleting a Synchronisation Rule, deleting a Connected System through synchronisation, and the stranded value sweep now record queued export changes they withdraw on their Activity too, and the Connected System deletion preview shows them beforehand. (#2011)
 - 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)
 - 🐛 A 389 Directory Server Delta Import now stops and asks for a Full Import when the changelog's newest change number is below the last import's (a restore from backup or snapshot), instead of silently missing the changes made since the restore. (#2004)
 - 🐛 An OpenLDAP Delta Import now refuses, and asks for a Full Import, when the accesslog has been purged past where the last import ended (Delta Imports paused for longer than `olcAccessLogPurge` keeps entries); the discarded changes were previously lost without an error. (#2008)
@@ -55,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
 - 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
+- 🐛 A rootful Podman JIM now survives a firewalld reload, which left it unable to reach its database until restarted: `setup.sh` enables Podman's `netavark-firewalld-reload.service`. Upgrading from v0.16.0 or earlier, enable it as the Podman page shows. (#2009)
+- 🐛 A service waiting for its database at start-up now names the address the database's name led to, so a name pointing at a server that has moved shows in the log. (#2009)
+- 🐛 A rootful Podman JIM on RHEL-family hosts no longer stays down after a restart, logging `No route to host` for its database: `setup.sh` stops NetworkManager unplugging JIM's pods. Upgrading from v0.16.0 or earlier, add the setting as the Podman page shows. (#2009)
 - 🐛 An export scope review item's causality panel now starts from its Metaverse Object; it showed a Connected System Object that took no part in the run, as though the review had imported it. (#1982)
 - 🐛 An export scope review's execution item now reads as an **Export Scope Review** of its Metaverse Object and links it; it showed "Operation: Not Set" and said the Connected System Object had been deleted. (#1971)
 - 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation, not when each next changes. Changes saved before upgrading need saving again. (#1925)

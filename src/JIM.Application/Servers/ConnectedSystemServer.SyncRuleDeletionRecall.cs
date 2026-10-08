@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Services;
+using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -120,9 +121,9 @@ public partial class ConnectedSystemServer
         Log.Information(
             "ExecuteSyncRuleDeletionRecallAsync: Synchronisation Rule {SyncRuleId}: {ObjectCount} Metaverse Object(s) processed, " +
             "{ValueCount} value(s) recalled, {ReElectedCount} attribute(s) re-elected, {ClearedCount} attribute(s) cleared, " +
-            "{PendingExportCount} Pending Export(s) staged; rule deleted.",
+            "{PendingExportCount} Pending Export(s) staged, {WithdrawnCount} queued Pending Export change(s) withdrawn as already current; rule deleted.",
             task.SyncRuleId, result.MetaverseObjectsProcessed, result.ValuesRecalled, result.AttributesReElected,
-            result.AttributesCleared, result.PendingExportsStaged);
+            result.AttributesCleared, result.PendingExportsStaged, result.PendingExportChangesWithdrawn);
 
         return result;
     }
@@ -182,6 +183,7 @@ public partial class ConnectedSystemServer
         var survivorObjectTypes = new List<Models.Staging.ConnectedSystemObjectType>();
         var affectedMvoIds = affectedMetaverseObjectIds
             ?? await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
+        var csoChangeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
         foreach (var batch in affectedMvoIds.Chunk(batchSize))
         {
@@ -275,6 +277,11 @@ public partial class ConnectedSystemServer
                 var executionItem = BuildRecallExecutionItem(mvo, reElectedDetailMessage, clearedDetailMessage, additions.Count, clearedAttributeCount);
                 executionItems.Add(executionItem);
                 scopeExitCandidates.Add((mvo, executionItem));
+
+                // Changes queued for the object's targets that they no longer need were withdrawn (#2011). That changes
+                // what the next export does, so it is recorded on the object's item, as synchronisation records it.
+                result.PendingExportChangesWithdrawn += await RecordRecallWithdrawalsAsync(executionItem, exportEvaluation.Withdrawals,
+                    exportEvaluationCache, activity, recordOutcomes: true, snapshotChanges: csoChangeTrackingEnabled);
 
                 result.MetaverseObjectsProcessed++;
                 result.ValuesRecalled += recalledValues.Count;
@@ -493,6 +500,89 @@ public partial class ConnectedSystemServer
         }
 
         return deprovisioningExports.Count;
+    }
+
+    /// <summary>
+    /// Reports the changes a recall's export evaluation withdrew from target objects' Pending Exports, because the targets
+    /// already hold the values the Metaverse now has (#2011): one Pending Export Changes Withdrawn outcome per target
+    /// object on the recalled object's execution item, with the same count, snapshot of the withdrawn values and
+    /// Synchronisation Rule attribution a synchronisation records for the same withdrawal
+    /// (<c>SyncTaskProcessorBase.ReportPendingExportChangeWithdrawalsAsync</c>, #2001). Placed at root level, where the
+    /// recall executors record their other export outcomes (<see cref="DeprovisionRecallScopeExitsAsync"/>). Shared by
+    /// every recall executor so they cannot diverge from each other or from synchronisation.
+    /// </summary>
+    /// <param name="executionItem">The recalled object's execution item.</param>
+    /// <param name="withdrawals">What the object's export evaluation withdrew, one per target object.</param>
+    /// <param name="exportEvaluationCache">The cache the evaluation ran against, for the export rules' names.</param>
+    /// <param name="activity">The recall's Activity, whose initiator the snapshots carry.</param>
+    /// <param name="recordOutcomes">Whether outcomes are recorded at all (the executor's sync outcome tracking).</param>
+    /// <param name="snapshotChanges">Whether Connected System Object change tracking is on, as for every export snapshot.</param>
+    /// <returns>How many changes were withdrawn, for the executor's summary statistics, recorded or not.</returns>
+    private async Task<int> RecordRecallWithdrawalsAsync(
+        ActivityRunProfileExecutionItem executionItem,
+        IReadOnlyList<PendingExportChangesWithdrawal> withdrawals,
+        ExportEvaluationCache exportEvaluationCache,
+        Activity activity,
+        bool recordOutcomes,
+        bool snapshotChanges)
+    {
+        if (withdrawals.Count == 0)
+            return 0;
+
+        var withdrawnCount = withdrawals.Sum(withdrawal => withdrawal.Changes.Count);
+        if (!recordOutcomes)
+            return withdrawnCount;
+
+        var exportRulesById = exportEvaluationCache.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .GroupBy(rule => rule.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var withdrawal in withdrawals)
+        {
+            exportRulesById.TryGetValue(withdrawal.SyncRuleId, out var exportRule);
+            var outcome = SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+                targetEntityId: withdrawal.ConnectedSystemObjectId,
+                targetEntityDescription: exportRule?.ConnectedSystem?.Name,
+                detailCount: withdrawal.Changes.Count,
+                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(withdrawal.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name),
+                syncRuleId: withdrawal.SyncRuleId,
+                syncRuleName: withdrawal.SyncRuleName);
+
+            if (snapshotChanges)
+                outcome.ConnectedSystemObjectChange = await SnapshotWithdrawnChangesAsync(withdrawal, activity);
+        }
+
+        SyncOutcomeBuilder.BuildOutcomeSummary(executionItem);
+        return withdrawnCount;
+    }
+
+    /// <summary>
+    /// The withdrawn values as a Connected System Object change snapshot, so the Activity shows what will no longer be
+    /// exported, built as a synchronisation builds a staged export's: reference values resolved to the referenced objects
+    /// in the target where they exist. Built from a shell, never the Pending Export itself, whose withdrawn rows may
+    /// already be deleted and detached.
+    /// </summary>
+    private async Task<Models.Staging.ConnectedSystemObjectChange> SnapshotWithdrawnChangesAsync(PendingExportChangesWithdrawal withdrawal, Activity activity)
+    {
+        var shell = new PendingExport
+        {
+            ConnectedSystemId = withdrawal.ConnectedSystemId,
+            ConnectedSystemObjectId = withdrawal.ConnectedSystemObjectId,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = [.. withdrawal.Changes]
+        };
+
+        var referencedMvoIds = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(shell.AttributeValueChanges);
+        var resolvedReferences = referencedMvoIds.Count > 0
+            ? await Application.SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(referencedMvoIds, withdrawal.ConnectedSystemId)
+            : null;
+
+        var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
+            shell, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, resolvedReferences);
+        change.ConnectedSystemObjectId ??= withdrawal.ConnectedSystemObjectId;
+        return change;
     }
 
     /// <summary>

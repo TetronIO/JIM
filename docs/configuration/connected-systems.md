@@ -609,9 +609,12 @@ unchanged since the one before, so its own speed would understate a run that has
 
 **Reading it.** The preview leads with the worst consequence, then lists each change by Connected System and attribute
 under **What would change**, including updates, provisioning and deprovisioning in the target systems the run reaches,
-drift corrections, and objects the run would fail. Objects the run would leave as they are are counted on one line
-under the list rather than as rows of it. Select a change to see the objects it applies to, with each value **Now**
-and **After the synchronisation**; select an object to see everything the run would do to it, as its own
+drift corrections, and objects the run would fail. Updates already queued for a target that would no longer be exported,
+because the target already holds the value, are listed as **Pending Export changes withdrawn**. Objects the run would
+leave as they are are counted on one line under the list rather than as rows of it. Select a change to see the objects
+it applies to, with each value **Now** and **After the synchronisation**; for withdrawn changes the columns are
+**Queued**, the change that was waiting to be exported, and **Target keeps**, the value the target already holds and
+keeps. Select an object to see everything the run would do to it, as its own
 [Sync Preview](sync-preview.md) shows it. Where every object would stay as it is, the preview says the Full
 Synchronisation would change nothing.
 
@@ -672,6 +675,7 @@ Open the Connected System's **Danger Zone** tab and choose **Preview deletion im
 | New contributor, value changes | Another Connected System also contributes the attribute, so its value takes over, following [Attribute Priority](../concepts/attribute-priority.md). Each row names the system the new value would come from. |
 | New contributor, same value | As above, but the value is identical, so only its source changes and nothing is exported. These are counted but never lead the summary. |
 | Updated in the target system | A correction staged for a downstream Connected System because a value it holds would change or be cleared. |
+| Pending Export changes withdrawn | A change already queued for a downstream Connected System, not yet exported, that would be withdrawn because the account already holds the value the deletion leaves the Metaverse Object with. The account keeps its value, and anything else queued for it still exports. Its values read **Queued**, the change that was waiting, and **Target keeps**, the value the account already holds. |
 | Removed from the target system | An account a downstream system would delete, because the identity it belongs to is deleted or leaves that system's export scope, and the [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) there is Delete. |
 | Disconnects from its Metaverse Object | The same two situations where the Deprovisioning Action is Disconnect: the account stays in the downstream system and JIM stops managing it. |
 | Provisioning cancelled | An account JIM was about to create in a downstream system, but has not yet exported, that would no longer be created. |

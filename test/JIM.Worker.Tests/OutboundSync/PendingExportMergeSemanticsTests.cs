@@ -163,6 +163,89 @@ public class PendingExportMergeSemanticsTests
         return (exportSyncRule, mvo, targetCso, targetEmployeeIdAttr, cache);
     }
 
+    /// <summary>
+    /// A group export Synchronisation Rule flowing a multi-valued member attribute to a joined target object that
+    /// already holds <paramref name="targetMembers"/>, for a Metaverse Object whose members are
+    /// <paramref name="mvoMembers"/>, all of them reported as changed.
+    /// </summary>
+    private (SyncRule ExportRule, MetaverseObject Mvo, ConnectedSystemObject TargetCso, ConnectedSystemObjectTypeAttribute MemberAttr,
+        ExportEvaluationCache Cache, List<MetaverseObjectAttributeValue> ChangedAttributes) ArrangeMembershipScenario(
+        string[] targetMembers, string[] mvoMembers)
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+
+        var mvMemberAttr = new MetaverseAttribute
+        {
+            Id = 9001, Name = "TestMember", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, BuiltIn = false
+        };
+        mvGroupType.Attributes.Add(mvMemberAttr);
+        var targetMemberAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9002, Name = "member", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, ConnectedSystemObjectType = targetUserType, Selected = true
+        };
+        targetUserType.Attributes.Add(targetMemberAttr);
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.MetaverseObjectTypeId = mvGroupType.Id;
+        exportRule.AttributeFlowRules.Clear();
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetMemberAttr,
+            TargetConnectedSystemAttributeId = targetMemberAttr.Id,
+            Sources = { new SyncRuleMappingSource { Id = 200, Order = 0, MetaverseAttribute = mvMemberAttr, MetaverseAttributeId = mvMemberAttr.Id } }
+        });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvGroupType };
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            MetaverseObject = mvo
+        };
+        var targetValues = targetMembers.Select(member => new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = targetCso, Attribute = targetMemberAttr, AttributeId = targetMemberAttr.Id, StringValue = member
+        }).ToList();
+        targetCso.AttributeValues.AddRange(targetValues);
+
+        var changedAttributes = mvoMembers.Select(member => new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = mvMemberAttr, AttributeId = mvMemberAttr.Id, StringValue = member
+        }).ToList();
+        mvo.AttributeValues.AddRange(changedAttributes);
+
+        var exportRulesByMvoTypeId = new Dictionary<int, List<SyncRule>> { { mvGroupType.Id, new List<SyncRule> { exportRule } } };
+        var csoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, targetSystem.Id), targetCso } };
+        var csoAttributeValues = targetValues.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+        var cache = new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup, csoAttributeValues, new List<int> { targetSystem.Id });
+
+        return (exportRule, mvo, targetCso, targetMemberAttr, cache, changedAttributes);
+    }
+
+    private static PendingExport NewUpdatePendingExport(ConnectedSystemObject targetCso) => new()
+    {
+        Id = Guid.NewGuid(),
+        ConnectedSystem = targetCso.ConnectedSystem,
+        ConnectedSystemId = targetCso.ConnectedSystemId,
+        ConnectedSystemObject = targetCso,
+        ConnectedSystemObjectId = targetCso.Id,
+        ChangeType = PendingExportChangeType.Update,
+        Status = PendingExportStatus.Pending,
+        CreatedAt = DateTime.UtcNow
+    };
+
     private static PendingExportAttributeValueChange CreateChange(
         ConnectedSystemObjectTypeAttribute attribute, PendingExportAttributeChangeType changeType, string stringValue) => new()
     {
@@ -410,6 +493,81 @@ public class PendingExportMergeSemanticsTests
 
         var carolChange = merged.AttributeValueChanges.Single(c => c.StringValue == "CN=Carol,DC=test");
         Assert.That(carolChange.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Add));
+    }
+
+    /// <summary>
+    /// The in-memory merge path (#2001): a Pending Export staged earlier this page queues the removal of a member the
+    /// target still holds, and the Metaverse now wants that member again while adding another. The queued removal is
+    /// withdrawn from the staged export and reported, so the run can record it; the new member is merged in.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_InMemoryPendingExportQueuesARemovalTheTargetNoLongerNeeds_ReportsTheWithdrawalAsync()
+    {
+        var (exportRule, mvo, targetCso, memberAttr, cache, changedAttributes) = ArrangeMembershipScenario(
+            targetMembers: ["CN=Bob,DC=test"], mvoMembers: ["CN=Bob,DC=test", "CN=Carol,DC=test"]);
+        var staged = NewUpdatePendingExport(targetCso);
+        staged.AttributeValueChanges.Add(CreateChange(memberAttr, PendingExportAttributeChangeType.Remove, "CN=Bob,DC=test"));
+        var inMemoryBatch = new List<PendingExport> { staged };
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache, deferSave: true, existingPendingExports: inMemoryBatch);
+
+        var withdrawal = result.Withdrawals.SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, "the withdrawal is reported");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
+            Assert.That(withdrawal!.ConnectedSystemId, Is.EqualTo(targetCso.ConnectedSystemId));
+            Assert.That(withdrawal!.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(withdrawal!.SyncRuleName, Is.EqualTo(exportRule.Name));
+            Assert.That(withdrawal!.MetaverseObjectId, Is.EqualTo(mvo.Id));
+            Assert.That(withdrawal!.Changes.Select(c => $"{c.ChangeType} {c.StringValue}"), Is.EqualTo(new[] { "Remove CN=Bob,DC=test" }));
+            Assert.That(staged.AttributeValueChanges.Select(c => $"{c.ChangeType} {c.StringValue}"), Is.EqualTo(new[] { "Add CN=Carol,DC=test" }),
+                "arrange check: the removal was withdrawn and the new member merged in");
+        }
+    }
+
+    /// <summary>
+    /// The persisted merge path (#2001): of three queued removals, one is for a member the target still holds and the
+    /// Metaverse wants again (withdrawn), one is superseded by a newly staged add for the same member (replaced, which
+    /// is not a withdrawal) and one is untouched. Only the first is reported.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_PersistedPendingExportMerge_ReportsOnlyTheChangesWithdrawnNotThoseSupersededAsync()
+    {
+        var (_, mvo, targetCso, memberAttr, cache, changedAttributes) = ArrangeMembershipScenario(
+            targetMembers: ["CN=Bob,DC=test"], mvoMembers: ["CN=Bob,DC=test", "CN=Carol,DC=test"]);
+        var queued = NewUpdatePendingExport(targetCso);
+        queued.AttributeValueChanges.Add(CreateChange(memberAttr, PendingExportAttributeChangeType.Remove, "CN=Bob,DC=test"));
+        queued.AttributeValueChanges.Add(CreateChange(memberAttr, PendingExportAttributeChangeType.Remove, "CN=Carol,DC=test"));
+        queued.AttributeValueChanges.Add(CreateChange(memberAttr, PendingExportAttributeChangeType.Remove, "CN=Dave,DC=test"));
+        SyncRepo.SeedPendingExport(queued);
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, changedAttributes, cache);
+
+        var withdrawal = result.Withdrawals.SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, "the withdrawal is reported");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
+            Assert.That(withdrawal!.Changes.Select(c => $"{c.ChangeType} {c.StringValue}"), Is.EqualTo(new[] { "Remove CN=Bob,DC=test" }));
+            Assert.That(result.PendingExports.Single().AttributeValueChanges.Select(c => $"{c.ChangeType} {c.StringValue}"),
+                Is.EquivalentTo(new[] { "Add CN=Carol,DC=test", "Remove CN=Dave,DC=test" }), "arrange check: the replacement export");
+        }
+    }
+
+    /// <summary>
+    /// Nothing queued: an evaluation that finds a member already current withdraws nothing and reports nothing.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_AlreadyCurrentWithNothingQueued_ReportsNoWithdrawalAsync()
+    {
+        var (_, mvo, _, _, cache, changedAttributes) = ArrangeMembershipScenario(
+            targetMembers: ["CN=Bob,DC=test"], mvoMembers: ["CN=Bob,DC=test"]);
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, changedAttributes, cache);
+
+        Assert.That(result.Withdrawals, Is.Empty);
     }
 
     /// <summary>

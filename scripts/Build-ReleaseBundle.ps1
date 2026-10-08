@@ -487,12 +487,18 @@ printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.c
   "`$(base64 -w0 /opt/jim/tls/tls.crt)" "`$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
 ``````
 
-Then start JIM, and allow its port through firewalld if it is running:
+If firewalld is running, open JIM's port without reloading firewalld, and have
+Podman restore its rules for JIM's network whenever firewalld reloads. If
+NetworkManager is running, tell it to leave Podman's interfaces alone, or it can
+unplug JIM's database from JIM's network. Then start JIM:
 
 ``````bash
+firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https
+systemctl enable --now netavark-firewalld-reload.service
+printf '[keyfile]\nunmanaged-devices+=interface-name:veth*;interface-name:podman*\n' > /etc/NetworkManager/conf.d/90-jim-podman.conf
+nmcli general reload conf
 systemctl daemon-reload
 systemctl start jim-database.service jim.service
-firewall-cmd --permanent --add-service=https && firewall-cmd --reload
 ``````
 
 JIM is ready when podman healthcheck run jim-web succeeds.

@@ -53,8 +53,9 @@ public partial class ConnectedSystemServer
     /// <list type="number">
     /// <item><b>Per-object pass</b>: every Connected System Object of the system, page by page, obsoleted on a preview-owned
     /// clone. Recalled values, values taken over by a surviving contributor, Metaverse Object deletion eligibility, values
-    /// kept by an Object Type with recall switched off, and the export consequences (corrective updates, and
-    /// deprovisioning for export rules the object leaves) are reported.</item>
+    /// kept by an Object Type with recall switched off, and the export consequences (corrective updates, queued changes
+    /// withdrawn because the target already holds the value, and deprovisioning for export rules the object leaves) are
+    /// reported.</item>
     /// <item><b>Residue pass</b>: values still carrying the system's provenance on objects the first pass did not reach
     /// (stranded by an earlier Connector Space clear, or kept joined by a RemainJoined rule), recalled by provenance as
     /// the real run's residue pass recalls them.</item>
@@ -472,15 +473,34 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Classifies the outbound decisions for one recalled object: a corrective update per exported attribute, and the
-    /// deprovisioning for each export rule the object leaves, named per the rule's Deprovisioning Action. Anything
-    /// targeting the system being deleted is left out; it goes with the system.
+    /// Classifies the outbound decisions for one recalled object: a corrective update per exported attribute, a
+    /// withdrawal per attribute whose queued change the target no longer needs, and the deprovisioning for each export
+    /// rule the object leaves, named per the rule's Deprovisioning Action. Anything targeting the system being deleted is
+    /// left out; it goes with the system.
     /// </summary>
     private static IEnumerable<PreviewDelta> ClassifyOutbound(DeprovisioningPreviewPass pass, MetaverseObject mvo, string objectName,
         OutboundPreviewResult outbound)
     {
         foreach (var entry in outbound.Entries.Where(entry => entry.ConnectedSystemId != pass.ConnectedSystemId))
         {
+            // Changes queued on the target's Pending Export that the deletion would withdraw, because the target already
+            // holds the values (#2011), by attribute as the Full Synchronisation preview states them: what was queued
+            // against what the target keeps. Independent of whether anything new is staged.
+            if (entry is { Kind: OutboundPreviewEntryKind.Staging, ExistingTargetCsoId: { } withdrawnFromCsoId })
+            {
+                foreach (var withdrawnForAttribute in entry.WithdrawnChanges.GroupBy(change => change.AttributeId))
+                {
+                    var attributeName = withdrawnForAttribute.Select(change => change.Attribute?.Name).FirstOrDefault(name => name != null)
+                        ?? $"attribute {withdrawnForAttribute.Key}";
+                    var kept = pass.ExportEvaluationCache.CsoAttributeValues[(withdrawnFromCsoId, withdrawnForAttribute.Key)]
+                        .Select(value => value.ToStringNoName());
+
+                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn, mvo, objectName, entry,
+                        withdrawnFromCsoId, attributeName, PreviewValueRenderer.Join(withdrawnForAttribute.Select(PreviewValueRenderer.Render)),
+                        PreviewValueRenderer.Join(kept));
+                }
+            }
+
             switch (entry.Kind)
             {
                 case OutboundPreviewEntryKind.Staging when entry.ExistingTargetCsoId.HasValue && entry.AttributeChanges.Count > 0:

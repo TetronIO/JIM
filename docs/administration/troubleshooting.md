@@ -19,15 +19,18 @@ At start-up, `jim.worker`, `jim.web` and `jim.scheduler` each wait for PostgreSQ
 The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: Name or service not known. Retrying in 15s.
 ```
 
-**What it means.** The service cannot reach PostgreSQL at the address named in the line (`JIM_DB_HOSTNAME`). A few of these lines are normal while the bundled PostgreSQL container starts, or while an external database server restarts: the service carries on as soon as PostgreSQL answers, logging `Connected to the database after 8 attempts (63s).`, and nothing is lost while it waits.
+Where the name resolves, the line also gives the address it led to on that attempt, such as `jim-database:5432 (10.89.1.14): No route to host`.
+
+**What it means.** The service cannot reach PostgreSQL at the server named in the line (`JIM_DB_HOSTNAME`). A few of these lines are normal while the bundled PostgreSQL container starts, or while an external database server restarts: the service carries on as soon as PostgreSQL answers, logging `Connected to the database after 8 attempts (63s).`, and nothing is lost while it waits.
 
 **How to fix, if it keeps waiting.**
 
 1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `sudo podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
-2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port.
-3. For an external server, check that a firewall allows the JIM host to reach it.
+2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port. For the bundled database, compare the address in the line with the database's own (`sudo podman inspect jim-database-postgres --format '{{.NetworkSettings.Networks.jim.IPAddress}}'` on Podman): a different address means the name still points at a database that has since moved.
+3. `No route to host` means nothing answered for the address, or something on the way refused the connection. For an external server, check that a firewall allows the JIM host to reach it. For the bundled database on rootful Podman, check that the database is still plugged into JIM's network: `sudo bridge link` lists one interface per pod on the network's bridge (`sudo podman network inspect jim` names the bridge, such as `podman1`), so a JIM and its database show two. With one missing, and `nmcli device` showing NetworkManager connecting an interface named `veth…`, NetworkManager unplugged the database: tell it to leave Podman's interfaces alone (see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor)), then restart JIM and its database, as step 4 shows.
+4. On a rootful Podman host running firewalld, a firewalld reload also removes the rules Podman adds for JIM's network, unless `netavark-firewalld-reload.service` is enabled to put them back; JIM's services then log `No route to host` or, where they can no longer resolve names on their network, `Resource temporarily unavailable`. Restart JIM and its database to bring them back: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`.
 
-A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait.
+A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait. On Podman the restarted service keeps its pod's network, so a fault in that network outlasts the restart: restart JIM and its database, as step 4 shows.
 
 ### The bundled database restarts with `could not map anonymous shared memory`
 
@@ -101,7 +104,7 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 **What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop a rootful JIM's containers using the network at all. `jim-web` logs `OIDC discovery attempt 1/5 failed: Permission denied`, `jim-worker` logs `The database is not reachable yet ... Resource temporarily unavailable`, and `sudo dmesg | grep DENIED` shows `profile="crun"` with `class="net"`.
 
-**How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
+**How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
 
 ### On Ubuntu, JIM's services keep crashing and restarting
 
@@ -109,13 +112,13 @@ JIM becomes ready, but `jim-web`, `jim-worker` or `jim-scheduler` restart now an
 
 **What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop the processes in a rootful JIM's containers signalling one another. The .NET runtime signals its own threads to reclaim memory, so a service aborts and Podman restarts it. `sudo podman inspect --format '{{.Name}} {{.RestartCount}}' jim-web jim-worker jim-scheduler` counts the restarts, and `sudo journalctl -k | grep DENIED` shows `operation="signal"` with a `peer` ending `//&crun`. A synchronisation running when the worker crashes stops there; the worker fails its Activity when it starts again, and the next run carries on from where JIM's data stands (see [Pausing work first](upgrading.md#pausing-work)).
 
-**How to fix.** Add the signal rule [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor) shows, then restart the server, which Podman needs to load its profile with the rule. The installer adds the rule; an installation made by the installer of v0.16.0 or earlier needs it adding by hand.
+**How to fix.** Add the signal rule [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart the server, which Podman needs to load its profile with the rule. The installer adds the rule; an installation made by the installer of v0.16.0 or earlier needs it adding by hand.
 
 ### Other machines cannot reach JIM, but it answers on the server itself
 
 **What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
 
-**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor).
+**How to fix.** `firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https` (or `--add-port=<port>/tcp` for another port), which opens it without reloading firewalld: a reload would take a rootful Podman JIM's network away (see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor)). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor).
 
 ## HTTPS
 

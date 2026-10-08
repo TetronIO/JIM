@@ -23,7 +23,7 @@ Adding a member is expected and welcome; add it to the end of the enum and add i
 Two independent rendering pipelines cover these enums, and they do not overlap:
 
 - **Sync outcomes and causal edges** (the causality Lineage/Timeline views, `src/JIM.Web/Shared/Causality/`) go through `src/JIM.Web/Causality/`:
-  - **`OutcomeDisplayMap`** is the single source of truth for how every `ActivityRunProfileExecutionItemSyncOutcomeType` value is displayed: a plain-English label, a `CausalityTone` (Success/Info/Warning/Error/Primary/Secondary) and a Material icon. Every one of the 52 members below has an entry; an unmapped future value falls back to the bare enum name rather than throwing. `OutcomeDisplayMapVocabularyTests` (JIM.Web.Tests) asserts every label against the product-noun rules (no "MVO"/"CSO"/"Identity"/"record").
+  - **`OutcomeDisplayMap`** is the single source of truth for how every `ActivityRunProfileExecutionItemSyncOutcomeType` value is displayed: a plain-English label, a `CausalityTone` (Success/Info/Warning/Error/Primary/Secondary) and a Material icon. Every one of the 59 members below has an entry; an unmapped future value falls back to the bare enum name rather than throwing. `OutcomeDisplayMapVocabularyTests` (JIM.Web.Tests) asserts every label against the product-noun rules (no "MVO"/"CSO"/"Identity"/"record").
   - **`CausalityModelBuilder`** places each outcome into a lane (Source, Downstream or Identity) for the visualisation's columns, and turns each `CausalEdgeType`/`CausalReasonCode` pair recorded on a `CausalEdge` row into a node in the model.
   - **`CausalityCauseWording`** renders the plain-English sentence for a cross-item causal edge (a `CausalEdgeType` plus its `CausalReasonCode`): "X rejected the generated value as already in use, so JIM generated a new one", and so on. This is the only one of the four builder types that reads `CausalReasonCode` at all; reason codes never appear directly in `OutcomeDisplayMap`.
   - **`CausalitySummaryBuilder`** composes the Activity's plain-English summary band from groups of outcomes (for example, folding every `GeneratedValueAssigned` event on a run into one clause via `BuildGeneratedValueClauses`).
@@ -62,7 +62,7 @@ Two independent rendering pipelines cover these enums, and they do not overlap:
 
 ## `ActivityRunProfileExecutionItemSyncOutcomeType`
 
-`src/JIM.Models/Activities/ActivityEnums.cs`. The sync outcome tree recorded on a Run Profile Execution Item: what synchronisation actually did (or, for the "Would..." members, what a Configuration Change Preview found it would do; nothing writes those during a real run). 52 members.
+`src/JIM.Models/Activities/ActivityEnums.cs`. The sync outcome tree recorded on a Run Profile Execution Item: what synchronisation actually did (or, for the "Would..." members, what a Configuration Change Preview found it would do; nothing writes those during a real run). 59 members.
 
 | Ordinal | Member | Meaning | Produced by | Portal label (`OutcomeDisplayMap`) | Tone |
 |---|---|---|---|---|---|
@@ -121,6 +121,10 @@ Two independent rendering pipelines cover these enums, and they do not overlap:
 | 52 | `WouldTakeOverContributedValue` | Preview only (#134): a value the deleted Connected System contributes would be withdrawn and another Connected System would take the attribute over with a different value; the delta's Connected System is the new contributor. | Connected System deletion preview | New contributor, value changes | Warning |
 | 53 | `WouldTakeOverSameValue` | Preview only (#134): as above, but the new contributor already holds the same value, so only the source changes and nothing is exported. | Connected System deletion preview | New contributor, same value | Secondary |
 | 54 | `WouldStageUpdateExport` | Preview only (#134): an exported attribute of an object in a target Connected System would be updated, one delta per attribute. | Connected System deletion preview | Updated in the target system | Info |
+| 55 | `TargetDisconnected` | A scope exit under a Disconnect Deprovisioning Action broke the join to the object in the target system and left it in place (#1966); queues nothing, so not counted as a Pending Export. | `SyncTaskProcessorBase` / recall executors / `SyncPreviewServer` | Disconnected from target system | Warning |
+| 56 | `WouldNotChange` | Preview only (#1530): the run would leave the object as it is (skipped as unchanged, or already as its rules describe); one per object. | Full Synchronisation preview | No change | Success |
+| 57 | `WouldFail` | Preview only (#1530): the run would fail the object with an error no more specific transition names; the delta carries the error's detail. | Full Synchronisation preview | Fails with an error | Error |
+| 58 | `PendingExportChangesWithdrawn` | Changes queued on a target object's Pending Export were withdrawn because the target already holds the values the Metaverse now wants (#2001); queues nothing, so not counted as a Pending Export. Detail count is the changes withdrawn, and the withdrawn values are snapshotted on the outcome. | `ExportEvaluationServer` (reported in `ExportEvaluationResult.Withdrawals`) / `SyncTaskProcessorBase.ReportPendingExportChangeWithdrawalsAsync` / `SyncPreviewServer` and the Full Synchronisation preview; the recall executors (`ConnectedSystemServer.RecordRecallWithdrawalsAsync`, at root level, #2011) and the Connected System deletion preview. | Pending Export changes withdrawn | Info |
 
 ## `ActivityRunProfileExecutionItemErrorType`
 

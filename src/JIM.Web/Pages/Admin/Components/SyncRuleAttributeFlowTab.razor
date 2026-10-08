@@ -761,8 +761,8 @@
                             <div class="d-flex flex-wrap gap-2 mt-3">
                                 @foreach (var suggestion in selectable)
                                 {
-                                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
-                                        OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</MudButton>
+                                    <AlertButton Severity="Severity.Info"
+                                        OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</AlertButton>
                                 }
                             </div>
                         }

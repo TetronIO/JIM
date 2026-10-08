@@ -838,7 +838,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 CsoId: o.OutcomeType switch
                 {
                     ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
-                        or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected => o.TargetEntityId,
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn => o.TargetEntityId,
                     ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
                         or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => o.ConnectedSystemObjectChange?.ConnectedSystemObjectId,
                     _ => null

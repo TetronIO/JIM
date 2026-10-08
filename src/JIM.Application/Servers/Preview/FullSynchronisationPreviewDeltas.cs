@@ -23,8 +23,9 @@ namespace JIM.Application.Servers.Preview;
 /// <item>A Metaverse value changed or cleared: the inbound summary's changes, per attribute; not for a projection,
 /// whose values are all new and are its projection.</item>
 /// <item>Drift corrected: the drift corrections, per attribute.</item>
-/// <item>Provisioning, an update to a target, a disconnection or a cancelled provisioning there: the outbound
-/// decisions; deprovisioning: the proposed Delete exports, which include an immediate deletion's cascade.</item>
+/// <item>Provisioning, an update to a target, queued changes withdrawn there, a disconnection or a cancelled
+/// provisioning there: the outbound decisions; deprovisioning: the proposed Delete exports, which include an
+/// immediate deletion's cascade.</item>
 /// </list>
 /// <para>
 /// Each row's subject (what <see cref="SubjectOf"/> counts) is the object it happens to: the synchronised object, its
@@ -172,8 +173,9 @@ internal static class FullSynchronisationPreviewDeltas
     }
 
     /// <summary>
-    /// What happens in target systems: provisioning, updates by attribute, disconnections, cancelled provisioning, and
-    /// deprovisioning (including an immediate deletion's cascade, and a cascade's disconnect-only objects).
+    /// What happens in target systems: provisioning, updates by attribute, queued changes withdrawn by attribute,
+    /// disconnections, cancelled provisioning, and deprovisioning (including an immediate deletion's cascade, and a
+    /// cascade's disconnect-only objects).
     /// </summary>
     private static IEnumerable<PreviewDelta> Outbound(SyncPreviewResult preview, Identity identity, Guid? provisionedFor)
     {
@@ -209,6 +211,21 @@ internal static class FullSynchronisationPreviewDeltas
                     yield return Target(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, identity,
                         entry.ExistingTargetCsoId, entry.ConnectedSystemId);
                     break;
+            }
+
+            // Changes queued on the target's Pending Export that the run would withdraw (#2001), by attribute: what was
+            // queued against what the target already holds and keeps. Independent of whether anything new is staged.
+            foreach (var withdrawn in entry.WithdrawnChanges.GroupBy(change => change.AttributeId))
+            {
+                var attributeName = withdrawn.Select(change => change.Attribute?.Name).FirstOrDefault(name => name != null)
+                    ?? $"attribute {withdrawn.Key}";
+                yield return Target(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn, identity,
+                    entry.ExistingTargetCsoId, entry.ConnectedSystemId,
+                    attributeName,
+                    PreviewValueRenderer.Join(withdrawn.Select(PreviewValueRenderer.Render)),
+                    PreviewValueRenderer.Join(entry.CurrentTargetValues
+                        .Where(value => value.AttributeId == withdrawn.Key)
+                        .Select(value => value.ToStringNoName())));
             }
         }
 

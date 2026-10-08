@@ -105,6 +105,7 @@ public partial class ConnectedSystemServer
         var survivorObjectTypes = new List<ConnectedSystemObjectType>();
         var systemNamesById = await Application.SyncRepo.GetConnectedSystemNamesAsync();
         var syncOutcomeTrackingLevel = await Application.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+        var csoChangeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
         // Pass A: per-object obsoletion, batched in ascending id order (keyset pagination, which is also
         // what makes the checkpoint deterministic). Skipped entirely when a resumed run had already
@@ -133,7 +134,7 @@ public partial class ConnectedSystemServer
 
                 await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, recallScope,
                     priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
-                    exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel,
+                    exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel, csoChangeTrackingEnabled,
                     connectedSystem.Name, derivedInputMarks, result);
 
                 // Persist the checkpoint AFTER the batch is fully persisted: a crash between the two
@@ -195,6 +196,7 @@ public partial class ConnectedSystemServer
                 result.AttributesReElected += residueResult.AttributesReElected;
                 result.AttributesCleared += residueResult.AttributesCleared;
                 result.PendingExportsStaged += residueResult.PendingExportsStaged;
+                result.PendingExportChangesWithdrawn += residueResult.PendingExportChangesWithdrawn;
 
                 task.CheckpointPhase = SynchronisedDeprovisioningPhase.ResiduePass;
                 task.CheckpointSyncRuleId = importRule.Id;
@@ -227,10 +229,10 @@ public partial class ConnectedSystemServer
             "ExecuteSynchronisedDeprovisioningAsync: Connected System {ConnectedSystemId}: {CsoCount} Connected System Object(s) processed, " +
             "{ReElectedCount} attribute(s) re-elected, {ClearedCount} attribute(s) cleared, {MvoDeletedCount} Metaverse Object(s) deleted, " +
             "{MvoMarkedCount} Metaverse Object(s) marked for deletion, {ResidueValueCount} residual value(s) recalled across {ResidueObjectCount} object(s), " +
-            "{PendingExportCount} Pending Export(s) staged; system deleted.",
+            "{PendingExportCount} Pending Export(s) staged, {WithdrawnCount} queued Pending Export change(s) withdrawn as already current; system deleted.",
             task.ConnectedSystemId, result.ConnectedSystemObjectsProcessed, result.AttributesReElected, result.AttributesCleared,
             result.MetaverseObjectsDeleted, result.MetaverseObjectsMarkedForDeletion, result.ResidueValuesRecalled,
-            result.ResidueMetaverseObjectsProcessed, result.PendingExportsStaged);
+            result.ResidueMetaverseObjectsProcessed, result.PendingExportsStaged, result.PendingExportChangesWithdrawn);
 
         return result;
     }
@@ -258,6 +260,7 @@ public partial class ConnectedSystemServer
         List<ConnectedSystemObjectType> survivorObjectTypes,
         Dictionary<int, string> systemNamesById,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel syncOutcomeTrackingLevel,
+        bool csoChangeTrackingEnabled,
         string connectedSystemName,
         DerivedInputMarkBatch derivedInputMarks,
         ConnectedSystemDeprovisioningResult result)
@@ -375,7 +378,21 @@ public partial class ConnectedSystemServer
                 // re-evaluated, and one about to be deleted immediately has no export evaluation here at all (its
                 // deletion cascade stages its deprovisioning instead). Evaluated after the batch persists; see Step 5.
                 if (obsoletionResult.MvoAttributeChange is { } changeForOutcomes)
+                {
                     scopeExitCandidates.Add((exportEvaluationInput.Mvo, changeForOutcomes.ExecutionItem));
+
+                    // Changes queued for the object's targets that they no longer need were withdrawn (#2011), recorded on
+                    // the object's item beside its scope exits, as synchronisation records them. Not for the system being
+                    // deleted: its objects are deleted in this batch (Step 2), so the record would name, and its snapshot
+                    // reference, rows that are gone; they go with the system, as the preview says of every export to it.
+                    var withdrawals = exportEvaluation.Withdrawals
+                        .Where(withdrawal => withdrawal.ConnectedSystemId != task.ConnectedSystemId)
+                        .ToList();
+                    result.PendingExportChangesWithdrawn += await RecordRecallWithdrawalsAsync(changeForOutcomes.ExecutionItem,
+                        withdrawals, exportEvaluationCache, activity,
+                        recordOutcomes: syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None,
+                        snapshotChanges: csoChangeTrackingEnabled);
+                }
             }
 
             result.ConnectedSystemObjectsProcessed++;

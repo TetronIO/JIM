@@ -425,7 +425,7 @@
                            state and reloads rather than keeping the previous group's rows. The column headers carry
                            no sort affordance because the stored read offers no ordering to drive one; the rows
                            arrive in the order the preview recorded them. *@
-                        var valueTitles = ConfigurationChangePreviewWording.ValueColumnTitles(preview.Surface);
+                        var valueTitles = ConfigurationChangePreviewWording.ValueColumnTitles(preview.Surface, selected.TransitionType);
                         <VirtualisedDataGrid @ref="_deltasGrid" T="ConfigurationChangePreviewDelta"
                                              ContainerId="preview-delta-list"
                                              UrlParameterPrefix="pd-"

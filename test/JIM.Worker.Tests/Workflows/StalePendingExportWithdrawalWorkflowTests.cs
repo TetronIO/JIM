@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -93,6 +94,120 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
 
         Assert.That(DirectoryPendingExports(ctx), Is.Empty,
             "the Metaverse now agrees with every value the account holds, so nothing is left to export");
+    }
+
+    [Test]
+    public async Task FullSync_ValueChangesThenChangesBackBeforeExport_RecordsTheWithdrawalOnTheObjectsItemAsync()
+    {
+        // A withdrawal changes what the next export will do to the target, so the run must say so on the item of the
+        // object whose change caused it, not only in the service log (#2001).
+        var ctx = await SetUpAsync(directoryProjects: false);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        var account = SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", "Engineer");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        SetValue(hrCso, "DisplayName", "Alicia");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        SetValue(hrCso, "DisplayName", "Alice");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var withdrawal = WithdrawalOutcomes(activity).SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, "the withdrawal is recorded on the object's item: " + DescribeOutcomes(activity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.TargetEntityId, Is.EqualTo(account.Id), "naming the account whose queued change was withdrawn");
+            Assert.That(withdrawal!.TargetEntityDescription, Is.EqualTo("Directory"), "and the system it is in");
+            Assert.That(withdrawal!.DetailCount, Is.EqualTo(1), "counting the changes withdrawn");
+            Assert.That(withdrawal!.SyncRuleName, Is.EqualTo("Directory Export"), "attributed to the export rule that queued them");
+            Assert.That(withdrawal!.ParentSyncOutcome?.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow),
+                "nested under the Attribute Flow that made the change unnecessary, as a staged export is");
+            Assert.That(SnapshotValues(withdrawal!), Is.EquivalentTo(new[] { "DisplayName=Alicia" }), "showing what was withdrawn");
+            Assert.That(DirectoryPendingExports(ctx), Is.Empty, "arrange check: the queued change was withdrawn");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_OneQueuedChangeBecomesUnnecessaryWhileAnotherIsStaged_RecordsOnlyTheWithdrawnOneAsync()
+    {
+        // The merge path: a new Title is staged in the same evaluation that finds DisplayName already current. The
+        // queued Title is superseded by the new one, which is not a withdrawal; only the queued DisplayName is.
+        var ctx = await SetUpAsync(directoryProjects: false);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        var account = SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", "Engineer");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        SetValue(hrCso, "DisplayName", "Alicia");
+        SetValue(hrCso, "Title", "Architect");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        SetValue(hrCso, "DisplayName", "Alice");
+        SetValue(hrCso, "Title", "Director");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var withdrawal = WithdrawalOutcomes(activity).SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, "the withdrawal is recorded on the object's item: " + DescribeOutcomes(activity));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawal!.TargetEntityId, Is.EqualTo(account.Id));
+            Assert.That(withdrawal!.DetailCount, Is.EqualTo(1), "the superseded Title is replaced, not withdrawn");
+            Assert.That(SnapshotValues(withdrawal!), Is.EquivalentTo(new[] { "DisplayName=Alicia" }));
+            Assert.That(DirectoryChangeValues(ctx, "Title"), Is.EqualTo(new[] { "Director" }), "arrange check: the new Title is staged");
+            Assert.That(DirectoryChangeValues(ctx, "DisplayName"), Is.Empty, "arrange check: the queued DisplayName was withdrawn");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_WithdrawalAtStandardTracking_IsRecordedAsARootOutcomeAsync()
+    {
+        // The processor reads the level from the service settings, not the repository.
+        DbContext.ServiceSettingItems.Add(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+            DisplayName = "Sync outcome tracking level",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Enum,
+            DefaultValue = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard)
+        });
+        await DbContext.SaveChangesAsync();
+        var ctx = await SetUpAsync(directoryProjects: false);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", "Engineer");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        SetValue(hrCso, "DisplayName", "Alicia");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        SetValue(hrCso, "DisplayName", "Alice");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var withdrawal = WithdrawalOutcomes(activity).SingleOrDefault();
+        Assert.That(withdrawal, Is.Not.Null, DescribeOutcomes(activity));
+        Assert.That(withdrawal!.ParentSyncOutcome, Is.Null, "Standard tracking records no children");
+    }
+
+    [Test]
+    public async Task FullSync_NothingQueued_RecordsNoWithdrawalAsync()
+    {
+        // The account already holds the new value and nothing was ever queued for it, so there is nothing to withdraw.
+        var ctx = await SetUpAsync(directoryProjects: false);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        var account = SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", "Engineer");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        SetValue(account, "DisplayName", "Alicia");
+
+        SetValue(hrCso, "DisplayName", "Alicia");
+        await ModifyCsoAsync(hrCso);
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        Assert.That(WithdrawalOutcomes(activity), Is.Empty, DescribeOutcomes(activity));
     }
 
     // ---- Topology ----
@@ -229,12 +344,28 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
             .Select(c => c.StringValue)
             .ToList();
 
-    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
+    private static List<ActivityRunProfileExecutionItemSyncOutcome> WithdrawalOutcomes(Activity activity) =>
+        activity.RunProfileExecutionItems
+            .SelectMany(item => item.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
+            .ToList();
+
+    private static List<string> SnapshotValues(ActivityRunProfileExecutionItemSyncOutcome outcome) =>
+        outcome.ConnectedSystemObjectChange?.AttributeChanges
+            .SelectMany(a => a.ValueChanges.Select(v => $"{a.Attribute?.Name}={v.StringValue}"))
+            .ToList() ?? [];
+
+    private static string DescribeOutcomes(Activity activity) =>
+        string.Join("; ", activity.RunProfileExecutionItems.Select(item =>
+            string.Join(", ", item.SyncOutcomes.Select(o => o.OutcomeType.ToString()))));
+
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem)
     {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 }

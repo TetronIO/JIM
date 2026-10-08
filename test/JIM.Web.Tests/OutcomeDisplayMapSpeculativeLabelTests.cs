@@ -30,6 +30,7 @@ public class OutcomeDisplayMapSpeculativeLabelTests
         ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
         ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
         ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
         ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
         ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
         ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved

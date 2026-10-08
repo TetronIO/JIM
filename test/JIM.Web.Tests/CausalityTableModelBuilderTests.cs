@@ -491,6 +491,37 @@ public class CausalityTableModelBuilderTests
     /// so nothing is being removed from it, and the row must not be treated as Destructive.
     /// </summary>
     [Test]
+    public void Build_PendingExportChangesWithdrawn_ProjectsOneObjectRowAndNoAttributeChanges()
+    {
+        // #2001: the withdrawn changes are exactly what will NOT reach the target system, so listing them as attribute
+        // changes would read as values being exported. One object-level row says what happened; the drawer shows the
+        // withdrawn values under their own caption.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var attributeFlow = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 1);
+        var withdrawn = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+            parent: attributeFlow, ordinal: 0, targetEntityId: CausalityTestData.ProvisionedCsoId,
+            targetEntityDescription: "Glitterband EMEA", detailCount: 3, detailMessage: "2|person",
+            syncRuleId: 9, syncRuleName: "Glitterband People - Outbound");
+        withdrawn.ConnectedSystemObjectChange = CausalityTestData.BuildCsoChangeSnapshot();
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var row = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.QueuedChangesWithdrawn);
+            Assert.That(row.Via, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(table.Rows.Where(r => r.ChangeKind == CausalityTableChangeKind.AttributeChange), Is.Empty,
+                "withdrawn values are not changes being made");
+            Assert.That(model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
+                .AttributeRows, Has.Count.EqualTo(3), "the drawer still lists what was withdrawn");
+            Assert.That(CausalityTableFilters.Matches(row, CausalityTableFilter.Destructive), Is.False,
+                "nothing is lost: the target keeps the values it already holds");
+        }
+    }
+
+    [Test]
     public void Build_SpeculativeCascadeWithNeverExportedTarget_ProjectsAProvisioningCancelledRow()
     {
         var mvoId = Guid.NewGuid();

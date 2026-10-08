@@ -99,8 +99,34 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
       - port: 443/tcp
         state: enabled
 
+  pre_tasks:
+    # Before JIM's pods start: NetworkManager would otherwise sometimes take the interface Podman plugs a pod into
+    # JIM's network with, and unplug it. += keeps any interfaces the host already lists; the reload applies it without
+    # restarting NetworkManager.
+    - name: Keep NetworkManager off Podman's interfaces
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/90-jim-podman.conf
+        content: |
+          [keyfile]
+          unmanaged-devices+=interface-name:veth*;interface-name:podman*
+        mode: "0644"
+      register: jim_networkmanager
+
+    - name: Apply it
+      ansible.builtin.command: nmcli general reload conf
+      when: jim_networkmanager.changed
+
   roles:
     - redhat.rhel_system_roles.podman
+
+  post_tasks:
+    # Puts back the firewall rules Podman adds for JIM's network whenever firewalld reloads; without it, a reload
+    # leaves JIM unable to reach its database until JIM restarts. Podman ships it disabled.
+    - name: Keep JIM's network through a firewalld reload
+      ansible.builtin.systemd_service:
+        name: netavark-firewalld-reload.service
+        enabled: true
+        state: started
 ```
 
 With your own PostgreSQL server, leave out `jim-database.yaml` and the `jim-database` unit, and set `JIM_DB_HOSTNAME` in `jim-config.yaml`. For a port other than 443, change `PublishPort=` and the firewall port together.

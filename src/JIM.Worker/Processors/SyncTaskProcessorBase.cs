@@ -3286,6 +3286,14 @@ public abstract class SyncTaskProcessorBase
                     await SnapshotPendingExportChangesAsync(peOutcome, pe);
                 }
             }
+
+            // Changes queued on the object's Pending Exports that the targets no longer need were withdrawn (#2001).
+            // That changes what the next export does, so it is a change made by this evaluation, and is recorded.
+            if (result.Withdrawals.Count > 0)
+            {
+                _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
+                await ReportPendingExportChangeWithdrawalsAsync(mvo.Id, objectItem, exportOutcomeParent, result.Withdrawals);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data.
@@ -3446,6 +3454,77 @@ public abstract class SyncTaskProcessorBase
                     targetEntityDescription: targetSystemName,
                     detailMessage: detailMessage);
             }
+        }
+    }
+
+    /// <summary>
+    /// Reports the changes an object's export evaluation withdrew from its Pending Exports, because the targets already
+    /// hold the values the Metaverse now wants (#2001), as one Pending Export Changes Withdrawn outcome per target
+    /// object on the object's execution item. Placed where the evaluation's staged exports go (nested under the
+    /// object's export parent in Detailed mode, else at root level), and carrying a snapshot of the withdrawn values so
+    /// the Activity shows what will no longer be exported. The Sync Preview and the Full Synchronisation preview
+    /// report the same outcome in the same place.
+    /// </summary>
+    /// <param name="mvoId">The Metaverse Object whose evaluation withdrew the changes.</param>
+    /// <param name="item">The object's execution item; null when none was registered for it.</param>
+    /// <param name="detailedParent">The outcome to nest under in Detailed mode, read before the object's evaluation
+    /// added outcomes of its own; null records the outcomes at root level.</param>
+    /// <param name="withdrawals">The withdrawals the evaluation made, one per target object.</param>
+    private async Task ReportPendingExportChangeWithdrawalsAsync(
+        Guid mvoId,
+        ActivityRunProfileExecutionItem? item,
+        ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
+        IReadOnlyList<PendingExportChangesWithdrawal> withdrawals)
+    {
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        if (item == null)
+        {
+            // A withdrawal follows an Attribute Flow change, which always registers the object's item, so this
+            // should not happen; say so rather than lose the record silently.
+            Log.Warning("ReportPendingExportChangeWithdrawalsAsync: No execution item registered for Metaverse Object {MvoId}; " +
+                "{Count} Pending Export change withdrawal(s) were made but cannot be recorded on the Activity",
+                mvoId, withdrawals.Count);
+            return;
+        }
+
+        var exportRulesById = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .GroupBy(rule => rule.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var withdrawal in withdrawals)
+        {
+            exportRulesById.TryGetValue(withdrawal.SyncRuleId, out var exportRule);
+            var targetSystemName = exportRule?.ConnectedSystem?.Name;
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(withdrawal.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+
+            var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
+                ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+                    targetEntityId: withdrawal.ConnectedSystemObjectId,
+                    targetEntityDescription: targetSystemName,
+                    detailCount: withdrawal.Changes.Count,
+                    detailMessage: detailMessage,
+                    syncRuleId: withdrawal.SyncRuleId,
+                    syncRuleName: withdrawal.SyncRuleName)
+                : SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+                    targetEntityId: withdrawal.ConnectedSystemObjectId,
+                    targetEntityDescription: targetSystemName,
+                    detailCount: withdrawal.Changes.Count,
+                    detailMessage: detailMessage,
+                    syncRuleId: withdrawal.SyncRuleId,
+                    syncRuleName: withdrawal.SyncRuleName);
+
+            // The withdrawn values, through the same snapshot a staged export's outcome carries. A shell, never the
+            // Pending Export itself: the withdrawn rows may already be deleted and detached.
+            await SnapshotPendingExportChangesAsync(outcome, new PendingExport
+            {
+                ConnectedSystemId = withdrawal.ConnectedSystemId,
+                ConnectedSystemObjectId = withdrawal.ConnectedSystemObjectId,
+                ChangeType = PendingExportChangeType.Update,
+                AttributeValueChanges = [.. withdrawal.Changes]
+            });
         }
     }
 
@@ -6118,14 +6197,7 @@ public abstract class SyncTaskProcessorBase
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
         // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
-        var mvoGuids = pendingExport.AttributeValueChanges
-            .Where(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue)
-                       && avc.Attribute?.Type == AttributeDataType.Reference)
-            .Select(avc => Guid.TryParse(avc.UnresolvedReferenceValue, out var g) ? g : (Guid?)null)
-            .Where(g => g.HasValue)
-            .Select(g => g!.Value)
-            .Distinct()
-            .ToList();
+        var mvoGuids = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(pendingExport.AttributeValueChanges);
 
         if (mvoGuids.Count > 0)
         {
