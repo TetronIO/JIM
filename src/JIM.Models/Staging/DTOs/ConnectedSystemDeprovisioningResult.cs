@@ -56,4 +56,11 @@ public class ConnectedSystemDeprovisioningResult
     /// (recalls, re-elections, deletion cascades and reference recalls) and the residue pass.
     /// </summary>
     public int PendingExportsStaged { get; set; }
+
+    /// <summary>
+    /// How many changes already queued on target objects' Pending Exports the run withdrew, across both passes,
+    /// because the targets already hold the values the Metaverse now has (#2011). Each is recorded on its object's
+    /// execution item.
+    /// </summary>
+    public int PendingExportChangesWithdrawn { get; set; }
 }

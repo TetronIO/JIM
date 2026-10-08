@@ -60,6 +60,12 @@ public class StrandedValueSweepResult
     public int PendingExportsStaged { get; set; }
 
     /// <summary>
+    /// How many changes already queued on target objects' Pending Exports the value recall withdrew, because the
+    /// targets already hold the values the Metaverse now has (#2011). Each is recorded on its object's execution item.
+    /// </summary>
+    public int PendingExportChangesWithdrawn { get; set; }
+
+    /// <summary>
     /// True when the sweep was armed but the #1605 Full Import gate was closed, so nothing above was
     /// touched: no recall, no marking, nothing staged. The arming stays in place for the next run. Every
     /// counter above is zero when this is true.

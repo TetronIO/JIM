@@ -172,9 +172,68 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
         }
     }
 
+    [Test]
+    public async Task QueuedChangeTheTargetAlreadyHolds_PreviewProposesTheWithdrawalAndTheRunRecordsItWithItsSnapshotAsync()
+    {
+        // HR's Description is queued for the account, unexported, and the account holds none. Deleting HR clears
+        // Description, so the account already holds what the Metaverse now has and the queued value is withdrawn (#2011).
+        // Only a real database shows the outcome's snapshot persisting by foreign key to the account and its attribute,
+        // and the preview reading the queue under its read-only guard.
+        var topology = await SeedAsync(exportScopedOnDescription: false, queueDescriptionForTarget: true);
+        var before = await DatabaseIsolationSnapshot.CaptureAsync(_connectionString, WatchedTables);
+
+        var deltas = new List<PreviewDelta>();
+        await using (var ctx = NewContext())
+        {
+            var repo = new PostgresDataRepository(ctx);
+            using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
+            await foreach (var delta in jim.ConnectedSystems.PreviewSynchronisedDeprovisioningAsync(topology.HrSystemId))
+                deltas.Add(delta);
+            await ctx.SaveChangesAsync();
+        }
+        var afterPreview = await DatabaseIsolationSnapshot.CaptureAsync(_connectionString, WatchedTables);
+
+        await using (var ctx = NewContext())
+        {
+            var repo = new PostgresDataRepository(ctx);
+            using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
+            var task = await FenceAndQueueAsync(ctx, topology.HrSystemId);
+            await jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+        }
+
+        await using var verify = NewContext(tracking: false);
+        var withdrawal = await verify.ActivityRunProfileExecutionItemSyncOutcomes
+            .Include(o => o.ConnectedSystemObjectChange!).ThenInclude(c => c.AttributeChanges).ThenInclude(a => a.ValueChanges)
+            .SingleOrDefaultAsync(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn);
+        var proposed = deltas.SingleOrDefault(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => afterPreview.AssertUnchangedSince(before), Throws.Nothing, "the preview reads the queue and changes nothing");
+            Assert.That(proposed?.ConnectedSystemObjectId, Is.EqualTo(topology.TargetCsoId), "the preview proposes the withdrawal");
+            Assert.That(proposed?.AttributeName, Is.EqualTo("Description"));
+            Assert.That(proposed?.OldValue, Is.EqualTo(HrDescription), "what was queued");
+
+            Assert.That(withdrawal, Is.Not.Null, "the run persists the withdrawal on the object's item");
+            Assert.That(withdrawal?.TargetEntityId, Is.EqualTo(topology.TargetCsoId));
+            Assert.That(withdrawal?.ConnectedSystemObjectChange?.ConnectedSystemObjectId, Is.EqualTo(topology.TargetCsoId),
+                "its snapshot belongs to the account");
+            Assert.That(withdrawal?.ConnectedSystemObjectChange?.AttributeChanges
+                    .SelectMany(a => a.ValueChanges.Select(v => $"{a.AttributeName}={v.StringValue}")),
+                Is.EqualTo(new[] { $"Description={HrDescription}" }), "and shows what was withdrawn");
+            Assert.That(await verify.PendingExports.AnyAsync(pe => pe.ConnectedSystemObjectId == topology.TargetCsoId), Is.False,
+                "the queued change was withdrawn and nothing new was staged");
+            Assert.That(await verify.ConnectedSystems.AnyAsync(cs => cs.Id == topology.HrSystemId), Is.False,
+                "the run must reach its final step and delete the system");
+        }
+    }
+
     private sealed record Topology(int HrSystemId, Guid MvoId, Guid TargetCsoId);
 
-    private async Task<Topology> SeedAsync()
+    /// <param name="exportScopedOnDescription">Scopes the export rule on HR's Description with a Delete Deprovisioning
+    /// Action, so deleting HR takes the account out of scope; otherwise the account stays in scope and is updated.</param>
+    /// <param name="queueDescriptionForTarget">Seeds the account holding no Description, with HR's queued for it on a
+    /// Pending Export not yet exported.</param>
+    private async Task<Topology> SeedAsync(bool exportScopedOnDescription = true, bool queueDescriptionForTarget = false)
     {
         await using var seed = NewContext();
 
@@ -258,11 +317,14 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
             TargetConnectedSystemAttribute = adDescription,
             Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescription } }
         });
-        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        if (exportScopedOnDescription)
         {
-            Type = SearchGroupType.All,
-            Criteria = [new SyncRuleScopingCriteria { MetaverseAttribute = mvDescription, ComparisonType = SearchComparisonType.Equals, StringValue = HrDescription, CaseSensitive = true }]
-        });
+            exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+            {
+                Type = SearchGroupType.All,
+                Criteria = [new SyncRuleScopingCriteria { MetaverseAttribute = mvDescription, ComparisonType = SearchComparisonType.Equals, StringValue = HrDescription, CaseSensitive = true }]
+            });
+        }
         seed.SyncRules.AddRange(importRule, exportRule);
         await seed.SaveChangesAsync();
 
@@ -296,10 +358,32 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
             ExternalIdAttributeId = adType.Attributes.Single(a => a.IsExternalId).Id
         };
         adCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), Attribute = adType.Attributes.Single(a => a.IsExternalId), GuidValue = Guid.NewGuid() });
-        adCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), Attribute = adDescription, StringValue = HrDescription });
+        if (!queueDescriptionForTarget)
+            adCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), Attribute = adDescription, StringValue = HrDescription });
 
         seed.ConnectedSystemObjects.AddRange(hrCso, adCso);
         await seed.SaveChangesAsync();
+
+        if (queueDescriptionForTarget)
+        {
+            seed.PendingExports.Add(new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = ad.Id,
+                ConnectedSystemObjectId = adCso.Id,
+                ChangeType = PendingExportChangeType.Update,
+                Status = PendingExportStatus.Pending,
+                AttributeValueChanges =
+                [
+                    new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(), Attribute = adDescription, StringValue = HrDescription,
+                        ChangeType = PendingExportAttributeChangeType.Update, SyncRuleId = exportRule.Id, SyncRuleName = exportRule.Name
+                    }
+                ]
+            });
+            await seed.SaveChangesAsync();
+        }
 
         return new Topology(hr.Id, mvo.Id, adCso.Id);
     }

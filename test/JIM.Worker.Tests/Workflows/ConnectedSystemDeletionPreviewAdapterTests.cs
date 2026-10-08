@@ -151,6 +151,41 @@ public class ConnectedSystemDeletionPreviewAdapterTests : SynchronisedDeprovisio
     }
 
     [Test]
+    public async Task CountImpactAsync_QueuedChangesWithdrawnInTwoTargets_CountsEachTargetAccountAsync()
+    {
+        // One person whose revised Description is queued for two target accounts, both already holding the value the
+        // deletion hands Description to (#2011). A withdrawal happens to the account whose queue loses the change, as an
+        // update does, so this is two objects, not one person.
+        var ctx = await SetUpTwoContributorsWithExportTargetAsync();
+        var mvType = ctx.HrImportRule.MetaverseObjectType!;
+        var secondTarget = await AddExportTargetAsync(mvType,
+            mvType.Attributes.First(a => a.Id == ctx.MvDisplayNameAttributeId),
+            mvType.Attributes.First(a => a.Id == ctx.MvDescriptionAttributeId));
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training!);
+        foreach (var targetCso in SyncRepo.ConnectedSystemObjects.Values
+                     .Where(c => c.ConnectedSystemId == ctx.Target.Id || c.ConnectedSystemId == secondTarget.System.Id))
+        {
+            targetCso.Status = ConnectedSystemObjectStatus.Normal;
+            foreach (var (name, value) in new[] { ("DisplayName", "John Smith"), ("Description", TrainingDescription) })
+            {
+                var attribute = targetCso.Type.Attributes.Single(a => a.Name == name);
+                targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    AttributeId = attribute.Id, Attribute = attribute, StringValue = value, ConnectedSystemObject = targetCso
+                });
+            }
+        }
+        SyncRepo.ClearAllPendingExports();
+        await QueueRevisedHrDescriptionAsync(ctx);
+
+        var counts = await Adapter.CountImpactAsync(ContextFor(ctx.Hr.Id));
+
+        Assert.That(counts.SingleOrDefault(c => c.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)?.ObjectCount,
+            Is.EqualTo(2), string.Join("; ", counts.Select(c => $"{c.TransitionType}={c.ObjectCount}")));
+    }
+
+    [Test]
     public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
     {
         var ctx = await SetUpTwoObjectsWithExportTargetAsync();

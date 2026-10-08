@@ -402,6 +402,33 @@ public abstract class SynchronisedDeprovisioningTestBase : WorkflowTestBase
         SyncRepo.ClearAllPendingExports();
     }
 
+    protected const string RevisedHrDescription = "HR Description, revised";
+
+    /// <summary>
+    /// Revises HR's Description and synchronises HR, so the target's Pending Export queues the revised value, unexported.
+    /// With the target holding Training's Description, a deletion that hands Description to Training withdraws it.
+    /// </summary>
+    protected async Task QueueRevisedHrDescriptionAsync(DeprovisioningContext ctx)
+    {
+        var hrCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Hr.Id);
+        hrCso.AttributeValues.Single(av => av.Attribute.Name == "HrDescription").StringValue = RevisedHrDescription;
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        Assert.That(SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == ctx.Target.Id)
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .Select(c => c.StringValue),
+            Is.EqualTo(new[] { RevisedHrDescription }), "arrange check: the revised Description is queued for the target");
+    }
+
+    /// <summary>
+    /// The withdrawn values a Pending Export Changes Withdrawn outcome carries, as attribute=value.
+    /// </summary>
+    protected static List<string> WithdrawnSnapshot(ActivityRunProfileExecutionItemSyncOutcome outcome) =>
+        outcome.ConnectedSystemObjectChange?.AttributeChanges
+            .SelectMany(a => a.ValueChanges.Select(v => $"{a.AttributeName}={v.StringValue}"))
+            .ToList() ?? [];
+
     protected static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue)
     {
         return new SyncRuleMapping

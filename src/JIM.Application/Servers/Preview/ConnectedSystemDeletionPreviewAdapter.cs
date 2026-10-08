@@ -33,7 +33,8 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
-        ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled
+        ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn
     ];
 
     private readonly JimApplication _application;
