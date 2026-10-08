@@ -91,6 +91,8 @@ public class SynchronisationControllerRunPreviewLinkTests
                 _createdActivities.Add(a);
             })
             .Returns(Task.CompletedTask);
+        // Nothing has happened since the preview started, so the cited preview is current (#2022).
+        _activities.Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>())).ReturnsAsync(new ConfigurationChangePreviewStaleness(null, null));
         _activities.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _storedActivities.GetValueOrDefault(id));
         _previews.Setup(r => r.GetPreviewAsync(It.IsAny<Guid>()))

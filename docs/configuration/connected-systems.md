@@ -619,9 +619,11 @@ keeps. Select an object to see everything the run would do to it, as its own
 Synchronisation would change nothing.
 
 **Running it.** **Run Full Synchronisation** on the preview queues the run, and the run's Activity records that it was
-informed by the preview. If data or configuration has changed since the preview ran, the panel says so, and a run
-started then records no preview, because what it showed may no longer hold; choose **Run again** first for a current
-answer.
+informed by the preview. If data or configuration has changed since the preview started, the panel says so and names
+what changed, for example "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Any run on any Connected
+System counts, so with a schedule running this is common. Running from such a preview asks first: **Preview again**
+gives you a current answer, and **Run anyway** queues the run. A run started anyway still records the preview you read,
+and its Activity says the preview was out of date and what overtook it.
 
 **Automating it.** Scripts get the same evaluation:
 [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -FullSynchronisation`](../powershell/previews.md#new-jimconfigurationchangepreview)
@@ -630,7 +632,9 @@ The start result's estimated duration says roughly how long to wait, and `-Wait`
 finished preview's Activity id to
 [`Start-JIMRunProfile -PreviewActivityId`](../powershell/run-profiles.md#start-jimrunprofile), or as `previewActivityId`
 when executing the Run Profile through the REST API, to record it on the run; JIM refuses a run citing anything other
-than a completed Full Synchronisation preview of that same system, and queues nothing.
+than a completed Full Synchronisation preview of that same system, and queues nothing. A run citing a preview that
+something has overtaken still queues: its Activity records that the preview was out of date, and PowerShell writes a
+warning saying what overtook it (the REST response carries it in `warnings`).
 
 ## Confirming a configuration change
 
@@ -682,13 +686,13 @@ Open the Connected System's **Danger Zone** tab and choose **Preview deletion im
 
 The preview describes **deprovisioning through synchronisation** only. Deleting immediately keeps every contributed value and sends no exports, so there is nothing for it to evaluate beyond the deletion rules, and the delete dialog says so instead of repeating the preview's figures.
 
-The delete dialog shows the latest preview beside the deletion choices: the first few lines of its summary when it is current, its progress while it is still running, and a prompt to preview first when there is none. A preview goes **stale** when anything that could change its answer happens after it ran. That is either data moving (a Run Profile running, housekeeping deleting Metaverse Objects, a connector space being cleared, or another Connected System being deleted) or a configuration change that affects synchronisation. A stale preview says which of the two overtook it and offers to run again.
+The delete dialog shows the latest preview beside the deletion choices: the first few lines of its summary when it is current, its progress while it is still running, and a prompt to preview first when there is none. A preview goes **stale** when anything that could change its answer happens after it ran. That is either data moving (a Run Profile running, housekeeping deleting Metaverse Objects, a connector space being cleared, or another Connected System being deleted) or a configuration change that affects synchronisation. A stale preview says what overtook it and offers to run again.
 
-The deletion's [Activity](activities.md) records whether a preview informed it. Only a finished, current preview is recorded, and the Activity shows it as "Informed by a preview run" with its summary lines and a link to the full preview; anything else (no preview, one still running, one that did not finish, or a stale one) is recorded as "Went ahead without a preview". Recording a preview the administrator could not rely on would make the audit trail claim more than it should.
+The deletion's [Activity](activities.md) records whether a preview informed it. A finished preview is recorded, and the Activity shows it as "Informed by a preview run" with its summary lines and a link to the full preview. If the preview was stale when you deleted, the Activity also says it was out of date and what overtook it, so the audit trail neither claims more than the preview could show nor says you went ahead without looking. A deletion with no preview, or with one still running or one that did not finish, is recorded as "Went ahead without a preview".
 
 Where a [derived Attribute Flow](synchronisation-rules.md#deriving-metaverse-attributes) reads a Metaverse attribute this deletion clears or changes, the preview carries a warning naming the attribute and the systems hosting those flows. The preview shows the change to the attribute itself, not the derived values that follow from it: the deletion marks the objects affected, and those flows recompute at the next synchronisation of the system hosting them.
 
-Automation gets the same evaluation: [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion`](../powershell/previews.md#new-jimconfigurationchangepreview) in PowerShell, or `POST connected-systems/{id}/deletion/preview` in the [REST API](../../api/reference/). Pass the preview's Activity id to [`Remove-JIMConnectedSystem -PreviewActivityId`](../powershell/connected-systems.md#remove-jimconnectedsystem), or as `previewActivityId` on the REST deletion, to record it; JIM refuses a deletion citing anything other than a deletion preview of that same system.
+Automation gets the same evaluation: [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion`](../powershell/previews.md#new-jimconfigurationchangepreview) in PowerShell, or `POST connected-systems/{id}/deletion/preview` in the [REST API](../../api/reference/). Pass the preview's Activity id to [`Remove-JIMConnectedSystem -PreviewActivityId`](../powershell/connected-systems.md#remove-jimconnectedsystem), or as `previewActivityId` on the REST deletion, to record it; JIM refuses a deletion citing anything other than a deletion preview of that same system. A deletion citing a stale preview goes ahead, records that the preview was out of date, and returns a warning saying what overtook it.
 
 ## Manage Connected Systems
 

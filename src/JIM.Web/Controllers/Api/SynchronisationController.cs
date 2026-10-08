@@ -2695,7 +2695,7 @@ public class SynchronisationController(
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone. Supplied as a query parameter because HTTP DELETE bodies are awkward for clients.</param>
     /// <param name="synchronisedDeprovisioning">True (the default) to deprovision through synchronisation; false to delete immediately and keep contributed data.</param>
-    /// <param name="previewActivityId">Optional: the deletion impact preview read before deleting (from <c>POST connected-systems/{id}/deletion/preview</c>), recorded on the deletion's Activity so its audit trail says what the deletion was expected to do. Must be a deletion preview of this Connected System.</param>
+    /// <param name="previewActivityId">Optional: the deletion impact preview read before deleting (from <c>POST connected-systems/{id}/deletion/preview</c>), recorded on the deletion's Activity so its audit trail says what the deletion was expected to do. Must be a deletion preview of this Connected System. A preview that a later run or configuration change has overtaken is still recorded; the Activity says it was out of date and what overtook it, and the result's <c>warnings</c> say so.</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
     /// <response code="200">Deletion completed immediately (immediate mode, small system only).</response>
     /// <response code="202">Deletion has been queued as a background job; the result carries the Activity and Worker Task ids to track it by. Always the case for the default deprovisioning mode.</response>
@@ -3052,7 +3052,9 @@ public class SynchronisationController(
     /// Queues a synchronisation task for execution by the worker service. Returns 202 Accepted with the Activity ID and Task ID for tracking.
     ///
     /// The body is optional. A Full Synchronisation started after reading its preview can name it as
-    /// <c>previewActivityId</c>, and the run's Activity then records that it was informed by that preview.
+    /// <c>previewActivityId</c>, and the run's Activity then records that it was informed by that preview. A preview
+    /// that a later run or configuration change has overtaken is still recorded: the run queues, its Activity says the
+    /// preview was out of date and what overtook it, and the response's <c>warnings</c> say so.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="runProfileId">The unique identifier of the Run Profile to execute.</param>

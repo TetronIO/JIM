@@ -67,7 +67,9 @@ function Remove-JIMConnectedSystem {
         The deletion preview this deletion was made after reading, as returned by
         New-JIMConfigurationChangePreview -ConnectedSystemId <id> -Deletion. Recorded on the deletion's
         Activity so "previewed, then deleted" is auditable rather than a claim. JIM refuses the deletion,
-        deleting nothing, when the id is not a deletion preview of this same Connected System.
+        deleting nothing, when the id is not a deletion preview of this same Connected System. A preview
+        that a later run or configuration change has overtaken is still recorded, and the deletion's
+        Activity says it was out of date and what overtook it; the cmdlet writes a warning saying so.
 
     .OUTPUTS
         When the deletion queues (always the case for the default deprovisioning mode), a PSCustomObject
@@ -231,6 +233,12 @@ function Remove-JIMConnectedSystem {
                 $result = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
                 Write-Verbose "Deletion result: $($result.outcome)"
+
+                # What the server wants the caller to know about a deletion that went ahead, such as the preview it
+                # cites having been out of date, which its Activity records.
+                foreach ($warning in @($result.warnings)) {
+                    if ($warning) { Write-Warning $warning }
+                }
 
                 if ($result -and $result.WorkerTaskId) {
                     # 202 Accepted: the deletion queued (always the case for deprovisioning). Surface the

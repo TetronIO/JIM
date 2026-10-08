@@ -40,7 +40,9 @@ function Start-JIMRunProfile {
         run's Activity so "previewed, then run" is auditable rather than a claim. Only a
         Full Synchronisation Run Profile can cite one, and it must be a completed Full
         Synchronisation preview of the same Connected System; anything else is refused and
-        the run is not queued.
+        the run is not queued. A preview that a later run or configuration change has
+        overtaken is still recorded, and the run's Activity says it was out of date and what
+        overtook it; the cmdlet writes a warning saying so.
 
     .PARAMETER PassThru
         If specified, returns the execution result object.
@@ -161,6 +163,12 @@ function Start-JIMRunProfile {
             $response = Invoke-JIMApi @executeParams
 
             Write-Verbose "Run Profile queued. ActivityId: $($response.activityId), TaskId: $($response.taskId)"
+
+            # What the server wants the caller to know about a run it queued: a partition warning, or the preview it
+            # cites having been out of date, which its Activity records.
+            foreach ($warning in @($response.warnings)) {
+                if ($warning) { Write-Warning $warning }
+            }
 
             if ($Wait) {
                 $hasTimeout = $PSBoundParameters.ContainsKey('Timeout')

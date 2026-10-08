@@ -82,6 +82,8 @@ public class SynchronisationControllerDeletionPreviewTests
             })
             .Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        // Nothing has happened since the preview started, so the cited preview is current (#2022).
+        _activityRepo.Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>())).ReturnsAsync(new ConfigurationChangePreviewStaleness(null, null));
         _activityRepo.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _activities.GetValueOrDefault(id));
         _previewRepo.Setup(r => r.CreatePreviewAsync(It.IsAny<ConfigurationChangePreview>()))

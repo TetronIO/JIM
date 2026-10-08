@@ -819,6 +819,20 @@ Describe 'Start-JIMRunProfile -PreviewActivityId' {
         }
     }
 
+    It 'Writes the warnings the server returns, such as the preview being out of date' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $outOfDate = "The preview was out of date (Run Profile 'Delta Import' ran on Connected System 'HR Import' after it started)."
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ activityId = [guid]::NewGuid(); taskId = [guid]::NewGuid(); warnings = @($outOfDate) }
+            }
+
+            Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 2 -PreviewActivityId ([guid]::NewGuid()) -WarningVariable written -WarningAction SilentlyContinue
+
+            @($written | ForEach-Object { "$_" }) | Should -Contain $outOfDate
+        }
+    }
+
     It 'Posts no body when no preview was read, as before' {
         InModuleScope JIM {
             $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

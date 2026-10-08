@@ -322,6 +322,23 @@ Describe 'Remove-JIMConnectedSystem' {
             }
         }
 
+        It 'Writes the warnings the server returns, such as the preview being out of date' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $outOfDate = "The preview was out of date (Synchronisation Rule 'HR Users' was updated after it started)."
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'DELETE') {
+                        return [PSCustomObject]@{ activityId = [guid]::NewGuid(); workerTaskId = [guid]::NewGuid(); outcome = 'QueuedAsBackgroundJob'; warnings = @($outOfDate) }
+                    }
+                    [PSCustomObject]@{ id = 1; name = 'HR System' }
+                }
+
+                Remove-JIMConnectedSystem -Id 1 -PreviewActivityId ([guid]::NewGuid()) -Force -WarningVariable written -WarningAction SilentlyContinue | Out-Null
+
+                @($written | ForEach-Object { "$_" }) | Should -Contain $outOfDate
+            }
+        }
+
         It 'Omits previewActivityId when no preview was run' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
