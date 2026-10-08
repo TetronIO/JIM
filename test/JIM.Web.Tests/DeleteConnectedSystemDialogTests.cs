@@ -275,7 +275,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
-        _staleness = new ConfigurationChangePreviewStaleness(null, DateTime.UtcNow.AddMinutes(-1));
+        _staleness = new ConfigurationChangePreviewStaleness(null, new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(-1), ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null));
         var provider = ShowDialog();
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");

@@ -98,7 +98,7 @@ namespace JIM.Application.Servers
 
         public async Task<WorkerTaskCreationResult> CreateWorkerTaskAsync(WorkerTask workerTask)
         {
-            string? partitionWarning = null;
+            var warnings = new List<string>();
 
             if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
@@ -108,7 +108,8 @@ namespace JIM.Application.Servers
                 {
                     return WorkerTaskCreationResult.Failed(validationResult.ErrorMessage!);
                 }
-                partitionWarning = validationResult.WarningMessage;
+                if (!string.IsNullOrEmpty(validationResult.WarningMessage))
+                    warnings.Add(validationResult.WarningMessage);
 
                 // every CRUD operation requires tracking with an activity...
                 // Core: only .Name and .Status are read for activity context; Run Profiles are loaded separately.
@@ -135,7 +136,10 @@ namespace JIM.Application.Servers
                 }
 
                 var activity = NewRunProfileExecutionActivity(synchronisationWorkerTask.ConnectedSystemId, connectedSystem?.Name, runProfile);
-                activity.PreviewActivityId = synchronisationWorkerTask.PreviewActivityId;
+
+                // Judged before the run's own Activity exists, so the run cannot count as having overtaken its preview.
+                if (await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, synchronisationWorkerTask.PreviewActivityId) is { } previewWarning)
+                    warnings.Add(previewWarning);
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -215,8 +219,9 @@ namespace JIM.Application.Servers
                     activity.ChangeReason = deleteConnectedSystemTask.ChangeReason.Trim();
 
                 // Likewise the preview that informed the deletion (#134), so the Activity answers whether the
-                // administrator looked first however the task ends.
-                activity.PreviewActivityId = deleteConnectedSystemTask.PreviewActivityId;
+                // administrator looked first however the task ends, and whether it was out of date (#2022).
+                if (await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, deleteConnectedSystemTask.PreviewActivityId) is { } previewWarning)
+                    warnings.Add(previewWarning);
 
                 // A finish-immediately deletion on a fenced system abandons the remaining Synchronised
                 // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
@@ -328,12 +333,9 @@ namespace JIM.Application.Servers
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
 
-            // Return result with any warnings
-            if (!string.IsNullOrEmpty(partitionWarning))
-            {
-                return WorkerTaskCreationResult.SucceededWithWarnings(workerTask.Id, partitionWarning);
-            }
-            return WorkerTaskCreationResult.Succeeded(workerTask.Id);
+            return warnings.Count > 0
+                ? WorkerTaskCreationResult.SucceededWithWarnings(workerTask.Id, [.. warnings])
+                : WorkerTaskCreationResult.Succeeded(workerTask.Id);
         }
 
         /// <summary>

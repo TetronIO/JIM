@@ -168,6 +168,32 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
         Assert.That(staleness.ConfigurationChangedAt, Is.Not.Null);
     }
 
+    [Test]
+    public async Task GetPreviewStalenessSinceAsync_SeveralRunsSince_NamesTheLatestOfEachKindAsync()
+    {
+        // What overtook a preview is said to the administrator about to act on it, and recorded on what they then do
+        // (#2022), so the query returns the Activity itself rather than only when it happened.
+        await SeedActivityAsync(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, PreviewStarted.AddMinutes(5),
+            targetName: "Full Import", targetContext: "HR Import");
+        var latestRun = await SeedActivityAsync(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute,
+            PreviewStarted.AddMinutes(10), targetName: "Delta Import", targetContext: "HR Import");
+        var edit = await SeedActivityAsync(ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, PreviewStarted.AddMinutes(7),
+            ConfigurationChangeClass.SyncAffecting, targetName: "HR Users");
+
+        var staleness = await GetStalenessAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(staleness.DataChange?.ActivityId, Is.EqualTo(latestRun));
+            Assert.That(staleness.DataChange?.TargetName, Is.EqualTo("Delta Import"));
+            Assert.That(staleness.DataChange?.TargetContext, Is.EqualTo("HR Import"));
+            Assert.That(staleness.DataChange?.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemRunProfile));
+            Assert.That(staleness.DataChange?.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Execute));
+            Assert.That(staleness.ConfigurationChange?.ActivityId, Is.EqualTo(edit));
+            Assert.That(staleness.ConfigurationChange?.TargetName, Is.EqualTo("HR Users"));
+        }
+    }
+
     // Activities that move no identity data a preview reasoned about. The first two are what an administrator's first-ever
     // sign-in records (their own Metaverse Object, created just in time and given the Administrator role); counting them
     // marked every preview stale the moment a new administrator signed in.
@@ -210,20 +236,23 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
         return await new PostgresDataRepository(context).Activity.GetPreviewStalenessSinceAsync(PreviewStarted);
     }
 
-    private async Task SeedActivityAsync(ActivityTargetType targetType, ActivityTargetOperationType operation, DateTime created,
-        ConfigurationChangeClass changeClass = ConfigurationChangeClass.NotClassified)
+    private async Task<Guid> SeedActivityAsync(ActivityTargetType targetType, ActivityTargetOperationType operation, DateTime created,
+        ConfigurationChangeClass changeClass = ConfigurationChangeClass.NotClassified, string targetName = "Seeded", string? targetContext = null)
     {
         await using var context = NewContext();
-        context.Activities.Add(new Activity
+        var activity = new Activity
         {
             TargetType = targetType,
             TargetOperationType = operation,
-            TargetName = "Seeded",
+            TargetName = targetName,
+            TargetContext = targetContext,
             Created = created,
             Executed = created,
             ConfigurationChangeClass = changeClass
-        });
+        };
+        context.Activities.Add(activity);
         await context.SaveChangesAsync();
+        return activity.Id;
     }
 
     private async Task<(int SystemA, int SystemB)> SeedTwoSystemsAsync()

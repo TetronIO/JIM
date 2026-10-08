@@ -203,7 +203,7 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
         // An audit trail claiming the administrator was shown what the run would do, when what they were shown no
         // longer held, is worse than one saying they went ahead without looking.
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
-        _staleness = new ConfigurationChangePreviewStaleness(DateTime.UtcNow, null);
+        _staleness = new ConfigurationChangePreviewStaleness(new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow, ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import"), null);
 
         var cut = RenderHost();
         using (Assert.EnterMultipleScope())

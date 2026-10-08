@@ -222,13 +222,14 @@ public class ConfigurationChangePreviewServerTests
         var started = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
         var previewActivity = new Activity { Id = Guid.CreateVersion7(), Created = started, TargetType = ActivityTargetType.ConnectedSystem };
         _activityRepo.Setup(r => r.GetActivityAsync(previewActivity.Id)).ReturnsAsync(previewActivity);
-        var changedAt = started.AddMinutes(3);
+        var overtakingRun = new PreviewOvertakingActivity(Guid.NewGuid(), started.AddMinutes(3), ActivityTargetType.ConnectedSystemRunProfile,
+            ActivityTargetOperationType.Execute, "Delta Import", "HR Import");
         _activityRepo.Setup(r => r.GetPreviewStalenessSinceAsync(started))
-            .ReturnsAsync(new ConfigurationChangePreviewStaleness(changedAt, null));
+            .ReturnsAsync(new ConfigurationChangePreviewStaleness(overtakingRun, null));
 
         var staleness = await NewServer().GetPreviewStalenessAsync(previewActivity.Id);
 
-        Assert.That(staleness, Is.EqualTo(new ConfigurationChangePreviewStaleness(changedAt, null)));
+        Assert.That(staleness, Is.EqualTo(new ConfigurationChangePreviewStaleness(overtakingRun, null)));
     }
 
     [Test]
@@ -236,6 +237,92 @@ public class ConfigurationChangePreviewServerTests
     {
         Assert.That(async () => await NewServer().GetPreviewStalenessAsync(Guid.CreateVersion7()),
             Throws.InstanceOf<InvalidOperationException>());
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Recording the preview a change cites (#2022)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task RecordCitedPreviewAsync_NoPreviewCited_RecordsNothingAndSaysNothingAsync()
+    {
+        var change = new Activity();
+
+        var warning = await NewServer().RecordCitedPreviewAsync(change, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.PreviewActivityId, Is.Null);
+            Assert.That(change.PreviewOvertakenAt, Is.Null);
+            Assert.That(change.PreviewOvertakenBy, Is.Null);
+            Assert.That(warning, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task RecordCitedPreviewAsync_CurrentPreview_RecordsTheLinkAloneAsync()
+    {
+        var preview = SetUpCitedPreview(new ConfigurationChangePreviewStaleness(null, null));
+        var change = new Activity();
+
+        var warning = await NewServer().RecordCitedPreviewAsync(change, preview);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.PreviewActivityId, Is.EqualTo(preview));
+            Assert.That(change.PreviewOvertakenAt, Is.Null);
+            Assert.That(change.PreviewOvertakenBy, Is.Null);
+            Assert.That(warning, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task RecordCitedPreviewAsync_OutOfDatePreview_RecordsTheLinkAndWhenAndWhatOvertookItAsync()
+    {
+        // The change still goes ahead, citing the preview the administrator read; the Activity says it was out of date
+        // rather than dropping the link, which would say no preview was read at all.
+        var run = new PreviewOvertakingActivity(Guid.CreateVersion7(), new DateTime(2026, 10, 8, 10, 42, 0, DateTimeKind.Utc),
+            ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import");
+        var staleness = new ConfigurationChangePreviewStaleness(run, null);
+        var preview = SetUpCitedPreview(staleness);
+        var change = new Activity();
+
+        var warning = await NewServer().RecordCitedPreviewAsync(change, preview);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.PreviewActivityId, Is.EqualTo(preview));
+            Assert.That(change.PreviewOvertakenAt, Is.EqualTo(run.Created));
+            Assert.That(change.PreviewOvertakenBy, Is.EqualTo(staleness.Describe()));
+            Assert.That(warning, Does.Contain(staleness.Describe()), "the caller is told, as the portal's administrator was");
+        }
+    }
+
+    [Test]
+    public async Task RecordCitedPreviewAsync_PreviewRemovedSinceItWasChecked_RecordsTheLinkWithoutFailingAsync()
+    {
+        // Retention can remove the preview between the boundary's check and this record; the change must not fail
+        // part-way through (a deletion has already fenced its system by now) over audit detail it cannot read.
+        var gone = Guid.CreateVersion7();
+        var change = new Activity();
+
+        var warning = await NewServer().RecordCitedPreviewAsync(change, gone);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.PreviewActivityId, Is.EqualTo(gone));
+            Assert.That(change.PreviewOvertakenAt, Is.Null);
+            Assert.That(warning, Is.Null);
+        }
+    }
+
+    private Guid SetUpCitedPreview(ConfigurationChangePreviewStaleness staleness)
+    {
+        var started = new DateTime(2026, 10, 8, 10, 0, 0, DateTimeKind.Utc);
+        var previewActivity = new Activity { Id = Guid.CreateVersion7(), Created = started, TargetType = ActivityTargetType.ConnectedSystem };
+        _activityRepo.Setup(r => r.GetActivityAsync(previewActivity.Id)).ReturnsAsync(previewActivity);
+        _activityRepo.Setup(r => r.GetPreviewStalenessSinceAsync(started)).ReturnsAsync(staleness);
+        return previewActivity.Id;
     }
 
     [Test]

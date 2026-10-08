@@ -33,6 +33,22 @@ public class ConnectedSystemDeletionResult
     /// </summary>
     public Guid? ActivityId { get; set; }
 
+    /// <summary>
+    /// What the caller should know about a deletion that went ahead, such as the preview it cites having been out of
+    /// date (#2022). Empty when there is nothing to say.
+    /// </summary>
+    public List<string> Warnings { get; set; } = [];
+
+    /// <summary>Adds what the caller should be told, and returns this result.</summary>
+    public ConnectedSystemDeletionResult WithWarnings(IEnumerable<string> warnings)
+    {
+        Warnings.AddRange(warnings);
+        return this;
+    }
+
+    /// <summary>Adds a warning, where there is one, and returns this result.</summary>
+    public ConnectedSystemDeletionResult WithWarning(string? warning) => warning is null ? this : WithWarnings([warning]);
+
     public static ConnectedSystemDeletionResult CompletedImmediately(Guid activityId)
     {
         return new ConnectedSystemDeletionResult

@@ -40,6 +40,7 @@ public class TaskingServerRunPreviewLinkTests
     private readonly List<Activity> _createdActivities = [];
     private readonly Dictionary<Guid, Activity> _storedActivities = [];
     private readonly Dictionary<Guid, ConfigurationChangePreview> _storedPreviews = [];
+    private ConfigurationChangePreviewStaleness _staleness = new(null, null);
 
     [SetUp]
     public void SetUp()
@@ -49,6 +50,7 @@ public class TaskingServerRunPreviewLinkTests
         _createdActivities.Clear();
         _storedActivities.Clear();
         _storedPreviews.Clear();
+        _staleness = new ConfigurationChangePreviewStaleness(null, null);
 
         _repository = new Mock<IRepository>();
         _connectedSystems = new Mock<IConnectedSystemRepository>();
@@ -81,6 +83,7 @@ public class TaskingServerRunPreviewLinkTests
             .Returns(Task.CompletedTask);
         _activities.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _storedActivities.GetValueOrDefault(id));
+        _activities.Setup(r => r.GetPreviewStalenessSinceAsync(It.IsAny<DateTime>())).ReturnsAsync(() => _staleness);
         _previews.Setup(r => r.GetPreviewAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _storedPreviews.GetValueOrDefault(id));
         _tasking.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>())).Returns(Task.CompletedTask);
@@ -101,6 +104,44 @@ public class TaskingServerRunPreviewLinkTests
         Assert.That(result.Success, Is.True, result.ErrorMessage);
         Assert.That(_createdActivities.Single().PreviewActivityId, Is.EqualTo(previewActivityId),
             "the run's Activity must name the preview the administrator read, or its audit trail cannot say what they were told");
+    }
+
+    [Test]
+    public async Task CreateWorkerTaskAsync_FullSynchronisationCitingAnOutOfDatePreview_QueuesAndRecordsWhatOvertookItAsync()
+    {
+        // Staleness is judged across the whole deployment, so with any schedule running a preview is usually overtaken
+        // before anyone acts on it (#2022). The run still queues and still names the preview the administrator read;
+        // its Activity says the preview was out of date, and the caller is told, whichever surface it came from.
+        var previewActivityId = StorePreview();
+        var overtakingRun = new PreviewOvertakingActivity(Guid.CreateVersion7(), DateTime.UtcNow, ActivityTargetType.ConnectedSystemRunProfile,
+            ActivityTargetOperationType.Execute, "Delta Import", "HR Import");
+        _staleness = new ConfigurationChangePreviewStaleness(overtakingRun, null);
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(FullSynchronisationTask(previewActivityId));
+
+        var run = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(run.PreviewActivityId, Is.EqualTo(previewActivityId));
+            Assert.That(run.PreviewOvertakenAt, Is.EqualTo(overtakingRun.Created));
+            Assert.That(run.PreviewOvertakenBy, Does.Contain("Delta Import"));
+            Assert.That(result.Warnings, Has.Some.Contain("Delta Import"));
+        }
+    }
+
+    [Test]
+    public async Task CreateWorkerTaskAsync_FullSynchronisationCitingACurrentPreview_RecordsNoStalenessAndWarnsOfNothingAsync()
+    {
+        var previewActivityId = StorePreview();
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(FullSynchronisationTask(previewActivityId));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_createdActivities.Single().PreviewOvertakenAt, Is.Null);
+            Assert.That(result.Warnings, Is.Empty);
+        }
     }
 
     [Test]

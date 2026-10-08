@@ -155,6 +155,50 @@ public class ConfigurationChangePreviewServer
     }
 
     /// <summary>
+    /// Records the preview a change cites on the Activity recording the change (#2022): the link itself and, where
+    /// something has happened since the preview started that could move its answer, when and what. Every path that
+    /// makes a change citing a Connected System preview (a run, a deletion) records it here, so the portal, the REST
+    /// API and PowerShell record the same thing for the same situation.
+    /// </summary>
+    /// <remarks>
+    /// An out-of-date preview is recorded as such rather than refused or dropped. Staleness is judged across the whole
+    /// deployment, so in any system with a schedule a preview is usually overtaken by the time someone acts on it;
+    /// refusing would stop a scripted preview-then-run whenever a schedule ran in between, and dropping the link would
+    /// say no preview was read. Whether the preview describes this change at all is the boundary's question, asked
+    /// before this is called.
+    /// </remarks>
+    /// <param name="change">The Activity of the change, not yet saved.</param>
+    /// <param name="previewActivityId">The preview the change cites, or null when it cites none.</param>
+    /// <returns>What to tell the caller when the preview was out of date; otherwise null.</returns>
+    public async Task<string?> RecordCitedPreviewAsync(Activity change, Guid? previewActivityId)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        change.PreviewActivityId = previewActivityId;
+        if (previewActivityId is not { } previewId)
+            return null;
+
+        // Retention can remove the preview between the boundary's check and this record. The change must not fail
+        // part-way through (a deletion has fenced its system by now) over audit detail that can no longer be read.
+        var preview = await _application.Repository.Activity.GetActivityAsync(previewId);
+        if (preview == null)
+        {
+            Log.Warning("RecordCitedPreviewAsync: Cited preview {PreviewActivityId} no longer exists; recording the link without judging its staleness",
+                previewId);
+            return null;
+        }
+
+        var staleness = await _application.Repository.Activity.GetPreviewStalenessSinceAsync(preview.Created);
+        if (!staleness.IsStale)
+            return null;
+
+        change.PreviewOvertakenAt = staleness.OvertakenAt;
+        change.PreviewOvertakenBy = staleness.Describe();
+        return $"The preview {previewId} was out of date ({change.PreviewOvertakenBy} after it started). " +
+               "The change goes ahead and its Activity records that the preview informing it was out of date.";
+    }
+
+    /// <summary>
     /// A preview's summary groups, largest first: the landing view.
     /// </summary>
     public async Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId) =>

@@ -83,7 +83,7 @@ public class ConnectedSystemPreviewStateTests
     public void From_FinishedButOvertaken_IsStaleAndRecordsNone()
     {
         var preview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
-        var staleness = new ConfigurationChangePreviewStaleness(null, Started.AddMinutes(2));
+        var staleness = new ConfigurationChangePreviewStaleness(null, new PreviewOvertakingActivity(Guid.NewGuid(), Started.AddMinutes(2), ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null));
 
         var state = ConnectedSystemPreviewState.From(preview, staleness);
 
