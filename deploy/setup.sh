@@ -127,6 +127,8 @@ DEFAULT_PODMAN_ACCOUNT="jim"
 APPARMOR_DIR="/etc/apparmor.d"
 APPARMOR_FS="/sys/kernel/security/apparmor"
 APPARMOR_SIGNAL_RULES="abstractions/base.d/jim-podman"
+# NetworkManager's folder for configuration snippets (see keep_podman_veths_from_networkmanager).
+NM_CONF_DIR="/etc/NetworkManager/conf.d"
 
 # Where this script is, when it runs from a file rather than from a pipe (curl ... | bash). Run from an extracted
 # release bundle, it installs from the bundle instead of downloading; run from an installation, its options act
@@ -1179,6 +1181,41 @@ keep_network_through_firewall_reload() {
         systemctl enable "$unit" >/dev/null 2>&1 || fatal "Failed to enable ${unit}"
     fi
     success "Enabled ${unit}, which restores JIM's network rules whenever firewalld reloads"
+}
+
+# NetworkManager, which RHEL and its derivatives run, sometimes takes a veth Podman has just plugged a rootful pod into
+# the jim network with: it creates a default "Wired connection" for it and starts DHCP on it, which releases the veth
+# from the network's bridge. Nothing on the network can then reach that pod, so JIM's services wait for a database
+# they cannot reach, logging "No route to host", until JIM restarts (#2009). Its own udev rule is meant to leave veths
+# alone, but races Podman. Listing Podman's interfaces as unmanaged, with += so as to keep any list the host already
+# has, ends the race; a reload applies it at once. NetworkManager is never restarted, and the profiles it made are not
+# deleted: both could take the host itself off the network, and the profiles go with their veths in any case. A
+# rootless installation's network lives in a namespace NetworkManager cannot see.
+networkmanager_installed() {
+    command -v nmcli >/dev/null 2>&1
+}
+
+keep_podman_veths_from_networkmanager() {
+    [ -z "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ] || return 0
+    networkmanager_installed || return 0
+
+    local file="${NM_CONF_DIR}/90-jim-podman.conf"
+    mkdir -p "$NM_CONF_DIR" || fatal "Failed to create ${NM_CONF_DIR}"
+    {
+        echo "# Written by JIM's installer; see ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor"
+        echo "# Leaves the veths and bridges of Podman's networks to Podman, so that their pods stay on their bridge."
+        echo "[keyfile]"
+        echo "unmanaged-devices+=interface-name:veth*;interface-name:podman*"
+    } > "$file" || fatal "Failed to write ${file}"
+    chmod 644 "$file"
+
+    if systemctl is-active -q NetworkManager.service 2>/dev/null; then
+        if ! nmcli general reload conf >/dev/null 2>&1; then
+            warn "NetworkManager did not reload ${file}; it applies when NetworkManager next starts. To apply it now: nmcli general reload conf"
+            return 0
+        fi
+    fi
+    success "Told NetworkManager to leave Podman's interfaces alone, so that JIM's pods stay on their network (${file})"
 }
 
 # Ubuntu 24.04 gives crun and podman AppArmor profiles of their own. A container that sets no-new-privileges, as
@@ -2972,6 +3009,7 @@ main() {
         configure_apparmor
         configure_firewall
         keep_network_through_firewall_reload
+        keep_podman_veths_from_networkmanager
     fi
     keep_installation
 
