@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
 using NUnit.Framework;
@@ -71,6 +72,61 @@ public class PreviewOvertakingActivityTests
             Assert.That(description, Is.Not.Empty);
             Assert.That(description, Does.Not.Contain("''"), "a missing name must not leave empty quotes behind");
         }
+    }
+
+    [Test]
+    public void Parts_ARun_NameTheRunProfileAsTheRunAndTheConnectedSystemAsItself()
+    {
+        // The portal renders what overtook a preview with each named thing as a chip it can link to: the run to its
+        // Activity, the Connected System to its page.
+        var runId = Guid.NewGuid();
+        var run = new PreviewOvertakingActivity(runId, When, ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute,
+            "Delta Import", "HR Import", ConnectedSystemId: 4);
+
+        var named = run.Parts().Where(p => p.Kind != PreviewOvertakingPartKind.Text).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(named.Select(p => (p.Kind, p.Text)), Is.EqualTo(new[]
+            {
+                (PreviewOvertakingPartKind.RunProfile, "Delta Import"),
+                (PreviewOvertakingPartKind.ConnectedSystem, "HR Import")
+            }));
+            Assert.That(named[0].ActivityId, Is.EqualTo(runId));
+            Assert.That(named[1].EntityId, Is.EqualTo(4));
+        }
+    }
+
+    [Test]
+    public void Parts_ASynchronisationRuleChange_NameTheRuleAsItself()
+    {
+        var change = new PreviewOvertakingActivity(Guid.NewGuid(), When, ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update,
+            "HR Users", null, SyncRuleId: 9);
+
+        var rule = change.Parts().Single(p => p.Kind != PreviewOvertakingPartKind.Text);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rule.Kind, Is.EqualTo(PreviewOvertakingPartKind.SynchronisationRule));
+            Assert.That(rule.Text, Is.EqualTo("HR Users"));
+            Assert.That(rule.EntityId, Is.EqualTo(9));
+        }
+    }
+
+    // The sentence snapshotted onto an Activity and the chips the portal renders are the same description, so they
+    // cannot drift apart.
+    [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, "Delta Import", "HR Import")]
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.Clear, "Old HR", null)]
+    [TestCase(ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null)]
+    [TestCase(ActivityTargetType.MetaverseObjectType, ActivityTargetOperationType.Update, "Person", null)]
+    [TestCase(ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetOperationType.Execute, null, null)]
+    public void Describe_ReadsEveryPartAsText(ActivityTargetType targetType, ActivityTargetOperationType operation, string? name, string? context)
+    {
+        var activity = Overtaking(targetType, operation, name, context);
+
+        var parts = activity.Parts();
+
+        Assert.That(activity.Describe(), Is.EqualTo(string.Concat(parts.Select(p => p.ToText()))));
     }
 
     [Test]

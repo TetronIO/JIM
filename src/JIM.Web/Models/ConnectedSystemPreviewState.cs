@@ -46,12 +46,6 @@ public sealed record ConnectedSystemPreviewState(
     };
 
     /// <summary>
-    /// What last overtook a stale preview ("Run Profile 'Delta Import' ran on Connected System 'HR Import'"), or null
-    /// when it is not stale.
-    /// </summary>
-    public string? OvertakenBy => Status == ConnectedSystemPreviewStatus.Stale ? Staleness?.Describe() : null;
-
-    /// <summary>
     /// Reads a preview and its staleness. <paramref name="preview"/> must carry its Activity, which says when it
     /// started, how it ended and how far a running one has got.
     /// </summary>

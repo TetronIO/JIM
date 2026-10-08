@@ -173,10 +173,11 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
     {
         // What overtook a preview is said to the administrator about to act on it, and recorded on what they then do
         // (#2022), so the query returns the Activity itself rather than only when it happened.
+        var (hrImport, _) = await SeedTwoSystemsAsync();
         await SeedActivityAsync(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute, PreviewStarted.AddMinutes(5),
-            targetName: "Full Import", targetContext: "HR Import");
+            targetName: "Full Import", targetContext: "HR Import", connectedSystemId: hrImport);
         var latestRun = await SeedActivityAsync(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute,
-            PreviewStarted.AddMinutes(10), targetName: "Delta Import", targetContext: "HR Import");
+            PreviewStarted.AddMinutes(10), targetName: "Delta Import", targetContext: "HR Import", connectedSystemId: hrImport);
         var edit = await SeedActivityAsync(ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, PreviewStarted.AddMinutes(7),
             ConfigurationChangeClass.SyncAffecting, targetName: "HR Users");
 
@@ -189,6 +190,7 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
             Assert.That(staleness.DataChange?.TargetContext, Is.EqualTo("HR Import"));
             Assert.That(staleness.DataChange?.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemRunProfile));
             Assert.That(staleness.DataChange?.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Execute));
+            Assert.That(staleness.DataChange?.ConnectedSystemId, Is.EqualTo(hrImport), "the portal links the system it names");
             Assert.That(staleness.ConfigurationChange?.ActivityId, Is.EqualTo(edit));
             Assert.That(staleness.ConfigurationChange?.TargetName, Is.EqualTo("HR Users"));
         }
@@ -237,7 +239,8 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
     }
 
     private async Task<Guid> SeedActivityAsync(ActivityTargetType targetType, ActivityTargetOperationType operation, DateTime created,
-        ConfigurationChangeClass changeClass = ConfigurationChangeClass.NotClassified, string targetName = "Seeded", string? targetContext = null)
+        ConfigurationChangeClass changeClass = ConfigurationChangeClass.NotClassified, string targetName = "Seeded", string? targetContext = null,
+        int? connectedSystemId = null)
     {
         await using var context = NewContext();
         var activity = new Activity
@@ -246,6 +249,7 @@ public class ConfigurationChangePreviewStalenessDatabaseTests
             TargetOperationType = operation,
             TargetName = targetName,
             TargetContext = targetContext,
+            ConnectedSystemId = connectedSystemId,
             Created = created,
             Executed = created,
             ConfigurationChangeClass = changeClass

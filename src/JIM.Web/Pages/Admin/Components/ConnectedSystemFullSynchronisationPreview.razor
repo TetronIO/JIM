@@ -33,9 +33,9 @@ else if (_previewActivityId is { } previewActivityId)
     @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
     {
         <MudAlert Severity="Severity.Warning" Class="mb-6" data-testid="jim-full-sync-preview-stale">
-            @_previewState.StaleReason since this preview ran (@_previewState.OvertakenBy), so it may no longer be accurate.
-            Run it again before running a Full Synchronisation; a run started now records that the preview informing it
-            was out of date.
+            @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. It may
+            no longer be accurate, so run it again before running a Full Synchronisation; a run started now records that the
+            preview informing it was out of date.
         </MudAlert>
     }
 
@@ -117,7 +117,9 @@ else if (_previewActivityId is { } previewActivityId)
             @if (runnable.Count == 1)
             {
                 var only = runnable[0];
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                @* Outlined, not filled: the panel offers this action rather than being the page's one main focus, and
+                   a run is consequential enough that it should not be the loudest thing on the page. *@
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.PlayArrow" Disabled="@_queueing"
                            OnClick="@(() => RunAsync(only))" data-testid="jim-full-sync-run">
                     Run Full Synchronisation
@@ -125,7 +127,7 @@ else if (_previewActivityId is { } previewActivityId)
             }
             else
             {
-                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                          StartIcon="@Icons.Material.Filled.PlayArrow" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                          Disabled="@_queueing" data-testid="jim-full-sync-run-menu">
                     @foreach (var profile in runnable)
@@ -283,16 +285,18 @@ else if (_previewActivityId is { } previewActivityId)
             if (askedAboutStaleness)
             {
                 StateHasChanged();
-                var previewAgain = await DialogService.ShowMessageBoxAsync(
-                    "Preview out of date",
-                    $"{_previewState.StaleReason} since this preview ran ({_previewState.OvertakenBy}), so it may no longer " +
-                    "describe what the run would do. Preview again for a current answer, or run anyway: the run's Activity " +
-                    "will record that the preview informing it was out of date.",
-                    yesText: "Preview again", noText: "Run anyway", cancelText: "Cancel");
+                var dialog = await DialogService.ShowAsync<OutOfDatePreviewDialog>("Preview out of date",
+                    new DialogParameters<OutOfDatePreviewDialog>
+                    {
+                        { x => x.StaleReason, _previewState.StaleReason },
+                        { x => x.Staleness, _previewState.Staleness }
+                    },
+                    new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+                var answer = await dialog.Result;
 
-                if (previewAgain == true)
+                if (answer is { Canceled: false, Data: OutOfDatePreviewChoice.PreviewAgain })
                     await StartPreviewAsync();
-                if (previewAgain != false)
+                if (answer is not { Canceled: false, Data: OutOfDatePreviewChoice.RunAnyway })
                     return;
             }
 

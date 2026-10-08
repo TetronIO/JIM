@@ -2274,7 +2274,8 @@ public class ActivityRepository : IActivityRepository
     private static Task<PreviewOvertakingActivity?> LatestOvertakingActivityAsync(IQueryable<Activity> candidates) =>
         candidates
             .OrderByDescending(a => a.Created)
-            .Select(a => new PreviewOvertakingActivity(a.Id, a.Created, a.TargetType, a.TargetOperationType, a.TargetName, a.TargetContext))
+            .Select(a => new PreviewOvertakingActivity(a.Id, a.Created, a.TargetType, a.TargetOperationType, a.TargetName, a.TargetContext,
+                a.ConnectedSystemId, a.SyncRuleId))
             .FirstOrDefaultAsync();
     #endregion
 

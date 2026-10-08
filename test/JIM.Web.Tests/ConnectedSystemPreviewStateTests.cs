@@ -93,7 +93,6 @@ public class ConnectedSystemPreviewStateTests
             Assert.That(state.Staleness, Is.EqualTo(staleness), "the host says which kind of change overtook it");
             Assert.That(state.InformingPreviewActivityId, Is.EqualTo(preview.ActivityId),
                 "a change made on an out-of-date preview still cites it, and records that it was out of date (#2022)");
-            Assert.That(state.OvertakenBy, Does.Contain("HR Users"), "the host names what overtook it");
         }
     }
 
