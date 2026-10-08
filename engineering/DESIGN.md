@@ -303,6 +303,8 @@ The MkDocs Material docs site uses a standard two-column layout (nav plus conten
 
 Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Outlined buttons use transparent background with `primary` text and border. Hover state darkens to `primary-darken`.
 
+A button inside an alert is filled in the alert's severity colour (`warning` on a warning, `error` on an error, and so on), never `primary`, so the action reads as part of the message it answers. A lesser action beside it is a text button in the alert's colour. In the portal this is the `<AlertButton>` component, enforced by a build check; see `src/JIM.Web/CLAUDE.md` > Alerts.
+
 ### Chips
 
 Metaverse text-chips render as a 16% tint of `primary` over the surface, with `primary-darken` text. Connected-system text-chips render as a 16% tint of `secondary`, with `secondary-darken` text. Both use `rounded.full` for pill shape. The chip-type prefix labels (`.jim-mv-chip-prefix`, `.jim-cs-chip-prefix`) sit inside chips as tinted text drawn from the `-lighten` variants of each colour, providing a softer accent against the tinted chip body.

@@ -21,8 +21,7 @@
 {
     <MudAlert Severity="Severity.Info">
         <MudText>Retrieve the @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
-        <MudButton Disabled="@_hierarchyBeingRetrieved" Color="Color.Primary" OnClick="HandleImportHierarchyAsync"
-                   Variant="Variant.Filled" Class="mt-5" DropShadow="false">
+        <AlertButton Severity="Severity.Info" Disabled="@_hierarchyBeingRetrieved" OnClick="HandleImportHierarchyAsync" Class="mt-5">
             @if (_hierarchyBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -32,7 +31,7 @@
             {
                 <text>Retrieve Hierarchy</text>
             }
-        </MudButton>
+        </AlertButton>
     </MudAlert>
 }
 else

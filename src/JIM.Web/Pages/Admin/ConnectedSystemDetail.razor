@@ -91,14 +91,14 @@
                 They stay pending until the limit is raised or cleared, or an Export Run Profile without the limit runs.
             </span>
             <MudStack Row Spacing="2">
-                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
-                           Href="@($"/activity/{exportActivity.Id}")">
+                <AlertButton Severity="Severity.Warning" Secondary="true"
+                             Href="@($"/activity/{exportActivity.Id}")">
                     View Activity
-                </MudButton>
-                <MudButton Variant="Variant.Text" Color="Color.Inherit" DropShadow="false"
-                           Href="@($"/admin/connected-systems/{_connectedSystem.Id}?t=run-profiles")">
+                </AlertButton>
+                <AlertButton Severity="Severity.Warning"
+                             Href="@($"/admin/connected-systems/{_connectedSystem.Id}?t=run-profiles")">
                     Edit Run Profile
-                </MudButton>
+                </AlertButton>
             </MudStack>
         </MudStack>
     </MudAlert>
@@ -138,12 +138,10 @@
                 @if (deletionActivity is { } linkActivity)
                 {
                     var deletionActivityId = linkActivity.Id;
-                    <MudButton Variant="Variant.Text"
-                               Color="Color.Inherit"
-                               DropShadow="false"
-                               Href="@($"/activity/{deletionActivityId}")">
+                    <AlertButton Severity="Severity.Info"
+                                 Href="@($"/activity/{deletionActivityId}")">
                         View Activity
-                    </MudButton>
+                    </AlertButton>
                 }
             </MudStack>
         </MudAlert>
@@ -179,12 +177,10 @@
                 Run Profile on this system will disconnect @obsoletePronoun from their Metaverse Objects and
                 delete @obsoletePronoun.
             </span>
-            <MudButton Variant="Variant.Text"
-                       Color="Color.Info"
-                       DropShadow="false"
-                       Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space?status=Obsolete")">
+            <AlertButton Severity="Severity.Info"
+                         Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space?status=Obsolete")">
                 Review
-            </MudButton>
+            </AlertButton>
         </MudStack>
     </MudAlert>
 }
@@ -238,24 +234,23 @@
         : driftCount == 1
             ? "Run a Full Synchronisation for it to take effect."
             : "Run a Full Synchronisation for them to take effect.";
-    var driftDestructive = driftClass == ConfigurationChangeClass.Destructive;
-    <MudAlert Severity="@(driftDestructive ? Severity.Error : Severity.Warning)"
+    var driftSeverity = driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning;
+    <MudAlert Severity="@driftSeverity"
               Class="mt-2 mb-6" data-testid="jim-configuration-drift-notice">
         <span>@driftLead @driftGuidance</span>
         @* Reviewing the changes reads what was configured; previewing reads what the run would then do (#1530). *@
         <div class="d-flex align-center flex-wrap gap-2 mt-2">
             @if (HasFullSynchronisationRunProfile)
             {
-                @* Filled in the notice's own severity colour, so the action reads as part of the message it answers. *@
-                <MudButton Variant="Variant.Filled" Color="@(driftDestructive ? Color.Error : Color.Warning)" DropShadow="false"
-                           StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
+                <AlertButton Severity="@driftSeverity"
+                             StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
                            data-testid="jim-drift-preview-full-synchronisation">
                     Preview Full Synchronisation
-                </MudButton>
+                </AlertButton>
             }
-            <MudButton Variant="Variant.Text" Color="Color.Inherit" Href="@($"/admin/connected-systems/{Id}?t=changes")">
+            <AlertButton Severity="@driftSeverity" Secondary="true" Href="@($"/admin/connected-systems/{Id}?t=changes")">
                 Review changes
-            </MudButton>
+            </AlertButton>
         </div>
     </MudAlert>
 }
@@ -269,10 +264,10 @@ else if (_drift is { NeverFullySynchronised: true })
         @if (HasFullSynchronisationRunProfile)
         {
             <div class="mt-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Info" DropShadow="false"
-                           StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
+                <AlertButton Severity="Severity.Info"
+                             StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
                     Preview Full Synchronisation
-                </MudButton>
+                </AlertButton>
             </div>
         }
     </MudAlert>

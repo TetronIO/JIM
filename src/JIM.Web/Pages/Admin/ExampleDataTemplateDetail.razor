@@ -113,13 +113,11 @@
         Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised.
         This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.
     </MudText>
-    <MudButton Class="mt-5"
-               Variant="Variant.Filled"
-               StartIcon="@Icons.Material.Filled.BuildCircle"
-               Color="Color.Warning"
-               Disabled="@(_status != null || _isExecuting)"
-               OnClick="ExecuteTemplateAsync"
-               DropShadow="false">
+    <AlertButton Severity="Severity.Warning"
+                 Class="mt-5"
+                 StartIcon="@Icons.Material.Filled.BuildCircle"
+                 Disabled="@(_status != null || _isExecuting)"
+                 OnClick="ExecuteTemplateAsync">
         @if (_status is WorkerTaskStatus.Processing)
         {
             <text>Processing...</text>
@@ -132,7 +130,7 @@
         {
             <text>Execute Template</text>
         }
-    </MudButton>
+    </AlertButton>
     </MudAlert>
 
     @if (_workerTask != null)

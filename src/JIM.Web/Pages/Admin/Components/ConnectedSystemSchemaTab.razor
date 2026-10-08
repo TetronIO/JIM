@@ -27,12 +27,10 @@
 {
     <MudAlert Severity="Severity.Info" data-testid="jim-schema-retrieve">
         <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
-        <MudButton Color="Color.Info"
-                   Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
-                   Variant="Variant.Filled"
-                   OnClick="HandleImportSchemaAsync"
-                   Class="mt-5"
-                   DropShadow="false">
+        <AlertButton Severity="Severity.Info"
+                     Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
+                     OnClick="HandleImportSchemaAsync"
+                     Class="mt-5">
             @if (_schemaBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -42,7 +40,7 @@
             {
                 <text>Retrieve Schema</text>
             }
-        </MudButton>
+        </AlertButton>
     </MudAlert>
 }
 
@@ -314,12 +312,11 @@
                                 @hiddenInternalCount internal object @(hiddenInternalCount == 1 ? "type is" : "types are") hidden.
                                 These are classes the Connected System uses for its own configuration or operation.
                             </span>
-                            <MudButton Variant="Variant.Text"
-                                       Color="Color.Inherit"
-                                       StartIcon="@Icons.Material.Filled.Visibility"
-                                       OnClick="@(() => _showInternalObjectTypes = true)">
+                            <AlertButton Severity="Severity.Normal"
+                                         StartIcon="@Icons.Material.Filled.Visibility"
+                                         OnClick="@(() => _showInternalObjectTypes = true)">
                                 Show internal object types
-                            </MudButton>
+                            </AlertButton>
                         </div>
                     </MudAlert>
                 }
@@ -328,12 +325,11 @@
                     <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                         <div class="d-flex align-center flex-wrap" style="gap: 8px;">
                             <span class="flex-grow-1">Internal object types are shown.</span>
-                            <MudButton Variant="Variant.Text"
-                                       Color="Color.Inherit"
-                                       StartIcon="@Icons.Material.Filled.VisibilityOff"
-                                       OnClick="@(() => _showInternalObjectTypes = false)">
+                            <AlertButton Severity="Severity.Normal"
+                                         StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                         OnClick="@(() => _showInternalObjectTypes = false)">
                                 Hide internal object types
-                            </MudButton>
+                            </AlertButton>
                         </div>
                     </MudAlert>
                 }
