@@ -292,7 +292,7 @@ flowchart TD
 | **Isolation** | A dedicated self-hosted runner that pauses its host's other runners for the run |
 | **Reset** | Every lane's stack is removed in an `always()` step, even on failure |
 | **Idempotency** | Each run is independent; only the directory snapshot images and Scenario 016's databases persist, as locally |
-| **Timeout** | 7 hours (a serial run takes ~5h 10m) |
+| **Timeout** | 4 hours (a run takes ~1h 45m) |
 
 ### Why Reset JIM's Database?
 
@@ -1688,14 +1688,7 @@ The pre-release regression runs in GitHub Actions through `.github/workflows/pre
 
 ### Triggering a Run
 
-**Actions** > **jim-pre-release** > **Run workflow**, on `main` (the runner group refuses any other branch), and choose a mode:
-
-| Mode | Runs | Takes | JIM-Bench |
-|------|------|-------|-----------|
-| `parallel` (default) | `-PreRelease -Parallel` | ~1h 45m | never streamed: lanes share the host, so their timings are not nominal |
-| `serial` | `-PreRelease` | ~5h 10m | streamed when the repository variable `JIM_BENCH_API_URL` and secret `JIM_BENCH_API_KEY` are set |
-
-Both modes run every scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large) with `-ContinueOnFailure`, so a pass in either is a pass. Add ~15 minutes on a cold host (snapshot builds and the Oracle image).
+**Actions** > **jim-pre-release** > **Run workflow**, on `main` (the runner group refuses any other branch). It runs `-PreRelease -Parallel -ContinueOnFailure`: every scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), the three passes side by side, in ~1h 45m (~15 minutes more on a cold host, for snapshot builds and the Oracle image). It is a correctness gate only: parallel passes share the host, so they never stream to JIM-Bench; performance data comes from serial runs.
 
 ### What a Run Does
 

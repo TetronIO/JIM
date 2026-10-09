@@ -1,21 +1,16 @@
-# Pre-release integration run: the full pre-release regression (Run-IntegrationTests.ps1 -PreRelease), every
-# implemented scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), on the
-# self-hosted pre-release runner, and a `jim-pre-release` commit status on the SHA it tested.
+# Pre-release integration run: the full pre-release regression (Run-IntegrationTests.ps1 -PreRelease -Parallel),
+# every implemented scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), the three
+# passes side by side, on the self-hosted pre-release runner, and a `jim-pre-release` commit status on the SHA it
+# tested.
 #
 # What it does: pauses the host's other runners (the suite needs the host's Docker to itself, see below), runs the
 # suite with -ContinueOnFailure so one red scenario does not hide the others, writes a per-directory summary to the
 # job summary, uploads the regression reports and logs, posts the commit status, tears the stacks down and resumes
 # the other runners. The last four always run, even after a failure.
 #
-# Modes (the `mode` input):
-#   parallel (default)  -PreRelease -Parallel: the three directory passes side by side, one isolated stack each,
-#                       about 1h 45m. A correctness gate only: lanes share the host, so their timings are not nominal
-#                       and the runner never streams them to JIM-Bench.
-#   serial              -PreRelease: the passes one after another, about 5h 10m. Streams results to JIM-Bench when
-#                       JIM_BENCH_API_URL and JIM_BENCH_API_KEY are set (below), so use it when performance data is
-#                       wanted.
-# Either way the suite tests the same scenarios, so either mode's success is a pass. Add about 15 minutes to a run on a
-# cold host, which builds the directory snapshots and pulls the Oracle image (13.6 GB) first.
+# A correctness gate, not a performance run: the passes share the host, so their timings are not nominal, and the
+# runner never streams a parallel pass to JIM-Bench. Performance data comes from serial runs elsewhere. About 1h 45m,
+# plus about 15 minutes on a cold host, which builds the directory snapshots and pulls the Oracle image (13.6 GB).
 #
 # Triggers: workflow_dispatch only. NEVER pull_request or push. Split-trust runner model (see ci.yml): a pull_request
 # runs code from anyone's fork, and this runner pauses its host's other runners and runs privileged containers, so fork
@@ -40,9 +35,7 @@
 # them. The last step resumes them, and a watchdog on the host resumes them anyway if this job is cancelled or dies
 # before it gets there.
 #
-# Configuration (all optional; unset, results stay local):
-#   repository variable JIM_BENCH_API_URL (https://bench-api.junctional.io) and secret JIM_BENCH_API_KEY, which the
-#   runner reads to stream a serial run's results to JIM-Bench (the same pair ad-lab.yml uses).
+# Configuration: none. The suite needs no secrets (its test credentials are throwaway and built in).
 #
 # The release gate: nothing reads the `jim-pre-release` status yet. Making release.yml require it for the SHA being
 # tagged, as it requires `jim-ad-lab`, is the next step.
@@ -51,12 +44,6 @@ name: jim-pre-release
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'parallel (about 1h 45m, no JIM-Bench data) or serial (about 5h 10m, streams to JIM-Bench)'
-        type: choice
-        options: [parallel, serial]
-        default: parallel
 
 permissions:
   contents: read
@@ -66,8 +53,8 @@ jobs:
   jim-pre-release:
     name: jim-pre-release
     runs-on: [self-hosted, jim-prerelease]
-    # A serial run takes about 5h 10m, plus about 15 minutes on a cold host; a parallel run about 1h 45m.
-    timeout-minutes: 420
+    # About 1h 45m, plus about 15 minutes on a cold host; the margin covers a slow lane and the clean-up.
+    timeout-minutes: 240
     # One run at a time: the suite uses fixed container names and ports, so a second run would tear the first down.
     # Never cancelled by a newer dispatch, which waits its turn instead.
     concurrency:
@@ -99,8 +86,7 @@ jobs:
           exit $LASTEXITCODE
 
       # The integration runner expects a .env in the repository root (it is gitignored, so a fresh checkout has
-      # none). The stack is throwaway: its database password is generated for this run and never reused. The
-      # JIM-Bench values are deliberately NOT written here; they reach the runner through the suite step's env.
+      # none). The stack is throwaway: its database password is generated for this run and never reused.
       - name: Create the stack's .env
         run: |
           $bytes = New-Object byte[] 24
@@ -109,28 +95,20 @@ jobs:
           $text = (Get-Content -LiteralPath .env.example -Raw) -replace '(?m)^JIM_DB_PASSWORD=.*$', "JIM_DB_PASSWORD=$password"
           Set-Content -LiteralPath .env -Value $text -NoNewline
 
-      # The suite. The mode reaches the script through env, never interpolated into it.
+      # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point is the full list.
       - name: Run the pre-release suite
         id: suite
-        env:
-          MODE: ${{ inputs.mode || 'parallel' }}
-          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
-          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
-          $arguments = @('-PreRelease', '-ContinueOnFailure')
-          if ($env:MODE -eq 'parallel') { $arguments += '-Parallel' }
-          elseif ($env:MODE -ne 'serial') { Write-Host "::error::Unknown mode '$env:MODE'."; exit 1 }
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 @arguments
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -PreRelease -Parallel -ContinueOnFailure
           exit $LASTEXITCODE
 
-      # What the run left, condensed: one row per directory pass from its regression report (full-regression*.json,
-      # written by both modes; checkout's clean removed any earlier run's), into the job summary and the one-line
-      # description of the commit status.
+      # What the run left, condensed: one row per directory pass from its regression report
+      # (full-regression-<DirectoryType>-*.json; checkout's clean removed any earlier run's), into the job summary and
+      # the one-line description of the commit status.
       - name: Summarise the run
         id: summary
         if: ${{ always() }}
         env:
-          MODE: ${{ inputs.mode || 'parallel' }}
           SUITE_OUTCOME: ${{ steps.suite.outcome }}
         run: |
           $files = @(Get-ChildItem -Path 'test/integration/results' -Filter 'full-regression*.json' -File -ErrorAction SilentlyContinue | Sort-Object Name)
@@ -152,7 +130,7 @@ jobs:
             $description = 'the run stopped before any directory pass reported'
           }
           else {
-            $description = "$passed/$total scenario runs passed across $($files.Count) directory passes ($env:MODE)"
+            $description = "$passed/$total scenario runs passed across $($files.Count) directory passes"
             if ($skipped -gt 0) { $description += "; $skipped skipped" }
           }
           if ($description.Length -gt 140) { $description = $description.Substring(0, 137) + '...' }
@@ -169,32 +147,10 @@ jobs:
             $lines += 'Failed scenarios: ' + (($failedNames | ForEach-Object { "``$_``" }) -join ', ')
           }
           $lines += ''
-          $lines += "Mode: $env:MODE. Suite: $env:SUITE_OUTCOME."
+          $lines += "Suite: $env:SUITE_OUTCOME."
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-      # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
-      # in a file, so a text file holding the JIM-Bench key has it replaced before upload.
-      - name: Scrub secrets from the results
-        if: ${{ always() }}
-        env:
-          BENCH_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
-        run: |
-          if (-not $env:BENCH_KEY) { exit 0 }
-          $files = @(Get-ChildItem -LiteralPath 'test/integration/results' -Recurse -File -ErrorAction SilentlyContinue)
-          foreach ($file in $files) {
-            if (Select-String -LiteralPath $file.FullName -SimpleMatch $env:BENCH_KEY -Quiet) {
-              if ($file.Length -gt 200MB) {
-                Remove-Item -LiteralPath $file.FullName -Force
-                Write-Host "::warning::Removed $($file.Name) from the artefacts: it held a secret and is too large to scrub."
-                continue
-              }
-              $text = [System.IO.File]::ReadAllText($file.FullName).Replace($env:BENCH_KEY, '***')
-              [System.IO.File]::WriteAllText($file.FullName, $text)
-              Write-Host "::warning::A secret was found in $($file.Name) and replaced before upload."
-            }
-          }
-
-      # The regression reports (full-regression*.json, and parallel-lanes-*.json in parallel mode), the lane and
+      # The regression reports (full-regression-*.json and the combined parallel-lanes-*.json), the lane and
       # scenario transcripts and worker logs (logs/), and the performance files. The docker stats and events
       # samplers are big and only useful for performance work.
       - name: Upload the run's artefacts
@@ -231,8 +187,7 @@ jobs:
           exit $LASTEXITCODE
 
       # The runner is not ephemeral. The suite removes a lane that passed and leaves a failed one up for diagnosis;
-      # its logs are in the artefacts by now, so remove every lane's stack (a serial run uses the Samba AD lane's
-      # names). Scenario 016's database containers are kept between runs by design. Then hand back the files the
+      # its logs are in the artefacts by now, so remove every lane's stack. Scenario 016's database containers are kept between runs by design. Then hand back the files the
       # worker container wrote, so the next checkout can clean the workspace.
       - name: Tear down the stacks
         if: ${{ always() }}
