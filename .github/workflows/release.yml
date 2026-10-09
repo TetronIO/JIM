@@ -73,11 +73,53 @@ jobs:
           Write-Output "::warning title=Active Directory lab gate not enforced::$message"
           "### Active Directory lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+  # Job 0b: The pre-release integration gate. The commit being tagged must have a `success` commit status named
+  # `jim-pre-release`, which .github/workflows/pre-release.yml posts on the SHA it tested: it runs the full
+  # pre-release integration suite (every scenario against Samba AD, OpenLDAP and 389 Directory Server) by itself when
+  # a change to VERSION reaches main, which is to say when the release pull request merges, and on dispatch. A
+  # release is refused otherwise, with a message naming the state, the run and the remedy: a fix, then a run on this
+  # commit BEFORE the tag is pushed. `validate` needs this job as well as the lab gate, so nothing is built, scanned,
+  # pushed or published for a commit the suite has not passed. scripts/Test-PreReleaseGate.ps1 holds the decision
+  # (sharing scripts/ReleaseGate.ps1 with the lab gate) and is tested in scripts/Tests.
+  #
+  # Enforced only while the repository variable JIM_PRE_RELEASE_GATE_ENFORCED is `true`, switched on once the suite
+  # has had its first green run (gh variable set JIM_PRE_RELEASE_GATE_ENFORCED --body true); until then the job
+  # passes with a warning on the run summary. From then on there is no override, as for the lab gate.
+  jim-pre-release-gate:
+    name: Pre-Release Integration Gate
+    runs-on: self-hosted
+    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
+    permissions:
+      contents: read
+      statuses: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # The SHA and repository reach the script through env, never interpolated into it.
+      - name: Require a green jim-pre-release status on this commit
+        if: vars.JIM_PRE_RELEASE_GATE_ENFORCED == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+
+      - name: Report that the gate is not yet enforced
+        if: vars.JIM_PRE_RELEASE_GATE_ENFORCED != 'true'
+        shell: pwsh
+        run: |
+          $message = 'The pre-release integration gate is not enforced yet (JIM_PRE_RELEASE_GATE_ENFORCED is not true), so this release has not been proven by the full integration suite.'
+          Write-Output "::warning title=Pre-release integration gate not enforced::$message"
+          "### Pre-release integration gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
     runs-on: self-hosted
-    needs: jim-ad-lab-gate
+    needs: [jim-ad-lab-gate, jim-pre-release-gate]
 
     steps:
       - name: Checkout
