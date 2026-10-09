@@ -27,7 +27,9 @@
     access, the commit unknown to GitHub) also exits 1, because a gate that opens when it cannot see is not a gate.
 
     The evaluation (Test-AdLabStatus) is separate from the gh call (Get-AdLabStatus) so it is tested without either;
-    dot-sourcing this file defines the functions and runs nothing.
+    dot-sourcing this file defines the functions and runs nothing. Both are thin wrappers over the shared release-gate
+    core in scripts/ReleaseGate.ps1, which scripts/Test-PreReleaseGate.ps1 uses too; this script supplies the context
+    and the lab's remedy, as constants.
 
 .PARAMETER Sha
     The full 40-character SHA of the commit that will be tagged (git rev-parse origin/main after the release pull
@@ -45,7 +47,6 @@
     pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha (git rev-parse origin/main)
 #>
 
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Console output for a person or a workflow log; the exit code is the contract.')]
 [CmdletBinding()]
 param(
     [string]$Sha,
@@ -56,54 +57,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'ReleaseGate.ps1')
+
 # The status context the lab workflow posts. A constant, not a parameter: there is nothing to configure here.
 $script:AdLabContext = 'jim-ad-lab'
 
-function Get-AdLabField {
-    # One field of a status, from a parsed JSON object or a hashtable, or $null when it is not there.
-    param(
-        [AllowNull()]
-        [object]$Object,
-
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-
-    if ($null -eq $Object) {
-        return $null
-    }
-    if ($Object -is [System.Collections.IDictionary]) {
-        if ($Object.Contains($Name)) {
-            return $Object[$Name]
-        }
-        return $null
-    }
-    $property = $Object.PSObject.Properties[$Name]
-    if ($null -eq $property) {
-        return $null
-    }
-    return $property.Value
+function Get-AdLabRemedy {
+    param([string]$Sha = 'the commit')
+    return "There is no override: fix the cause, then dispatch ad-lab.yml so it runs on $Sha (gh workflow run ad-lab.yml --ref main, while $Sha is the head of main), wait for it to finish, and check again."
 }
+
+$script:AdLabNotReportedReason = 'the Active Directory lab has not run on this exact commit. The nightly run tests the head of main as it stood then, so a commit made since has none.'
 
 function Test-AdLabStatus {
     <#
     .SYNOPSIS
-        Decides whether a commit's statuses say the Active Directory lab passed.
-
-    .DESCRIPTION
-        Pure. Takes the commit statuses (the objects GitHub returns: context, state, description, target_url,
-        created_at, updated_at) and looks only at those whose context is exactly `jim-ad-lab`. When there is more than
-        one (a re-run on the same commit), the newest wins, so a later failure is not hidden by an earlier success
-        nor a later success by an earlier failure. Passes only for state `success`.
-
-        Returns Passed, State (the state, or "not reported"), Description, TargetUrl and Message (what to tell the
-        person, which for a refusal names the remedy).
-
-    .PARAMETER Statuses
-        The commit's statuses; may be empty.
-
-    .PARAMETER Sha
-        The commit, for the message.
+        Decides whether a commit's statuses say the Active Directory lab passed: Test-ReleaseGateStatus for the
+        `jim-ad-lab` context, with the lab's remedy. Returns Passed, State, Description, TargetUrl and Message.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -115,86 +85,11 @@ function Test-AdLabStatus {
         [string]$Sha = 'the commit'
     )
 
-    $matching = @($Statuses | Where-Object { ($null -ne $_) -and ((Get-AdLabField -Object $_ -Name 'context') -ceq $script:AdLabContext) })
-
-    $newest = $null
-    $newestAt = [DateTimeOffset]::MinValue
-    foreach ($status in $matching) {
-        $stamp = [DateTimeOffset]::MinValue
-        foreach ($field in @('updated_at', 'created_at')) {
-            $raw = Get-AdLabField -Object $status -Name $field
-            $parsed = [DateTimeOffset]::MinValue
-            if (($null -ne $raw) -and [DateTimeOffset]::TryParse([string]$raw, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) {
-                $stamp = $parsed
-                break
-            }
-        }
-        if (($null -eq $newest) -or ($stamp -gt $newestAt)) {
-            $newest = $status
-            $newestAt = $stamp
-        }
-    }
-
-    $remedy = "There is no override: fix the cause, then dispatch ad-lab.yml so it runs on $Sha (gh workflow run ad-lab.yml --ref main, while $Sha is the head of main), wait for it to finish, and check again."
-
-    if ($null -eq $newest) {
-        return [pscustomobject][ordered]@{
-            Passed      = $false
-            State       = 'not reported'
-            Description = $null
-            TargetUrl   = $null
-            Message     = "The jim-ad-lab status is not reported for ${Sha}: the Active Directory lab has not run on this exact commit. The nightly run tests the head of main as it stood then, so a commit made since has none. $remedy"
-        }
-    }
-
-    $state = [string](Get-AdLabField -Object $newest -Name 'state')
-    $description = [string](Get-AdLabField -Object $newest -Name 'description')
-    $url = [string](Get-AdLabField -Object $newest -Name 'target_url')
-
-    if ($state -ceq 'success') {
-        $detail = $description
-        if ($url) {
-            $detail = "$description ($url)"
-        }
-        return [pscustomobject][ordered]@{
-            Passed      = $true
-            State       = $state
-            Description = $description
-            TargetUrl   = $url
-            Message     = "jim-ad-lab passed on ${Sha}: $detail"
-        }
-    }
-
-    $shownState = $state
-    if ([string]::IsNullOrEmpty($shownState)) {
-        $shownState = 'unknown'
-    }
-    $run = 'no run link was recorded'
-    if ($url) {
-        $run = "the run: $url"
-    }
-    $said = ''
-    if ($description) {
-        $said = " It said: $description."
-    }
-    return [pscustomobject][ordered]@{
-        Passed      = $false
-        State       = $shownState
-        Description = $description
-        TargetUrl   = $url
-        Message     = "The jim-ad-lab status for $Sha is $shownState, not success.$said See $run. $remedy"
-    }
+    return Test-ReleaseGateStatus -Statuses $Statuses -Context $script:AdLabContext -Sha $Sha -Remedy (Get-AdLabRemedy -Sha $Sha) -NotReportedReason $script:AdLabNotReportedReason
 }
 
 function Get-AdLabStatus {
-    <#
-    .SYNOPSIS
-        Reads a commit's statuses through gh: GET repos/<repository>/commits/<sha>/status, every page of it.
-
-    .DESCRIPTION
-        The combined-status endpoint already holds only the latest status per context, and pages its statuses 100 at
-        a time, so this follows the pages (up to ten). Throws, with what gh said, when gh fails.
-    #>
+    # Reads a commit's statuses through gh (Get-ReleaseGateStatus); throws, with what gh said, when gh fails.
     [CmdletBinding()]
     [OutputType([object[]])]
     param(
@@ -205,35 +100,7 @@ function Get-AdLabStatus {
         [string]$Sha
     )
 
-    $all = New-Object System.Collections.Generic.List[object]
-    for ($page = 1; $page -le 10; $page++) {
-        $stderrPath = [System.IO.Path]::GetTempFileName()
-        try {
-            $global:LASTEXITCODE = 0
-            $stdout = & gh api "repos/$Repository/commits/$Sha/status?per_page=100&page=$page" 2>$stderrPath
-            $exitCode = $LASTEXITCODE
-            $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
-        }
-        finally {
-            Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
-        }
-        if ($exitCode -ne 0) {
-            $said = (@($stdout) + @($stderr) | Where-Object { $_ } | ForEach-Object { ([string]$_).Trim() }) -join ' '
-            throw "gh could not read the commit status of $Sha in ${Repository} (exit code $exitCode): $said"
-        }
-
-        $document = ((@($stdout) | ForEach-Object { [string]$_ }) -join "`n") | ConvertFrom-Json
-        $statuses = @(Get-AdLabField -Object $document -Name 'statuses')
-        foreach ($status in $statuses) {
-            if ($null -ne $status) {
-                $all.Add($status)
-            }
-        }
-        if ($statuses.Count -lt 100) {
-            break
-        }
-    }
-    return $all.ToArray()
+    return Get-ReleaseGateStatus -Repository $Repository -Sha $Sha
 }
 
 # Dot-sourced (by the tests): the functions above are all that is wanted.
@@ -241,32 +108,4 @@ if ($MyInvocation.InvocationName -eq '.') {
     return
 }
 
-try {
-    if ($Sha -notmatch '^[0-9a-fA-F]{40}$') {
-        throw "-Sha must be the full 40-character SHA of the commit that will be tagged (git rev-parse origin/main), not '$Sha'."
-    }
-    if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
-        throw "-Repository must be OWNER/NAME, not '$Repository'."
-    }
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        throw 'The GitHub CLI (gh) is not on the PATH, so the jim-ad-lab status cannot be read. The gate stays closed.'
-    }
-
-    $result = Test-AdLabStatus -Statuses (Get-AdLabStatus -Repository $Repository -Sha $Sha) -Sha $Sha
-    if ($result.Passed) {
-        Write-Host $result.Message -ForegroundColor Green
-        exit 0
-    }
-    Write-Host $result.Message -ForegroundColor Red
-    if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host ('::error title=Release gate: jim-ad-lab::' + (($result.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
-    }
-    exit 1
-}
-catch {
-    Write-Host "Release gate: $($_.Exception.Message)" -ForegroundColor Red
-    if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host ('::error title=Release gate: jim-ad-lab::' + (($_.Exception.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
-    }
-    exit 1
-}
+exit (Invoke-ReleaseGate -Context $script:AdLabContext -Sha $Sha -Repository $Repository -Remedy (Get-AdLabRemedy -Sha $Sha) -NotReportedReason $script:AdLabNotReportedReason)

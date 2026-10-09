@@ -12,10 +12,13 @@
 # runner never streams a parallel pass to JIM-Bench. Performance data comes from serial runs elsewhere. About 1h 45m,
 # plus about 15 minutes on a cold host, which builds the directory snapshots and pulls the Oracle image (13.6 GB).
 #
-# Triggers: workflow_dispatch only. NEVER pull_request or push. Split-trust runner model (see ci.yml): a pull_request
-# runs code from anyone's fork, and this runner pauses its host's other runners and runs privileged containers, so fork
+# Triggers: a push to main that changes VERSION, and workflow_dispatch. NEVER pull_request. Only a release pull
+# request changes VERSION, so merging one starts this run on the merge commit, which is the commit the release tags
+# and the one the release gate checks; nothing else may merge to main before the tag (engineering/RELEASE_PROCESS.md).
+# Dispatch it to re-run after a fix, or at any other time. Split-trust runner model (see ci.yml): a pull_request runs
+# code from anyone's fork, and this runner pauses its host's other runners and runs privileged containers, so fork
 # code must never reach it:
-#   - a dispatch needs write access to this repository;
+#   - a push to main is merged code, and a dispatch needs write access to this repository;
 #   - the runner (`<host>-prerelease`, label `jim-prerelease`) is alone in a DEDICATED runner group named
 #     `jim-prerelease`, with repository access to TetronIO/JIM only and a workflow allowlist of exactly this file at
 #     refs/heads/main, so even a branch that edits this workflow cannot reach the runner. It is not in
@@ -37,12 +40,16 @@
 #
 # Configuration: none. The suite needs no secrets (its test credentials are throwaway and built in).
 #
-# The release gate: nothing reads the `jim-pre-release` status yet. Making release.yml require it for the SHA being
-# tagged, as it requires `jim-ad-lab`, is the next step.
+# The release gate: release.yml's jim-pre-release-gate job and the /release skill require a `success` status from this
+# workflow on the SHA being tagged (scripts/Test-PreReleaseGate.ps1), with no override, once the repository variable
+# JIM_PRE_RELEASE_GATE_ENFORCED is `true`; until then a release carries a warning instead.
 
 name: jim-pre-release
 
 on:
+  push:
+    branches: [ "main" ]
+    paths: [ "VERSION" ]
   workflow_dispatch:
 
 permissions:

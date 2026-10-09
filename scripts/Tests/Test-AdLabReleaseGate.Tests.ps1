@@ -314,13 +314,15 @@ Describe 'the gate in the release workflow' {
         $workflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows' 'release.yml') -Raw
         $workflow | Should -Match '(?m)^  jim-ad-lab-gate:'
         $workflow.IndexOf('jim-ad-lab-gate:') | Should -BeLessThan $workflow.IndexOf('  validate:')
-        $workflow | Should -Match '(?ms)^  validate:.*?^    needs: jim-ad-lab-gate'
+        # validate needs every release gate; the lab gate is one of them (a list once there is more than one).
+        $workflow | Should -Match '(?ms)^  validate:.*?^    needs: \[?[^\n]*\bjim-ad-lab-gate\b'
         $workflow | Should -Match 'Test-AdLabReleaseGate\.ps1'
     }
 
     It 'enforces the gate only once JIM_AD_LAB_GATE_ENFORCED is true, and warns on every release until then' {
         $workflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows' 'release.yml') -Raw
-        $gateJob = [regex]::Match($workflow, '(?ms)^  jim-ad-lab-gate:.*?(?=^  validate:)').Value
+        # The job's own lines only: up to the next line indented two spaces (the next job, or its comment).
+        $gateJob = [regex]::Match($workflow, '(?ms)^  jim-ad-lab-gate:.*?(?=^  \S)').Value
         $gateJob | Should -Match "(?ms)if: vars\.JIM_AD_LAB_GATE_ENFORCED == 'true'\s+shell: pwsh.*?Test-AdLabReleaseGate\.ps1"
         $gateJob | Should -Match "(?ms)if: vars\.JIM_AD_LAB_GATE_ENFORCED != 'true'.*?::warning"
     }
