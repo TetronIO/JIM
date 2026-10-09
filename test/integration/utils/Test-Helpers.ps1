@@ -2728,6 +2728,43 @@ function Get-UniquenessProbeWarningPattern {
     return "^JIM couldn't probe $system for values already in use\. .+\. JIM chose [1-9][0-9]* values? using its own records only\.`$"
 }
 
+function Get-ExecutionItemErrorMessages {
+    <#
+    .SYNOPSIS
+        The error messages of the given Run Profile Execution Items, keyed by item ID, read from the lane's database.
+
+    .DESCRIPTION
+        No API returns an execution item's error message, and it is the part of a failure that names what went
+        wrong (for a generated value: the attribute, the last candidate tried and what rejected it). For diagnostic
+        output only: anything that goes wrong reading it returns an empty table rather than masking the failure
+        being reported.
+    #>
+    param([Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$ItemIds)
+
+    $messages = @{}
+    # Parsed as GUIDs before they reach the SQL text, so nothing but a GUID can.
+    $ids = @($ItemIds | ForEach-Object {
+            $parsed = [guid]::Empty
+            if ([guid]::TryParse("$_", [ref]$parsed)) { $parsed }
+        } | Select-Object -Unique)
+    if ($ids.Count -eq 0) { return $messages }
+
+    $idList = ($ids | ForEach-Object { "'$_'" }) -join ','
+    $query = "SELECT COALESCE(json_agg(json_build_object('id', ""Id"", 'message', ""ErrorMessage"")), '[]') FROM ""ActivityRunProfileExecutionItems"" WHERE ""Id"" IN ($idList) AND ""ErrorMessage"" IS NOT NULL;"
+    $raw = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $messages }
+
+    try {
+        foreach ($row in @("$raw" | ConvertFrom-Json)) {
+            $messages["$($row.id)"] = $row.message
+        }
+    }
+    catch [System.ArgumentException] {
+        Write-Verbose "Could not parse execution item error messages: $_"
+    }
+    return $messages
+}
+
 function Assert-ActivitySuccess {
     <#
     .SYNOPSIS
@@ -2903,17 +2940,20 @@ function Assert-ActivitySuccess {
                     Select-Object -First 5
 
                 if ($errorItems) {
+                    # The item list is headers only: no API returns an item's error message, which is the part that
+                    # says what actually went wrong, so it is read from the database.
+                    $messages = Get-ExecutionItemErrorMessages -ItemIds @($errorItems | ForEach-Object { $_.id })
                     $errorDetails += "First error items:"
                     foreach ($item in $errorItems) {
                         $errorDetails += "  - Error: $($item.errorType)"
-                        if ($item.errorMessage) {
-                            $errorDetails += "    Message: $($item.errorMessage)"
+                        if ($messages.ContainsKey("$($item.id)")) {
+                            $errorDetails += "    Message: $($messages["$($item.id)"])"
                         }
-                        if ($item.snapshotDisplayName) {
-                            $errorDetails += "    Object: $($item.snapshotDisplayName)"
+                        if ($item.displayName) {
+                            $errorDetails += "    Object: $($item.displayName)"
                         }
-                        elseif ($item.connectedSystemObjectExternalId) {
-                            $errorDetails += "    ExtId: $($item.connectedSystemObjectExternalId)"
+                        elseif ($item.externalIdValue) {
+                            $errorDetails += "    ExtId: $($item.externalIdValue)"
                         }
                     }
                 }
@@ -5167,6 +5207,99 @@ ORDER BY cs."Name", pe."Id";
     if ($violations.Count -gt 0) {
         throw "Synchronisation state invariant(s) broken:`n  - $($violations -join "`n  - ")"
     }
+}
+
+function Get-CSharpEnumMemberNames {
+    <#
+    .SYNOPSIS
+        A JIM enum's member names keyed by value, read from its source file, so a value the database stores as an
+        integer can be reported by name without a second copy of the enum to keep in step.
+    .OUTPUTS
+        A hashtable of int to name; empty when the file cannot be read.
+    #>
+    param([Parameter(Mandatory=$true)][string]$Path)
+
+    $names = @{}
+    if (-not (Test-Path -LiteralPath $Path)) { return $names }
+
+    $next = 0
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match '^\s*([A-Z][A-Za-z0-9]*)\s*(?:=\s*(-?\d+))?\s*,?\s*(//.*)?$') {
+            if ($Matches[2]) { $next = [int]$Matches[2] }
+            $names[$next] = $Matches[1]
+            $next++
+        }
+    }
+    return $names
+}
+
+function Export-FailedScenarioDiagnostics {
+    <#
+    .SYNOPSIS
+        Writes what a failed scenario left in the JIM database (every Activity that did not complete cleanly, and
+        every errored Run Profile Execution Item with its error message) to a JSON file in the results folder.
+
+    .DESCRIPTION
+        The runner resets the stack before every scenario, so a failed scenario's database is gone moments after it
+        fails, and with it the item error messages, which no API returns and which are the part of a failure that
+        says what went wrong. Called by the runner for a failed scenario, before anything resets; the file is
+        uploaded with the rest of the results.
+
+        Error stack traces are cut to 4,000 characters, and at most 200 Activities and 500 items are written (the
+        most recent), so a scale run that fails every object cannot produce an unwieldy file.
+
+    .PARAMETER Path
+        The JSON file to write.
+
+    .OUTPUTS
+        An object with the Activity and item counts written.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][string]$Path)
+
+    # ActivityStatus.Complete = 2; ActivityRunProfileExecutionItemErrorType.NotSet = 0.
+    $query = @"
+SELECT json_build_object(
+  'activities', COALESCE((SELECT json_agg(a ORDER BY a.created) FROM (
+      SELECT act."Id" AS id, act."Created" AS created, act."TargetName" AS "targetName", act."Status" AS status,
+             cs."Name" AS "connectedSystem", act."Message" AS message, act."ErrorMessage" AS "errorMessage",
+             act."WarningMessage" AS "warningMessage"
+      FROM "Activities" act
+      LEFT JOIN "ConnectedSystems" cs ON cs."Id" = act."ConnectedSystemId"
+      WHERE act."Status" <> 2
+      ORDER BY act."Created" DESC
+      LIMIT 200) a), '[]'::json),
+  'items', COALESCE((SELECT json_agg(i ORDER BY i."activityCreated") FROM (
+      SELECT r."Id" AS id, r."ActivityId" AS "activityId", act."Created" AS "activityCreated",
+             act."TargetName" AS "activityName", r."ErrorType" AS "errorType", r."DisplayNameSnapshot" AS "displayName",
+             r."ExternalIdSnapshot" AS "externalId", r."ObjectTypeSnapshot" AS "objectType",
+             r."ErrorMessage" AS "errorMessage", left(r."ErrorStackTrace", 4000) AS "errorStackTrace"
+      FROM "ActivityRunProfileExecutionItems" r
+      JOIN "Activities" act ON act."Id" = r."ActivityId"
+      WHERE r."ErrorType" IS NOT NULL AND r."ErrorType" <> 0
+      ORDER BY act."Created" DESC
+      LIMIT 500) i), '[]'::json));
+"@
+
+    $raw = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Export-FailedScenarioDiagnostics: psql query failed. Output: $raw"
+    }
+    $data = ("$raw" | ConvertFrom-Json)
+
+    # Both are stored as integers; report them by name, keeping the number when the enum source cannot be read.
+    $modelsRoot = Join-Path $PSScriptRoot '..' '..' '..' 'src' 'JIM.Models' 'Activities'
+    $statusNames = Get-CSharpEnumMemberNames -Path (Join-Path $modelsRoot 'ActivityStatus.cs')
+    $errorTypeNames = Get-CSharpEnumMemberNames -Path (Join-Path $modelsRoot 'ActivityRunProfileExecutionItemErrorType.cs')
+    foreach ($activity in @($data.activities)) {
+        if ($statusNames.ContainsKey([int]$activity.status)) { $activity.status = $statusNames[[int]$activity.status] }
+    }
+    foreach ($item in @($data.items)) {
+        if ($errorTypeNames.ContainsKey([int]$item.errorType)) { $item.errorType = $errorTypeNames[[int]$item.errorType] }
+    }
+
+    $data | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Path -Encoding utf8
+    return [pscustomobject]@{ Activities = @($data.activities).Count; Items = @($data.items).Count }
 }
 
 function Assert-NoWorkerErrors {
