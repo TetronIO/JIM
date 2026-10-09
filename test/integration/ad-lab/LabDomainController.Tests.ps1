@@ -390,6 +390,14 @@ Describe 'Get-LabDomainInfo' {
         $info.BaseDn | Should -Be 'DC=panoply,DC=local'
     }
 
+    It 'derives the NetBIOS name when it is passed empty, as New-LabDomainController passes it when not given one' {
+        (Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName '').NetBiosName | Should -Be 'PANOPLY'
+    }
+
+    It 'still rejects a NetBIOS name with characters NetBIOS does not allow' {
+        { Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PAN OPLY' } | Should -Throw
+    }
+
     It 'honours an explicit NetBIOS name' {
         (Get-LabDomainInfo -Domain 'RESURGAM.LOCAL' -ShortName 'dc1' -NetBiosName 'RSG').NetBiosName | Should -Be 'RSG'
     }
@@ -508,6 +516,12 @@ Describe 'Get-LabGuestPhaseArgument' {
         }
     }
 
+    It 'gives License nothing but the phase: it needs no settings and no secret' {
+        $arguments = Get-LabGuestPhaseArgument -Phase License -Settings $script:Settings
+        @($arguments.Keys) | Should -Be @('Phase')
+        $arguments.Phase | Should -Be 'License'
+    }
+
     It 'gives Prepare the network settings and nothing that belongs to a later phase' {
         $arguments = Get-LabGuestPhaseArgument -Phase Prepare -Settings $script:Settings
         $arguments.Phase | Should -Be 'Prepare'
@@ -624,14 +638,81 @@ Describe 'Resolve-LabInstallImage' {
         (Resolve-LabInstallImage -Image $legacy).ImageIndex | Should -Be 4
     }
 
-    It 'throws listing what the media does hold when there is no Datacenter image, as an evaluation-only ISO might' {
+    It 'throws listing what the media does hold when there is no Datacenter image, as a Standard-only ISO might' {
         $evaluation = @([pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Standard Evaluation' })
         { Resolve-LabInstallImage -Image $evaluation } | Should -Throw '*Standard Evaluation*'
     }
 
-    It 'refuses an Evaluation edition even when it is Datacenter, because it cannot be converted and would expire' {
-        $evaluation = @([pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' })
-        { Resolve-LabInstallImage -Image $evaluation } | Should -Throw '*Evaluation*'
+    It 'flags a full Datacenter image as not Evaluation' {
+        (Resolve-LabInstallImage -Image $script:Images).Evaluation | Should -BeFalse
+    }
+
+    It 'falls back to the Datacenter Evaluation image, flagged, when the media holds nothing else (the free Evaluation Center ISO)' {
+        $evaluation = @(
+            [pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Standard Evaluation' }
+            [pscustomobject]@{ ImageIndex = 2; ImageName = 'Windows Server 2025 Standard Evaluation (Desktop Experience)' }
+            [pscustomobject]@{ ImageIndex = 3; ImageName = 'Windows Server 2025 Datacenter Evaluation' }
+            [pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' }
+        )
+        $image = Resolve-LabInstallImage -Image $evaluation
+        $image.ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $image.ImageIndex | Should -Be 4
+        $image.Evaluation | Should -BeTrue
+        (Resolve-LabInstallImage -Image $evaluation -ServerCore).ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation'
+    }
+
+    It 'prefers a full Datacenter image over an Evaluation one on the same media' {
+        $mixed = @(
+            [pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' }
+            [pscustomobject]@{ ImageIndex = 2; ImageName = 'Windows Server 2025 Datacenter (Desktop Experience)' }
+        )
+        $image = Resolve-LabInstallImage -Image $mixed
+        $image.ImageIndex | Should -Be 2
+        $image.Evaluation | Should -BeFalse
+    }
+}
+
+Describe 'Test-LabEvaluationEdition' {
+    It 'recognises the evaluation edition IDs Windows reports' {
+        Test-LabEvaluationEdition -EditionId 'ServerDatacenterEval' | Should -BeTrue
+        Test-LabEvaluationEdition -EditionId 'ServerStandardEval' | Should -BeTrue
+    }
+
+    It 'does not mistake a full edition for an evaluation one' {
+        Test-LabEvaluationEdition -EditionId 'ServerDatacenter' | Should -BeFalse
+        Test-LabEvaluationEdition -EditionId 'ServerStandard' | Should -BeFalse
+    }
+}
+
+Describe 'ConvertTo-LabKeylessUnattend' {
+    BeforeAll {
+        $script:Template = Get-Content -LiteralPath $script:TemplatePath -Raw
+        $script:KeylessValues = @{
+            COMPUTER_NAME              = 'dc1'
+            ADMIN_PASSWORD_ENCODED     = 'QUJD'
+            AUTOLOGON_PASSWORD_ENCODED = 'REVG'
+            IMAGE_NAME                 = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+            UI_LANGUAGE                = 'en-US'
+            LOCALE                     = 'en-GB'
+            TIME_ZONE                  = 'UTC'
+        }
+    }
+
+    It 'removes both product key settings, so evaluation media installs with none' {
+        $keyless = ConvertTo-LabKeylessUnattend -Template $script:Template
+        Get-LabUnattendPlaceholder -Template $keyless | Should -Not -Contain 'PRODUCT_KEY'
+        $keyless | Should -Not -Match '<ProductKey>'
+    }
+
+    It 'leaves a template that renders to well-formed XML from every other value' {
+        $xml = ConvertTo-LabUnattendXml -Template (ConvertTo-LabKeylessUnattend -Template $script:Template) -Values $script:KeylessValues
+        { [xml]$xml } | Should -Not -Throw
+        $xml | Should -Match '<ComputerName>dc1</ComputerName>'
+        $xml | Should -Match '<AcceptEula>true</AcceptEula>'
+    }
+
+    It 'throws when the template carries no product key, rather than silently doing nothing' {
+        { ConvertTo-LabKeylessUnattend -Template '<unattend></unattend>' } | Should -Throw '*ProductKey*'
     }
 }
 

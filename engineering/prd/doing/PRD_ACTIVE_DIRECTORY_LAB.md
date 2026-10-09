@@ -55,7 +55,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 #### Lab
 
-1. The hypervisor host runs Windows Server Datacenter with the Hyper-V role, activated, so that guests activate through Automatic Virtual Machine Activation with the generic per-version key and no per-VM licence management. Evaluation editions are not used: an evaluation domain controller cannot be converted, and its timer counts real time regardless of checkpoint reverts.
+1. The hypervisor host runs Windows Server Datacenter with the Hyper-V role, activated, so that guests activate through Automatic Virtual Machine Activation with the generic per-version key and no per-VM licence management. No domain controller runs an evaluation edition: an evaluation domain controller cannot be converted, and its timer counts real time regardless of checkpoint reverts. The free evaluation media may be used to build them, because each guest is converted to full Datacenter with the AVMA key before promotion (the build's `License` phase), which is the point at which Microsoft supports that conversion.
 2. Three single-domain-controller forests mirror the existing container roles and names: `dc-primary` (PANOPLY.LOCAL), `dc-source` (RESURGAM.LOCAL) and `dc-target` (GENTIAN.LOCAL), at the Windows Server 2016 forest functional level on Windows Server 2025 domain controllers. `dc-primary` has the AD Recycle Bin enabled.
 3. A dedicated Linux runner VM on the same host, registered in its own `jim-ad-lab` runner group (repository access limited to JIM, workflow allowlist limited to the two lab workflows) with the label `jim-ad-lab`, runs the JIM stack in Docker exactly as the existing self-hosted runners do. It is the only machine with a route to the domain controller network, an internal virtual switch on which the host serves NTP and nothing routes out. A runner carrying the default labels in `tetron-trusted` would be offered ordinary CI jobs, which is why the group is separate.
 4. Every domain controller is built by a PowerShell script from installation media: unattended install with the AVMA key, promotion, an LDAPS certificate whose Subject Alternative Names match the rules `post-provision.sh` enforces, the OUs, `svc-jim` in the JIM Connectors group with the existing SDDL delegation file applied unchanged, ownership of the Deleted Objects container as `jim-delegate.sh --tombstones` does, "password never expires" on `svc-jim` and Administrator only, Windows Update automatic installation switched off, and w32time pointed at the same NTP source as the host and the runner. The domain password policy stays at Windows defaults (complexity on) except where a scenario sets its own.
@@ -163,7 +163,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 ## Dependencies
 
-- Host preparation (owner: Jay): Datacenter activation and the Hyper-V role; a virtual switch on the CI VLAN; OpenSSH Server with a dedicated Hyper-V Administrators account; NTP; non-evaluation Windows Server 2025 media.
+- Host preparation (owner: Jay): Datacenter activation and the Hyper-V role; a virtual switch on the CI VLAN; OpenSSH Server with a dedicated Hyper-V Administrators account; NTP; Windows Server 2025 media (full, or the free evaluation ISO, which the build converts before promotion).
 - The runner VM registered with the `jim-ad-lab` label (mirrors the existing self-hosted runners).
 - #518 for the gate's compliance framing; this PRD delivers its Active Directory leg first.
 
