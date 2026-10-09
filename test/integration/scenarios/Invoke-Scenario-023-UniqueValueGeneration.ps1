@@ -1208,6 +1208,20 @@ try {
         $rawRestartResult = Invoke-RawJimApi -Method POST -Endpoint "/api/v1/synchronisation/sync-rules/$($config.ImportRuleId)/mappings/$($config.EmployeeNumberMappingId)/generation/restart"
         Add-TestResult -Name "The REST restart route answers directly (surface parity)" -Passed ($null -ne $rawRestartResult) `
             -Detail "Raw response: $($rawRestartResult | ConvertTo-Json -Compress)"
+
+        # Put the counter back above the population before any later step draws a Staff Number. Start again left it
+        # at 1, below the block the initial population holds (EMP-001000 upwards, one number per person), and every
+        # synchronisation that draws reserves a block of 100, so each later joiner moves it 100 closer. Ten joiners
+        # on (the Samba AD order: Tests 13 and 16 add the two OpenLDAP skips), a joiner's sync reached the block and
+        # had to skip every number in it, more than the attempt limit at Medium, so Test 18 failed Pre-Release
+        # with GeneratedValueExhausted for Staff Number, nothing to do with what it tests.
+        $highestStaffNumber = (@((Get-Population) | ForEach-Object { [int]("$($_.attributes.'Staff Number')" -replace '^EMP-0*', '') }) |
+            Measure-Object -Maximum).Maximum
+        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart ($highestStaffNumber + 1) | Out-Null
+        $sequenceAfterRaise = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
+        Add-TestResult -Name "Raising Sequence Start after Start again moves the counter past every Staff Number in use" `
+            -Passed ($sequenceAfterRaise.nextNumber -gt $highestStaffNumber) `
+            -Detail "Highest Staff Number in use: $highestStaffNumber; NextNumber: $($sequenceAfterRaise.nextNumber)"
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
