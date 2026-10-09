@@ -282,17 +282,17 @@ flowchart TD
     A --> B --> C --> D --> E --> F --> A
 ```
 
-**Local vs CI:** locally the runner performs the reset between runs (and `Reset-JIMForNextScenario` between scenarios of a full-regression sweep). In CI each run gets a fresh GitHub runner, so there are no persistent volumes and the reset is automatic. See [CI/CD Integration](#cicd-integration) for the workflow itself.
+**Local vs CI:** the runner performs the reset between runs (and `Reset-JIMForNextScenario` between scenarios of a full-regression sweep) in both. The CI runner is self-hosted and not ephemeral, so the workflow also removes every stack in an `always()` step. See [CI/CD Integration](#cicd-integration) for the workflow itself.
 
 **CI/CD Characteristics:**
 
 | Aspect | Behaviour |
 |--------|-----------|
-| **Trigger** | Manual only (`workflow_dispatch`) - not on every commit |
-| **Isolation** | Fresh GitHub runner = clean state guaranteed |
-| **Reset** | `docker compose down -v` in `always()` step ensures cleanup even on failure |
-| **Idempotency** | Each run is fully independent; no state persists between runs |
-| **Timeout** | 2 hours maximum to prevent runaway costs |
+| **Trigger** | Manual only (`workflow_dispatch` on `main`) - not on every commit |
+| **Isolation** | A dedicated self-hosted runner that pauses its host's other runners for the run |
+| **Reset** | Every lane's stack is removed in an `always()` step, even on failure |
+| **Idempotency** | Each run is independent; only the directory snapshot images and Scenario 016's databases persist, as locally |
+| **Timeout** | 4 hours (a run takes ~1h 45m) |
 
 ### Why Reset JIM's Database?
 
@@ -1684,42 +1684,23 @@ The remaining database scenarios (Multi-Source Aggregation and Performance Basel
 
 ## CI/CD Integration
 
-> **Not yet implemented.** `.github/workflows/integration-tests.yml` does not exist yet (see [Remaining Work](#remaining-work)); this section describes the intended workflow. Until it lands, run the suite locally with `Run-IntegrationTests.ps1`. The CI jobs that do run on every PR against real infrastructure are the `database-tests` and `ldaps-tests` tiers described in `engineering/TESTING_STRATEGY.md`.
+The pre-release regression runs in GitHub Actions through `.github/workflows/pre-release.yml` (`jim-pre-release`), on a dedicated self-hosted runner; the workflow's header comment is the full reference. The other CI jobs that run against real infrastructure are the `database-tests` and `ldaps-tests` tiers in `engineering/TESTING_STRATEGY.md` (every PR) and the Active Directory lab (`ad-lab.yml`, nightly).
 
-Integration tests run manually via GitHub Actions `workflow_dispatch` to avoid excessive resource consumption.
+### Triggering a Run
 
-### Triggering a Test Run
+**Actions** > **jim-pre-release** > **Run workflow**, on `main` (the runner group refuses any other branch). It runs `-PreRelease -Parallel -ContinueOnFailure`: every scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), the three passes side by side, in ~1h 45m (~15 minutes more on a cold host, for snapshot builds and the Oracle image). It is a correctness gate only: parallel passes share the host, so they never stream to JIM-Bench; performance data comes from serial runs.
 
-1. Navigate to **Actions** tab in GitHub
-2. Select **Integration Tests** workflow
-3. Click **Run workflow**
-4. Choose:
-   - **Template**: Data scale (Micro to Scale1m80Groups; or Scale100k5kGroups-Scale1m60kGroups for long-tail / OpenLDAP-only)
-   - **Phase**: 1 (LDAP/CSV) or 2 (databases)
-5. Click **Run workflow**
+### What a Run Does
 
-### Workflow Configuration
-
-See `.github/workflows/integration-tests.yml` for complete workflow definition.
-
-**Key Features**:
-- Manual trigger only (`workflow_dispatch`)
-- Configurable template and phase
-- Complete stand-up/tear-down for idempotency
-- Artefact upload for test results
-- Timeout protection (2 hours max)
+- **Pauses the host's other runners first.** The suite assumes it owns the host's Docker (it prunes every image it did not build, wipes the build cache and publishes fixed ports), so the job pauses every other runner on its host, each only once idle, and resumes them at the end. A watchdog on the host resumes them if the job dies first. The runner, its group and the pause tool are set up from TetronIO/ci-runners.
+- **Reports** a per-directory table in the job summary, uploads `test/integration/results/` (regression reports, lane and scenario logs, worker logs) as an artefact kept for 30 days, and posts a `jim-pre-release` commit status on the SHA it tested: `success` only when every scenario passed.
+- **Cleans up** every lane's stack, even after a failure (the failed lane's logs are already in the artefact). Scenario 016's database containers are kept between runs, as locally.
 
 **When to Run**:
-- Before creating a release
-- After major connector changes
-- After sync engine modifications
-- When validating performance improvements
-- Before merging large PRs
+- Before creating a release, on the release commit
+- After major connector or sync engine changes, before they ship
 
-**Not Recommended**:
-- On every commit (too expensive)
-- On every PR (use unit tests instead)
-- During development (use local testing)
+The release gate (making `release.yml` require `jim-pre-release` for the tagged SHA, as it requires `jim-ad-lab`) is not in place yet.
 
 ---
 
@@ -2484,12 +2465,12 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity; release 2: never reuse; release 3: probing; release 4: Collision Remediation, derived collisions, Needs Decision, remediation off (#242) |
 | Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
-| GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
+| GitHub Actions | ✅ Manual run | `pre-release.yml` runs the pre-release regression on demand; the release gate is pending |
 
 ### Remaining Work
 
 - **Scenario 003 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
-- **GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
+- **Pre-release release gate** - `release.yml` to require the `jim-pre-release` commit status, as it does `jim-ad-lab`
 - **Entitlement Management** (both deferred scenarios) - blocked on Internal MVO design
 - **Multi-Source Aggregation and Performance Baselines** (unnumbered) - sequenced after the Scenario 016 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
 
