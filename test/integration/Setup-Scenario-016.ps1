@@ -133,10 +133,12 @@ if ($staleSystems.Count -gt 0) {
             Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
         }
 
-        # A large system's deletion is queued rather than done inline, and its Metaverse Objects are deleted when it
-        # runs, so wait for both before restoring the grace period the deletion is evaluated under. Once the systems
-        # are gone, a count that has stopped falling is not going to reach zero (objects no SQL Matrix system
-        # projected); the check below reports those, rather than this waiting out the deadline for them.
+        # Removing a system only marks the Metaverse Objects it leaves without a connector; the worker's housekeeping
+        # deletes them, at most once a minute and only while idle (Scheduled Metaverse Object Deletion), and a large
+        # system's removal is itself queued. So wait for both before restoring the grace period the deletion is
+        # evaluated under. Once the systems are gone, a count that has held for longer than one housekeeping interval
+        # is not going to reach zero (objects no SQL Matrix system projected); the check below reports those, rather
+        # than this waiting out the deadline for them.
         $deadline = (Get-Date).AddMinutes(15)
         $lastCount = -1
         $steadySince = Get-Date
@@ -145,7 +147,7 @@ if ($staleSystems.Count -gt 0) {
             $usersLeft = Get-ProjectedUserCount
             if ($systemsLeft -eq 0 -and $usersLeft -eq 0) { break }
             if ($usersLeft -ne $lastCount) { $lastCount = $usersLeft; $steadySince = Get-Date }
-            if ($systemsLeft -eq 0 -and ((Get-Date) - $steadySince).TotalSeconds -ge 30) { break }
+            if ($systemsLeft -eq 0 -and ((Get-Date) - $steadySince).TotalSeconds -ge 90) { break }
             if ((Get-Date) -gt $deadline) {
                 throw "Setup failed: 15 minutes after removing the earlier SQL Matrix Connected Systems, $systemsLeft of them and $usersLeft projected User Metaverse Object(s) remain."
             }
