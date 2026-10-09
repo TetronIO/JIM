@@ -1694,7 +1694,7 @@ It starts by itself on every push to `main` that changes `VERSION` (that is, whe
 
 - **Pauses the host's other runners first.** The suite assumes it owns the host's Docker (it prunes every image it did not build, wipes the build cache and publishes fixed ports), so the job pauses every other runner on its host, each only once idle, and resumes them at the end. A watchdog on the host resumes them if the job dies first. The runner, its group and the pause tool are set up from TetronIO/ci-runners.
 - **Reports** a per-directory table in the job summary, uploads `test/integration/results/` (regression reports, lane and scenario logs, worker logs) as an artefact kept for 30 days, and posts a `jim-pre-release` commit status on the SHA it tested: `success` only when every scenario passed.
-- **Cleans up** every lane's stack, even after a failure (the failed lane's logs are already in the artefact). Scenario 016's database containers are kept between runs, as locally.
+- **Cleans up** every lane's stack, even after a failure. Nothing is lost by it: the runner resets the stack before every scenario anyway, so a lane left running for diagnosis only holds its *last* scenario's state. What a failed scenario's database holds is captured as it fails instead, in `results/failure-diagnostics-<scenario>-<template>[-<lane>]-<timestamp>.json`: every Activity that did not complete cleanly, and every errored execution item with its error message, which no API returns. Scenario 016's database containers are kept between runs, as locally.
 
 **When to Run**:
 - Before creating a release, on the release commit
