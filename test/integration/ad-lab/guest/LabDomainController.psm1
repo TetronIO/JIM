@@ -459,7 +459,9 @@ function Get-LabDomainInfo {
         [ValidatePattern('^[A-Za-z0-9]([A-Za-z0-9-]{0,13}[A-Za-z0-9])?$')]
         [string]$ShortName,
 
-        [ValidatePattern('^[A-Za-z0-9-]{1,15}$')]
+        # Empty is allowed and means "derive it from the domain": New-LabDomainController always passes its own
+        # -NetBiosName through, which is an empty string when the operator did not give one.
+        [ValidatePattern('^([A-Za-z0-9-]{1,15})?$')]
         [string]$NetBiosName
     )
 

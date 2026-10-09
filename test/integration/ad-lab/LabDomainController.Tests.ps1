@@ -390,6 +390,14 @@ Describe 'Get-LabDomainInfo' {
         $info.BaseDn | Should -Be 'DC=panoply,DC=local'
     }
 
+    It 'derives the NetBIOS name when it is passed empty, as New-LabDomainController passes it when not given one' {
+        (Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName '').NetBiosName | Should -Be 'PANOPLY'
+    }
+
+    It 'still rejects a NetBIOS name with characters NetBIOS does not allow' {
+        { Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PAN OPLY' } | Should -Throw
+    }
+
     It 'honours an explicit NetBIOS name' {
         (Get-LabDomainInfo -Domain 'RESURGAM.LOCAL' -ShortName 'dc1' -NetBiosName 'RSG').NetBiosName | Should -Be 'RSG'
     }
