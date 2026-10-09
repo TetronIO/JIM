@@ -303,6 +303,15 @@ The MkDocs Material docs site uses a standard two-column layout (nav plus conten
 
 Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Outlined buttons use transparent background with `primary` text and border. Hover state darkens to `primary-darken`.
 
+**One filled button per view.** Emphasis comes from the variant, not the colour: filled is high emphasis, outlined medium, text low. A view (a page as it is seen at once, or a dialog) has at most one filled `primary` button, its main action; every other action is outlined, or a text button where it is lesser still.
+
+- A panel's own action on a page that already has a main action is outlined: the Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's filled **Save Changes**.
+- In a dialog, the filled button is the recommended way out, which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** outlined and **Cancel** as text.
+- Lower emphasis by variant, never by recolouring. A filled `secondary` button is just as heavy as a filled `primary` one (and `secondary` means the Connected System side in JIM's chips), and a filled default grey reads as disabled.
+- Outside the rule: buttons inside alerts, which follow the paragraph below, and the small filled icon buttons in a table row's actions column, which act on that row rather than on the view.
+
+Pages that predate this rule are brought into line as they are next changed.
+
 A button inside an alert is filled in the alert's severity colour (`warning` on a warning, `error` on an error, and so on), never `primary`, so the action reads as part of the message it answers. A lesser action beside it is a text button in the alert's colour. In the portal this is the `<AlertButton>` component, enforced by a build check; see `src/JIM.Web/CLAUDE.md` > Alerts.
 
 ### Chips

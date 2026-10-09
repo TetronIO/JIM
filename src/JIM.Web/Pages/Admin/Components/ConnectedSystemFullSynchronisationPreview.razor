@@ -11,6 +11,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject IConfigurationChangePreviewStarter PreviewStarter
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 
@@ -20,7 +21,8 @@
 @* The Full Synchronisation preview of the Connected System on show (#1530), hosted at the top of its Details tab. Started
    from the drift notice or a Run Profile's Preview action, which hand this host a request; found again on return, until
    a Full Synchronisation has run since it, when its job is done. The run is started from here too, recording the
-   preview on its Activity while nothing has overtaken it. Renders nothing while there is no preview to show. *@
+   preview on its Activity; a preview something has overtaken is asked about first, and the run records that it was
+   out of date (#2022). Renders nothing while there is no preview to show. *@
 
 @if (_loading)
 {
@@ -31,8 +33,9 @@ else if (_previewActivityId is { } previewActivityId)
     @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
     {
         <MudAlert Severity="Severity.Warning" Class="mb-6" data-testid="jim-full-sync-preview-stale">
-            @_previewState.StaleReason since this preview ran, so it may no longer be accurate. Run it again before
-            running a Full Synchronisation; a run started now would record that no current preview informed it.
+            @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. It may
+            no longer be accurate, so run it again before running a Full Synchronisation; a run started now records that the
+            preview informing it was out of date.
         </MudAlert>
     }
 
@@ -114,7 +117,9 @@ else if (_previewActivityId is { } previewActivityId)
             @if (runnable.Count == 1)
             {
                 var only = runnable[0];
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                @* Outlined, not filled: the panel offers this action rather than being the page's one main focus, and
+                   a run is consequential enough that it should not be the loudest thing on the page. *@
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.PlayArrow" Disabled="@_queueing"
                            OnClick="@(() => RunAsync(only))" data-testid="jim-full-sync-run">
                     Run Full Synchronisation
@@ -122,7 +127,7 @@ else if (_previewActivityId is { } previewActivityId)
             }
             else
             {
-                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                          StartIcon="@Icons.Material.Filled.PlayArrow" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                          Disabled="@_queueing" data-testid="jim-full-sync-run-menu">
                     @foreach (var profile in runnable)
@@ -261,8 +266,10 @@ else if (_previewActivityId is { } previewActivityId)
     }
 
     /// <summary>
-    /// Queues a Full Synchronisation, recording the preview on its Activity while it is current. Staleness is judged
-    /// again first: data may have moved since the preview finished and the page last looked.
+    /// Queues a Full Synchronisation, recording the preview on its Activity. Staleness is judged again first, because
+    /// data may have moved since the preview finished and the page last looked; a preview something has overtaken is
+    /// asked about before anything queues, naming what overtook it (#2022). Running anyway cites it, and the server
+    /// records that it was out of date.
     /// </summary>
     private async Task RunAsync(ConnectedSystemRunProfile runProfile)
     {
@@ -273,7 +280,27 @@ else if (_previewActivityId is { } previewActivityId)
         try
         {
             await ReloadPreviewStateAsync(attachToLatest: false);
-            var informingPreview = _previewState.ActivityId == _previewActivityId ? _previewState.InformingPreviewActivityId : null;
+            var showingLatest = _previewState.ActivityId == _previewActivityId;
+            var askedAboutStaleness = showingLatest && _previewState.Status == ConnectedSystemPreviewStatus.Stale;
+            if (askedAboutStaleness)
+            {
+                StateHasChanged();
+                var dialog = await DialogService.ShowAsync<OutOfDatePreviewDialog>("Preview out of date",
+                    new DialogParameters<OutOfDatePreviewDialog>
+                    {
+                        { x => x.StaleReason, _previewState.StaleReason },
+                        { x => x.Staleness, _previewState.Staleness }
+                    },
+                    new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+                var answer = await dialog.Result;
+
+                if (answer is { Canceled: false, Data: OutOfDatePreviewChoice.PreviewAgain })
+                    await StartPreviewAsync();
+                if (answer is not { Canceled: false, Data: OutOfDatePreviewChoice.RunAnyway })
+                    return;
+            }
+
+            var informingPreview = showingLatest ? _previewState.InformingPreviewActivityId : null;
 
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
@@ -289,6 +316,10 @@ else if (_previewActivityId is { } previewActivityId)
 
             foreach (var warning in result.Warnings)
                 Snackbar.Add(warning, Severity.Warning);
+
+            // Only where the administrator was not just asked: a preview overtaken between the click and the queue.
+            if (!askedAboutStaleness && result.CitedPreviewWarning is { } previewWarning)
+                Snackbar.Add(previewWarning, Severity.Warning);
 
             var runActivityId = task.Activity?.Id;
             Snackbar.Add($"{runProfile.Name} queued.", Severity.Success, config =>

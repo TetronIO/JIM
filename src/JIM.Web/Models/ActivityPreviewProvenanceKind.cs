@@ -14,6 +14,11 @@ public enum ActivityPreviewProvenanceKind
     /// <summary>The administrator read a preview before making the change.</summary>
     InformedByPreview = 1,
 
-    /// <summary>A Connected System was deleted with no current preview behind the decision.</summary>
-    WentAheadWithoutAPreview = 2
+    /// <summary>A Connected System was deleted with no preview behind the decision.</summary>
+    WentAheadWithoutAPreview = 2,
+
+    /// <summary>
+    /// The administrator read a preview before making the change, but something had overtaken it by then (#2022).
+    /// </summary>
+    InformedByOutOfDatePreview = 3
 }

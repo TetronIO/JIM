@@ -48,8 +48,9 @@
         @if (_previewState.Status == ConnectedSystemPreviewStatus.Stale)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-6" data-testid="jim-deletion-impact-stale">
-                @_previewState.StaleReason since this preview ran, so it may no longer be accurate. Run it again before deleting; a
-                deletion now would record that no current preview informed it.
+                @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />. It
+                may no longer be accurate, so run it again before deleting; a deletion now records that the preview informing it
+                was out of date.
             </MudAlert>
         }
 

@@ -11,7 +11,8 @@ namespace JIM.Web.Models;
 public static class ActivityPreviewProvenance
 {
     /// <summary>
-    /// Any change carrying a preview was informed by it. A Connected System deletion without one says it went ahead
+    /// Any change carrying a preview was informed by it, and says so differently where something had overtaken the
+    /// preview by the time the change was made (#2022). A Connected System deletion without one says it went ahead
     /// without a preview, because whether the administrator looked first is the question its audit trail is read to
     /// answer; every other change without one says nothing, since most have no preview surface at all.
     /// </summary>
@@ -20,7 +21,9 @@ public static class ActivityPreviewProvenance
         ArgumentNullException.ThrowIfNull(activity);
 
         if (activity.PreviewActivityId.HasValue)
-            return ActivityPreviewProvenanceKind.InformedByPreview;
+            return activity.PreviewOvertakenAt.HasValue
+                ? ActivityPreviewProvenanceKind.InformedByOutOfDatePreview
+                : ActivityPreviewProvenanceKind.InformedByPreview;
 
         return activity is { TargetType: ActivityTargetType.ConnectedSystem, TargetOperationType: ActivityTargetOperationType.Delete or ActivityTargetOperationType.Deprovision }
             ? ActivityPreviewProvenanceKind.WentAheadWithoutAPreview

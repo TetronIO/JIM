@@ -1373,9 +1373,9 @@ public partial class ConnectedSystemServer
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             deleteTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         if (synchronisedDeprovisioning)
@@ -1390,9 +1390,9 @@ public partial class ConnectedSystemServer
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
             deprovisioningTask.ChangeReason = changeReason;
             deprovisioningTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Get CSO count to determine sync vs async deletion
@@ -1410,9 +1410,9 @@ public partial class ConnectedSystemServer
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             deleteTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Small system - execute synchronously
@@ -1427,11 +1427,13 @@ public partial class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Delete,
-            PreviewActivityId = previewActivityId,
             // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
             Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
             // ConnectedSystemId intentionally not set - the CS will be deleted before activity completes
         };
+
+        // Judged before the deletion's own Activity exists, so the deletion cannot count as having overtaken its preview.
+        var previewWarning = await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, previewActivityId);
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         try
@@ -1444,7 +1446,7 @@ public partial class ConnectedSystemServer
             await Application.Activities.CompleteActivityAsync(activity);
 
             Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
-            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id);
+            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id).WithWarning(previewWarning);
         }
         catch (Exception ex)
         {
@@ -1533,9 +1535,9 @@ public partial class ConnectedSystemServer
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             deleteTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         if (synchronisedDeprovisioning)
@@ -1547,9 +1549,9 @@ public partial class ConnectedSystemServer
             var deprovisioningTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory, synchronisedDeprovisioning: true);
             deprovisioningTask.ChangeReason = changeReason;
             deprovisioningTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deprovisioningTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deprovisioningTask.Id, deprovisioningTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Get CSO count to determine sync vs async deletion
@@ -1564,9 +1566,9 @@ public partial class ConnectedSystemServer
             deleteTask.AbandonsDeprovisioningRun = abandonsDeprovisioningRun;
             deleteTask.ChangeReason = changeReason;
             deleteTask.PreviewActivityId = previewActivityId;
-            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+            var taskResult = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
-            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id).WithWarnings(taskResult.Warnings).WithWarning(taskResult.CitedPreviewWarning);
         }
 
         // Small system - execute synchronously
@@ -1578,10 +1580,12 @@ public partial class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Delete,
-            PreviewActivityId = previewActivityId,
             // The finish-immediately exit (#809) must leave the abandonment on the audit trail.
             Message = abandonsDeprovisioningRun ? SynchronisedDeprovisioningAbandonedMessage : null
         };
+
+        // Judged before the deletion's own Activity exists, so the deletion cannot count as having overtaken its preview.
+        var previewWarning = await Application.ConfigurationChangePreviews.RecordCitedPreviewAsync(activity, previewActivityId);
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         try
@@ -1592,7 +1596,7 @@ public partial class ConnectedSystemServer
             await Application.Activities.CompleteActivityAsync(activity);
 
             Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
-            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id);
+            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id).WithWarning(previewWarning);
         }
         catch (Exception ex)
         {

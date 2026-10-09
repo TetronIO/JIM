@@ -1,0 +1,53 @@
+@using JIM.Models.Preview
+@using JimUtilities = JIM.Utilities.Utilities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What overtook a preview (#2022), inline in a sentence: one clause per kind of change, with each thing it names as
+   that thing's object chip, linking to it. The Run Profile chip opens the run itself, which is usually the question
+   ("what ran?"). The words come from PreviewOvertakingActivity.Parts, the same pieces the sentence snapshotted onto
+   an Activity is built from, so the two cannot drift apart. Renders nothing for a current preview. *@
+@if (Staleness is { IsStale: true } staleness)
+{
+    var clauses = new[] { staleness.DataChange, staleness.ConfigurationChange }.OfType<PreviewOvertakingActivity>().ToList();
+    <span class="jim-preview-overtaken-by" data-testid="jim-preview-overtaken-by">
+        @for (var i = 0; i < clauses.Count; i++)
+        {
+            @if (i > 0)
+            {
+                <text>, and </text>
+            }
+            @foreach (var part in clauses[i].Parts())
+            {
+                @switch (part.Kind)
+                {
+                    case PreviewOvertakingPartKind.RunProfile:
+                        <ObjectChip Kind="ObjectChipKind.RunProfile" Name="@part.Text"
+                                    Href="@(part.ActivityId is { } runId ? $"/activity/{runId}" : null)" />
+                        break;
+                    case PreviewOvertakingPartKind.ConnectedSystem:
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@part.Text"
+                                    Href="@(part.EntityId is { } systemId ? JimUtilities.GetConnectedSystemHref(systemId) : null)" />
+                        break;
+                    case PreviewOvertakingPartKind.SynchronisationRule:
+                        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@part.Text"
+                                    Href="@(part.EntityId is { } ruleId ? $"/admin/sync-rules/{ruleId}" : null)" />
+                        break;
+                    case PreviewOvertakingPartKind.Other:
+                        @part.TypeName <strong>@part.Text</strong>
+                        break;
+                    default:
+                        @part.Text
+                        break;
+                }
+            }
+        }
+    </span>
+}
+
+@code {
+    /// <summary>What has happened since the preview started; nothing is rendered when it is current.</summary>
+    [Parameter]
+    public ConfigurationChangePreviewStaleness? Staleness { get; set; }
+}

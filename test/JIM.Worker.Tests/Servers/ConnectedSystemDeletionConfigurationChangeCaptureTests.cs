@@ -8,6 +8,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Preview;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -224,7 +225,65 @@ public class ConnectedSystemDeletionConfigurationChangeCaptureTests
         Assert.That(_createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision).PreviewActivityId, Is.Null);
     }
 
+    [Test]
+    public async Task DeleteAsync_SynchronisedDeprovisioningCitingAnOutOfDatePreview_RecordsWhatOvertookItAndWarnsAsync()
+    {
+        // The deletion goes ahead citing the preview the administrator read, and its Activity says that preview was out
+        // of date, rather than dropping the link and saying no preview was read (#2022).
+        SetupTrackingSetting(enabled: true);
+        SetupCore(BuildCore());
+        var previewActivityId = SetupOutOfDatePreview();
+
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), synchronisedDeprovisioning: true,
+            previewActivityId: previewActivityId);
+
+        var queuedActivity = _createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(queuedActivity.PreviewActivityId, Is.EqualTo(previewActivityId));
+            Assert.That(queuedActivity.PreviewOvertakenBy, Does.Contain("Delta Import"));
+            Assert.That(queuedActivity.PreviewOvertakenAt, Is.Not.Null);
+            Assert.That(result.Warnings, Has.Some.Contain("Delta Import"));
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_SmallSystemImmediatelyCitingAnOutOfDatePreview_RecordsWhatOvertookItAndWarnsAsync()
+    {
+        SetupTrackingSetting(enabled: false);
+        SetupCore(BuildCore());
+        SetupFull(BuildFull());
+        _csRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(10);
+        var previewActivityId = SetupOutOfDatePreview();
+
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, TestUtilities.GetInitiatedBy(), previewActivityId: previewActivityId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_updatedActivity!.PreviewActivityId, Is.EqualTo(previewActivityId));
+            Assert.That(_updatedActivity.PreviewOvertakenBy, Does.Contain("Delta Import"));
+            Assert.That(result.Warnings, Has.Some.Contain("Delta Import"));
+        }
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
+
+    private Guid SetupOutOfDatePreview()
+    {
+        var started = DateTime.UtcNow.AddMinutes(-30);
+        var preview = new Activity
+        {
+            Id = Guid.CreateVersion7(),
+            Created = started,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Preview
+        };
+        _activityRepo.Setup(r => r.GetActivityAsync(preview.Id)).ReturnsAsync(preview);
+        _activityRepo.Setup(r => r.GetPreviewStalenessSinceAsync(started)).ReturnsAsync(new ConfigurationChangePreviewStaleness(
+            new PreviewOvertakingActivity(Guid.CreateVersion7(), started.AddMinutes(10), ActivityTargetType.ConnectedSystemRunProfile,
+                ActivityTargetOperationType.Execute, "Delta Import", "HR Import"), null));
+        return preview.Id;
+    }
 
     private void SetupCore(ConnectedSystem core) =>
         _csRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(core);

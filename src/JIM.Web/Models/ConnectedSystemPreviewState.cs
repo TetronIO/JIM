@@ -25,11 +25,13 @@ public sealed record ConnectedSystemPreviewState(
     ConfigurationChangePreviewStaleness? Staleness = null)
 {
     /// <summary>
-    /// The preview the change records as having informed it if made now: a finished preview nothing has overtaken,
-    /// and no other. An audit trail claiming the administrator was shown the consequences, when what they were shown
-    /// no longer held, is worse than one saying they went ahead without looking.
+    /// The preview the change cites if made now: a finished preview that answered, whether or not something has
+    /// overtaken it since. An overtaken preview is still the one the administrator read, so it is cited and the server
+    /// records that it was out of date (#2022); dropping it would record that no preview informed the change, which is
+    /// untrue too, and with staleness judged across the whole deployment it would rarely be recorded at all.
     /// </summary>
-    public Guid? InformingPreviewActivityId => Status == ConnectedSystemPreviewStatus.Current ? ActivityId : null;
+    public Guid? InformingPreviewActivityId =>
+        Status is ConnectedSystemPreviewStatus.Current or ConnectedSystemPreviewStatus.Stale ? ActivityId : null;
 
     /// <summary>
     /// What overtook a stale preview, as the subject of a sentence ("Configuration has changed since this preview

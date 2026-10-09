@@ -158,7 +158,7 @@ public class ConnectedSystemDangerZoneTabTests : JimComponentTestContext
     public void DangerZone_FinishedPreviewOvertakenByAConfigurationChange_SaysSo()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
-        _staleness = new ConfigurationChangePreviewStaleness(null, DateTime.UtcNow.AddMinutes(-2));
+        _staleness = new ConfigurationChangePreviewStaleness(null, new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(-2), ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null));
 
         var cut = RenderTab();
 

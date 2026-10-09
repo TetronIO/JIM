@@ -492,6 +492,19 @@ public class ActivityDetailDto
     public Guid? PreviewActivityId { get; set; }
 
     /// <summary>
+    /// When the preview in <see cref="PreviewActivityId"/> had been overtaken by the time the change was made: the latest
+    /// run or configuration change recorded after the preview started that could change its answer. Null when the
+    /// preview was current, or when no preview informed the change.
+    /// </summary>
+    public DateTime? PreviewOvertakenAt { get; set; }
+
+    /// <summary>
+    /// What had overtaken the preview in <see cref="PreviewActivityId"/> by the time the change was made, for example
+    /// "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Null when <see cref="PreviewOvertakenAt"/> is.
+    /// </summary>
+    public string? PreviewOvertakenBy { get; set; }
+
+    /// <summary>
     /// For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded;
     /// null for every other kind of activity.
     /// </summary>
@@ -584,6 +597,8 @@ public class ActivityDetailDto
             ChangeReason = activity.ChangeReason,
             ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
             PreviewActivityId = activity.PreviewActivityId,
+            PreviewOvertakenAt = activity.PreviewOvertakenAt,
+            PreviewOvertakenBy = activity.PreviewOvertakenBy,
             ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot),
             ClearedPendingExportCount = activity.ClearedPendingExportCount,
             ClearedConnectedSystemObjectCount = activity.ClearedConnectedSystemObjectCount,
