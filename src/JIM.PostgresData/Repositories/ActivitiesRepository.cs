@@ -2251,25 +2251,32 @@ public class ActivityRepository : IActivityRepository
 
     public async Task<ConfigurationChangePreviewStaleness> GetPreviewStalenessSinceAsync(DateTime since)
     {
-        var dataChangedAt = await Repository.Database.Activities
+        // The latest of each kind, as the Activity itself (#2022): what overtook a preview is said to the administrator
+        // about to act on it, and recorded on what they then do.
+        var dataChange = await LatestOvertakingActivityAsync(Repository.Database.Activities
             .Where(a => a.Created > since
                         && ((a.TargetOperationType == ActivityTargetOperationType.Execute && DataMovingExecutions.Contains(a.TargetType))
                             || (a.TargetType == ActivityTargetType.ConnectedSystem && DataMovingConnectedSystemOperations.Contains(a.TargetOperationType))
                             || (a.TargetType == ActivityTargetType.SynchronisationRule
-                                && a.TargetOperationType == ActivityTargetOperationType.RecallAttributeValues)))
-            .MaxAsync(a => (DateTime?)a.Created);
+                                && a.TargetOperationType == ActivityTargetOperationType.RecallAttributeValues))));
 
         // A new Synchronisation Rule carries no class (a create has nothing to diff), but it can contribute exactly
         // what a preview reported as cleared, so it counts as surely as an edit to an existing rule does.
-        var configurationChangedAt = await Repository.Database.Activities
+        var configurationChange = await LatestOvertakingActivityAsync(Repository.Database.Activities
             .Where(a => a.Created > since
                         && (a.ConfigurationChangeClass >= ConfigurationChangeClass.SyncAffecting
                             || (a.TargetType == ActivityTargetType.SynchronisationRule
-                                && a.TargetOperationType == ActivityTargetOperationType.Create)))
-            .MaxAsync(a => (DateTime?)a.Created);
+                                && a.TargetOperationType == ActivityTargetOperationType.Create))));
 
-        return new ConfigurationChangePreviewStaleness(dataChangedAt, configurationChangedAt);
+        return new ConfigurationChangePreviewStaleness(dataChange, configurationChange);
     }
+
+    private static Task<PreviewOvertakingActivity?> LatestOvertakingActivityAsync(IQueryable<Activity> candidates) =>
+        candidates
+            .OrderByDescending(a => a.Created)
+            .Select(a => new PreviewOvertakingActivity(a.Id, a.Created, a.TargetType, a.TargetOperationType, a.TargetName, a.TargetContext,
+                a.ConnectedSystemId, a.SyncRuleId))
+            .FirstOrDefaultAsync();
     #endregion
 
     // Bulk RPEI operations (BulkInsertRpeisAsync, BulkUpdateRpeiOutcomesAsync,

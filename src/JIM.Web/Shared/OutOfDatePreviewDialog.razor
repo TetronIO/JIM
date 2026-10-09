@@ -1,0 +1,55 @@
+@using JIM.Models.Preview
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Asked before a Full Synchronisation runs from a preview something has overtaken (#2022). The cause leads, with each
+   thing it names as that thing's chip, because "which run, on which system, and when" is what tells the
+   administrator whether it matters. Previewing again is the recommended answer, so it is the one filled button; running
+   anyway is a deliberate choice beside it, and the run records it. *@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Warning" Dense="true" data-testid="jim-out-of-date-preview-cause">
+                @StaleReason since this preview started: <PreviewOvertakenBy Staleness="@Staleness" />@WhenSuffix.
+            </MudAlert>
+            <MudText>
+                The preview may no longer describe what the run would do. Preview again for a current answer, or run
+                anyway; the run's Activity records that the preview informing it was out of date.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" DropShadow="false">Cancel</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                   OnClick="@(() => Choose(OutOfDatePreviewChoice.RunAnyway))" data-testid="jim-out-of-date-preview-run-anyway">
+            Run anyway
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                   OnClick="@(() => Choose(OutOfDatePreviewChoice.PreviewAgain))" data-testid="jim-out-of-date-preview-again">
+            Preview again
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>Which kind of change overtook the preview, as the subject of a sentence ("Data has changed").</summary>
+    [Parameter, EditorRequired]
+    public string StaleReason { get; set; } = string.Empty;
+
+    /// <summary>What has happened since the preview started.</summary>
+    [Parameter, EditorRequired]
+    public ConfigurationChangePreviewStaleness? Staleness { get; set; }
+
+    /// <summary>When the latest of it happened, relative to now, so the administrator can judge whether it matters.</summary>
+    private string WhenSuffix => Staleness?.OvertakenAt is { } overtakenAt
+        ? $" ({overtakenAt.ToLocalTime().ToRelativeTime()})"
+        : string.Empty;
+
+    private void Choose(OutOfDatePreviewChoice choice) => MudDialog.Close(DialogResult.Ok(choice));
+
+    private void Cancel() => MudDialog.Cancel();
+}

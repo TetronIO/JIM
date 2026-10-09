@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below) and a green `jim-pre-release` commit status (the pre-release integration gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
 4. Publishes the PowerShell module to PSGallery
@@ -24,6 +24,17 @@ A release is refused unless the exact commit being tagged has a `success` commit
 - **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
 - **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
 - **The lab runner is in its own runner group.** It is the only runner in a dedicated `jim-ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `jim-ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
+
+## The Pre-Release Integration Gate
+
+A release is also refused unless the exact commit being tagged has a `success` commit status named `jim-pre-release`. The status is posted by `.github/workflows/pre-release.yml`, which runs the full pre-release integration suite (`Run-IntegrationTests.ps1 -PreRelease -Parallel`: every scenario against Samba AD, OpenLDAP and 389 Directory Server, about 1h 45m) on a dedicated self-hosted runner, and which pauses that host's other runners while it runs (see the workflow's header). It closes the gap described in [#518](https://github.com/TetronIO/JIM/issues/518): without it, a release could be cut without the integration suite ever running.
+
+- **It starts by itself.** The workflow runs on every push to `main` that changes `VERSION`, and only a release pull request does, so merging the release PR starts the suite on the release commit (the merge commit) with nothing to dispatch. It can also be dispatched, to re-run after a fix.
+- **It is enforced twice, behind one switch,** exactly as the Active Directory lab gate is: the `/release` skill runs `scripts/Test-PreReleaseGate.ps1` before it tags, and the `jim-pre-release-gate` job in `release.yml` runs the same script, which `validate` (and so every other release job) needs. Both run only while the repository variable `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`; until then the job passes and the release run's summary carries a warning. Set it after the suite's first green run: `gh variable set JIM_PRE_RELEASE_GATE_ENFORCED --body true`. Once set there is no override; the remedy for a red run is a fix and another run.
+- **The status belongs to one SHA,** so nothing else may merge to `main` between the release PR and the tag (the same rule as the lab gate; a later commit would be untested and undescribed by the changelog).
+- **Reading a result:** `pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The status description carries the scenario counts ("51/53 scenario runs passed across 3 directory passes"); each run's job summary has a per-directory table, and its artefact holds the regression reports and logs for 30 days.
+- **Both gates share one implementation,** `scripts/ReleaseGate.ps1`; each gate script fixes its own context and remedy, so neither can be pointed at another status.
+- **The two suites overlap.** The lab runs on the Hyper-V host and this suite on its own runner, so a release waits for the slower of the two rather than their sum.
 
 ## Release History
 
@@ -93,13 +104,21 @@ git push origin main --tags
    git push origin main
    ```
 
-6. **Pass the Active Directory lab gate** (only while `JIM_AD_LAB_GATE_ENFORCED` is `true`; check with `gh variable get JIM_AD_LAB_GATE_ENFORCED`, and skip this step while it is unset): once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `jim-ad-lab-gate` job would refuse the release anyway.
+6. **Pass the release gates.** Do not tag before each enforced gate's script exits 0 for the release commit; `release.yml` would refuse the release anyway.
+
+   **The pre-release integration gate** (only while `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`): merging the release PR started `pre-release.yml` on the release commit by itself. Wait for it (about 1h 45m), then check:
+   ```bash
+   gh run watch "$(gh run list --workflow pre-release.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+   pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   ```
+
+   **The Active Directory lab gate** (only while `JIM_AD_LAB_GATE_ENFORCED` is `true`; check with `gh variable get JIM_AD_LAB_GATE_ENFORCED`, and skip it while it is unset): once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Dispatch it as soon as the release PR merges, so it runs alongside the pre-release suite.
    ```bash
    gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
    gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
    pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
    ```
-   If it exits 1 the script names the state and the run; fix the cause, dispatch again and re-check. Once enforced, there is no override.
+   If either script exits 1 it names the state and the run; fix the cause, run that workflow again and re-check. Once enforced, there is no override.
 
 7. **Create the release tag**:
    ```bash

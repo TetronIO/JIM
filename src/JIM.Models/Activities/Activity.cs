@@ -42,6 +42,22 @@ public class Activity
     /// </summary>
     public Guid? PreviewActivityId { get; set; }
 
+    /// <summary>
+    /// When the preview in <see cref="PreviewActivityId"/> had been overtaken by the time this change was made: the
+    /// latest run or configuration change recorded after the preview started that could change its answer (#2022).
+    /// Null when the preview was current, or when no preview is cited. A change may go ahead on an out-of-date preview,
+    /// and is recorded as having done so; dropping the link instead would say no preview was read, which is untrue.
+    /// </summary>
+    public DateTime? PreviewOvertakenAt { get; set; }
+
+    /// <summary>
+    /// What had overtaken the preview in <see cref="PreviewActivityId"/> by the time this change was made, as a
+    /// clause ("Run Profile 'Delta Import' ran on Connected System 'HR Import'"). Snapshotted rather than linked,
+    /// because retention removes the Activity it describes long before this one (#2022). Null when
+    /// <see cref="PreviewOvertakenAt"/> is.
+    /// </summary>
+    public string? PreviewOvertakenBy { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>

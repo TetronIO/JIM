@@ -25,6 +25,13 @@ public class WorkerTaskCreationResult
     public List<string> Warnings { get; set; } = new();
 
     /// <summary>
+    /// What to tell the caller when the preview the task cites had been overtaken by the time it queued (#2022), or
+    /// null. Kept apart from <see cref="Warnings"/> so a surface that has already asked the administrator about the
+    /// out-of-date preview need not say it twice; every other caller passes it on with the rest.
+    /// </summary>
+    public string? CitedPreviewWarning { get; set; }
+
+    /// <summary>
     /// Error message if the task was not created.
     /// </summary>
     public string? ErrorMessage { get; set; }

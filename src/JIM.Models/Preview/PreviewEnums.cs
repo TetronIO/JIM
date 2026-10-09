@@ -192,3 +192,25 @@ public enum PreviewValidationSeverity
     /// </summary>
     Blocking = 2
 }
+
+/// <summary>
+/// What one piece of a <see cref="PreviewOvertakingActivity"/>'s description is (#2022): plain text, or a thing it
+/// names, which a surface can show as that thing (the portal renders each named kind as its object chip).
+/// </summary>
+public enum PreviewOvertakingPartKind
+{
+    /// <summary>Plain text joining the named things.</summary>
+    Text = 0,
+
+    /// <summary>A Run Profile; <see cref="PreviewOvertakingPart.ActivityId"/> is the Activity that ran or changed it.</summary>
+    RunProfile = 1,
+
+    /// <summary>A Connected System; <see cref="PreviewOvertakingPart.EntityId"/> is its id, where it still has one.</summary>
+    ConnectedSystem = 2,
+
+    /// <summary>A Synchronisation Rule; <see cref="PreviewOvertakingPart.EntityId"/> is its id.</summary>
+    SynchronisationRule = 3,
+
+    /// <summary>Anything else with a name, such as a Metaverse Object Type.</summary>
+    Other = 4
+}

@@ -193,7 +193,8 @@
             @* ─── The preview behind this change (#134) ─── *@
             @switch (ActivityPreviewProvenance.For(_activity))
             {
-                case ActivityPreviewProvenanceKind.InformedByPreview when _activity.PreviewActivityId is { } informingPreviewId:
+                case ActivityPreviewProvenanceKind.InformedByPreview or ActivityPreviewProvenanceKind.InformedByOutOfDatePreview
+                    when _activity.PreviewActivityId is { } informingPreviewId:
                     <MudItem xs="12" data-testid="jim-activity-preview-provenance">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Preview:</MudText>
                         @if (_informingPreviewActivity is { } informingPreviewActivity)
@@ -216,6 +217,15 @@
                         else
                         {
                             <MudText>Informed by a preview that has since been removed under the history retention period.</MudText>
+                        }
+                        @* Something had overtaken the preview by the time this change was made (#2022): the change went
+                           ahead on it, and what overtook it is stated so the preview's verdict is read in that light. *@
+                        @if (_activity.PreviewOvertakenAt is { } overtakenAt)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-activity-preview-out-of-date">
+                                It was out of date when this change was made:
+                                <span title="@overtakenAt.ToLocalTime().ToFriendlyDate()">@(_activity.PreviewOvertakenBy ?? "something changed") after the preview started.</span>
+                            </MudText>
                         }
                     </MudItem>
                     break;

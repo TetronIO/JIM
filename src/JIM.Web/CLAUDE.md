@@ -381,6 +381,9 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - **A notice sitting between the breadcrumbs and the tabs** (a page-level `MudAlert`, e.g. the configuration changed-since notice on `ConnectedSystemDetail.razor`) needs `Class="mt-2 mb-6"`. `mt-2` combines with the breadcrumbs' own 16px bottom padding for the 24px target above it; `mb-6` is needed below because adjacent block margins collapse to the larger of the two, and the tabs' `mt-2` alone leaves an 8px gap that reads as cramped next to every other section break on the page.
 - **Tab content spacing**: Whether `TabPanelsClass` needs its own top spacing depends on the first tab's content. If the tab's content starts flush (e.g. a bare `MudPaper`/`MudText` with no top margin), use `TabPanelsClass="pt-5"`. If the content already supplies its own top margin (e.g. a table with `Class="mt-3"`), use `TabPanelsClass="pa-0"` and let the content's own margin stand; do not stack both, it double-counts.
 
+## Button emphasis
+- **At most one filled `Color.Primary` button per view** (a page as seen at once, or a dialog): its main action. Everything else is `Variant.Outlined`, or `Variant.Text` where lesser still. Lower emphasis by variant, never by switching to `Color.Secondary` or `Color.Default`. Alert buttons and a table row's small filled icon buttons are outside the rule. Full rule and worked examples: `engineering/DESIGN.md` > Buttons.
+
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)

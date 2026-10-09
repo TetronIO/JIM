@@ -25,6 +25,24 @@ public class ActivityPreviewProvenanceTests
         Assert.That(ActivityPreviewProvenance.For(activity), Is.EqualTo(ActivityPreviewProvenanceKind.InformedByPreview));
     }
 
+    [TestCase(ActivityTargetType.ConnectedSystem, ActivityTargetOperationType.Deprovision)]
+    [TestCase(ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetOperationType.Execute)]
+    public void For_AChangeCarryingAPreviewThatWasOutOfDate_SaysSo(ActivityTargetType targetType, ActivityTargetOperationType operation)
+    {
+        // The change was made on a preview something had since overtaken (#2022); saying only that it was informed by
+        // the preview would overstate what the administrator was shown.
+        var activity = new Activity
+        {
+            TargetType = targetType,
+            TargetOperationType = operation,
+            PreviewActivityId = Guid.CreateVersion7(),
+            PreviewOvertakenAt = DateTime.UtcNow,
+            PreviewOvertakenBy = "Run Profile 'Delta Import' ran on Connected System 'HR Import'"
+        };
+
+        Assert.That(ActivityPreviewProvenance.For(activity), Is.EqualTo(ActivityPreviewProvenanceKind.InformedByOutOfDatePreview));
+    }
+
     [TestCase(ActivityTargetOperationType.Delete)]
     [TestCase(ActivityTargetOperationType.Deprovision)]
     public void For_AConnectedSystemDeletionWithoutOne_WentAheadWithoutAPreview(ActivityTargetOperationType operation)

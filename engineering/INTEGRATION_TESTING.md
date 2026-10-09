@@ -1688,7 +1688,7 @@ The pre-release regression runs in GitHub Actions through `.github/workflows/pre
 
 ### Triggering a Run
 
-**Actions** > **jim-pre-release** > **Run workflow**, on `main` (the runner group refuses any other branch). It runs `-PreRelease -Parallel -ContinueOnFailure`: every scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), the three passes side by side, in ~1h 45m (~15 minutes more on a cold host, for snapshot builds and the Oracle image). It is a correctness gate only: parallel passes share the host, so they never stream to JIM-Bench; performance data comes from serial runs.
+It starts by itself on every push to `main` that changes `VERSION` (that is, when a release pull request merges), and can be started by hand: **Actions** > **jim-pre-release** > **Run workflow**, on `main` (the runner group refuses any other branch). It runs `-PreRelease -Parallel -ContinueOnFailure`: every scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), the three passes side by side, in ~1h 45m (~15 minutes more on a cold host, for snapshot builds and the Oracle image). It is a correctness gate only: parallel passes share the host, so they never stream to JIM-Bench; performance data comes from serial runs.
 
 ### What a Run Does
 
@@ -1700,7 +1700,7 @@ The pre-release regression runs in GitHub Actions through `.github/workflows/pre
 - Before creating a release, on the release commit
 - After major connector or sync engine changes, before they ship
 
-The release gate (making `release.yml` require `jim-pre-release` for the tagged SHA, as it requires `jim-ad-lab`) is not in place yet.
+**The release gate:** `release.yml` and the `/release` skill refuse to release a commit whose `jim-pre-release` status is not `success` (`scripts/Test-PreReleaseGate.ps1`), once the repository variable `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`. See `engineering/RELEASE_PROCESS.md`.
 
 ---
 
@@ -2465,12 +2465,11 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity; release 2: never reuse; release 3: probing; release 4: Collision Remediation, derived collisions, Needs Decision, remediation off (#242) |
 | Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
-| GitHub Actions | ✅ Manual run | `pre-release.yml` runs the pre-release regression on demand; the release gate is pending |
+| GitHub Actions | ✅ Release gate | `pre-release.yml` runs the pre-release regression when a release PR merges and on demand; `release.yml` requires it once `JIM_PRE_RELEASE_GATE_ENFORCED` is on |
 
 ### Remaining Work
 
 - **Scenario 003 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
-- **Pre-release release gate** - `release.yml` to require the `jim-pre-release` commit status, as it does `jim-ad-lab`
 - **Entitlement Management** (both deferred scenarios) - blocked on Internal MVO design
 - **Multi-Source Aggregation and Performance Baselines** (unnumbered) - sequenced after the Scenario 016 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
 

@@ -83,7 +83,7 @@ An Activity for a [Connector Space clear](../configuration/connected-systems.md#
 
 All three are empty for every other kind of Activity.
 
-A configuration change made after reading a [Configuration Change Preview](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) (including a Connected System deletion recorded with `Remove-JIMConnectedSystem -PreviewActivityId`) carries `PreviewActivityId` (`Guid`, `-Id` only): the preview's own Activity id, which `Get-JIMConfigurationChangePreview -ActivityId` reads back. It is empty when no preview informed the change.
+A configuration change made after reading a [Configuration Change Preview](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) (including a Connected System deletion recorded with `Remove-JIMConnectedSystem -PreviewActivityId`) carries `PreviewActivityId` (`Guid`, `-Id` only): the preview's own Activity id, which `Get-JIMConfigurationChangePreview -ActivityId` reads back. It is empty when no preview informed the change. A Full Synchronisation run or Connected System deletion made on a preview that something had since overtaken also carries `PreviewOvertakenAt` (`DateTime`, `-Id` only), when the latest overtaking run or configuration change was recorded, and `PreviewOvertakenBy` (`String`, `-Id` only), what it was, for example `Run Profile 'Delta Import' ran on Connected System 'HR Import'`. Both are empty when the preview was current.
 
 An **Export** Activity carries how many Pending Exports of each change type were withheld by the Run Profile's [Safeguards](../configuration/run-profiles.md#safeguards) (`-Id` only):
 

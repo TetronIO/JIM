@@ -1134,6 +1134,31 @@ public class ActivitiesControllerTests
         Assert.That(dto.PreviewActivityId, Is.Null);
     }
 
+    [Test]
+    public void ActivityDetailDto_FromEntity_ChangeMadeOnAnOutOfDatePreview_CarriesWhenAndWhatOvertookIt()
+    {
+        // Read parity for #2022: the portal says the preview was out of date when the change was made, and a script
+        // auditing the change has to be able to read the same.
+        var overtakenAt = new DateTime(2026, 10, 8, 10, 42, 0, DateTimeKind.Utc);
+        var activity = new Activity
+        {
+            Id = Guid.CreateVersion7(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            PreviewActivityId = Guid.CreateVersion7(),
+            PreviewOvertakenAt = overtakenAt,
+            PreviewOvertakenBy = "Run Profile 'Delta Import' ran on Connected System 'HR Import'"
+        };
+
+        var dto = ActivityDetailDto.FromEntity(activity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.PreviewOvertakenAt, Is.EqualTo(overtakenAt));
+            Assert.That(dto.PreviewOvertakenBy, Is.EqualTo(activity.PreviewOvertakenBy));
+        }
+    }
+
     #endregion
 
     #region Connector Space clear statistics (#1605)
