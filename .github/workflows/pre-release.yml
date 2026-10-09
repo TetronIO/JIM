@@ -1,0 +1,256 @@
+# Pre-release integration run: the full pre-release regression (Run-IntegrationTests.ps1 -PreRelease), every
+# implemented scenario against Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large), on the
+# self-hosted pre-release runner, and a `jim-pre-release` commit status on the SHA it tested.
+#
+# What it does: pauses the host's other runners (the suite needs the host's Docker to itself, see below), runs the
+# suite with -ContinueOnFailure so one red scenario does not hide the others, writes a per-directory summary to the
+# job summary, uploads the regression reports and logs, posts the commit status, tears the stacks down and resumes
+# the other runners. The last four always run, even after a failure.
+#
+# Modes (the `mode` input):
+#   parallel (default)  -PreRelease -Parallel: the three directory passes side by side, one isolated stack each,
+#                       about 1h 45m. A correctness gate only: lanes share the host, so their timings are not nominal
+#                       and the runner never streams them to JIM-Bench.
+#   serial              -PreRelease: the passes one after another, about 5h 10m. Streams results to JIM-Bench when
+#                       JIM_BENCH_API_URL and JIM_BENCH_API_KEY are set (below), so use it when performance data is
+#                       wanted.
+# Either way the suite tests the same scenarios, so either mode's success is a pass. Add about 15 minutes to a run on a
+# cold host, which builds the directory snapshots and pulls the Oracle image (13.6 GB) first.
+#
+# Triggers: workflow_dispatch only. NEVER pull_request or push. Split-trust runner model (see ci.yml): a pull_request
+# runs code from anyone's fork, and this runner pauses its host's other runners and runs privileged containers, so fork
+# code must never reach it:
+#   - a dispatch needs write access to this repository;
+#   - the runner (`<host>-prerelease`, label `jim-prerelease`) is alone in a DEDICATED runner group named
+#     `jim-prerelease`, with repository access to TetronIO/JIM only and a workflow allowlist of exactly this file at
+#     refs/heads/main, so even a branch that edits this workflow cannot reach the runner. It is not in
+#     `tetron-trusted`: a runner carrying the default labels there would be offered ordinary ci.yml push jobs.
+#     Set the allowlist once, with an account holding admin:org:
+#
+#       GROUP=$(gh api orgs/TetronIO/actions/runner-groups --jq '.runner_groups[] | select(.name == "jim-prerelease") | .id')
+#       jq -n '{restricted_to_workflows: true, selected_workflows: ["TetronIO/JIM/.github/workflows/pre-release.yml@refs/heads/main"]}' \
+#         | gh api -X PATCH "orgs/TetronIO/actions/runner-groups/$GROUP" --input - --jq '.selected_workflows'
+#
+# The host: the runner and the pause tool are set up from TetronIO/ci-runners (docs/rebuild.md, "The pre-release
+# runner"). The suite assumes it owns the host's Docker: after each pass it deletes every image it did not build and
+# wipes the build cache, and it publishes fixed host ports (5200, 5300, 5400, 5432 to 5434, 8180). CI jobs running
+# beside it would lose their images or collide on 5432, so the first step runs
+# `sudo -n /usr/local/sbin/ci-runner-pause pause <this runner>`: it stops every other runner on the host, each one only
+# while it is idle (never cancelling a job), and GitHub sends their jobs to the organisation's other runners or queues
+# them. The last step resumes them, and a watchdog on the host resumes them anyway if this job is cancelled or dies
+# before it gets there.
+#
+# Configuration (all optional; unset, results stay local):
+#   repository variable JIM_BENCH_API_URL (https://bench-api.junctional.io) and secret JIM_BENCH_API_KEY, which the
+#   runner reads to stream a serial run's results to JIM-Bench (the same pair ad-lab.yml uses).
+#
+# The release gate: nothing reads the `jim-pre-release` status yet. Making release.yml require it for the SHA being
+# tagged, as it requires `jim-ad-lab`, is the next step.
+
+name: jim-pre-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'parallel (about 1h 45m, no JIM-Bench data) or serial (about 5h 10m, streams to JIM-Bench)'
+        type: choice
+        options: [parallel, serial]
+        default: parallel
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  jim-pre-release:
+    name: jim-pre-release
+    runs-on: [self-hosted, jim-prerelease]
+    # A serial run takes about 5h 10m, plus about 15 minutes on a cold host; a parallel run about 1h 45m.
+    timeout-minutes: 420
+    # One run at a time: the suite uses fixed container names and ports, so a second run would tear the first down.
+    # Never cancelled by a newer dispatch, which waits its turn instead.
+    concurrency:
+      group: jim-pre-release
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      # The JIM worker container (UID 1654) writes its logs into the workspace through a bind mount, so a previous
+      # run can leave files this runner's user cannot delete, and checkout's clean would then fail. Hand them back
+      # first, through Docker (the runner's user is in the docker group; it has no general sudo).
+      - name: Hand back files a previous run's containers wrote
+        shell: bash
+        run: |
+          if [ -d "$GITHUB_WORKSPACE/test/integration/results" ]; then
+            docker run --rm -v "$GITHUB_WORKSPACE/test/integration/results:/results" busybox:1.37.0 \
+              chown -R "$(id -u):$(id -g)" /results
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # See the header: the suite needs the host's Docker to itself. Waits for each other runner's current job to
+      # finish (up to an hour), and fails rather than run beside a job it could not wait out.
+      - name: Pause this host's other runners
+        run: |
+          sudo -n /usr/local/sbin/ci-runner-pause pause "$env:RUNNER_NAME"
+          exit $LASTEXITCODE
+
+      # The integration runner expects a .env in the repository root (it is gitignored, so a fresh checkout has
+      # none). The stack is throwaway: its database password is generated for this run and never reused. The
+      # JIM-Bench values are deliberately NOT written here; they reach the runner through the suite step's env.
+      - name: Create the stack's .env
+        run: |
+          $bytes = New-Object byte[] 24
+          [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+          $password = [Convert]::ToBase64String($bytes).Replace('+', 'A').Replace('/', 'B').Replace('=', '')
+          $text = (Get-Content -LiteralPath .env.example -Raw) -replace '(?m)^JIM_DB_PASSWORD=.*$', "JIM_DB_PASSWORD=$password"
+          Set-Content -LiteralPath .env -Value $text -NoNewline
+
+      # The suite. The mode reaches the script through env, never interpolated into it.
+      - name: Run the pre-release suite
+        id: suite
+        env:
+          MODE: ${{ inputs.mode || 'parallel' }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          $arguments = @('-PreRelease', '-ContinueOnFailure')
+          if ($env:MODE -eq 'parallel') { $arguments += '-Parallel' }
+          elseif ($env:MODE -ne 'serial') { Write-Host "::error::Unknown mode '$env:MODE'."; exit 1 }
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 @arguments
+          exit $LASTEXITCODE
+
+      # What the run left, condensed: one row per directory pass from its regression report (full-regression*.json,
+      # written by both modes; checkout's clean removed any earlier run's), into the job summary and the one-line
+      # description of the commit status.
+      - name: Summarise the run
+        id: summary
+        if: ${{ always() }}
+        env:
+          MODE: ${{ inputs.mode || 'parallel' }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: |
+          $files = @(Get-ChildItem -Path 'test/integration/results' -Filter 'full-regression*.json' -File -ErrorAction SilentlyContinue | Sort-Object Name)
+          $rows = @()
+          $passed = 0; $failed = 0; $skipped = 0
+          $failedNames = @()
+          foreach ($file in $files) {
+            $report = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            $scenarios = @($report.Scenarios)
+            $p = @($scenarios | Where-Object { $_.Success -and -not $_.Skipped }).Count
+            $s = @($scenarios | Where-Object { $_.Skipped }).Count
+            $f = @($scenarios | Where-Object { -not $_.Success -and -not $_.Skipped }).Count
+            $passed += $p; $failed += $f; $skipped += $s
+            $failedNames += @($scenarios | Where-Object { -not $_.Success -and -not $_.Skipped } | ForEach-Object { "$($report.DirectoryType): $($_.Name)" })
+            $rows += "| $($report.DirectoryType) | $($report.Template) | $p | $f | $s |"
+          }
+          $total = $passed + $failed
+          if ($files.Count -eq 0) {
+            $description = 'the run stopped before any directory pass reported'
+          }
+          else {
+            $description = "$passed/$total scenario runs passed across $($files.Count) directory passes ($env:MODE)"
+            if ($skipped -gt 0) { $description += "; $skipped skipped" }
+          }
+          if ($description.Length -gt 140) { $description = $description.Substring(0, 137) + '...' }
+          "description=$description" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $lines = @('### Pre-release integration run', '', "**$description**", '')
+          if ($rows.Count -gt 0) {
+            $lines += '| Directory | Template | Passed | Failed | Skipped |'
+            $lines += '|---|---|---|---|---|'
+            $lines += $rows
+          }
+          if ($failedNames.Count -gt 0) {
+            $lines += ''
+            $lines += 'Failed scenarios: ' + (($failedNames | ForEach-Object { "``$_``" }) -join ', ')
+          }
+          $lines += ''
+          $lines += "Mode: $env:MODE. Suite: $env:SUITE_OUTCOME."
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
+      # in a file, so a text file holding the JIM-Bench key has it replaced before upload.
+      - name: Scrub secrets from the results
+        if: ${{ always() }}
+        env:
+          BENCH_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          if (-not $env:BENCH_KEY) { exit 0 }
+          $files = @(Get-ChildItem -LiteralPath 'test/integration/results' -Recurse -File -ErrorAction SilentlyContinue)
+          foreach ($file in $files) {
+            if (Select-String -LiteralPath $file.FullName -SimpleMatch $env:BENCH_KEY -Quiet) {
+              if ($file.Length -gt 200MB) {
+                Remove-Item -LiteralPath $file.FullName -Force
+                Write-Host "::warning::Removed $($file.Name) from the artefacts: it held a secret and is too large to scrub."
+                continue
+              }
+              $text = [System.IO.File]::ReadAllText($file.FullName).Replace($env:BENCH_KEY, '***')
+              [System.IO.File]::WriteAllText($file.FullName, $text)
+              Write-Host "::warning::A secret was found in $($file.Name) and replaced before upload."
+            }
+          }
+
+      # The regression reports (full-regression*.json, and parallel-lanes-*.json in parallel mode), the lane and
+      # scenario transcripts and worker logs (logs/), and the performance files. The docker stats and events
+      # samplers are big and only useful for performance work.
+      - name: Upload the run's artefacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: jim-pre-release-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test/integration/results/
+            !test/integration/results/README.md
+            !test/integration/results/docker-stats-*
+            !test/integration/results/docker-events-*
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The commit status a release gate can read. Posted on the SHA that was tested (a dispatch checks out
+      # github.sha), from the suite's outcome: success only when every scenario passed. A cancelled run posts nothing,
+      # so it can neither open a gate nor close it on a commit it did not finish testing.
+      - name: Post the jim-pre-release commit status
+        if: ${{ always() && job.status != 'cancelled' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+          SUMMARY_DESCRIPTION: ${{ steps.summary.outputs.description }}
+        run: |
+          # failure: the suite ran and something failed; error: the run never got as far as running it.
+          $state = switch ($env:SUITE_OUTCOME) { 'success' { 'success' } 'failure' { 'failure' } default { 'error' } }
+          $description = $env:SUMMARY_DESCRIPTION
+          if (-not $description) { $description = 'the run stopped before the suite ran' }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-pre-release' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The runner is not ephemeral. The suite removes a lane that passed and leaves a failed one up for diagnosis;
+      # its logs are in the artefacts by now, so remove every lane's stack (a serial run uses the Samba AD lane's
+      # names). Scenario 016's database containers are kept between runs by design. Then hand back the files the
+      # worker container wrote, so the next checkout can clean the workspace.
+      - name: Tear down the stacks
+        if: ${{ always() }}
+        run: |
+          . ./test/integration/utils/Invoke-IntegrationLanes.ps1
+          foreach ($lane in @('SambaAD', 'OpenLDAP', 'DirectoryServer389')) {
+            try { Remove-IntegrationLaneStack -Name $lane -RepoRoot (Get-Location) }
+            catch { Write-Host "::warning::Removing the $lane stack failed: $_" }
+          }
+          if (Test-Path -LiteralPath 'test/integration/results') {
+            docker run --rm -v "$(Resolve-Path 'test/integration/results'):/results" busybox:1.37.0 chown -R "$(id -u):$(id -g)" /results
+          }
+          exit 0
+
+      # Last, and always, so the host's other runners come back however this job ended. The host's watchdog
+      # resumes them too if the job dies before this step.
+      - name: Resume this host's other runners
+        if: ${{ always() }}
+        run: |
+          sudo -n /usr/local/sbin/ci-runner-pause resume
+          exit $LASTEXITCODE
