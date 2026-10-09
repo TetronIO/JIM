@@ -326,6 +326,54 @@ public class UniquenessProbeSessionTests
         Assert.That(session.GetRunWarnings(), Is.Empty);
     }
 
+    /// <summary>
+    /// #1940: a probe that answered but searched less than everywhere the value must be unique keeps its answers, and
+    /// the run says once what it could not reach, however many objects were probed.
+    /// </summary>
+    [Test]
+    public async Task ProbeAsync_AnsweredWithACaveat_KeepsTheAnswersAndWarnsOnceAsync()
+    {
+        const string caveat = "The userPrincipalName attribute is unique across the Active Directory forest, but no Global Catalog could be searched";
+        var connector = new FakeProbingConnector
+        {
+            ProbeAnswer = request => UniquenessProbeResult.FromValuesFound(request, ["joe.bloggs@corp.local"]).WithCaveat(caveat)
+        };
+        await using var session = new UniquenessProbeSession(CorporateAdHost(connector), CancellationToken.None);
+
+        var first = await session.ProbeAsync(Mail, ["joe.bloggs@corp.local", "joe.bloggs2@corp.local"]);
+        await session.ProbeAsync(Mail, ["ada.lovelace@corp.local"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.Outcomes, Is.EqualTo(new[] { UniquenessProbeOutcome.Found, UniquenessProbeOutcome.NotFound }));
+            Assert.That(connector.Requests, Has.Count.EqualTo(2), "a caveat latches nothing: the next object is probed too");
+            Assert.That(session.GetRunWarnings(), Is.EqualTo(new[]
+            {
+                $"JIM's probe of Corporate AD for values already in use was incomplete. {caveat}."
+            }));
+        }
+    }
+
+    [Test]
+    public async Task GetRunWarnings_DifferentCaveats_OneWarningEachInTheOrderMetAsync()
+    {
+        var connector = new FakeProbingConnector
+        {
+            ProbeAnswer = request => UniquenessProbeResult.FromValuesFound(request, []).WithCaveat($"The {request.AttributeName} attribute was searched in one domain only")
+        };
+        await using var session = new UniquenessProbeSession(CorporateAdHost(connector), CancellationToken.None);
+
+        await session.ProbeAsync(Mail, ["joe.bloggs@corp.local"]);
+        await session.ProbeAsync(SamAccountName, ["joe.bloggs"]);
+        await session.ProbeAsync(Mail, ["ada.lovelace@corp.local"]);
+
+        Assert.That(session.GetRunWarnings(), Is.EqualTo(new[]
+        {
+            "JIM's probe of Corporate AD for values already in use was incomplete. The mail attribute was searched in one domain only.",
+            "JIM's probe of Corporate AD for values already in use was incomplete. The sAMAccountName attribute was searched in one domain only."
+        }));
+    }
+
     [Test]
     public async Task GetRunWarnings_EveryProbeAnswered_RaisesNoWarningAsync()
     {

@@ -1005,8 +1005,14 @@ internal static class LdapConnectorUtilities
     /// name commonly resolves to every domain controller in the domain, and the client tries them in turn and connects
     /// once one answers; bounding the name as a whole would fail a name that connects today.
     /// </para>
+    /// <para>
+    /// A caller with a fixed budget and a fallback of its own (the uniqueness probe's Global Catalog, #1940) passes
+    /// <paramref name="failOnUnansweredAddress"/>: the check then fails at the first address that does not answer,
+    /// rather than going on to one that does, because the LDAP client would wait minutes on that address before
+    /// reaching the next. A refused or unreachable address costs the LDAP client nothing, so it is still passed over.
+    /// </para>
     /// </summary>
-    internal static void EnsureAcceptsConnections(string server, int port, TimeSpan timeout, ILogger logger)
+    internal static void EnsureAcceptsConnections(string server, int port, TimeSpan timeout, ILogger logger, bool failOnUnansweredAddress = false)
     {
         IPAddress[] addresses;
         try
@@ -1019,7 +1025,7 @@ internal static class LdapConnectorUtilities
             throw new LdapException(LdapServerDownErrorCode, $"{server} could not be resolved: {ex.Message.TrimEnd('.')}");
         }
 
-        EnsureAcceptsConnections(server, addresses, port, timeout, logger);
+        EnsureAcceptsConnections(server, addresses, port, timeout, logger, failOnUnansweredAddress);
     }
 
     /// <inheritdoc cref="EnsureAcceptsConnections(string, int, TimeSpan, ILogger)"/>
@@ -1028,7 +1034,9 @@ internal static class LdapConnectorUtilities
     /// <param name="port">The port to connect to.</param>
     /// <param name="timeout">How long to wait on each address.</param>
     /// <param name="logger">Logger for the calling operation.</param>
-    internal static void EnsureAcceptsConnections(string server, IReadOnlyList<IPAddress> addresses, int port, TimeSpan timeout, ILogger logger)
+    /// <param name="failOnUnansweredAddress">Fail at the first address that does not answer, rather than going on to
+    /// the next.</param>
+    internal static void EnsureAcceptsConnections(string server, IReadOnlyList<IPAddress> addresses, int port, TimeSpan timeout, ILogger logger, bool failOnUnansweredAddress = false)
     {
         var failures = new List<(IPAddress Address, string Reason, bool Unanswered)>();
         foreach (var address in addresses)
@@ -1042,6 +1050,13 @@ internal static class LdapConnectorUtilities
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
+                if (failOnUnansweredAddress)
+                {
+                    throw new LdapException(LdapServerDownErrorCode, address.ToString() == server
+                        ? string.Create(CultureInfo.InvariantCulture, $"{server} did not accept a connection on port {port} within {timeout.TotalSeconds:0} seconds")
+                        : string.Create(CultureInfo.InvariantCulture, $"{server} did not accept a connection on port {port}: {address} did not answer within {timeout.TotalSeconds:0} seconds, and the LDAP client would wait minutes on it before trying another address"));
+                }
+
                 failures.Add((address, string.Create(CultureInfo.InvariantCulture, $"no answer within {timeout.TotalSeconds:0} seconds"), true));
                 continue;
             }

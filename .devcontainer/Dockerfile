@@ -3,7 +3,7 @@
 # The 2.x image line is the maintained GA .NET 10 family: the previous 1-10.0-noble
 # tag was frozen upstream on an October 2025, RC-era image and never rebuilt after
 # .NET 10 went GA, so it received no SDK, runtime, or OS updates.
-FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:9eb314432a5fa67773a53ab754cdc381cae614906162f9fc44cdb7f7837b91c7
+FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:8ba49796e4cb84c1d7bcd676a14d6a03ec88b1afab8d75762ff9abbcbb33c707
 
 # Install pinned .NET SDK version to match global.json's rollForward target.
 # Reasons this is an explicit install rather than relying on the base image:

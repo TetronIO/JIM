@@ -9,11 +9,12 @@ namespace JIM.Models.Staging;
 /// </summary>
 public sealed class UniquenessProbeResult
 {
-    private UniquenessProbeResult(IReadOnlyList<UniquenessProbeOutcome> outcomes, string? reason, bool isFailure)
+    private UniquenessProbeResult(IReadOnlyList<UniquenessProbeOutcome> outcomes, string? reason, bool isFailure, string? caveat = null)
     {
         Outcomes = outcomes;
         Reason = reason;
         IsFailure = isFailure;
+        Caveat = caveat;
     }
 
     /// <summary>
@@ -33,6 +34,16 @@ public sealed class UniquenessProbeResult
     /// all, so JIM stops asking it for the rest of the run.
     /// </summary>
     public bool IsFailure { get; }
+
+    /// <summary>
+    /// What the search could not reach, when it answered but searched less than everywhere the value must be unique
+    /// (#1940): an Active Directory attribute unique across the forest, say, searched in one domain only because no
+    /// Global Catalog could be. The outcomes stand, since a value the search found is in use either way, but a
+    /// <see cref="UniquenessProbeOutcome.NotFound"/> says less than it should. A sentence an administrator can act
+    /// on (no trailing full stop); null when the search covered everywhere it needed to, and always null alongside a
+    /// <see cref="Reason"/>.
+    /// </summary>
+    public string? Caveat { get; }
 
     /// <summary>
     /// Builds the result from the values a completed search returned for the attribute. When the control value
@@ -62,6 +73,18 @@ public sealed class UniquenessProbeResult
             request.Candidates.Select(c => found.Contains(c) ? UniquenessProbeOutcome.Found : UniquenessProbeOutcome.NotFound).ToList(),
             reason: null,
             isFailure: false);
+    }
+
+    /// <summary>
+    /// This result with <paramref name="caveat"/> added (see <see cref="Caveat"/>). A result that could not answer is
+    /// returned as it was: its <see cref="Reason"/> already says why nothing was learned, and a remark on how far the
+    /// search reached adds nothing to it.
+    /// </summary>
+    public UniquenessProbeResult WithCaveat(string caveat)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(caveat);
+
+        return Reason != null ? this : new UniquenessProbeResult(Outcomes, reason: null, isFailure: false, caveat);
     }
 
     /// <summary>
