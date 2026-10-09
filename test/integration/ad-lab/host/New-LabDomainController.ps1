@@ -10,8 +10,12 @@
     small second ISO carrying autounattend.xml, installs unattended with the Automatic Virtual Machine Activation
     key, then drives the guest through PowerShell Direct (Invoke-Command -VMName; no network or guest listener is
     needed): it copies the guest files into C:\jim-ad-lab, runs Initialize-LabDomainController.ps1 phase by phase
-    across restarts (Prepare, Promote, Configure, Verify), installs the cumulative update if one was given, and
-    finally takes the 'baseline' checkpoint.
+    across restarts (License, Prepare, Promote, Configure, Verify), installs the cumulative update if one was given,
+    and finally takes the 'baseline' checkpoint.
+
+    Evaluation media (the free ISO from Microsoft's Evaluation Center) is accepted when it holds no full Datacenter
+    image: it installs without a product key, and the License phase converts the guest to full Datacenter with the
+    AVMA key, before promotion, which is the only point at which that conversion is supported.
 
     Safe to re-run after a failed step. If the VM exists the create step is skipped, and every guest phase checks
     whether it has already happened, so the sequence converges. To start again from nothing, run
@@ -30,8 +34,9 @@
     The forest root domain, for example PANOPLY.LOCAL. The domain controller is <ComputerName>.<domain>.
 
 .PARAMETER IsoPath
-    Path to a NON-evaluation Windows Server 2025 ISO (an evaluation domain controller cannot be converted, and its
-    timer runs in real time regardless of checkpoint reverts).
+    Path to a Windows Server 2025 ISO holding a Datacenter image. Full media is preferred; evaluation media is
+    converted to full Datacenter by the License phase before promotion (an evaluation domain controller cannot be
+    converted afterwards, and its timer runs in real time regardless of checkpoint reverts).
 
 .PARAMETER VhdDirectory
     Folder that receives the VM's files: <VhdDirectory>\<Name>\.
@@ -221,8 +226,9 @@ function Write-Ok {
     Write-Host "  $Text" -ForegroundColor Green
 }
 
-function Get-InstallImageName {
-    # Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one.
+function Get-InstallImage {
+    # Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
+    # { ImageIndex, ImageName, Evaluation }.
     $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
     try {
         $drive = ($mounted | Get-Volume).DriveLetter
@@ -231,7 +237,7 @@ function Get-InstallImageName {
             $wim = "${drive}:\sources\install.esd"
         }
         $images = @(Get-WindowsImage -ImagePath $wim)
-        return (Resolve-LabInstallImage -Image $images).ImageName
+        return (Resolve-LabInstallImage -Image $images)
     }
     finally {
         $null = Dismount-DiskImage -ImagePath $IsoPath
@@ -239,18 +245,24 @@ function Get-InstallImageName {
 }
 
 function Invoke-UnattendIsoBuild {
-    param([string]$ImageName, [securestring]$Password, [string]$IsoOutputPath)
+    param([object]$Image, [securestring]$Password, [string]$IsoOutputPath)
 
     $template = Get-Content -LiteralPath (Join-Path $layout.GuestDirectory 'autounattend.xml') -Raw
     $values = @{
         COMPUTER_NAME              = $info.ShortName
         ADMIN_PASSWORD_ENCODED     = (ConvertTo-LabUnattendPassword -Password $Password -Kind AdministratorPassword)
         AUTOLOGON_PASSWORD_ENCODED = (ConvertTo-LabUnattendPassword -Password $Password -Kind Password)
-        IMAGE_NAME                 = $ImageName
-        PRODUCT_KEY                = (Get-LabAvmaKey -Edition Datacenter)
+        IMAGE_NAME                 = $Image.ImageName
         UI_LANGUAGE                = $UILanguage
         LOCALE                     = $Locale
         TIME_ZONE                  = $TimeZone
+    }
+    if ($Image.Evaluation) {
+        # Evaluation media takes no product key; the License phase applies the AVMA key by converting the edition.
+        $template = ConvertTo-LabKeylessUnattend -Template $template
+    }
+    else {
+        $values['PRODUCT_KEY'] = Get-LabAvmaKey -Edition Datacenter
     }
     $xml = ConvertTo-LabUnattendXml -Template $template -Values $values
 
@@ -266,7 +278,7 @@ function Invoke-UnattendIsoBuild {
 }
 
 function Invoke-VmCreation {
-    param([string]$ImageName, [securestring]$Password)
+    param([object]$Image, [securestring]$Password)
 
     $vmFolder = Join-Path $VhdDirectory $Name
     $vhdPath = Join-Path $vmFolder "$Name.vhdx"
@@ -285,7 +297,7 @@ function Invoke-VmCreation {
     Set-VMFirmware -VMName $Name -EnableSecureBoot On
 
     $windowsDrive = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
-    Invoke-UnattendIsoBuild -ImageName $ImageName -Password $Password -IsoOutputPath $script:UnattendIso
+    Invoke-UnattendIsoBuild -Image $Image -Password $Password -IsoOutputPath $script:UnattendIso
     $null = Add-VMDvdDrive -VMName $Name -Path $script:UnattendIso
     Set-VMFirmware -VMName $Name -FirstBootDevice $windowsDrive
     Write-Ok "Created $Name (Generation 2, $($MemoryStartupBytes / 1GB) GB, $ProcessorCount vCPU, production checkpoints only)"
@@ -321,9 +333,14 @@ try {
     $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
     $installPending = $false
     if ($null -eq $vm) {
-        $imageName = Get-InstallImageName
-        Write-Ok "Installation image: $imageName"
-        Invoke-VmCreation -ImageName $imageName -Password $adminSecret
+        $image = Get-InstallImage
+        if ($image.Evaluation) {
+            Write-Ok "Installation image: $($image.ImageName) (evaluation media: installed without a key, converted to full Datacenter by the License phase)"
+        }
+        else {
+            Write-Ok "Installation image: $($image.ImageName)"
+        }
+        Invoke-VmCreation -Image $image -Password $adminSecret
         $installPending = $true
     }
     else {
@@ -396,7 +413,9 @@ try {
         $settings['DnsForwarder'] = $DnsForwarder.ToString()
     }
 
-    foreach ($phase in @('Prepare', 'Promote')) {
+    # License first: on evaluation media it converts the edition, which must happen before promotion. On full media,
+    # and on any re-run after it has converted, it changes nothing and needs no restart.
+    foreach ($phase in @('License', 'Prepare', 'Promote')) {
         Write-Heading "Phase: $phase"
         $result = Invoke-LabGuestPhase -VMName $Name -Credential $credential -Phase $phase -Settings $settings
         if ($result.RebootRequired) {

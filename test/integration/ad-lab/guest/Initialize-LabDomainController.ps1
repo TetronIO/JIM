@@ -9,6 +9,10 @@
 .DESCRIPTION
     Phases, run in this order with a restart between them where a phase reports RebootRequired:
 
+      License    On evaluation media only: convert the evaluation edition to full Datacenter with the AVMA key (one
+                 restart), after which the guest activates through Automatic Virtual Machine Activation. It must run
+                 before Promote: Microsoft does not support converting an evaluation domain controller. On full media
+                 there is nothing to do.
       Prepare    Rename the computer, set the static IP address, install the AD DS and DNS roles.
       Promote    Install-ADDSForest (a new single-domain forest, Windows Server 2016 functional level, with DNS).
       Configure  Everything the directory carries after the build, identical to
@@ -31,7 +35,7 @@
     refused, which Verify confirms), so everything talks LDAPS on 636.
 
 .PARAMETER Phase
-    Prepare, Promote, Configure or Verify.
+    License, Prepare, Promote, Configure or Verify.
 
 .PARAMETER ComputerName
     The domain controller's host name, for example dc1 (giving dc1.panoply.local).
@@ -97,7 +101,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+    [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
     [string]$Phase,
 
     [string]$ComputerName,
@@ -165,6 +169,10 @@ function Test-IsDomainController {
     return ((Get-DomainRole) -ge 4)
 }
 
+function Get-EditionId {
+    return [string](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').EditionID
+}
+
 function Wait-ActiveDirectory {
     # After the promotion restart, Active Directory Web Services takes a while to answer. Wait for it.
     param([int]$TimeoutSeconds = 900)
@@ -182,6 +190,32 @@ function Wait-ActiveDirectory {
         }
     }
     throw "Active Directory did not answer within $TimeoutSeconds seconds. Last error: $lastError"
+}
+
+# ---------------------------------------------------------------------------------------------
+# License
+# ---------------------------------------------------------------------------------------------
+
+function Invoke-LicensePhase {
+    $edition = Get-EditionId
+    if (-not (Test-LabEvaluationEdition -EditionId $edition)) {
+        Write-Step "Edition $edition is not an evaluation edition; nothing to convert."
+        return
+    }
+    if (Test-IsDomainController) {
+        throw "This is an evaluation edition ($edition) that is already a domain controller, which Microsoft does not support converting. Remove the VM and build it again."
+    }
+
+    # https://learn.microsoft.com/windows-server/get-started/upgrade-conversion-options#convert-an-evaluation-version-to-a-retail-version
+    # The AVMA key converts ServerDatacenterEval to ServerDatacenter (proven on Windows Server 2025 build 26100), and
+    # once the restart applies the new edition the guest activates through AVMA against the Datacenter host, with no
+    # further step. DISM returns 3010 when the change needs the restart, which the host performs.
+    $output = & dism.exe /Online /Set-Edition:ServerDatacenter "/ProductKey:$(Get-LabAvmaKey -Edition Datacenter)" /AcceptEula /NoRestart /English 2>&1
+    if ($LASTEXITCODE -notin 0, 3010) {
+        throw ("DISM could not convert $edition to ServerDatacenter (exit $LASTEXITCODE): " + (($output | Select-Object -Last 5) -join ' '))
+    }
+    $script:RebootRequired = $true
+    Set-Changed "Converted $edition to ServerDatacenter with the AVMA key (applies on restart)"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -244,6 +278,13 @@ function Invoke-PromotePhase {
     if (Test-IsDomainController) {
         Write-Step 'Already a domain controller; nothing to promote.'
         return
+    }
+
+    # The last point at which an evaluation edition can still be converted. Promoting one would leave a domain
+    # controller that expires in real time and can never be converted, so refuse rather than build it.
+    $edition = Get-EditionId
+    if (Test-LabEvaluationEdition -EditionId $edition) {
+        throw "Refusing to promote an evaluation edition ($edition): run the License phase and restart first."
     }
 
     Import-Module ADDSDeployment -ErrorAction Stop
@@ -604,6 +645,11 @@ function Invoke-VerifyPhase {
         Write-Step ("{0} {1}: {2}" -f $mark, $probe.Name, $probe.Detail)
     }
 
+    Add-Check 'Windows is a full Datacenter edition, not evaluation' {
+        $edition = Get-EditionId
+        [pscustomobject]@{ Passed = ($edition -eq 'ServerDatacenter'); Detail = "EditionID=$edition" }
+    }
+
     Add-Check 'Windows is activated through Automatic Virtual Machine Activation' -Advisory {
         $product = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "PartialProductKey IS NOT NULL AND Name LIKE 'Windows%'" | Select-Object -First 1
         $ok = ($null -ne $product) -and ($product.LicenseStatus -eq 1)
@@ -628,6 +674,7 @@ Write-Step ('Starting; ' + (ConvertTo-LabArgumentString -Argument ([ordered]@{
             })))
 
 switch ($Phase) {
+    'License' { Invoke-LicensePhase }
     'Prepare' { Invoke-PreparePhase }
     'Promote' { Invoke-PromotePhase }
     'Configure' { Invoke-ConfigurePhase }

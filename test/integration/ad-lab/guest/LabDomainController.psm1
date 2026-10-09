@@ -772,15 +772,66 @@ function ConvertTo-LabUnattendXml {
     return $builder.ToString()
 }
 
+function ConvertTo-LabKeylessUnattend {
+    <#
+    .SYNOPSIS
+        Removes both product key settings from the unattend template, for evaluation media.
+
+    .DESCRIPTION
+        Evaluation media takes no product key at install time (the AVMA key does not match an evaluation edition, and
+        Setup stops on it). The key is applied afterwards instead, by the guest's License phase, which converts the
+        edition with it. Throws if the template has no product key to remove, so a template change cannot make this
+        a silent no-op.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Template
+    )
+
+    # The windowsPE pass: <ProductKey><Key>__PRODUCT_KEY__</Key>...</ProductKey>; the specialize pass:
+    # <ProductKey>__PRODUCT_KEY__</ProductKey>. Each with its leading whitespace, so no blank line is left behind.
+    $patterns = @('(?s)\r?\n[ \t]*<ProductKey>\s*<Key>__PRODUCT_KEY__</Key>.*?</ProductKey>', '\r?\n[ \t]*<ProductKey>__PRODUCT_KEY__</ProductKey>')
+    $result = $Template
+    foreach ($pattern in $patterns) {
+        if ($result -notmatch $pattern) {
+            throw 'The unattend template has no ProductKey setting in the expected form to remove; update ConvertTo-LabKeylessUnattend with the template.'
+        }
+        $result = [regex]::Replace($result, $pattern, '')
+    }
+    return $result
+}
+
+function Test-LabEvaluationEdition {
+    <#
+    .SYNOPSIS
+        Whether a Windows EditionID (HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion) is an evaluation edition.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$EditionId
+    )
+
+    return ($EditionId -match 'Eval$')
+}
+
 function Resolve-LabInstallImage {
     <#
     .SYNOPSIS
         Chooses the Datacenter image (Desktop Experience unless -ServerCore) from the media's image list.
 
     .DESCRIPTION
-        Refuses Evaluation images: an evaluation domain controller cannot be converted and its timer runs in
-        real time regardless of checkpoint reverts. Handles both naming schemes, "Windows Server 2025
-        Datacenter (Desktop Experience)" and the older upper-case "SERVERDATACENTER".
+        Prefers a full (non-evaluation) Datacenter image. When the media holds only Evaluation Datacenter images (the
+        free ISO from Microsoft's Evaluation Center), it returns the Evaluation one with Evaluation set: the build then
+        installs it without a product key and the guest's License phase converts it to full Datacenter with the AVMA
+        key before promotion. That order matters: Microsoft does not support converting an evaluation edition once it
+        is a domain controller, and an evaluation one expires in real time regardless of checkpoint reverts.
+
+        Returns { ImageIndex, ImageName, Evaluation }. Handles both naming schemes, "Windows Server 2025 Datacenter
+        (Desktop Experience)" and the older upper-case "SERVERDATACENTER".
     #>
     [CmdletBinding()]
     param(
@@ -792,17 +843,15 @@ function Resolve-LabInstallImage {
 
     $all = @($Image | ForEach-Object { [string]$_.ImageName })
     $datacenter = @($Image | Where-Object { $_.ImageName -match 'Datacenter' })
-    $licensed = @($datacenter | Where-Object { $_.ImageName -notmatch 'Evaluation' })
-
-    if ($licensed.Count -eq 0) {
-        if ($datacenter.Count -gt 0) {
-            throw ("The media holds only Evaluation Datacenter images ({0}). An Evaluation domain controller cannot be converted and expires in real time; use non-evaluation media." -f ($all -join '; '))
-        }
+    if ($datacenter.Count -eq 0) {
         throw ("The media holds no Datacenter image, so Automatic Virtual Machine Activation cannot apply. It holds: {0}" -f ($all -join '; '))
     }
+    $licensed = @($datacenter | Where-Object { $_.ImageName -notmatch 'Evaluation' })
+    $evaluation = ($licensed.Count -eq 0)
+    $candidates = if ($evaluation) { $datacenter } else { $licensed }
 
-    $desktop = @($licensed | Where-Object { ($_.ImageName -match 'Desktop Experience') -or ($_.ImageName -cmatch 'SERVERDATACENTER$') })
-    $core = @($licensed | Where-Object { $desktop -notcontains $_ })
+    $desktop = @($candidates | Where-Object { ($_.ImageName -match 'Desktop Experience') -or ($_.ImageName -cmatch 'SERVERDATACENTER$') })
+    $core = @($candidates | Where-Object { $desktop -notcontains $_ })
 
     if ($ServerCore) {
         $pool = $core
@@ -813,7 +862,11 @@ function Resolve-LabInstallImage {
     if ($pool.Count -eq 0) {
         throw ("The media has no matching Datacenter image. It holds: {0}" -f ($all -join '; '))
     }
-    return $pool[0]
+    return [pscustomobject]@{
+        ImageIndex = $pool[0].ImageIndex
+        ImageName  = [string]$pool[0].ImageName
+        Evaluation = $evaluation
+    }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -834,7 +887,7 @@ function Get-LabGuestPhaseArgument {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -842,6 +895,7 @@ function Get-LabGuestPhaseArgument {
     )
 
     $required = @{
+        License   = @()
         Prepare   = @('ComputerName', 'IPAddress', 'PrefixLength', 'Gateway')
         Promote   = @('Domain', 'NetBiosName', 'SafeModePassword')
         Configure = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
@@ -850,18 +904,21 @@ function Get-LabGuestPhaseArgument {
     # The DNS forwarder is optional: the lab network has no uplink, so there is normally nothing to forward to. It
     # is passed only when it has a value, so the guest never receives an empty argument.
     $optionalScalar = @{
+        License   = @()
         Prepare   = @('DnsForwarder')
         Promote   = @()
         Configure = @('DnsForwarder')
         Verify    = @()
     }
     $optionalArray = @{
+        License   = @()
         Prepare   = @()
         Promote   = @()
         Configure = @('ExtraCertificateNames')
         Verify    = @('ExtraCertificateNames')
     }
     $optionalSwitch = @{
+        License   = @()
         Prepare   = @()
         Promote   = @()
         Configure = @('EnableRecycleBin')
@@ -2436,8 +2493,9 @@ public static class LabIsoStream
     $image = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
     $result = $null
     try {
-        # FsiFileSystems: ISO9660 = 1, Joliet = 2, UDF = 4.
-        $image.FileSystemsToCreate = 6
+        # FsiFileSystems: ISO9660 = 1, Joliet = 2, UDF = 4. Joliet is an extension of ISO 9660, so IMAPI2 refuses
+        # Joliet without it ("The value specified for parameter 'fileSystems' is not valid"): all three, 7.
+        $image.FileSystemsToCreate = 7
         $image.VolumeName = $VolumeLabel
         $image.Root.AddTree($SourceDirectory, $false)
         $result = $image.CreateResultImage()
@@ -2584,7 +2642,7 @@ function Invoke-LabGuestPhase {
         [System.Management.Automation.PSCredential]$Credential,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -3187,7 +3245,7 @@ Export-ModuleMember -Function @(
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',
     'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote',
     'Get-LabAvmaKey', 'ConvertTo-LabUnattendPassword', 'Get-LabUnattendPlaceholder', 'ConvertTo-LabUnattendXml',
-    'Resolve-LabInstallImage',
+    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
