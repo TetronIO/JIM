@@ -4,7 +4,7 @@ title: Activities
 
 # Activities
 
-Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template. Use these cmdlets to review activity logs, retrieve execution statistics, and inspect child activities spawned by parent operations.
+Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template. Use these cmdlets to review activity logs, retrieve execution statistics, find out why an object in a run failed, and inspect child activities spawned by parent operations.
 
 ---
 
@@ -219,8 +219,65 @@ $stats = Get-JIMActivityStats -Id $result.ActivityId
 if ($stats.TotalObjectErrors -gt 0) {
     Write-Warning "Sync completed with $($stats.TotalObjectErrors) errors"
     Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-        Where-Object { $null -ne $_.ErrorType }
+        Where-Object { $_.ErrorType -and $_.ErrorType -ne 'NotSet' } |
+        Get-JIMActivityExecutionItem |
+        Select-Object DisplayNameSnapshot, ErrorType, ErrorMessage
 }
+```
+
+---
+
+## Get-JIMActivityExecutionItem
+
+Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
+
+### Syntax
+
+```powershell
+Get-JIMActivityExecutionItem -Id <guid>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | ID of the execution item. Accepts pipeline input by property name, so the rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. |
+
+### Output
+
+Returns a `PSCustomObject` describing the item:
+
+| Property | Description |
+|----------|-------------|
+| `Id` | The execution item's ID. |
+| `ActivityId` | The Run Profile activity the item belongs to. |
+| `ObjectChangeType` | What happened to the object, for example `Projected`, `Updated` or `NoChange`. |
+| `NoChangeReason` | Why nothing changed, when nothing did. |
+| `ConnectedSystemObjectId` | The Connected System Object the item is about, while it still exists. |
+| `MetaverseObjectId` | The Metaverse Object the item is about, where it records one. Kept as history, so the object may since have been deleted. |
+| `PendingExportId` | The Pending Export the item is about, for an export. |
+| `ExternalIdSnapshot` | The object's external ID when the item was recorded. |
+| `DisplayNameSnapshot` | The object's display name when the item was recorded. |
+| `ObjectTypeSnapshot` | The object's type when the item was recorded. |
+| `ErrorType` | The kind of failure, for example `GeneratedValueExhausted`; `NotSet` or empty when the object did not fail. |
+| `ErrorMessage` | What went wrong, in words; empty when the object did not fail. |
+| `ErrorStackTrace` | The stack trace, when the failure came from an exception. |
+| `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
+| `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
+
+The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
+
+### Examples
+
+```powershell title="Get one execution item"
+Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+```
+
+```powershell title="List why each object in a run failed"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+    Where-Object { $_.ErrorType -and $_.ErrorType -ne 'NotSet' } |
+    Get-JIMActivityExecutionItem |
+    Format-List DisplayNameSnapshot, ErrorType, ErrorMessage
 ```
 
 ---

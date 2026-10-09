@@ -146,6 +146,7 @@
         # Activities
         'Get-JIMActivity',
         'Get-JIMActivityChildren',
+        'Get-JIMActivityExecutionItem',
         'Get-JIMActivityStats',
 
         # Predefined Searches

@@ -573,9 +573,8 @@ try {
         $refusals = @($executionItems | Where-Object { "$($_.errorType)" -eq 'ClassMembershipRequirementsNotMet' })
         Assert-Equal -Expected 1 -Actual $refusals.Count -Message "Exactly one export was refused for unmet class membership requirements"
 
-        # The header DTO does not carry the message, so read it where it is stored, per the established
-        # psql pattern for state the API does not expose (see Assert-MvoAttributeValue's history).
-        $refusalMessage = docker exec (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -t -A -c "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""ActivityId"" = '$($exportResult.activityId)' AND ""ErrorMessage"" IS NOT NULL LIMIT 1;"
+        # The list's headers do not carry the message; the refused item's detail does.
+        $refusalMessage = (Get-JIMActivityExecutionItem -Id $refusals[0].id).errorMessage
         Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeNumber') `
             -Message "The refusal names the missing attribute (jimBadgeNumber)"
         Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeHolder') `

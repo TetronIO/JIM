@@ -2728,43 +2728,6 @@ function Get-UniquenessProbeWarningPattern {
     return "^JIM couldn't probe $system for values already in use\. .+\. JIM chose [1-9][0-9]* values? using its own records only\.`$"
 }
 
-function Get-ExecutionItemErrorMessages {
-    <#
-    .SYNOPSIS
-        The error messages of the given Run Profile Execution Items, keyed by item ID, read from the lane's database.
-
-    .DESCRIPTION
-        No API returns an execution item's error message, and it is the part of a failure that names what went
-        wrong (for a generated value: the attribute, the last candidate tried and what rejected it). For diagnostic
-        output only: anything that goes wrong reading it returns an empty table rather than masking the failure
-        being reported.
-    #>
-    param([Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$ItemIds)
-
-    $messages = @{}
-    # Parsed as GUIDs before they reach the SQL text, so nothing but a GUID can.
-    $ids = @($ItemIds | ForEach-Object {
-            $parsed = [guid]::Empty
-            if ([guid]::TryParse("$_", [ref]$parsed)) { $parsed }
-        } | Select-Object -Unique)
-    if ($ids.Count -eq 0) { return $messages }
-
-    $idList = ($ids | ForEach-Object { "'$_'" }) -join ','
-    $query = "SELECT COALESCE(json_agg(json_build_object('id', ""Id"", 'message', ""ErrorMessage"")), '[]') FROM ""ActivityRunProfileExecutionItems"" WHERE ""Id"" IN ($idList) AND ""ErrorMessage"" IS NOT NULL;"
-    $raw = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $messages }
-
-    try {
-        foreach ($row in @("$raw" | ConvertFrom-Json)) {
-            $messages["$($row.id)"] = $row.message
-        }
-    }
-    catch [System.ArgumentException] {
-        Write-Verbose "Could not parse execution item error messages: $_"
-    }
-    return $messages
-}
-
 function Assert-ActivitySuccess {
     <#
     .SYNOPSIS
@@ -2940,14 +2903,14 @@ function Assert-ActivitySuccess {
                     Select-Object -First 5
 
                 if ($errorItems) {
-                    # The item list is headers only: no API returns an item's error message, which is the part that
-                    # says what actually went wrong, so it is read from the database.
-                    $messages = Get-ExecutionItemErrorMessages -ItemIds @($errorItems | ForEach-Object { $_.id })
                     $errorDetails += "First error items:"
                     foreach ($item in $errorItems) {
                         $errorDetails += "  - Error: $($item.errorType)"
-                        if ($messages.ContainsKey("$($item.id)")) {
-                            $errorDetails += "    Message: $($messages["$($item.id)"])"
+                        # The list's headers do not carry the message, which is the part that says what went wrong;
+                        # the item's detail does. Diagnostic output only, so a failed read leaves the line out.
+                        $itemDetail = Get-JIMActivityExecutionItem -Id $item.id -ErrorAction SilentlyContinue
+                        if ($itemDetail.errorMessage) {
+                            $errorDetails += "    Message: $($itemDetail.errorMessage)"
                         }
                         if ($item.displayName) {
                             $errorDetails += "    Object: $($item.displayName)"
@@ -5241,9 +5204,11 @@ function Export-FailedScenarioDiagnostics {
 
     .DESCRIPTION
         The runner resets the stack before every scenario, so a failed scenario's database is gone moments after it
-        fails, and with it the item error messages, which no API returns and which are the part of a failure that
-        says what went wrong. Called by the runner for a failed scenario, before anything resets; the file is
-        uploaded with the rest of the results.
+        fails, and with it the item error messages, which are the part of a failure that says what went wrong. Called
+        by the runner for a failed scenario, before anything resets; the file is uploaded with the rest of the results.
+
+        It reads the database rather than Get-JIMActivityExecutionItem deliberately: one query covers hundreds of
+        items, and it still answers when the failure being diagnosed is JIM's API itself.
 
         Error stack traces are cut to 4,000 characters, and at most 200 Activities and 500 items are written (the
         most recent), so a scale run that fails every object cannot produce an unwieldy file.

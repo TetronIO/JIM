@@ -244,6 +244,14 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>
+    /// One Run Profile Execution Item's own row, with no navigation loaded: its error type, message and stack trace,
+    /// its snapshots and the ids of what it is about. The light counterpart of
+    /// <see cref="GetActivityRunProfileExecutionItemAsync"/>, which loads the graph the portal's detail page renders.
+    /// Null when no item has the id.
+    /// </summary>
+    public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id);
+
+    /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
     /// upward walk can resolve a whole level of a cascade in one round trip.
     /// </summary>

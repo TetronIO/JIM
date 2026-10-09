@@ -4233,8 +4233,8 @@ finally {
         $scenarioExitCode = 1
     }
 
-    # The next run resets the stack, and with it the item error messages that say what went wrong (no API returns
-    # them), so a failed scenario's are written out now, while its database still holds them.
+    # The next run resets the stack, and with it the item error messages that say what went wrong, so a failed
+    # scenario's are written out now, while its database still holds them.
     if ($scenarioExitCode -ne 0) {
         $failureDiagnosticsPath = Join-Path $scriptRoot "results" "failure-diagnostics-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').json"
         try {

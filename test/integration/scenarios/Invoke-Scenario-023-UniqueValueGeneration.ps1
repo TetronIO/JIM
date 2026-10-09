@@ -661,8 +661,8 @@ function New-CollidingDirectoryAccount {
 function Invoke-JimDatabaseScalar {
     <#
     .SYNOPSIS
-        One scalar from the JIM database, for state no API surface reads (the revision-pending record, an
-        execution item's error message, the Collision Remediation switch).
+        One scalar from the JIM database, for state no API surface reads (the revision-pending record, the
+        Generated Value assignment's state, the Collision Remediation switch).
     #>
     param([Parameter(Mandatory=$true)][string]$Sql)
     $raw = docker exec (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -t -A -c $Sql 2>&1
@@ -1712,7 +1712,7 @@ try {
         Add-TestResult -Name "[Needs Decision] The execution item error is GeneratedValueCollisionUnresolved" -Passed ($unresolved.Count -eq 1) `
             -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
         if ($unresolved.Count -eq 1) {
-            $message = Invoke-JimDatabaseScalar -Sql "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""Id"" = '$($unresolved[0].id)';"
+            $message = (Get-JIMActivityExecutionItem -Id $unresolved[0].id).errorMessage
             Add-TestResult -Name "[Needs Decision] The error names the rejecting and the anchoring systems" `
                 -Passed ($message -match [regex]::Escape($DirectoryConfig.ConnectedSystemName) -and $message -match 'Cross-Domain Export') -Detail "Message: '$message'"
         }
