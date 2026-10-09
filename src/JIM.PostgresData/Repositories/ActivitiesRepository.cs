@@ -2073,6 +2073,15 @@ public class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)
+    {
+        // The item's own row and nothing it points at: callers read its columns only, so none of the graph
+        // GetActivityRunProfileExecutionItemAsync loads for the portal is paid for here.
+        return await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .SingleOrDefaultAsync(i => i.Id == id);
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations

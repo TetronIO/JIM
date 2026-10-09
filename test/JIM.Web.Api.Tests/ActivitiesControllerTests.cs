@@ -934,6 +934,79 @@ public class ActivitiesControllerTests
 
     #endregion
 
+    #region GetActivityExecutionItemAsync tests
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithExistingItem_ReturnsErrorMessageStackTraceAndSnapshotAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = Guid.NewGuid(),
+            MetaverseObjectId = Guid.NewGuid(),
+            ExternalIdSnapshot = "EMP900083",
+            DisplayNameSnapshot = "Osric Tamworth",
+            ObjectTypeSnapshot = "person",
+            ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted,
+            ErrorMessage = "No free value was found for Staff Number after 1000 attempts.",
+            ErrorStackTrace = "   at JIM.Application.UniqueValues.UniqueValueGenerationServer.ResolveAsync()",
+            AttributeFlowCount = 1,
+            OutcomeSummary = "Projected:1"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Id, Is.EqualTo(item.Id));
+            Assert.That(dto!.ActivityId, Is.EqualTo(item.ActivityId));
+            Assert.That(dto!.ObjectChangeType, Is.EqualTo(ObjectChangeType.Projected));
+            Assert.That(dto!.ConnectedSystemObjectId, Is.EqualTo(item.ConnectedSystemObjectId));
+            Assert.That(dto!.MetaverseObjectId, Is.EqualTo(item.MetaverseObjectId));
+            Assert.That(dto!.ExternalIdSnapshot, Is.EqualTo("EMP900083"));
+            Assert.That(dto!.DisplayNameSnapshot, Is.EqualTo("Osric Tamworth"));
+            Assert.That(dto!.ObjectTypeSnapshot, Is.EqualTo("person"));
+            Assert.That(dto!.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted));
+            Assert.That(dto!.ErrorMessage, Is.EqualTo(item.ErrorMessage));
+            Assert.That(dto!.ErrorStackTrace, Is.EqualTo(item.ErrorStackTrace));
+            Assert.That(dto!.AttributeFlowCount, Is.EqualTo(1));
+            Assert.That(dto!.OutcomeSummary, Is.EqualTo("Projected:1"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithNonExistentId_ReturnsNotFoundAsync()
+    {
+        var itemId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(itemId))
+            .ReturnsAsync((ActivityRunProfileExecutionItem?)null);
+
+        var result = await _controller.GetActivityExecutionItemAsync(itemId);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_UsesTheLightRetrievalNotThePortalsFullGraphAsync()
+    {
+        // The portal's detail page loads the item's whole graph (its Connected System Object, attribute values,
+        // references and linked Metaverse Object); this endpoint returns the item's own fields only, so it must
+        // not pay for that load.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        await _controller.GetActivityExecutionItemAsync(item.Id);
+
+        _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    #endregion
+
     #region GetChildActivitiesAsync tests
 
     [Test]
