@@ -1273,7 +1273,7 @@ Budget for it: retiring the three base-image categories on #1637 meant about 8,0
 Before merging a Docker digest update PR:
 
 1. Check if apt package versions need updating against the new base image
-2. Run integration tests (especially LDAP connector tests) against the updated image
+2. Run integration tests (especially LDAP connector tests) against the updated image. Whatever happens here, the pre-release integration gate runs the full suite on every release commit (`engineering/RELEASE_PROCESS.md`), so a regression the update causes stops the release at the latest
 3. Update pinned versions in the Dockerfile if they have changed
 
 To check available package versions in a new base image:
