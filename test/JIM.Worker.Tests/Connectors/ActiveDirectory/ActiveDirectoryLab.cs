@@ -289,8 +289,10 @@ internal static class ActiveDirectoryLab
     }
 
     /// <summary>
-    /// Ensures a global security group exists under the probe OU holding exactly the given members (existing
-    /// members are kept; missing ones are added in chunks), and returns its Distinguished Name.
+    /// Ensures a global security group exists under the probe OU holding at least the given members (existing
+    /// members are kept; missing ones are added in chunks), and returns its Distinguished Name. Reads the members
+    /// back afterwards and throws if any is absent, so a fixture that did not build fails here, naming what is
+    /// missing, rather than as a count the probe then misreads (#2041).
     /// </summary>
     internal static string EnsureGroup(LdapConnection connection, Coordinates lab, string cn, string sAMAccountName, IReadOnlyList<string> memberDns)
     {
@@ -303,8 +305,17 @@ internal static class ActiveDirectoryLab
         foreach (var chunk in missing.Chunk(FixtureChunkSize))
         {
             var modify = new ModifyRequest(dn, DirectoryAttributeOperation.Add, "member", chunk.Cast<object>().ToArray());
-            connection.SendRequest(modify);
+            var response = (ModifyResponse)connection.SendRequest(modify);
+            if (response.ResultCode != ResultCode.Success)
+                throw new InvalidOperationException($"Adding {chunk.Length} members to the fixture group {dn} was answered {response.ResultCode}: {response.ErrorMessage}");
         }
+
+        var held = new HashSet<string>(ReadAllValues(connection, dn, "member"), StringComparer.OrdinalIgnoreCase);
+        var absent = memberDns.Where(member => !held.Contains(member)).ToList();
+        if (absent.Count > 0)
+            throw new InvalidOperationException(
+                $"The fixture group {dn} was given {memberDns.Count} members but {absent.Count} of them are not in it when read back " +
+                $"({held.Count} values read), the first being {absent[0]}. Either the adds did not land or they cannot be read back.");
 
         return dn;
     }
@@ -369,6 +380,11 @@ internal static class ActiveDirectoryLab
     /// This is the reference behaviour the connector is expected to implement; it is kept here, independently, so
     /// the probe can count what the directory actually holds.
     /// </summary>
+    /// <remarks>
+    /// The ranged description is looked for before the plain one, because a directory may return the plain attribute,
+    /// empty, beside the range. Taking whichever came first read a 1,600-member group as empty on a Windows Server 2025
+    /// domain controller (#2041).
+    /// </remarks>
     internal static List<string> ReadAllValues(LdapConnection connection, string dn, string attributeName)
     {
         var values = new List<string>();
@@ -381,17 +397,17 @@ internal static class ActiveDirectoryLab
                 return values;
 
             var entry = response.Entries[0];
-            var returned = entry.Attributes.AttributeNames.Cast<string>().FirstOrDefault(name =>
-                name.Equals(attributeName, StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith(attributeName + ";range=", StringComparison.OrdinalIgnoreCase));
+            var names = entry.Attributes.AttributeNames.Cast<string>().ToList();
+            var ranged = names.FirstOrDefault(name => name.StartsWith(attributeName + ";range=", StringComparison.OrdinalIgnoreCase));
+            var returned = ranged ?? names.FirstOrDefault(name => name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
             if (returned == null)
                 return values;
 
             values.AddRange(entry.Attributes[returned].GetValues(typeof(string)).Cast<string>());
-            if (returned.Equals(attributeName, StringComparison.OrdinalIgnoreCase) || returned.EndsWith("-*", StringComparison.Ordinal))
+            if (ranged == null || ranged.EndsWith("-*", StringComparison.Ordinal))
                 return values;
 
-            next = int.Parse(returned[(returned.LastIndexOf('-') + 1)..]) + 1;
+            next = int.Parse(ranged[(ranged.LastIndexOf('-') + 1)..]) + 1;
         }
     }
 

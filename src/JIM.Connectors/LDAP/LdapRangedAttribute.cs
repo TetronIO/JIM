@@ -15,7 +15,7 @@ namespace JIM.Connectors.LDAP;
 /// <para>
 /// A multi-valued attribute with more values than the directory's MaxValRange (1,500 by default) is not returned
 /// whole. The directory answers with the first range under an attribute description carrying a range option,
-/// <c>member;range=0-1499</c>, and leaves the plain <c>member</c> out of the entry altogether. The rest is read by
+/// <c>member;range=0-1499</c>, with the plain <c>member</c> absent or empty beside it. The rest is read by
 /// asking for the attribute from the next index, <c>member;range=1500-*</c>; the directory answers each request
 /// with the actual range it returned, and a range ending in <c>*</c> is the last. Samba AD returns every value in
 /// one attribute, so the integration lab never met a ranged attribute (#1853).
@@ -42,6 +42,11 @@ internal static partial class LdapRangedAttribute
         low = 0;
         high = null;
 
+        // Nearly every description carries no option at all, and this runs for every attribute of every entry an
+        // import reads, so the regular expression is kept for the ones that might.
+        if (!attributeDescription.Contains(';'))
+            return false;
+
         var match = RangeOption().Match(attributeDescription);
         if (!match.Success)
             return false;
@@ -51,6 +56,28 @@ internal static partial class LdapRangedAttribute
         var highText = match.Groups["high"].Value;
         high = highText == "*" ? null : int.Parse(highText, CultureInfo.InvariantCulture);
         return true;
+    }
+
+    /// <summary>
+    /// The attribute descriptions to read off an entry: every one it carries, less a plain description the entry also
+    /// carries in ranged form.
+    /// </summary>
+    /// <remarks>
+    /// A directory may answer a value set over MaxValRange with the plain attribute, carrying no values, beside the
+    /// range-qualified one (#2041). The ranged read covers every value from the first, so the plain one adds nothing,
+    /// and reading both would give one directory attribute twice: once empty, once whole.
+    /// </remarks>
+    internal static IReadOnlyList<string> DescriptionsToRead(SearchResultEntry entry)
+    {
+        var descriptions = entry.Attributes.AttributeNames.Cast<string>().ToList();
+        var rangedNames = descriptions
+            .Select(description => TryParse(description, out var attributeName, out _, out _) ? attributeName : null)
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return rangedNames.Count == 0
+            ? descriptions
+            : descriptions.Where(description => !rangedNames.Contains(description)).ToList();
     }
 
     /// <summary>
@@ -122,19 +149,22 @@ internal static partial class LdapRangedAttribute
     private static string? FindReturnedRange(SearchResultEntry page, string attributeName, out int? high)
     {
         high = null;
+
+        // The range wins over the plain attribute, which a directory may also return, empty, beside it (#2041).
+        string? plain = null;
         foreach (string description in page.Attributes.AttributeNames)
         {
-            if (description.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
-                return description;
-
             if (TryParse(description, out var name, out _, out var rangeHigh) && name.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
             {
                 high = rangeHigh;
                 return description;
             }
+
+            if (description.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+                plain = description;
         }
 
-        return null;
+        return plain;
     }
 
     private static void AppendValues(List<object> values, DirectoryAttribute attribute)
