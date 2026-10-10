@@ -99,6 +99,49 @@ public class LdapObjectTypeMatcherTests
     }
 
     [Test]
+    public void Match_UntaggedTypesWithTopListedLast_ResolvesToTheFirstListed()
+    {
+        // An RFC 4512 directory returns objectClass in the order it was written, and LDIF commonly lists the most
+        // specific class first with top last (JIM's own OpenLDAP lab does). top marks the general end of the list.
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "organizationalPerson", "person", "top"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithTopListedFirst_ResolvesToTheLastListed()
+    {
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["top", "person", "organizationalPerson", "inetOrgPerson"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithNoTopListed_KeepsTheFirstListed()
+    {
+        // Nothing says which end is the general one, so the rule JIM has always applied stands.
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "person"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
+    public void Match_UntaggedTypesWithTopListedBetweenThem_KeepsTheFirstListed()
+    {
+        var inetOrgPerson = StructuralType("inetOrgPerson");
+
+        var matched = LdapObjectTypeMatcher.Match(["inetOrgPerson", "top", "person"], [_person, inetOrgPerson]);
+
+        Assert.That(matched, Is.SameAs(inetOrgPerson));
+    }
+
+    [Test]
     public void Match_InheritanceKnown_ResolvesToTheMostSpecificClassWhateverOrderTheDirectoryListsThemIn()
     {
         var user = StructuralType("user", inheritsFrom: ["organizationalPerson", "person", "top"]);

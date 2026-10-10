@@ -67,9 +67,15 @@ internal static partial class LdapRangedAttribute
     /// range-qualified one (#2041). The ranged read covers every value from the first, so the plain one adds nothing,
     /// and reading both would give one directory attribute twice: once empty, once whole.
     /// </remarks>
-    internal static IReadOnlyList<string> DescriptionsToRead(SearchResultEntry entry)
+    internal static IReadOnlyList<string> DescriptionsToRead(SearchResultEntry entry) =>
+        DescriptionsToRead(entry.Attributes.AttributeNames.Cast<string>().ToList());
+
+    /// <summary>
+    /// <see cref="DescriptionsToRead(SearchResultEntry)"/> over the descriptions themselves, in their own case and
+    /// order, which the entry's collection does not keep.
+    /// </summary>
+    internal static IReadOnlyList<string> DescriptionsToRead(IReadOnlyList<string> descriptions)
     {
-        var descriptions = entry.Attributes.AttributeNames.Cast<string>().ToList();
         var rangedNames = descriptions
             .Select(description => TryParse(description, out var attributeName, out _, out _) ? attributeName : null)
             .OfType<string>()
@@ -146,13 +152,20 @@ internal static partial class LdapRangedAttribute
     /// The attribute description the directory answered a follow-up read with: the next range, or the plain
     /// attribute if it chose to answer the whole thing. Null when it answered neither.
     /// </summary>
-    private static string? FindReturnedRange(SearchResultEntry page, string attributeName, out int? high)
+    private static string? FindReturnedRange(SearchResultEntry page, string attributeName, out int? high) =>
+        FindReturnedRange(page.Attributes.AttributeNames.Cast<string>(), attributeName, out high);
+
+    /// <summary>
+    /// <see cref="FindReturnedRange(SearchResultEntry, string, out int?)"/> over the descriptions in a given order,
+    /// which the entry's own collection does not keep.
+    /// </summary>
+    internal static string? FindReturnedRange(IEnumerable<string> descriptions, string attributeName, out int? high)
     {
         high = null;
 
         // The range wins over the plain attribute, which a directory may also return, empty, beside it (#2041).
         string? plain = null;
-        foreach (string description in page.Attributes.AttributeNames)
+        foreach (var description in descriptions)
         {
             if (TryParse(description, out var name, out _, out var rangeHigh) && name.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
             {

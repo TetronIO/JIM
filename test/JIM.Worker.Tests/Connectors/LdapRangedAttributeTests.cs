@@ -151,9 +151,35 @@ public class LdapRangedAttributeTests
     [Test]
     public void DescriptionsToRead_TheRangedFormInADifferentCase_StillLeavesThePlainOneOut()
     {
-        var entry = LdapTestResponses.EntryWithValues(GroupDn, ("Member;Range=0-1", ["CN=a", "CN=b"]), ("member", []));
+        // The overload over descriptions keeps their case, which an entry's own collection does not.
+        Assert.That(LdapRangedAttribute.DescriptionsToRead(["Member;Range=0-1", "member"]), Is.EqualTo(new[] { "Member;Range=0-1" }));
+    }
 
-        Assert.That(LdapRangedAttribute.DescriptionsToRead(entry), Is.EquivalentTo(new[] { "Member;Range=0-1" }).IgnoreCase);
+    [Test]
+    public void FindReturnedRange_ThePlainAttributeListedBeforeTheRange_ReturnsTheRange()
+    {
+        // Deterministic where the ReadAll test below is not: an entry's attribute collection is hash-ordered, so
+        // which of the two it lists first varies from process to process.
+        var returned = LdapRangedAttribute.FindReturnedRange(["member", "member;range=2-3"], "member", out var high);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.EqualTo("member;range=2-3"));
+            Assert.That(high, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public void FindReturnedRange_OnlyThePlainAttribute_ReturnsIt()
+    {
+        // A directory may answer the rest of the values whole; that is the last of them.
+        var returned = LdapRangedAttribute.FindReturnedRange(["objectClass", "member"], "member", out var high);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.EqualTo("member"));
+            Assert.That(high, Is.Null);
+        }
     }
 
     [Test]

@@ -24,8 +24,9 @@ internal static class LdapObjectTypeMatcher
         IEnumerable<ConnectedSystemObjectType> objectTypes)
     {
         var selected = objectTypes.Where(objectType => objectType.Selected).ToList();
+        var listed = objectClasses as IReadOnlyList<string> ?? objectClasses.ToList();
 
-        var candidates = objectClasses
+        var candidates = listed
             .Select(objectClass => selected.FirstOrDefault(objectType =>
                 objectType.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase)))
             .OfType<ConnectedSystemObjectType>()
@@ -45,9 +46,40 @@ internal static class LdapObjectTypeMatcher
             .Where(candidate => !structural.Any(other => !ReferenceEquals(other, candidate) && other.InheritsFrom(candidate.Name)))
             .ToList();
 
-        // Where it did not (Object Types discovered before JIM recorded inheritance), the order decides. Windows
-        // Server and Samba AD both list an entry's classes from top down to the most specific, so the last wins.
-        return mostSpecific.Count > 0 ? mostSpecific[^1] : structural[^1];
+        // Where it did not (Object Types discovered before JIM recorded inheritance), the order decides, read from
+        // the entry itself.
+        var remaining = mostSpecific.Count > 0 ? mostSpecific : structural;
+        return TopIsListedFirst(listed, remaining) ? remaining[^1] : remaining[0];
+    }
+
+    /// <summary>
+    /// Whether the entry lists its classes from the general end, which <c>top</c> marks: every structural chain ends
+    /// at it. Windows Server and Samba AD always list top first and the most specific class last; an RFC 4512
+    /// directory returns them in the order they were written, which is commonly the reverse, top last.
+    /// </summary>
+    /// <remarks>
+    /// False when top is listed last, absent, or between the candidates, so the first candidate stands: the rule JIM
+    /// applied before it read the order at all, which an existing deployment's Connected System Objects were staged
+    /// by.
+    /// </remarks>
+    private static bool TopIsListedFirst(IReadOnlyList<string> objectClasses, List<ConnectedSystemObjectType> candidates)
+    {
+        var topIndex = IndexOf(objectClasses, objectClass => objectClass.Equals("top", StringComparison.OrdinalIgnoreCase));
+        var firstCandidateIndex = IndexOf(objectClasses, objectClass =>
+            candidates.Any(candidate => candidate.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase)));
+
+        return topIndex >= 0 && topIndex < firstCandidateIndex;
+    }
+
+    private static int IndexOf(IReadOnlyList<string> values, Func<string, bool> predicate)
+    {
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (predicate(values[i]))
+                return i;
+        }
+
+        return -1;
     }
 
     /// <summary>
