@@ -805,6 +805,218 @@ function ConvertTo-LabKeylessUnattend {
     return $result
 }
 
+# ---------------------------------------------------------------------------------------------
+# Directory extensions (pure)
+#
+# A product that extends the forest (Exchange today; Skype for Business could follow) is listed in settings.json
+# directoryExtensions, in the order to apply them. Adding a product means: its name in $script:DirectoryExtensionProduct,
+# its build script parameter there, a handler in the guest's Extend phase, and its Verify check. Nothing else about the
+# sequencing changes.
+# ---------------------------------------------------------------------------------------------
+
+# Product name (as the lab spells it) -> the New-LabDomainController.ps1 parameter that carries its media.
+$script:DirectoryExtensionProduct = [ordered]@{
+    Exchange = 'ExchangeIsoPath'
+}
+
+function ConvertFrom-LabDirectoryExtensionSetting {
+    <#
+    .SYNOPSIS
+        Validates settings.json directoryExtensions and returns the extensions in order: { Product, IsoPath }.
+
+    .DESCRIPTION
+        Absent or empty means a plain forest. Each entry needs a known product and its media; a product may appear only
+        once. The order is the order the products are applied in, which matters once a product depends on another
+        (Skype for Business on Exchange, say).
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    $result = New-Object System.Collections.Generic.List[object]
+    if ($null -eq $Value) {
+        return @()
+    }
+    $known = @($script:DirectoryExtensionProduct.Keys)
+    $seen = @{}
+    foreach ($entry in @($Value)) {
+        $productText = [string](Get-LabSettingValue -Object $entry -Name 'product')
+        $product = $known | Where-Object { $_ -eq $productText.Trim() } | Select-Object -First 1
+        if (-not $product) {
+            throw ("settings.json directoryExtensions names the product '{0}', which this lab does not know (known: {1})." -f $productText, ($known -join ', '))
+        }
+        $isoPath = [string](Get-LabSettingValue -Object $entry -Name 'isoPath')
+        if ([string]::IsNullOrWhiteSpace($isoPath)) {
+            throw "settings.json directoryExtensions entry '$product' has no 'isoPath' (the product's installation media)."
+        }
+        if ($seen.ContainsKey($product)) {
+            throw "settings.json directoryExtensions lists '$product' more than once."
+        }
+        $seen[$product] = $true
+        $result.Add([pscustomobject][ordered]@{ Product = [string]$product; IsoPath = $isoPath.Trim() })
+    }
+    return $result.ToArray()
+}
+
+function Get-LabDirectoryExtensionBuildParameter {
+    <#
+    .SYNOPSIS
+        The New-LabDomainController.ps1 parameters that carry the directory extensions' media: { ExchangeIsoPath = ... }.
+
+    .DESCRIPTION
+        Single values only, because the monthly rebuild passes build parameters to a child process.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Extension
+    )
+
+    $parameters = @{}
+    foreach ($entry in $Extension) {
+        $parameters[$script:DirectoryExtensionProduct[[string]$entry.Product]] = [string]$entry.IsoPath
+    }
+    return $parameters
+}
+
+function Get-LabExchangeOrganizationName {
+    <#
+    .SYNOPSIS
+        The Exchange organisation name for a forest: its NetBIOS name (PANOPLY, RESURGAM, GENTIAN).
+
+    .DESCRIPTION
+        Permanent once /PrepareAD has set it. Exchange allows letters, digits, hyphens and spaces, up to 64 characters,
+        with no leading or trailing space:
+        https://learn.microsoft.com/exchange/plan-and-deploy/prepare-ad-and-domains#step-2-prepare-active-directory
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$NetBiosName
+    )
+
+    if (($NetBiosName -notmatch '^[A-Za-z0-9-]([A-Za-z0-9 -]{0,62}[A-Za-z0-9-])?$')) {
+        throw "'$NetBiosName' cannot be an Exchange organisation name: letters, digits, hyphens and inner spaces only, up to 64 characters."
+    }
+    return $NetBiosName
+}
+
+function Get-LabExchangeSchemaTarget {
+    <#
+    .SYNOPSIS
+        The Exchange schema version (rangeUpper of ms-Exch-Schema-Version-Pt) the media installs, from the text of its
+        Setup\Data\SchemaVersion.ldf.
+
+    .DESCRIPTION
+        Read from the media rather than a table, so newer media needs no change here. 17003 for Exchange SE RTM.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$LdfText
+    )
+
+    $found = @([regex]::Matches($LdfText, '(?m)^rangeUpper:\s*(\d+)\s*$'))
+    if ($found.Count -ne 1) {
+        throw "SchemaVersion.ldf should state exactly one rangeUpper; found $($found.Count)."
+    }
+    return [int]$found[0].Groups[1].Value
+}
+
+function Get-LabExchangePreparationStep {
+    <#
+    .SYNOPSIS
+        Which Exchange Setup preparation steps a forest still needs, in order: PrepareSchema, PrepareAD,
+        PrepareAllDomains.
+
+    .DESCRIPTION
+        A forest already prepared by this media needs nothing, so a re-run converges; an interrupted preparation is
+        finished from where it stopped. A schema update from newer media is always followed by PrepareAD and
+        PrepareAllDomains, as Exchange requires. Media older than the forest's schema is refused: Exchange Setup cannot
+        use it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [AllowNull()]
+        [Nullable[int]]$SchemaRangeUpper,
+
+        [Parameter(Mandatory)]
+        [int]$TargetRangeUpper,
+
+        [Parameter(Mandatory)]
+        [bool]$OrganizationPresent,
+
+        [Parameter(Mandatory)]
+        [bool]$DomainPrepared
+    )
+
+    if (($null -ne $SchemaRangeUpper) -and ($SchemaRangeUpper -gt $TargetRangeUpper)) {
+        throw "The forest's Exchange schema ($SchemaRangeUpper) is newer than the media's ($TargetRangeUpper); use newer Exchange media."
+    }
+    $steps = New-Object System.Collections.Generic.List[string]
+    $schemaNeeded = ($null -eq $SchemaRangeUpper) -or ($SchemaRangeUpper -lt $TargetRangeUpper)
+    if ($schemaNeeded) { $steps.Add('PrepareSchema') }
+    if ($schemaNeeded -or (-not $OrganizationPresent)) { $steps.Add('PrepareAD') }
+    if ($schemaNeeded -or (-not $OrganizationPresent) -or (-not $DomainPrepared)) { $steps.Add('PrepareAllDomains') }
+    return [string[]]$steps.ToArray()
+}
+
+function Test-LabExchangeSchemaMasterBuild {
+    <#
+    .SYNOPSIS
+        Whether a schema master's Windows build is safe for Exchange to extend the schema on.
+
+    .DESCRIPTION
+        Microsoft requires a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or
+        later before Exchange extends the schema, or replication breaks:
+        https://learn.microsoft.com/exchange/plan-and-deploy/supportability-matrix#supported-active-directory-environments
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$CurrentBuild,
+
+        [Parameter(Mandatory)]
+        [int]$Ubr
+    )
+
+    if ($CurrentBuild -ne 26100) {
+        return $true
+    }
+    return ($Ubr -ge 7171)
+}
+
+function Get-LabExchangeSetupArgument {
+    <#
+    .SYNOPSIS
+        Exchange Setup's arguments for one preparation step, accepting the licence terms with diagnostic data off.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')]
+        [string]$Step,
+
+        [Parameter(Mandatory)]
+        [string]$OrganizationName
+    )
+
+    $arguments = @('/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF', "/$Step")
+    if ($Step -eq 'PrepareAD') {
+        $arguments += "/OrganizationName:$(Get-LabExchangeOrganizationName -NetBiosName $OrganizationName)"
+    }
+    return [string[]]$arguments
+}
+
 function Get-LabDirectoryResultCode {
     <#
     .SYNOPSIS
@@ -942,7 +1154,7 @@ function Get-LabGuestPhaseArgument {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -953,6 +1165,7 @@ function Get-LabGuestPhaseArgument {
         License   = @()
         Prepare   = @('ComputerName', 'IPAddress', 'PrefixLength', 'Gateway')
         Promote   = @('Domain', 'NetBiosName', 'SafeModePassword')
+        Extend    = @('Domain', 'NetBiosName')
         Configure = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
         Verify    = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
     }
@@ -962,20 +1175,24 @@ function Get-LabGuestPhaseArgument {
         License   = @()
         Prepare   = @('DnsForwarder')
         Promote   = @()
+        Extend    = @()
         Configure = @('DnsForwarder')
         Verify    = @()
     }
+    # DirectoryExtension: the products extending the forest, in order (Exchange). Absent for a plain forest.
     $optionalArray = @{
         License   = @()
         Prepare   = @()
         Promote   = @()
+        Extend    = @('DirectoryExtension')
         Configure = @('ExtraCertificateNames')
-        Verify    = @('ExtraCertificateNames')
+        Verify    = @('ExtraCertificateNames', 'DirectoryExtension')
     }
     $optionalSwitch = @{
         License   = @()
         Prepare   = @()
         Promote   = @()
+        Extend    = @()
         Configure = @('EnableRecycleBin')
         Verify    = @('EnableRecycleBin')
     }
@@ -1490,6 +1707,9 @@ function ConvertFrom-LabRebuildSetting {
         $shared['dnsForwarder'] = $forwarderText
     }
 
+    # Every forest gets the same extensions, in the order listed (validated before anything is built).
+    $extensions = @(ConvertFrom-LabDirectoryExtensionSetting -Value (Get-LabSettingValue -Object $Settings -Name 'directoryExtensions'))
+
     $controllers = Get-LabSettingValue -Object $Settings -Name 'domainControllers'
     if ($null -eq $controllers) {
         throw "settings.json has no 'domainControllers'."
@@ -1561,6 +1781,10 @@ function ConvertFrom-LabRebuildSetting {
         }
         if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
             $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $extensionParameters = Get-LabDirectoryExtensionBuildParameter -Extension $extensions
+        foreach ($key in $extensionParameters.Keys) {
+            $parameters[$key] = $extensionParameters[$key]
         }
         $roles.Add((Get-LabRebuildRoleEntry -LiveName $liveName -BuildParameters $parameters))
     }
@@ -2704,7 +2928,7 @@ function Invoke-LabGuestPhase {
         [System.Management.Automation.PSCredential]$Credential,
 
         [Parameter(Mandatory)]
-        [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -3311,7 +3535,9 @@ Export-ModuleMember -Function @(
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',
     'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote',
     'Get-LabAvmaKey', 'ConvertTo-LabUnattendPassword', 'Get-LabUnattendPlaceholder', 'ConvertTo-LabUnattendXml',
-    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Get-LabAdProviderPath', 'Get-LabDirectoryResultCode', 'Resolve-LabInstallImage',
+    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Get-LabAdProviderPath', 'Get-LabDirectoryResultCode',
+    'ConvertFrom-LabDirectoryExtensionSetting', 'Get-LabDirectoryExtensionBuildParameter', 'Get-LabExchangeOrganizationName',
+    'Get-LabExchangeSchemaTarget', 'Get-LabExchangePreparationStep', 'Test-LabExchangeSchemaMasterBuild', 'Get-LabExchangeSetupArgument', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
