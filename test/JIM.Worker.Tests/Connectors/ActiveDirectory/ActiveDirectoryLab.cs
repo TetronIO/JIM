@@ -229,6 +229,10 @@ internal static class ActiveDirectoryLab
             lock (TrustDirectories)
                 TrustDirectories.Add(trustDirectory);
             connection.SessionOptions.TrustedCertificatesDirectory = trustDirectory.DirectoryPath;
+            // As LdapConnector does: the platform LDAP client applies the directory only to a new TLS context, so
+            // without this the connection keeps the default trust store and rejects the lab's self-signed
+            // certificate ("certificate verify failed (self-signed certificate)", seen on the Ubuntu 26.04 runner).
+            connection.SessionOptions.StartNewTlsSessionContext();
         }
 
         connection.SessionOptions.SecureSocketLayer = true;
