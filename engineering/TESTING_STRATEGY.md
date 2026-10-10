@@ -287,7 +287,8 @@ Tear down with `Start-SqlServerTlsTestServer.ps1 -Stop`.
 
 **Characteristics**:
 - One probe per primitive only a real Active Directory can prove: schema discovery over more than 1,000 `attributeSchema` entries (the directory's MaxPageSize), container enumeration over more than 1,000 organisational units, a Full Import of a group over MaxValRange (1,500 members, returned as `member;range=0-1499`), a duplicate member add on export, the order the directory lists `objectClass` values in, and `unicodePwd` over LDAPS and its refusal over plain LDAP
-- Fixtures are created idempotently under `OU=JIM Probes,<base DN>` by the raw platform LDAP client, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create
+- Fixtures are created idempotently under `OU=JIM Probes,OU=Corp,<base DN>` by the raw platform LDAP client, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create
+- `OU=Corp` is one of the containers the lab delegates JIM's access over, and every entry in `jim-ad-delegation.acl` is inheritable, so the probe OU inherits exactly that delegation: the probes act as `svc-jim` with the rights a least-privilege deployment grants it, never wider ones (#2040)
 - Each probe is written to fail against the domain controller for the right reason before its fix lands, and stays as the regression net afterwards
 
 **Gating**: Every fixture carries `[Category("RequiresActiveDirectory")]` and calls `Assert.Ignore` unless `JIM_TEST_AD_HOST` is set, so a normal `dotnet test` / `jim-test` run skips them.

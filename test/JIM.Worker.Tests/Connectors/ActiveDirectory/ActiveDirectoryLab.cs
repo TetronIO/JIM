@@ -33,9 +33,17 @@ namespace JIM.Worker.Tests.Connectors.ActiveDirectory;
 /// omitted when the domain controller's certificate is already trusted by the operating system).
 /// </para>
 /// <para>
-/// Fixtures live under <c>OU=JIM Probes,&lt;base DN&gt;</c> and are created idempotently by the raw LDAP helpers here,
-/// never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create.
-/// The helpers page and follow ranged attributes themselves for the same reason.
+/// Fixtures live under <c>OU=JIM Probes,OU=Corp,&lt;base DN&gt;</c> and are created idempotently by the raw LDAP helpers
+/// here, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to
+/// create. The helpers page and follow ranged attributes themselves for the same reason.
+/// </para>
+/// <para>
+/// <c>OU=Corp</c> is one of the containers the lab delegates JIM's access over (<c>jim-ad-delegation.acl</c>, whose
+/// entries are all inheritable), so the probe OU and everything in it inherit exactly that delegation and nothing
+/// more: the JIM account acts on the fixtures with the rights a least-privilege deployment grants it. A probe OU
+/// outside the delegated branch left the account with no right to write a fixture group or set a fixture user's
+/// password (#2040); widening the account's rights to suit the probes would have stopped them testing a faithful
+/// deployment.
 /// </para>
 /// </remarks>
 internal static class ActiveDirectoryLab
@@ -64,9 +72,14 @@ internal static class ActiveDirectoryLab
         string? CaCertificatePath)
     {
         /// <summary>
+        /// The delegated container the probe OU is created in, so the fixtures inherit the lab's delegation.
+        /// </summary>
+        public string DelegatedParentDn => $"OU=Corp,{BaseDn}";
+
+        /// <summary>
         /// Where every probe fixture lives.
         /// </summary>
-        public string ProbeOu => $"OU=JIM Probes,{BaseDn}";
+        public string ProbeOu => $"OU=JIM Probes,{DelegatedParentDn}";
     }
 
     /// <summary>
@@ -264,8 +277,14 @@ internal static class ActiveDirectoryLab
         connection.SendRequest(request);
     }
 
-    internal static void EnsureProbeOu(LdapConnection connection, Coordinates lab) =>
+    internal static void EnsureProbeOu(LdapConnection connection, Coordinates lab)
+    {
+        if (!Exists(connection, lab.DelegatedParentDn))
+            Assert.Fail($"{lab.DelegatedParentDn} does not exist. The probes create their fixtures inside it so that the JIM account " +
+                        "inherits the lab's delegation over them; run them against a lab domain controller built by the AD lab scripts.");
+
         EnsureEntry(connection, lab.ProbeOu, "organizationalUnit", ("ou", "JIM Probes"));
+    }
 
     /// <summary>
     /// Ensures <paramref name="count"/> contacts exist under the probe OU and returns their Distinguished Names in
