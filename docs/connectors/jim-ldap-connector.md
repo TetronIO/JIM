@@ -681,6 +681,12 @@ If authentication fails with "invalid credentials":
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
 
+### Sign-in refused because the directory requires LDAP signing or encryption
+
+A domain controller that enforces LDAP signing refuses a simple bind over plain LDAP, and Windows Server 2025 domain controllers enforce it by default. JIM reports the refusal with the remedy rather than the directory's bare "Strong authentication is required for this operation": turn on "Use Secure Connection (LDAPS)?" on the Connected System and set the port to 636 (or wherever the directory listens for LDAPS), adding the directory's certificate authority under Admin > Certificates first if it is a private one. Do not relax the domain controller's signing policy to suit JIM; LDAPS protects the service account's credentials, which a plain LDAP bind sends unencrypted.
+
+If the same refusal arrives over LDAPS, encryption is not the problem: the domain controller wants more than a simple bind provides, most often because it enforces LDAP channel binding. JIM's message says so; check the directory's signing and channel binding policy for the account JIM connects as.
+
 ### Import fails with "The directory stopped the import ... at its search limit"
 
 The account JIM binds as is subject to the directory's search limits, and the container being imported holds more objects than they allow. The run ends as **Failed with error** before importing anything from that container, because continuing would import a truncated container and a Full Import would then treat every object past the limit as gone. The message names the container, the object type and the account, for example:

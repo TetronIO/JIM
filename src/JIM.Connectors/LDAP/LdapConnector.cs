@@ -771,7 +771,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             }
         }
 
-        connection.Bind();
+        try
+        {
+            connection.Bind();
+        }
+        catch (DirectoryException ex) when (LdapBindRefusal.Describe(ex, useSsl) is { } actionable)
+        {
+            // A domain controller enforcing LDAP signing refuses a simple bind over plain LDAP with bare protocol text
+            // (#2042). This is the only bind JIM makes, so every caller gets the remedy instead.
+            connection.Dispose();
+            throw actionable;
+        }
+
         return connection;
     }
 
