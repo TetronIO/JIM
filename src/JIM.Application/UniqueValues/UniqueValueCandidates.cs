@@ -29,14 +29,26 @@ internal static class UniqueValueCandidates
         if (string.IsNullOrEmpty(token))
             return baseValue ?? string.Empty;
 
+        var (prefix, suffix) = SplitPlacement(baseValue, separator);
+        return prefix + token + suffix;
+    }
+
+    /// <summary>
+    /// The text <see cref="Place"/> puts either side of a non-empty token: the base value up to its first <c>@</c>
+    /// (or all of it) followed by <paramref name="separator"/>, and the rest of the base value from that <c>@</c> (or
+    /// nothing). Both are empty when there is no base value. A skip over held sequence numbers (#2031) uses it to read
+    /// the number back out of a held value.
+    /// </summary>
+    public static (string Prefix, string Suffix) SplitPlacement(string? baseValue, string? separator)
+    {
         if (string.IsNullOrEmpty(baseValue))
-            return token;
+            return (string.Empty, string.Empty);
 
         var sep = separator ?? string.Empty;
         var atIndex = baseValue.IndexOf('@');
         return atIndex >= 0
-            ? string.Concat(baseValue.AsSpan(0, atIndex), sep, token, baseValue.AsSpan(atIndex))
-            : baseValue + sep + token;
+            ? (baseValue[..atIndex] + sep, baseValue[atIndex..])
+            : (baseValue + sep, string.Empty);
     }
 
     /// <summary>

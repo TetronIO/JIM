@@ -4141,6 +4141,78 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
+    public Task<SequenceHeldRun> GetSequenceHeldRunAsync(SequenceSkipQuery query)
+    {
+        ValidateExactlyOneAttributeReference(query.MetaverseAttributeId, query.ConnectedSystemObjectTypeAttributeId);
+
+        var holders = new List<SequenceNumberHolder>();
+        var importMode = query.MetaverseAttributeId.HasValue;
+
+        void AddText(string? value, SequenceNumberHolderKind kind, Guid? objectId, Guid? metaverseObjectId)
+        {
+            if (value != null && query.TryParseHeldNumber(value.ToLowerInvariant(), out var number))
+                holders.Add(new SequenceNumberHolder(number, kind, objectId, metaverseObjectId));
+        }
+
+        void AddValue(int? intValue, long? longValue, string? stringValue, SequenceNumberHolderKind kind, Guid objectId, Guid? metaverseObjectId)
+        {
+            if (!query.NumericTarget)
+                AddText(stringValue, kind, objectId, metaverseObjectId);
+            else if ((intValue ?? longValue).HasValue)
+                holders.Add(new SequenceNumberHolder((intValue ?? longValue)!.Value, kind, objectId, metaverseObjectId));
+        }
+
+        // The attribute's own values, as the value gate reads them.
+        if (importMode)
+        {
+            foreach (var mvo in _mvos.Values)
+            {
+                foreach (var av in mvo.AttributeValues.Where(av => av.AttributeId == query.MetaverseAttributeId))
+                    AddValue(av.IntValue, av.LongValue, av.StringValue, SequenceNumberHolderKind.AttributeValue, mvo.Id, null);
+            }
+        }
+        else
+        {
+            foreach (var cso in _csos.Values)
+            {
+                foreach (var av in cso.AttributeValues.Where(av => av.AttributeId == query.ConnectedSystemObjectTypeAttributeId))
+                    AddValue(av.IntValue, av.LongValue, av.StringValue, SequenceNumberHolderKind.AttributeValue, cso.Id, null);
+            }
+        }
+
+        // Import mode: the participating targets' values, as the connector-space gate reads them.
+        if (importMode && query.ConnectorSpaceAttributeIds.Count > 0)
+        {
+            foreach (var cso in _csos.Values)
+            {
+                foreach (var av in cso.AttributeValues.Where(av => query.ConnectorSpaceAttributeIds.Contains(av.AttributeId)))
+                    AddValue(av.IntValue, av.LongValue, av.StringValue, SequenceNumberHolderKind.ConnectorSpace, cso.Id, cso.MetaverseObjectId);
+            }
+        }
+
+        // Live assignments, and the retired values register.
+        foreach (var assignment in _generatedValueAssignments.Values.Where(a => importMode
+                     ? a.MetaverseAttributeId == query.MetaverseAttributeId
+                     : a.ConnectedSystemObjectTypeAttributeId == query.ConnectedSystemObjectTypeAttributeId))
+            AddText(assignment.NormalisedValue, SequenceNumberHolderKind.Assignment, importMode ? assignment.MetaverseObjectId : assignment.ConnectedSystemObjectId, null);
+
+        foreach (var retired in _retiredGeneratedValues.Where(r =>
+                     r.MetaverseAttributeId == query.MetaverseAttributeId && r.ConnectedSystemObjectTypeAttributeId == query.ConnectedSystemObjectTypeAttributeId))
+            AddText(retired.NormalisedValue, SequenceNumberHolderKind.Retired, null, null);
+
+        var heldNumbers = holders.Select(h => h.Number).ToHashSet();
+        var firstFree = query.From;
+        while (heldNumbers.Contains(firstFree))
+            firstFree += query.Increment;
+
+        IReadOnlyList<SequenceNumberHolder> inRun = holders
+            .Where(h => h.Number >= query.From && h.Number < firstFree && (h.Number - query.From) % query.Increment == 0)
+            .OrderBy(h => h.Number)
+            .ToList();
+        return Task.FromResult(new SequenceHeldRun(firstFree, inRun));
+    }
+
+    /// <inheritdoc />
     public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
     {
         ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
