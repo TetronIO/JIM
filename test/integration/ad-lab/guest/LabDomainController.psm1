@@ -805,6 +805,59 @@ function ConvertTo-LabKeylessUnattend {
     return $result
 }
 
+function Get-LabDirectoryResultCode {
+    <#
+    .SYNOPSIS
+        The LDAP result code a directory exception stands for, as a ResultCode name, or nothing when unrecognised.
+
+    .DESCRIPTION
+        Reads Response.ResultCode when the exception carries a response. A Windows Server 2025 domain controller
+        refusing a simple bind over plain LDAP raises a DirectoryOperationException with no Response at all, only the
+        message "Strong authentication is required for this operation.", so the message is the fallback (the lab guests
+        are installed en-US, so the text is stable). Looks inside the MethodInvocationException PowerShell wraps round
+        an exception from a .NET method call such as Bind(). Anything unrecognised returns nothing, so a check can
+        never read an unrelated failure (the server being down, say) as the refusal it wanted.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Exception
+    )
+
+    $current = $Exception
+    while (($null -eq $current.PSObject.Properties['Response']) -and $current.PSObject.Properties['InnerException'] -and ($null -ne $current.InnerException)) {
+        $current = $current.InnerException
+    }
+    if ($current.PSObject.Properties['Response'] -and ($null -ne $current.Response) -and $current.Response.PSObject.Properties['ResultCode']) {
+        return [string]$current.Response.ResultCode
+    }
+    $message = [string]$current.Message
+    if ($message -match 'Strong authentication is required') { return 'StrongAuthRequired' }
+    if ($message -match 'insufficient access rights') { return 'InsufficientAccessRights' }
+    return $null
+}
+
+function Get-LabAdProviderPath {
+    <#
+    .SYNOPSIS
+        The AD: drive path for a distinguished name, escaped for -Path.
+
+    .DESCRIPTION
+        Get-Acl -LiteralPath does not work on the ActiveDirectory provider's drive (it returns nothing and writes
+        "Cannot find path '//RootDSE/...'"), so callers use -Path, which treats [ ] * ? as wildcards. Escaping them
+        keeps a distinguished name that contains one meaning exactly itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DistinguishedName
+    )
+
+    return ('AD:\' + [System.Management.Automation.WildcardPattern]::Escape($DistinguishedName))
+}
+
 function Test-LabEvaluationEdition {
     <#
     .SYNOPSIS
@@ -2563,6 +2616,13 @@ function Restart-LabGuest {
         Restarts through Hyper-V rather than from inside the guest, so the PowerShell Direct session is not
         broken mid-command. Waits for the VM's uptime to reset before polling the guest, so a guest that has
         not yet begun to shut down is not mistaken for one that has come back.
+
+        The restart is a clean one (-Type Reboot, through the guest's Shutdown integration service), never the
+        default, which is a hard reset: "like powering the computer down ... This can result in data loss"
+        (https://learn.microsoft.com/powershell/module/hyper-v/restart-vm). Every phase restarts straight after
+        writing its changes, so a hard reset lost what had not yet reached the disk: a Trusted Root import two
+        seconds old, and very likely promotion's own final settings (Active Directory Web Services was left
+        Disabled on the first real build).
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([System.Management.Automation.PSCredential])]
@@ -2582,7 +2642,7 @@ function Restart-LabGuest {
     }
 
     $before = (Get-VM -Name $VMName).Uptime
-    Restart-VM -Name $VMName -Force -Confirm:$false
+    Restart-VM -Name $VMName -Type Reboot -Force -Confirm:$false
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $vm = Get-VM -Name $VMName
@@ -2818,13 +2878,16 @@ function Grant-LabContainerDelegation {
 
     $sid = Get-LabGroupSid -GroupName $GroupName
     $sddl = ConvertTo-LabDelegationSddl -AclPath $AclPath -TrusteeSid $sid
-    $path = "AD:\$ContainerDn"
-    if (-not (Test-Path -LiteralPath $path)) {
+    # -Path with an escaped name, never -LiteralPath: on the AD: drive, Get-Acl -LiteralPath returns nothing and writes
+    # "Cannot find path '//RootDSE/...'" (seen on Windows Server 2025, Windows PowerShell 5.1), and -ErrorAction Stop so
+    # a failed read can never be mistaken for an empty DACL.
+    $path = Get-LabAdProviderPath -DistinguishedName $ContainerDn
+    if (-not (Test-Path -Path $path)) {
         throw "Could not read the permissions of '$ContainerDn'; does it exist?"
     }
 
     $access = [System.Security.AccessControl.AccessControlSections]::Access
-    $acl = Get-Acl -LiteralPath $path
+    $acl = Get-Acl -Path $path -ErrorAction Stop
     $existing = $acl.GetSecurityDescriptorSddlForm($access)
     if (Test-LabSddlContainsSid -Sddl $existing -Sid $sid) {
         return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'AlreadyPresent'; TrusteeSid = $sid }
@@ -2832,9 +2895,9 @@ function Grant-LabContainerDelegation {
 
     $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl -TrusteeSid $sid
     $acl.SetSecurityDescriptorSddlForm($merged, $access)
-    Set-Acl -LiteralPath $path -AclObject $acl
+    Set-Acl -Path $path -AclObject $acl -ErrorAction Stop
 
-    $after = (Get-Acl -LiteralPath $path).GetSecurityDescriptorSddlForm($access)
+    $after = (Get-Acl -Path $path -ErrorAction Stop).GetSecurityDescriptorSddlForm($access)
     if (-not (Test-LabSddlContainsSid -Sddl $after -Sid $sid)) {
         throw "The delegation was written to '$ContainerDn' but reading it back does not show the '$GroupName' group."
     }
@@ -3186,8 +3249,8 @@ function Test-LabServiceAccountDelegation {
             Get-ADUser -Filter "SamAccountName -eq 'jim-probe-outside'" | Remove-ADUser -Confirm:$false
         }
         catch [System.DirectoryServices.Protocols.DirectoryOperationException] {
-            $refused = ($_.Exception.Response.ResultCode -eq [System.DirectoryServices.Protocols.ResultCode]::InsufficientAccessRights)
-            & $record 'svc-jim cannot create a user outside the delegated containers' $refused "result: $($_.Exception.Response.ResultCode)"
+            $code = Get-LabDirectoryResultCode -Exception $_.Exception
+            & $record 'svc-jim cannot create a user outside the delegated containers' ($code -eq 'InsufficientAccessRights') "result: $code ($($_.Exception.Message))"
         }
         catch {
             & $record 'svc-jim cannot create a user outside the delegated containers' $false $_.Exception.Message
@@ -3229,7 +3292,8 @@ function Test-LabPlainLdapRefused {
         return $false
     }
     catch [System.DirectoryServices.Protocols.DirectoryOperationException] {
-        return ($_.Exception.Response.ResultCode -eq [System.DirectoryServices.Protocols.ResultCode]::StrongAuthRequired)
+        # Windows Server 2025 refuses with "Strong authentication is required for this operation." and no Response.
+        return ((Get-LabDirectoryResultCode -Exception $_.Exception) -eq 'StrongAuthRequired')
     }
     catch [System.DirectoryServices.Protocols.LdapException] {
         # Error 8 is strongerAuthRequired; error 49 with the signing data code also counts as a refusal.
@@ -3247,7 +3311,7 @@ Export-ModuleMember -Function @(
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',
     'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote',
     'Get-LabAvmaKey', 'ConvertTo-LabUnattendPassword', 'Get-LabUnattendPlaceholder', 'ConvertTo-LabUnattendXml',
-    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Resolve-LabInstallImage',
+    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Get-LabAdProviderPath', 'Get-LabDirectoryResultCode', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
