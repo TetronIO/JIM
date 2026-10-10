@@ -15,7 +15,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | Component | Use for | See |
 |-----------|---------|-----|
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
-| `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by, the Metaverse Object's Form/Tabs/Inspect): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; give options an `Href` to choose between sibling pages as links (`SiblingPages`); `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
+| `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by, the Metaverse Object's Form/Tabs/Inspect): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; give options an `Href` to choose between sibling pages as links (`SiblingPages`), and a `Tooltip` where the label alone is too terse; `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |

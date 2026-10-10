@@ -3,6 +3,7 @@
 
 using Bunit;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -93,6 +94,51 @@ public class SegmentedToggleTests : JimComponentTestContext
             Assert.That(links.Select(a => a.GetAttribute("aria-current")), Is.EqualTo(new[] { null, "page" }));
             Assert.That(links[1].ClassList, Does.Contain("on"));
         }
+    }
+
+    [Test]
+    public void SegmentedToggle_AnOptionWithATooltip_IsExplainedByIt_AndTheOthersAreNot()
+    {
+        // A label alone can be too terse to say what a view is ("Inspect"); the tooltip says it on hover.
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form"),
+            new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view"));
+
+        var tooltips = cut.FindComponents<MudTooltip>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tooltips.Select(t => t.Instance.Text), Is.EqualTo(new[] { "Attributes with their sources and history" }));
+            Assert.That(tooltips.Single().Find("button").TextContent.Trim(), Is.EqualTo("Inspect"));
+            Assert.That(cut.FindAll(".jim-seg button").Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Form", "Inspect" }));
+        }
+    }
+
+    [Test]
+    public void SegmentedToggle_ClickingAnOptionWithATooltip_StillRaisesValueChanged()
+    {
+        string? raised = null;
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form"),
+            new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view")
+            .Add(c => c.ValueChanged, (string v) => raised = v));
+
+        cut.FindAll(".jim-seg button")[1].Click();
+
+        Assert.That(raised, Is.EqualTo("table"));
     }
 
     [Test]

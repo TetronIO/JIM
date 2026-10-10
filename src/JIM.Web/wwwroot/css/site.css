@@ -5241,8 +5241,8 @@ body.jim-dark-mode .jim-seg {
     --jim-seg-option-radius: 5px;
 }
 
-.jim-seg > button,
-.jim-seg > a {
+.jim-seg button,
+.jim-seg a {
     border: none;
     background: transparent;
     color: var(--jim-seg-text);
@@ -5258,27 +5258,33 @@ body.jim-dark-mode .jim-seg {
     transition: background 0.15s, color 0.15s;
 }
 
-.jim-seg > button:hover,
-.jim-seg > a:hover {
+/* An option with a tooltip sits inside MudTooltip's wrapper, so the options are matched as descendants rather than
+   children, and the wrapper is made a flex item of the track like a bare option. */
+.jim-seg > .mud-tooltip-root {
+    display: inline-flex;
+}
+
+.jim-seg button:hover,
+.jim-seg a:hover {
     color: var(--jim-seg-text-on);
 }
 
-.jim-seg > button.on,
-.jim-seg > a.on {
+.jim-seg button.on,
+.jim-seg a.on {
     background: var(--jim-seg-on);
     color: var(--jim-seg-text-on);
     box-shadow: var(--jim-seg-on-shadow);
 }
 
-.jim-seg > button:focus-visible,
-.jim-seg > a:focus-visible {
+.jim-seg button:focus-visible,
+.jim-seg a:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-seg > button,
-    .jim-seg > a {
+    .jim-seg button,
+    .jim-seg a {
         transition: none;
     }
 }
