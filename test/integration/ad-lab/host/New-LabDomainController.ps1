@@ -79,6 +79,12 @@
 .PARAMETER CumulativeUpdatePath
     A .msu cumulative update to install (from inside the guest, by DISM) after promotion and before configuration.
 
+.PARAMETER ExchangeIsoPath
+    Exchange Server media (the Exchange Server SE ISO). When given, the Extend phase extends the forest with the full
+    Exchange organisation, named after the forest: Setup /PrepareSchema, /PrepareAD and /PrepareAllDomains, the only
+    supported way to add Exchange's schema. The ISO is attached to the guest for that phase only. settings.json lists it
+    under directoryExtensions.
+
 .PARAMETER MemoryStartupBytes
     Static memory. Default 4 GB.
 
@@ -176,6 +182,8 @@ param(
     [string[]]$ExtraCertificateNames = @(),
 
     [string]$CumulativeUpdatePath,
+
+    [string]$ExchangeIsoPath,
 
     [uint64]$MemoryStartupBytes = 4GB,
 
@@ -313,6 +321,15 @@ try {
     if ($CumulativeUpdatePath -and -not (Test-Path -LiteralPath $CumulativeUpdatePath -PathType Leaf)) {
         throw "The cumulative update '$CumulativeUpdatePath' does not exist."
     }
+    if ($ExchangeIsoPath -and -not (Test-Path -LiteralPath $ExchangeIsoPath -PathType Leaf)) {
+        throw "The Exchange media '$ExchangeIsoPath' does not exist."
+    }
+    # The directory extensions this build applies, in order, with their media. Skype for Business would follow
+    # Exchange here.
+    $directoryExtensions = [ordered]@{}
+    if ($ExchangeIsoPath) {
+        $directoryExtensions['Exchange'] = $ExchangeIsoPath
+    }
     if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue)) {
         throw "The virtual switch '$SwitchName' does not exist on this host."
     }
@@ -407,6 +424,7 @@ try {
         ExtraCertificateNames  = @($ExtraCertificateNames)
         VmName                 = $Name
         LabRoot                = $guestRoot
+        DirectoryExtension     = @($directoryExtensions.Keys)
     }
     # The lab network has no uplink, so normally there is no forwarder and the setting is left out altogether.
     if ($null -ne $DnsForwarder) {
@@ -437,6 +455,34 @@ try {
         }
         Write-Ok 'Installed; restarting'
         $credential = Restart-LabGuest -VMName $Name -Credential $credentials
+    }
+
+    # After the cumulative update (Exchange needs a Windows Server 2025 schema master at the November 2025 update or
+    # later) and before Configure. Each product's media is attached for this phase only.
+    if ($directoryExtensions.Count -gt 0) {
+        Write-Heading "Phase: Extend ($(@($directoryExtensions.Keys) -join ', '))"
+        $attached = New-Object System.Collections.Generic.List[object]
+        try {
+            foreach ($product in $directoryExtensions.Keys) {
+                $media = $directoryExtensions[$product]
+                $existing = @(Get-VMDvdDrive -VMName $Name | Where-Object { $_.Path -eq $media })
+                if ($existing.Count -eq 0) {
+                    $attached.Add((Add-VMDvdDrive -VMName $Name -Path $media -Passthru))
+                    Write-Ok "Attached the $product media ($(Split-Path $media -Leaf))"
+                }
+            }
+            $result = Invoke-LabGuestPhase -VMName $Name -Credential $credential -Phase 'Extend' -Settings $settings
+        }
+        finally {
+            # Detach whatever this run attached, and any earlier run's leftover, so no media stays in the guest.
+            foreach ($drive in @(Get-VMDvdDrive -VMName $Name | Where-Object { $directoryExtensions.Values -contains $_.Path })) {
+                Remove-VMDvdDrive -VMName $Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation
+            }
+        }
+        if ($result.RebootRequired) {
+            Write-Ok 'Restarting after Extend'
+            $credential = Restart-LabGuest -VMName $Name -Credential $credentials
+        }
     }
 
     Write-Heading 'Phase: Configure'

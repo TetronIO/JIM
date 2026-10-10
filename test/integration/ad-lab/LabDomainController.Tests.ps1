@@ -516,6 +516,24 @@ Describe 'Get-LabGuestPhaseArgument' {
         }
     }
 
+    It 'gives Extend the forest name and the products to apply, in order, and no secret' {
+        $withExtensions = $script:Settings.Clone()
+        $withExtensions.DirectoryExtension = @('Exchange')
+        $arguments = Get-LabGuestPhaseArgument -Phase Extend -Settings $withExtensions
+        $arguments.NetBiosName | Should -Be 'PANOPLY'
+        $arguments.Domain | Should -Be 'PANOPLY.LOCAL'
+        $arguments.DirectoryExtension | Should -Be @('Exchange')
+        $arguments.Contains('SafeModePassword') | Should -BeFalse
+        $arguments.Contains('ServiceAccountPassword') | Should -BeFalse
+    }
+
+    It 'tells Verify which products to check, and nothing when the forest is plain' {
+        $withExtensions = $script:Settings.Clone()
+        $withExtensions.DirectoryExtension = @('Exchange')
+        (Get-LabGuestPhaseArgument -Phase Verify -Settings $withExtensions).DirectoryExtension | Should -Be @('Exchange')
+        (Get-LabGuestPhaseArgument -Phase Verify -Settings $script:Settings).Contains('DirectoryExtension') | Should -BeFalse
+    }
+
     It 'gives License nothing but the phase: it needs no settings and no secret' {
         $arguments = Get-LabGuestPhaseArgument -Phase License -Settings $script:Settings
         @($arguments.Keys) | Should -Be @('Phase')
@@ -669,6 +687,129 @@ Describe 'Resolve-LabInstallImage' {
         $image = Resolve-LabInstallImage -Image $mixed
         $image.ImageIndex | Should -Be 2
         $image.Evaluation | Should -BeFalse
+    }
+}
+
+Describe 'ConvertFrom-LabDirectoryExtensionSetting' {
+    It 'returns nothing when the settings list no extensions, which is a plain forest' {
+        @(ConvertFrom-LabDirectoryExtensionSetting -Value $null).Count | Should -Be 0
+        @(ConvertFrom-LabDirectoryExtensionSetting -Value @()).Count | Should -Be 0
+    }
+
+    It 'reads each extension in the order given, from a hashtable or parsed JSON' {
+        $json = '[{ "product": "Exchange", "isoPath": "C:\\media\\ExchangeServerSE-x64.iso" }]' | ConvertFrom-Json
+        $extensions = @(ConvertFrom-LabDirectoryExtensionSetting -Value $json)
+        $extensions.Count | Should -Be 1
+        $extensions[0].Product | Should -Be 'Exchange'
+        $extensions[0].IsoPath | Should -Be 'C:\media\ExchangeServerSE-x64.iso'
+    }
+
+    It 'accepts the product name in any case and returns it as the lab spells it' {
+        (ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'exchange'; isoPath = 'C:\x.iso' }))[0].Product | Should -Be 'Exchange'
+    }
+
+    It 'refuses an unknown product, naming it and the products it knows' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Lync'; isoPath = 'C:\x.iso' }) } | Should -Throw '*Lync*Exchange*'
+    }
+
+    It 'refuses an extension with no media' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Exchange' }) } | Should -Throw '*isoPath*'
+    }
+
+    It 'refuses the same product twice' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Exchange'; isoPath = 'C:\a.iso' }, @{ product = 'Exchange'; isoPath = 'C:\b.iso' }) } | Should -Throw '*more than once*'
+    }
+}
+
+Describe 'Get-LabDirectoryExtensionBuildParameter' {
+    It 'maps Exchange onto the build script parameter that carries its media' {
+        $parameters = Get-LabDirectoryExtensionBuildParameter -Extension @([pscustomobject]@{ Product = 'Exchange'; IsoPath = 'C:\media\ex.iso' })
+        $parameters.ExchangeIsoPath | Should -Be 'C:\media\ex.iso'
+        @($parameters.Keys).Count | Should -Be 1
+    }
+
+    It 'returns no parameters for a plain forest' {
+        @((Get-LabDirectoryExtensionBuildParameter -Extension @()).Keys).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-LabExchangeOrganizationName' {
+    It 'names the organisation after the forest' {
+        Get-LabExchangeOrganizationName -NetBiosName 'PANOPLY' | Should -Be 'PANOPLY'
+    }
+
+    It 'refuses a name Exchange does not allow' {
+        { Get-LabExchangeOrganizationName -NetBiosName 'PAN_OPLY' } | Should -Throw '*organisation name*'
+    }
+}
+
+Describe 'Get-LabExchangeSchemaTarget' {
+    It 'reads the schema version the media installs from SchemaVersion.ldf' {
+        $ldf = "dn: CN=ms-Exch-Schema-Version-Pt,<SchemaContainerDN>`nchangetype: modify`nreplace: rangeUpper`nrangeUpper: 17003`n-`n"
+        Get-LabExchangeSchemaTarget -LdfText $ldf | Should -Be 17003
+    }
+
+    It 'refuses a file that does not state exactly one version' {
+        { Get-LabExchangeSchemaTarget -LdfText 'dn: CN=something' } | Should -Throw '*rangeUpper*'
+        { Get-LabExchangeSchemaTarget -LdfText "rangeUpper: 1`nrangeUpper: 2" } | Should -Throw '*rangeUpper*'
+    }
+}
+
+Describe 'Get-LabExchangePreparationStep' {
+    It 'prepares everything in a forest Exchange has never touched' {
+        Get-LabExchangePreparationStep -TargetRangeUpper 17003 -OrganizationPresent:$false -DomainPrepared:$false |
+            Should -Be @('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')
+    }
+
+    It 'does nothing in a forest already prepared by this media, so a re-run converges' {
+        @(Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$true).Count | Should -Be 0
+    }
+
+    It 'finishes what an interrupted preparation left undone' {
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$false -DomainPrepared:$false |
+            Should -Be @('PrepareAD', 'PrepareAllDomains')
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$false |
+            Should -Be @('PrepareAllDomains')
+    }
+
+    It 'prepares the organisation and domains again after a schema update from newer media, as Exchange requires' {
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17004 -OrganizationPresent:$true -DomainPrepared:$true |
+            Should -Be @('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')
+    }
+
+    It 'refuses older media than the forest was prepared with, which Exchange Setup cannot use' {
+        { Get-LabExchangePreparationStep -SchemaRangeUpper 17004 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$true } | Should -Throw '*newer*'
+    }
+}
+
+Describe 'Test-LabExchangeSchemaMasterBuild' {
+    It 'accepts Windows Server 2025 at the November 2025 update or later' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 7171 | Should -BeTrue
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 32230 | Should -BeTrue
+    }
+
+    It 'refuses Windows Server 2025 older than that, which corrupts replication when Exchange extends the schema' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 7092 | Should -BeFalse
+    }
+
+    It 'has no objection to a later Windows Server release' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26200 -Ubr 1 | Should -BeTrue
+    }
+}
+
+Describe 'Get-LabExchangeSetupArgument' {
+    It 'accepts the licence terms with diagnostic data off for every step' {
+        foreach ($step in 'PrepareSchema', 'PrepareAD', 'PrepareAllDomains') {
+            Get-LabExchangeSetupArgument -Step $step -OrganizationName 'PANOPLY' | Should -Contain '/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF'
+        }
+    }
+
+    It 'names the organisation only when preparing Active Directory' {
+        $prepareAd = Get-LabExchangeSetupArgument -Step PrepareAD -OrganizationName 'PANOPLY'
+        $prepareAd | Should -Contain '/PrepareAD'
+        $prepareAd | Should -Contain '/OrganizationName:PANOPLY'
+        (Get-LabExchangeSetupArgument -Step PrepareSchema -OrganizationName 'PANOPLY') -join ' ' | Should -Not -Match 'OrganizationName'
+        Get-LabExchangeSetupArgument -Step PrepareAllDomains -OrganizationName 'PANOPLY' | Should -Contain '/PrepareAllDomains'
     }
 }
 
@@ -1045,6 +1186,22 @@ Describe 'ConvertFrom-LabRebuildSetting' {
 
         $without = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
         foreach ($role in $without.Roles) { $role.BuildParameters.ContainsKey('CumulativeUpdatePath') | Should -BeFalse }
+    }
+
+    It 'passes each directory extension to every build, and none when there are none' {
+        $settings = Get-RebuildSetting
+        $settings.directoryExtensions = @(@{ product = 'Exchange'; isoPath = 'D:\media\ExchangeServerSE-x64.iso' })
+        $with = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1'
+        @($with.Roles | ForEach-Object { $_.BuildParameters.ExchangeIsoPath }) | Should -Be @('D:\media\ExchangeServerSE-x64.iso', 'D:\media\ExchangeServerSE-x64.iso', 'D:\media\ExchangeServerSE-x64.iso')
+
+        $without = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        foreach ($role in $without.Roles) { $role.BuildParameters.ContainsKey('ExchangeIsoPath') | Should -BeFalse }
+    }
+
+    It 'refuses a directory extension it does not know, before building anything' {
+        $settings = Get-RebuildSetting
+        $settings.directoryExtensions = @(@{ product = 'Lync'; isoPath = 'D:\media\lync.iso' })
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*Lync*'
     }
 
     It 'reads settings parsed from JSON as well as a hashtable' {
