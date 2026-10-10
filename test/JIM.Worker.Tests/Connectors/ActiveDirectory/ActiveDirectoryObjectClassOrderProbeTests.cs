@@ -14,7 +14,8 @@ namespace JIM.Worker.Tests.Connectors.ActiveDirectory;
 /// <c>person</c> selected it must resolve to <c>user</c>, the more specific. The Object Type matcher settles that from
 /// the inheritance schema discovery records, whatever order the classes come in, and falls back on the order the
 /// directory lists them in (top first, most specific last, on Windows Server as on Samba AD) for Object Types
-/// discovered before JIM recorded inheritance. Both are checked here against a real domain controller.
+/// discovered before JIM recorded inheritance. Both are checked here against a real domain controller; the second
+/// with user and computer, because person is a hidden class that schema discovery never offers.
 /// </summary>
 [TestFixture]
 [Category(ActiveDirectoryLab.Category)]
@@ -46,22 +47,31 @@ public class ActiveDirectoryObjectClassOrderProbeTests
     }
 
     [Test]
-    public async Task Match_UserEntryClassesInAnyOrder_ResolvesToUserFromTheDiscoveredSchemaAsync()
+    public async Task Match_ComputerEntryClassesInAnyOrder_ResolvesToComputerFromTheDiscoveredSchemaAsync()
     {
+        // person is a hidden class (defaultHidingValue TRUE) that schema discovery never offers, so the overlap a
+        // deployment can actually select is user and computer: computer inherits from user, so the search for user
+        // returns every computer too. The domain controller's own computer account is on every domain.
         var lab = ActiveDirectoryLab.Require();
-        var objectClasses = ReadAdministratorObjectClasses();
+        string[] objectClasses;
+        using (var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger))
+        {
+            var computerDn = ActiveDirectoryLab.ListEntryDns(admin, $"OU=Domain Controllers,{lab.BaseDn}", "(objectClass=computer)", System.DirectoryServices.Protocols.SearchScope.OneLevel).First();
+            objectClasses = ActiveDirectoryLab.ReadValues(admin, computerDn, "objectClass");
+        }
+        TestContext.Out.WriteLine($"objectClass as listed: {string.Join(", ", objectClasses)}");
 
         using var connector = ActiveDirectoryLab.NewConnector(lab);
         var schema = await connector.GetSchemaAsync(ActiveDirectoryLab.ConnectorSettings(lab), _logger);
-        var objectTypes = new[] { "user", "person" }.Select((name, index) => Selected(schema, name, index + 1)).ToList();
+        var objectTypes = new[] { "user", "computer" }.Select((name, index) => Selected(schema, name, index + 1)).ToList();
 
-        TestContext.Out.WriteLine($"user inherits from: {string.Join(", ", objectTypes[0].Tags.Where(tag => tag.Key == ObjectTypeTags.Keys.SuperiorClass).Select(tag => tag.Value))}");
-        Assert.That(objectTypes[0].InheritsFrom("person"), Is.True, "Schema discovery must record that user inherits from person.");
+        TestContext.Out.WriteLine($"computer inherits from: {string.Join(", ", objectTypes[1].Tags.Where(tag => tag.Key == ObjectTypeTags.Keys.SuperiorClass).Select(tag => tag.Value))}");
+        Assert.That(objectTypes[1].InheritsFrom("user"), Is.True, "Schema discovery must record that computer inherits from user.");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(LdapObjectTypeMatcher.Match(objectClasses, objectTypes)?.Name, Is.EqualTo("user").IgnoreCase, "as the directory lists them");
-            Assert.That(LdapObjectTypeMatcher.Match(objectClasses.Reverse(), objectTypes)?.Name, Is.EqualTo("user").IgnoreCase, "reversed");
+            Assert.That(LdapObjectTypeMatcher.Match(objectClasses, objectTypes)?.Name, Is.EqualTo("computer").IgnoreCase, "as the directory lists them");
+            Assert.That(LdapObjectTypeMatcher.Match(objectClasses.Reverse(), objectTypes)?.Name, Is.EqualTo("computer").IgnoreCase, "reversed");
         }
     }
 
