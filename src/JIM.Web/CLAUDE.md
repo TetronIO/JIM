@@ -15,7 +15,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | Component | Use for | See |
 |-----------|---------|-----|
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
-| `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
+| `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by, the Metaverse Object's Form/Tabs/Inspect): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; give options an `Href` to choose between sibling pages as links (`SiblingPages`); `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
@@ -382,7 +382,13 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - **Tab content spacing**: Whether `TabPanelsClass` needs its own top spacing depends on the first tab's content. If the tab's content starts flush (e.g. a bare `MudPaper`/`MudText` with no top margin), use `TabPanelsClass="pt-5"`. If the content already supplies its own top margin (e.g. a table with `Class="mt-3"`), use `TabPanelsClass="pa-0"` and let the content's own margin stand; do not stack both, it double-counts.
 
 ## Button emphasis
-- **At most one filled `Color.Primary` button per view** (a page as seen at once, or a dialog): its main action. Everything else is `Variant.Outlined`, or `Variant.Text` where lesser still. Lower emphasis by variant, never by switching to `Color.Secondary` or `Color.Default`. Alert buttons and a table row's small filled icon buttons are outside the rule. Full rule and worked examples: `engineering/DESIGN.md` > Buttons.
+- **At most one filled `Color.Primary` button per view** (a page as seen at once, or a dialog): its main action. Everything else is `Variant.Outlined`, or `Variant.Text` where lesser still. Lower emphasis by variant, never by switching to `Color.Secondary` or `Color.Default`. Full rule and worked examples: `engineering/DESIGN.md` > Buttons.
+- **Destructive:** `Variant.Outlined` + `Color.Error` on a page; `Variant.Filled` + `Color.Error` only as a dialog's confirming button.
+- **Row actions** repeated on every table row: `Variant.Text` + `Color.Primary`, `Size.Small`.
+- **Dialog Cancel/Close:** a plain `MudButton` (text, default colour), never filled.
+- **Choosing a view or a sibling page:** `<SegmentedToggle>`, not a `MudButtonGroup` with the chosen option filled. Options with an `Href` render as links, so sibling pages keep open-in-new-tab; the pairs live in `Shared/SiblingPages.cs`.
+- Alert buttons (`<AlertButton>`) and the small filled icon buttons that act on one item in a list or table are outside the rule.
+- **`ButtonEmphasisConventionTests` enforces what one file can show:** a filled button in a colour other than Primary/Error/Warning, a filled Error/Warning button outside `<DialogActions>`, more than one filled button that can show at once in `<DialogActions>` (if/else branches count as one), a filled button in a table row template, and a filled `MudButtonGroup`. A deliberate exception opts out with `@* button-emphasis: exempt - <why> *@` directly above the button or the `<DialogActions>`. "One filled button per page" is for review, since a page is built from several components.
 
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components

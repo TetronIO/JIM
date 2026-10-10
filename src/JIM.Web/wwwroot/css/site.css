@@ -5241,7 +5241,8 @@ body.jim-dark-mode .jim-seg {
     --jim-seg-option-radius: 5px;
 }
 
-.jim-seg > button {
+.jim-seg > button,
+.jim-seg > a {
     border: none;
     background: transparent;
     color: var(--jim-seg-text);
@@ -5253,26 +5254,31 @@ body.jim-dark-mode .jim-seg {
     line-height: 1.3;
     border-radius: var(--jim-seg-option-radius);
     white-space: nowrap;
+    text-decoration: none;
     transition: background 0.15s, color 0.15s;
 }
 
-.jim-seg > button:hover {
+.jim-seg > button:hover,
+.jim-seg > a:hover {
     color: var(--jim-seg-text-on);
 }
 
-.jim-seg > button.on {
+.jim-seg > button.on,
+.jim-seg > a.on {
     background: var(--jim-seg-on);
     color: var(--jim-seg-text-on);
     box-shadow: var(--jim-seg-on-shadow);
 }
 
-.jim-seg > button:focus-visible {
+.jim-seg > button:focus-visible,
+.jim-seg > a:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-seg > button {
+    .jim-seg > button,
+    .jim-seg > a {
         transition: none;
     }
 }

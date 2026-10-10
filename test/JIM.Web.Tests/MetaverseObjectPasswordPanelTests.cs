@@ -604,18 +604,19 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
     /// <summary>
     /// The queue link sits in the same column as the Set Password button on the card above, so it takes the same
-    /// button shape (filled in the Secondary colour, being the secondary action) rather than reading as a stray text link.
+    /// button shape rather than reading as a stray text link; but it is the lesser action, so it is not filled: Set
+    /// Password is the panel's one filled button (engineering/DESIGN.md > Buttons).
     /// </summary>
     [Test]
-    public void Panel_HistoryCard_OffersTheQueueAsASecondaryButton()
+    public void Panel_HistoryCard_OffersTheQueueAsALesserButton()
     {
         var cut = RenderPanel();
 
-        var queue = Find(cut, HistoryQueueMarker);
+        var queue = cut.FindComponents<MudButton>().Single(b => b.Find("*").GetAttribute("data-testid") == HistoryQueueMarker);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(queue.ClassList, Does.Contain("mud-button-filled-secondary"));
-            Assert.That(queue.TextContent.Trim(), Is.EqualTo("Password queue"));
+            Assert.That(queue.Instance.Variant, Is.Not.EqualTo(Variant.Filled).And.Not.EqualTo(Variant.Text));
+            Assert.That(queue.Find("*").TextContent.Trim(), Is.EqualTo("Password queue"));
         }
     }
 

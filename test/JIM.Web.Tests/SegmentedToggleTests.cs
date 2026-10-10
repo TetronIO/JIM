@@ -70,6 +70,32 @@ public class SegmentedToggleTests : JimComponentTestContext
     }
 
     [Test]
+    public void SegmentedToggle_OptionsWithAnHref_AreLinksMarkingTheCurrentPage()
+    {
+        // Sibling list pages chosen from one control: links, so each can be opened in a new tab like any other.
+        IReadOnlyList<SegmentedToggleOption<string>> pages =
+        [
+            new("systems", "Connected Systems", Href: "/admin/connected-systems"),
+            new("connectors", "Connectors", Href: "/admin/connected-systems/connectors")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, pages)
+            .Add(c => c.Value, "connectors")
+            .Add(c => c.AriaLabel, "Connected Systems or Connectors"));
+
+        var links = cut.FindAll(".jim-seg > a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".jim-seg > button"), Is.Empty);
+            Assert.That(links.Select(a => a.GetAttribute("href")),
+                Is.EqualTo(new[] { "/admin/connected-systems", "/admin/connected-systems/connectors" }));
+            Assert.That(links.Select(a => a.GetAttribute("aria-current")), Is.EqualTo(new[] { null, "page" }));
+            Assert.That(links[1].ClassList, Does.Contain("on"));
+        }
+    }
+
+    [Test]
     public void SegmentedToggle_Dense_AddsTheCompactClass()
     {
         var cut = Render<SegmentedToggle<string>>(p => p

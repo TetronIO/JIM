@@ -6,13 +6,22 @@
 @* A segmented control for choosing one of a few settings or views: a recessed track with the chosen option raised
    as a card. Use it where the choice is a state (which view, which scope) rather than an action, which is what a
    button group reads as. Styled by .jim-seg in site.css through custom properties, so a host with its own palette
-   (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class. *@
+   (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class.
+   Options with an Href are links, for choosing between sibling pages; the current one is marked aria-current. *@
 <div class="jim-seg @(Dense ? "jim-seg-dense" : null) @Class" role="group" aria-label="@AriaLabel" data-testid="@TestId">
     @foreach (var option in Options)
     {
         var isOn = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
-        <button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
-                data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>
+        @if (option.Href is { } href)
+        {
+            <a href="@href" class="@(isOn ? "on" : null)" aria-current="@(isOn ? "page" : null)"
+               data-testid="@option.TestId">@option.Label</a>
+        }
+        else
+        {
+            <button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
+                    data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>
+        }
     }
 </div>
 
