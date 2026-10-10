@@ -8,7 +8,8 @@
    button group reads as. Styled by .jim-seg in site.css through custom properties, so a host with its own palette
    (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class.
    Options with an Href are links, for choosing between sibling pages; the current one is marked aria-current.
-   An option with a Tooltip explains itself on hover, for a label too terse to say what it chooses ("Inspect"). *@
+   An option with a Tooltip explains itself on hover, for a label too terse to say what it chooses ("Inspect"), and
+   an option with an Icon shows it before the label. *@
 <div class="jim-seg @(Dense ? "jim-seg-dense" : null) @Class" role="group" aria-label="@AriaLabel" data-testid="@TestId">
     @foreach (var option in Options)
     {
@@ -57,10 +58,19 @@
         var isOn = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
         return option.Href is { } href
             ? @<a href="@href" class="@(isOn ? "on" : null)" aria-current="@(isOn ? "page" : null)"
-                  data-testid="@option.TestId">@option.Label</a>
+                  data-testid="@option.TestId">@OptionContent(option)</a>
             : @<button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
-                       data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>;
+                       data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@OptionContent(option)</button>;
     }
+
+    /// <summary>An option's icon, where it has one, then its label.</summary>
+    private static RenderFragment OptionContent(SegmentedToggleOption<TValue> option) => @<text>
+        @if (option.Icon is { } icon)
+        {
+            <MudIcon Icon="@icon" Class="jim-seg-icon" aria-hidden="true" />
+        }
+        @option.Label
+    </text>;
 
     private async Task SelectAsync(TValue value)
     {

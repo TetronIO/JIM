@@ -5243,6 +5243,9 @@ body.jim-dark-mode .jim-seg {
 
 .jim-seg button,
 .jim-seg a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     border: none;
     background: transparent;
     color: var(--jim-seg-text);
@@ -5256,6 +5259,13 @@ body.jim-dark-mode .jim-seg {
     white-space: nowrap;
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
+}
+
+/* An option's icon follows the label's size rather than MudIcon's own, so a dense toggle's icons shrink with its
+   text. Qualified with html[lang] because MudBlazor's icon size classes load after this sheet and would otherwise win. */
+html[lang] .jim-seg .jim-seg-icon {
+    font-size: 1.15em;
+    flex-shrink: 0;
 }
 
 /* An option with a tooltip sits inside MudTooltip's wrapper, so the options are matched as descendants rather than
