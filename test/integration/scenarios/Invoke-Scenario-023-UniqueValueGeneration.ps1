@@ -972,6 +972,12 @@ try {
         $afterLowerNumber = [int]($afterLower.attributes.'Staff Number' -replace '^EMP-0*', '')
         Add-TestResult -Name "After lowering Sequence Start, the next joiner still continues forward (no reset to 1)" -Passed ($afterLowerNumber -gt $afterRaiseNumber) `
             -Detail "Expected greater than $afterRaiseNumber, got $afterLowerNumber"
+
+        # Each synchronisation reserves Staff Numbers in blocks and hands back what it did not draw when it ends
+        # (#2044), so a joiner in the next synchronisation gets the next number rather than one a block further on.
+        Add-TestResult -Name "Consecutive synchronisations issue consecutive Staff Numbers (each run hands back the rest of its block)" `
+            -Passed ($afterLowerNumber -eq $afterRaiseNumber + 1) `
+            -Detail "Expected $($afterRaiseNumber + 1), got $afterLowerNumber"
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
