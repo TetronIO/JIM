@@ -660,7 +660,7 @@ public class GeneratedValueRepositoryDatabaseTests
         await using var ctx = NewContext();
         var repo = NewSyncRepository(ctx);
 
-        var first = await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 500, count: 10, increment: 1);
+        var first = (await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 500, count: 10, increment: 1)).First;
         Assert.That(first, Is.EqualTo(500));
 
         var sequence = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
@@ -677,7 +677,7 @@ public class GeneratedValueRepositoryDatabaseTests
 
         // The counter is now at 520; a reservation with a far lower floor must still continue from 520.
         await using var ctx2 = NewContext();
-        var next = await NewSyncRepository(ctx2).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 1, increment: 1);
+        var next = (await NewSyncRepository(ctx2).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 1, increment: 1)).First;
         Assert.That(next, Is.EqualTo(520), "the counter only ever moves forward (plan decision 3)");
     }
 
@@ -697,8 +697,8 @@ public class GeneratedValueRepositoryDatabaseTests
         var taskB = repoB.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 25, increment: 1);
         await Task.WhenAll(taskA, taskB);
 
-        var firstA = taskA.Result;
-        var firstB = taskB.Result;
+        var firstA = taskA.Result.First;
+        var firstB = taskB.Result.First;
 
         var rangeA = Enumerable.Range(0, 25).Select(i => firstA + i).ToHashSet();
         var rangeB = Enumerable.Range(0, 25).Select(i => firstB + i).ToHashSet();
@@ -720,6 +720,103 @@ public class GeneratedValueRepositoryDatabaseTests
 
         var updated = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
         Assert.That(updated?.AssignedCount, Is.EqualTo(4));
+    }
+
+    // ---- Handing back unused numbers (#2044) ----
+
+    [Test]
+    public async Task ReserveGeneratedValueSequenceBlockAsync_ReportsTheCounterAndItsLastMoveAfterReservingAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 5, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 100, estate.ImportMappingId);
+
+        await using var readCtx = NewContext();
+        var repo = NewSyncRepository(readCtx);
+        var block = await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 10, increment: 1);
+        var unmoved = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var neverMoved = await repo.ReserveGeneratedValueSequenceBlockAsync(unmoved.MvNumberAttributeId, null, floor: 1, count: 10, increment: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(block.First, Is.EqualTo(100));
+            Assert.That(block.CounterAfter, Is.EqualTo(110));
+            Assert.That(block.CounterMovedStamp, Is.Not.Null, "the raise stamped the counter's last move");
+            Assert.That(neverMoved.CounterMovedStamp, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingMovedTheCounter_MovesItBackWithoutStampingAMoveAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 5, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 100, estate.ImportMappingId);
+
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        DateTime? movedAtBefore;
+        await using (var ctx = NewContext())
+            movedAtBefore = (await NewSyncRepository(ctx).GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.LastMovedAt;
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 103);
+        var sequence = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.True);
+            Assert.That(sequence!.NextValue, Is.EqualTo(103));
+            Assert.That(sequence.LastMovedAt, Is.EqualTo(movedAtBefore), "handing back is not an administrator move");
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AnotherReservationSince_LeavesTheCounterAloneAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False);
+            Assert.That((await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.NextValue, Is.EqualTo(201));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AdministratorMovedTheCounterSinceEvenBackToTheSamePlace_LeavesItAloneAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ResetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null, newValue: 101, estate.ImportMappingId);
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False, "the counter reads 101 as it did, but an administrator put it there");
+            Assert.That((await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.NextValue, Is.EqualTo(101));
+        }
     }
 
     // ---- Save-time counter moves (Phase 3, #242) ----

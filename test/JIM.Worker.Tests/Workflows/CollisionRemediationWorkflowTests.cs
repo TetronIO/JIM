@@ -144,6 +144,28 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs1"), "a User Principal Name derived from one generated value is that value's collision");
     }
 
+    [Test]
+    public async Task Export_SequenceValueCorrected_HandsTheRestOfItsBlockBackSoTheNextJoinerGetsTheNextNumberAsync()
+    {
+        // Each run reserves sequence numbers in blocks; the synchronisation and the export's correction each hand back
+        // what they did not draw (#2044), so the next joiner gets the next number, not one a block or two further on.
+        var ctx = await SetUpAsync(accountNameSequenceStart: 100);
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+
+        await SeedHrPersonAsync(ctx, "Ada", "Lovelace", "E2");
+        await RunFullSyncAsync(ctx.Hr);
+
+        var accountNames = SyncRepo.MetaverseObjects.Values
+            .Select(mvo => mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.AccountName.Id)?.StringValue)
+            .Order()
+            .ToList();
+
+        Assert.That(accountNames, Is.EqualTo(new[] { "ada.lovelace102", "joe.bloggs101" }),
+            "joe.bloggs100 was refused and corrected to the next number; Ada's synchronisation carries on from the one after");
+    }
+
     #endregion
 
     #region The revision-pending record and the next synchronisation
@@ -566,7 +588,7 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectTypeAttribute ContractorUid,
         int ContractorCsoTypeId);
 
-    private async Task<Context> SetUpAsync(bool connectorClassifies = true, bool directoryExportModeEmployeeNumber = false)
+    private async Task<Context> SetUpAsync(bool connectorClassifies = true, bool directoryExportModeEmployeeNumber = false, long? accountNameSequenceStart = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -596,7 +618,9 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
             TargetMetaverseAttribute = accountName, TargetMetaverseAttributeId = accountName.Id,
             Generation = new SyncRuleMappingGeneration
             {
-                TokenKind = GeneratedValueTokenKind.OnlyIfTaken, SuffixStyle = GeneratedValueSuffixStyle.Number, SuffixStart = 1,
+                TokenKind = accountNameSequenceStart.HasValue ? GeneratedValueTokenKind.Sequence : GeneratedValueTokenKind.OnlyIfTaken,
+                SuffixStyle = GeneratedValueSuffixStyle.Number, SuffixStart = 1,
+                SequenceStart = accountNameSequenceStart ?? 1, SequenceIncrement = 1,
                 AttemptLimit = 1000, NeverReuse = true, CollisionRemediation = true
             },
             Sources = { new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"first\"]) + \".\" + Lower(cs[\"last\"])" } }

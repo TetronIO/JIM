@@ -671,8 +671,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
         => throw new PreviewWriteAttemptedException(nameof(DeleteRetiredGeneratedValuesForAttributeAsync));
 
-    public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+    public Task<GeneratedValueSequenceBlock> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
         => throw new PreviewWriteAttemptedException(nameof(ReserveGeneratedValueSequenceBlockAsync));
+
+    public Task<bool> ReturnUnusedGeneratedValueSequenceNumbersAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, GeneratedValueSequenceBlock block, long firstUnused)
+        => throw new PreviewWriteAttemptedException(nameof(ReturnUnusedGeneratedValueSequenceNumbersAsync));
 
     public Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by)
         => throw new PreviewWriteAttemptedException(nameof(IncrementGeneratedValueSequenceAssignedCountAsync));

@@ -434,6 +434,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // exports, the rejecting system's included, now that this run's own changes are persisted.
             await ProcessGeneratedValueRevisionsPendingAsync();
 
+            // Unique Value Generation (#2044): the run has drawn every sequence number it will, so hand the undrawn
+            // rest of its reserved blocks back, and the next run carries on from the next number rather than a block on.
+            await ReturnUnusedSequenceNumbersAsync();
+
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
 

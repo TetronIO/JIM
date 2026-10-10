@@ -80,6 +80,14 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void ReturnUnusedGeneratedValueSequenceNumbersAsync_IsAWrite_Throws()
+    {
+        // Handing back unused numbers moves the counter back (#2044); "Return" is in the mutating-verb list for it.
+        Assert.That(() => _guard.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, new GeneratedValueSequenceBlock(1, 11, null), 2),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ReturnUnusedGeneratedValueSequenceNumbersAsync)));
+    }
+
+    [Test]
     public void IncrementGeneratedValueSequenceAssignedCountAsync_IsAWrite_Throws()
     {
         Assert.That(() => _guard.IncrementGeneratedValueSequenceAssignedCountAsync(1, 5),
@@ -152,7 +160,7 @@ public class ReadOnlySyncRepositoryGuardTests
             "Create", "Update", "Delete", "Add", "Remove", "Set", "Stamp", "Disconnect", "Bulk", "Save",
             "Truncate", "Mark", "TryClaim", "Claim", "Flush", "Insert", "Upsert", "Replace", "Reset",
             "Persist", "Write", "Apply", "Queue", "Enqueue", "Cancel", "Obsolete", "Expire", "Link",
-            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release", "Reserve", "Retire"
+            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release", "Reserve", "Retire", "Return"
         };
 
         // Change-tracker state operations mutate nothing in the database; the guard delegates them so reused

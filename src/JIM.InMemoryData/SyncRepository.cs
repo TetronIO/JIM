@@ -4213,7 +4213,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+    public Task<GeneratedValueSequenceBlock> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
     {
         ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
@@ -4240,7 +4240,27 @@ public class SyncRepository : ISyncRepository
             sequence.NextValue = Math.Max(sequence.NextValue, floor) + advance;
             sequence.LastUpdated = DateTime.UtcNow;
 
-            return Task.FromResult(sequence.NextValue - advance);
+            return Task.FromResult(new GeneratedValueSequenceBlock(sequence.NextValue - advance, sequence.NextValue, sequence.LastMovedAt?.Ticks));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ReturnUnusedGeneratedValueSequenceNumbersAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, GeneratedValueSequenceBlock block, long firstUnused)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        // The same lock as the reservation, standing in for the real repository's single compare-and-swap UPDATE.
+        lock (_generatedValueSequenceLock)
+        {
+            var sequence = _generatedValueSequences.Values.SingleOrDefault(s =>
+                s.MetaverseAttributeId == metaverseAttributeId && s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+            if (sequence == null || firstUnused >= block.CounterAfter || sequence.NextValue != block.CounterAfter || sequence.LastMovedAt?.Ticks != block.CounterMovedStamp)
+                return Task.FromResult(false);
+
+            sequence.NextValue = firstUnused;
+            sequence.LastUpdated = DateTime.UtcNow;
+            return Task.FromResult(true);
         }
     }
 
