@@ -28,6 +28,21 @@ public static class ConnectedSystemObjectTypeTagExtensions
     }
 
     /// <summary>
+    /// Whether the Connected System says this object type inherits from the class named
+    /// <paramref name="className"/>, directly or further up the chain.
+    /// </summary>
+    /// <remarks>
+    /// False when the Connected System said nothing about inheritance, which is not the same as saying the type does
+    /// not inherit from it; see <see cref="ObjectTypeTags.Keys.SuperiorClass"/>.
+    /// </remarks>
+    public static bool InheritsFrom(this ConnectedSystemObjectType objectType, string className)
+    {
+        return objectType.Tags.Any(tag =>
+            tag.Key == ObjectTypeTags.Keys.SuperiorClass &&
+            string.Equals(tag.Value, className, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Whether the Connected System classified this object type as a structural class: one an object can be, rather
     /// than one it merely carries.
     /// </summary>

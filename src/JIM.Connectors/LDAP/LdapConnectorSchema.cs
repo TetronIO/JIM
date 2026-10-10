@@ -141,8 +141,15 @@ internal class LdapConnectorSchema
         string? subclassof;
         var objectClassName = objectType.Name;
 
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         while (continueGettingClasses)
         {
+            // A class already walked means a cycle, which a domain controller should never publish but which would
+            // otherwise loop for ever.
+            if (!visited.Add(objectClassName))
+                break;
+
             if (!_classSchemaCache.TryGetValue(objectClassName, out var objectClassEntry))
             {
                 // some object classes do not have a schema entry, i.e. some system objects.
@@ -152,7 +159,8 @@ internal class LdapConnectorSchema
             ldapdisplayname = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname");
             subclassof = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "subclassof");
 
-            if (ldapdisplayname == subclassof)
+            // top names itself as its own subClassOf, which ends the walk.
+            if (ldapdisplayname == subclassof || subclassof == null)
                 continueGettingClasses = false;
 
             objectClassEntries.Add(objectClassEntry);
@@ -162,6 +170,13 @@ internal class LdapConnectorSchema
 
         foreach (var objectClassEntry in objectClassEntries)
             GetObjectClassAttributesRecursively(objectClassEntry, objectType);
+
+        // Record every class it inherits from, so an entry carrying this class and one of those resolves to this, the
+        // more specific, whatever order the directory lists them in (#2043). The first entry is the class itself.
+        foreach (var superiorName in objectClassEntries.Skip(1)
+                     .Select(entry => LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname"))
+                     .OfType<string>())
+            objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.SuperiorClass, superiorName));
 
         // todo (#492): it's possible there's some duplication of attributes going on due to attributes being specified on structural and auxiliary classes, so de-dupe before we return
         objectType.Attributes = objectType.Attributes.OrderBy(q => q.Name).ToList();
@@ -464,6 +479,11 @@ internal class LdapConnectorSchema
                 objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(
                     ObjectTypeTags.Keys.ClassMembershipAttribute, LdapConnectorConstants.ObjectClassAttributeName));
 
+                // Record every class it inherits from, so an entry carrying this class and one of those resolves to
+                // this, the more specific, whatever order the directory lists them in (#2043).
+                foreach (var (superiorName, _) in WalkSuperiorClasses(objectClassDef, objectClassDefs))
+                    objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.SuperiorClass, superiorName));
+
                 // Collect attributes by walking the class hierarchy (SUP chain)
                 var allMust = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allMay = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -540,7 +560,7 @@ internal class LdapConnectorSchema
     }
 
     /// <summary>
-    /// Recursively collects MUST and MAY attributes from an object class and all its superiors.
+    /// Collects MUST and MAY attributes from an object class and all its superiors.
     /// </summary>
     private static void CollectClassAttributes(
         Rfc4512ObjectClassDescription classDef,
@@ -548,16 +568,42 @@ internal class LdapConnectorSchema
         HashSet<string> mustAttributes,
         HashSet<string> mayAttributes)
     {
-        foreach (var attr in classDef.MustAttributes)
-            mustAttributes.Add(attr);
-        foreach (var attr in classDef.MayAttributes)
-            mayAttributes.Add(attr);
+        var definitions = WalkSuperiorClasses(classDef, allClasses)
+            .Select(superior => superior.Definition)
+            .OfType<Rfc4512ObjectClassDescription>()
+            .Prepend(classDef);
 
-        // Walk the superclass chain
-        if (classDef.SuperiorName != null &&
-            allClasses.TryGetValue(classDef.SuperiorName, out var superClass))
+        foreach (var definition in definitions)
         {
-            CollectClassAttributes(superClass, allClasses, mustAttributes, mayAttributes);
+            mustAttributes.UnionWith(definition.MustAttributes);
+            mayAttributes.UnionWith(definition.MayAttributes);
+        }
+    }
+
+    /// <summary>
+    /// Every class <paramref name="classDef"/> inherits from, nearest first, each with its definition, or null for a
+    /// superior the schema names but does not define (where the walk ends).
+    /// </summary>
+    /// <remarks>
+    /// Stops at a class it has already passed, so a cycle in a hand-edited schema ends the walk instead of
+    /// recursing until the process runs out of stack.
+    /// </remarks>
+    private static IEnumerable<(string Name, Rfc4512ObjectClassDescription? Definition)> WalkSuperiorClasses(
+        Rfc4512ObjectClassDescription classDef,
+        Dictionary<string, Rfc4512ObjectClassDescription> allClasses)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { classDef.Name ?? string.Empty };
+        var current = classDef;
+        while (current.SuperiorName is { } superiorName && visited.Add(superiorName))
+        {
+            if (!allClasses.TryGetValue(superiorName, out var superior))
+            {
+                yield return (superiorName, null);
+                yield break;
+            }
+
+            yield return (superiorName, superior);
+            current = superior;
         }
     }
 

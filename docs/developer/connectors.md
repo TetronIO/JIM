@@ -42,6 +42,7 @@ Tags are open key/value pairs rather than an enum, so a Connector can express so
 |-----|--------|--------------|
 | `class-kind` | `structural`, `auxiliary`, `abstract` | What kind of class this is in the Connected System's own schema model. |
 | `visibility` | `internal` | The Connected System uses this Object Type for its own configuration or operation. The Schema tab hides these by default, and `Get-JIMConnectedSystemObjectType` omits them unless `-IncludeInternal` is passed. |
+| `superior-class` | A class name, once per class | A class this Object Type inherits from, for every class up the chain and not only the nearest. The LDAP Connector uses it to resolve an entry carrying two selected classes to the more specific one (a `user` rather than the `person` it inherits from), whatever order the directory lists them in. |
 
 ```csharp
 var objectType = new ConnectorSchemaObjectType(name);

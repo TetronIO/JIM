@@ -34,10 +34,20 @@ internal static class LdapObjectTypeMatcher
         // A structural class is what an entry is; an auxiliary class is only something it also carries. Settling
         // that by class kind rather than by position is what makes an entry resolve to the same Object Type
         // whatever order the directory lists its classes in, which RFC 4512 leaves entirely open.
-        //
-        // Among structural classes the first still wins: Active Directory returns them most specific first, and
-        // that ordering is the only statement of specificity JIM holds.
-        return candidates.FirstOrDefault(candidate => !candidate.IsAuxiliary()) ?? candidates.FirstOrDefault();
+        var structural = candidates.Where(candidate => !candidate.IsAuxiliary()).ToList();
+        if (structural.Count == 0)
+            return candidates.FirstOrDefault();
+
+        // An entry's structural classes form one inheritance chain, so when several are selected the entry is the
+        // most specific of them: user rather than the person it inherits from, computer rather than user (#2043).
+        // The schema says which that is wherever discovery recorded inheritance, whatever the order.
+        var mostSpecific = structural
+            .Where(candidate => !structural.Any(other => !ReferenceEquals(other, candidate) && other.InheritsFrom(candidate.Name)))
+            .ToList();
+
+        // Where it did not (Object Types discovered before JIM recorded inheritance), the order decides. Windows
+        // Server and Samba AD both list an entry's classes from top down to the most specific, so the last wins.
+        return mostSpecific.Count > 0 ? mostSpecific[^1] : structural[^1];
     }
 
     /// <summary>
