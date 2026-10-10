@@ -21,8 +21,8 @@
         <TermHint Term="Term.AttributeFlow" />
     </div>
     <div class="d-flex align-center justify-space-between mt-3">
-        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
-            OnClick="HandleOpenAddAttributeFlowRuleDialogAsync" Color="Color.Default"
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
+            OnClick="HandleOpenAddAttributeFlowRuleDialogAsync" Color="Color.Primary"
             Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
@@ -935,7 +935,7 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+        <MudButton DropShadow="false"
             OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
         <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
             Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">@(_isEditingAttributeFlow ? "Update Attribute Flow" : "Add Attribute Flow")</MudButton>

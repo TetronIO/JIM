@@ -86,9 +86,9 @@
                         @* The row opens the history dialog on click and so does this button; stopping the click
                            here keeps a button click to one dialog open. *@
                         <span @onclick:stopPropagation="true">
-                            <MudButton Variant="Variant.Filled"
+                            <MudButton Variant="Variant.Text"
                                        Size="Size.Small"
-                                       Color="Color.Secondary"
+                                       Color="Color.Primary"
                                        OnClick="() => ViewCsoHistoryAsync(context.Item)">
                                 View
                             </MudButton>
@@ -228,9 +228,9 @@
                         @* The row opens the history dialog on click and so does this button; stopping the click
                            here keeps a button click to one dialog open. *@
                         <span @onclick:stopPropagation="true">
-                            <MudButton Variant="Variant.Filled"
+                            <MudButton Variant="Variant.Text"
                                        Size="Size.Small"
-                                       Color="Color.Secondary"
+                                       Color="Color.Primary"
                                        OnClick="() => ViewMvoHistoryAsync(context.Item)">
                                 View
                             </MudButton>

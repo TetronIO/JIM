@@ -61,22 +61,9 @@
             @if (_activeTabIndex == 0)
             {
                 <MudSpacer />
-                <MudButtonGroup OverrideStyles="false" Class="my-auto me-2">
-                    <MudButton Variant="@(_detailViewMode == "form" ? Variant.Filled : Variant.Outlined)"
-                               Color="Color.Primary" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.ViewModule"
-                               OnClick="@(() => OnDetailViewModeChangedAsync("form"))">Form</MudButton>
-                    <MudButton Variant="@(_detailViewMode == "tabs" ? Variant.Filled : Variant.Outlined)"
-                               Color="Color.Primary" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Tab"
-                               OnClick="@(() => OnDetailViewModeChangedAsync("tabs"))">Tabs</MudButton>
-                    <MudTooltip Text="Attributes with their sources and history" Arrow="true" Placement="Placement.Top">
-                        <MudButton Variant="@(_detailViewMode == "table" ? Variant.Filled : Variant.Outlined)"
-                                   Color="Color.Primary" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.ManageSearch"
-                                   OnClick="@(() => OnDetailViewModeChangedAsync("table"))">Inspect</MudButton>
-                    </MudTooltip>
-                </MudButtonGroup>
+                @* Which view of the details: a choice of view, so the segmented control, not a button group. *@
+                <SegmentedToggle TValue="string" Options="@DetailViewModes" Value="@_detailViewMode"
+                                 ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="Details view" Class="my-auto me-2" />
             }
         </Header>
         <ChildContent>
@@ -122,8 +109,8 @@
                     @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Filled"
-                                       Color="Color.Secondary"
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -263,7 +250,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
@@ -624,6 +611,13 @@
     private string? _displayName;
     private int _activeTabIndex = 0;
     private string _detailViewMode = "form";
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<string>> DetailViewModes =
+    [
+        new("form", "Form"),
+        new("tabs", "Tabs"),
+        new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+    ];
     private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
