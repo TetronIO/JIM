@@ -157,14 +157,10 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
             .Add(p => p.PartitionAndHierarchyText, "partition and container"));
 
     private static void SwitchToAdvanced(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
-        ToggleItem(cut, "Advanced").Click();
+        cut.Find("[data-testid='jim-scope-mode-advanced']").Click();
 
     private static void SwitchToSimple(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
-        ToggleItem(cut, "Simple").Click();
-
-    private static AngleSharp.Dom.IElement ToggleItem(IRenderedComponent<ConnectedSystemPartitionsTab> cut, string text) =>
-        cut.FindAll("[data-testid='jim-scope-mode'] .mud-toggle-item")
-            .Single(item => item.TextContent.Contains(text, StringComparison.Ordinal));
+        cut.Find("[data-testid='jim-scope-mode-simple']").Click();
 
     private static void SetText(IRenderedComponent<ConnectedSystemPartitionsTab> cut, string text) =>
         // Immediate="true", so the field commits on input rather than on blur.

@@ -252,7 +252,7 @@
     }
 
 </MudForm>
-<MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
     @if (_settingsBeingSaved)
     {
         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -283,7 +283,7 @@
                 Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
                 stored until you choose to trust it.
             </MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small" DropShadow="false"
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" DropShadow="false"
                        StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
                        Disabled="_fetchingCertificate"
                        OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
