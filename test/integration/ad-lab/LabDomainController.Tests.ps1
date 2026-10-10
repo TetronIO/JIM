@@ -672,6 +672,47 @@ Describe 'Resolve-LabInstallImage' {
     }
 }
 
+Describe 'Get-LabDirectoryResultCode' {
+    It 'reads the result code from the response when the exception carries one' {
+        $exception = [pscustomobject]@{ Message = 'The user has insufficient access rights.'; Response = [pscustomobject]@{ ResultCode = 'InsufficientAccessRights' } }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'InsufficientAccessRights'
+    }
+
+    It 'recognises a strong-authentication refusal that arrives with no response, as a Windows Server 2025 simple bind does' {
+        $exception = [pscustomobject]@{ Message = 'Strong authentication is required for this operation.'; Response = $null }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'recognises an access refusal that arrives with no response' {
+        $exception = [pscustomobject]@{ Message = 'The user has insufficient access rights.'; Response = $null }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'InsufficientAccessRights'
+    }
+
+    It 'copes with an exception that has no Response property at all' {
+        Get-LabDirectoryResultCode -Exception ([pscustomobject]@{ Message = 'Strong authentication is required for this operation.' }) | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'looks inside the wrapper PowerShell puts round an exception from a .NET method call such as Bind()' {
+        $inner = [pscustomobject]@{ Message = 'Strong authentication is required for this operation.'; Response = $null; InnerException = $null }
+        $wrapper = [pscustomobject]@{ Message = 'Exception calling "Bind" with "0" argument(s): "Strong authentication is required."'; InnerException = $inner }
+        Get-LabDirectoryResultCode -Exception $wrapper | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'returns nothing for an error it does not recognise, so a check cannot mistake it for a refusal' {
+        Get-LabDirectoryResultCode -Exception ([pscustomobject]@{ Message = 'The LDAP server is unavailable.'; Response = $null }) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-LabAdProviderPath' {
+    It 'puts the distinguished name on the AD: drive' {
+        Get-LabAdProviderPath -DistinguishedName 'OU=Corp,DC=panoply,DC=local' | Should -Be 'AD:\OU=Corp,DC=panoply,DC=local'
+    }
+
+    It 'escapes wildcard characters, because Get-Acl -LiteralPath does not work on the AD: drive and -Path expands them' {
+        Get-LabAdProviderPath -DistinguishedName 'OU=Team [A]*?,DC=panoply,DC=local' | Should -Be 'AD:\OU=Team `[A`]`*`?,DC=panoply,DC=local'
+    }
+}
+
 Describe 'Test-LabEvaluationEdition' {
     It 'recognises the evaluation edition IDs Windows reports' {
         Test-LabEvaluationEdition -EditionId 'ServerDatacenterEval' | Should -BeTrue

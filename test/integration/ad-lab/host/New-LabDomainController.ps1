@@ -462,6 +462,9 @@ try {
         Write-Heading 'Taking the baseline checkpoint'
         # Let the directory settle after the restart before capturing it.
         Start-Sleep -Seconds 30
+        # The script runs in this session and sets an exit code only when it fails, so clear whatever an earlier native
+        # command left in LASTEXITCODE first; otherwise a checkpoint that was taken reads as a failure.
+        $global:LASTEXITCODE = 0
         & (Join-Path $PSScriptRoot 'Checkpoint-LabDomainController.ps1') -Name $Name -Checkpoint (Get-LabCheckpointName -Baseline) -Replace
         if ($LASTEXITCODE -ne 0) { throw 'Taking the baseline checkpoint failed.' }
     }

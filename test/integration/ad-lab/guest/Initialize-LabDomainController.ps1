@@ -176,12 +176,39 @@ function Get-EditionId {
 function Wait-ActiveDirectory {
     # After the promotion restart, Active Directory Web Services takes a while to answer. Wait for it.
     param([int]$TimeoutSeconds = 900)
-    Import-Module ActiveDirectory -ErrorAction Stop
+
+    # The ActiveDirectory module talks to Active Directory Web Services, and promotion normally sets that service to
+    # start automatically. On the first real build (Windows Server 2025 build 26100.32230, from evaluation media) it was
+    # left Disabled with no start-type change ever logged, so the wait below ran out; the likely cause was the host
+    # hard-resetting the guest straight after promotion (Restart-LabGuest now restarts cleanly). Own the dependency
+    # anyway: make sure it starts automatically and is running, whatever left it otherwise.
+    $webServices = Get-Service -Name 'ADWS' -ErrorAction Stop
+    if ($webServices.StartType -ne 'Automatic') {
+        Set-Service -Name 'ADWS' -StartupType Automatic
+        Set-Changed "Set Active Directory Web Services to start automatically (it was $($webServices.StartType))"
+    }
+    if ((Get-Service -Name 'ADWS').Status -ne 'Running') {
+        Start-Service -Name 'ADWS'
+        Write-Step 'Started Active Directory Web Services'
+    }
+
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = 'no attempt was made'
     while ((Get-Date) -lt $deadline) {
         try {
+            # Loading the module is part of the wait, not a step before it: loaded while Web Services is still starting
+            # it either warns ("Error initializing default drive") or, part-way up, fails outright ("Attempting to
+            # perform the InitializeDefaultDrives operation on the 'ActiveDirectory' provider failed"). Retried here.
+            if (-not (Get-Module -Name ActiveDirectory)) {
+                Import-Module ActiveDirectory -ErrorAction Stop -WarningAction SilentlyContinue
+            }
             $null = Get-ADDomain -ErrorAction Stop
+            # The module creates its AD: drive only at import, and only if Web Services answered then; imported before
+            # they were up ("Error initializing default drive"), it never does, and the delegation (Get-Acl AD:\...)
+            # would fail later. Create it once they answer.
+            if (-not (Get-PSDrive -Name AD -ErrorAction SilentlyContinue)) {
+                $null = New-PSDrive -Name AD -PSProvider ActiveDirectory -Root '//RootDSE/' -Scope Global -ErrorAction Stop
+            }
             return
         }
         catch {
@@ -296,8 +323,9 @@ function Invoke-PromotePhase {
     #   https://learn.microsoft.com/powershell/module/addsdeployment/install-addsforest
     #   https://learn.microsoft.com/windows-server/identity/ad-ds/plan/raise-domain-forest-functional-levels
     #
-    # -NoRebootOnCompletion: the host restarts the VM itself (Restart-VM), which a PowerShell Direct session
-    # survives better than a restart from inside the guest. RebootRequired tells it to.
+    # -NoRebootOnCompletion: the host restarts the VM itself (Restart-VM -Type Reboot, a clean restart, never a hard
+    # reset, which can lose promotion's last writes), which a PowerShell Direct session survives better than a
+    # restart from inside the guest. RebootRequired tells it to.
     # -CreateDnsDelegation:$false: there is no parent zone. -Force skips the prompts and the warnings about
     # delegation and the static address, which are expected here.
     $result = Install-ADDSForest `
@@ -450,6 +478,17 @@ function Set-LdapsCertificate {
 
     $exportPath = Join-Path $LabRoot ("{0}-ca.cer" -f $ExportName)
     $null = Export-Certificate -Cert $certificate -FilePath $exportPath -Type CERT -Force
+
+    # AD DS only uses a certificate whose chain the domain controller itself trusts. A self-signed one is its own root,
+    # so its public half has to be in the machine's Trusted Root store too; without it Schannel logs 36886 ("No
+    # suitable default server credential exists"), the directory logs 1220 (error 8009030e) and LDAPS drops every
+    # handshake. Copies of an earlier certificate with the same subject are removed, so only the current one is trusted.
+    $root = 'Cert:\LocalMachine\Root'
+    Get-ChildItem -LiteralPath $root | Where-Object { ($_.Subject -eq $subject) -and ($_.Thumbprint -ne $certificate.Thumbprint) } | Remove-Item -Force
+    if (-not (Get-ChildItem -LiteralPath $root | Where-Object { $_.Thumbprint -eq $certificate.Thumbprint })) {
+        $null = Import-Certificate -FilePath $exportPath -CertStoreLocation $root
+        Set-Changed 'Trusted the LDAPS certificate on the domain controller itself (machine Trusted Root store)'
+    }
     return $certificate
 }
 
@@ -625,7 +664,8 @@ function Invoke-VerifyPhase {
         $sid = Get-LabGroupSid
         $missing = @()
         foreach ($dn in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
-            $sddl = (Get-Acl -LiteralPath "AD:\$dn").GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
+            # -Path, escaped: Get-Acl -LiteralPath does not work on the AD: drive (see Get-LabAdProviderPath).
+            $sddl = (Get-Acl -Path (Get-LabAdProviderPath -DistinguishedName $dn) -ErrorAction Stop).GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
             if (-not (Test-LabSddlContainsSid -Sddl $sddl -Sid $sid)) { $missing += $dn }
         }
         [pscustomobject]@{ Passed = ($missing.Count -eq 0); Detail = ('missing on: ' + ($missing -join '; ')) }
