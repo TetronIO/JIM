@@ -94,18 +94,79 @@ Write-TestStep "Step 2" "Connecting to JIM"
 if (-not $ApiKey) { throw "API key required for authentication" }
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-# ─── Step 3: Clean up any prior run ────────────────────────────────────────────
+# ─── Step 3: Clean up any prior run or earlier provider pass ───────────────────
 
-Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
-# Accounts first: it holds the Connected System Objects provisioned from the other one, so removing the
-# source of identity first would deprovision them on the way past rather than simply dropping them.
-foreach ($name in @($exportSystemName, $appUserSystemName, $systemName)) {
-    $existing = Get-JIMConnectedSystem -Name $name -ErrorAction SilentlyContinue
-    foreach ($system in @($existing | Where-Object { $_ })) {
-        Remove-JIMConnectedSystem -Id $system.id -DeleteImmediately -Force | Out-Null
-        Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+Write-TestStep "Step 3" "Removing every SQL Matrix Connected System an earlier pass or run left, and its Metaverse Objects"
+# Every SQL Matrix system, not just this provider's, and the Metaverse Objects they projected with them: the
+# matrix's row counts assume an empty Metaverse. An earlier provider's people stay in scope for the export rules
+# this pass creates, and a new export rule provisions the Metaverse Objects already in its scope (#1925), so
+# leaving them doubled every Oracle export count after the SQL Server pass (85 App Users where 43 were expected).
+# For each provider, Accounts and App Users go before the identity source: they hold the Connected System Objects
+# provisioned from it, so removing the source first would deprovision them on the way past rather than simply
+# dropping them.
+$staleSystems = @(Get-JIMConnectedSystem | Where-Object { $_.name -like 'SQL Matrix *' } | Sort-Object {
+        if ($_.name -like '* Accounts') { 0 } elseif ($_.name -like '* App Users') { 1 } else { 2 }
+    })
+
+function Get-ProjectedUserCount {
+    # Projected (Origin 0) only: an internal object such as the initial administrator, created on a first portal
+    # sign-in, is never projected and is out of every matrix rule's scope, so it must not count. No API filters on
+    # origin, so this reads the lane's database.
+    $raw = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c `
+        "SELECT count(*) FROM ""MetaverseObjects"" m JOIN ""MetaverseObjectTypes"" t ON t.""Id"" = m.""TypeId"" WHERE t.""Name"" = 'User' AND m.""Origin"" = 0;" 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Setup failed: could not count the projected User Metaverse Objects: $raw" }
+    return [int]"$raw".Trim()
+}
+
+if ($staleSystems.Count -gt 0) {
+    # The Metaverse Objects must go with their systems rather than wait out the User type's deletion grace period,
+    # which would leave them in scope for this pass's export rules, so the grace period is lifted for the removal.
+    $userType = Get-JIMMetaverseObjectType -Name 'User'
+    $originalGracePeriod = if ($userType.deletionGracePeriod) { [TimeSpan]::Parse("$($userType.deletionGracePeriod)") } else { [TimeSpan]::Zero }
+    if ($originalGracePeriod -ne [TimeSpan]::Zero) {
+        Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
+    }
+
+    try {
+        foreach ($system in $staleSystems) {
+            Remove-JIMConnectedSystem -Id $system.id -DeleteImmediately -Force | Out-Null
+            Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+        }
+
+        # Removing a system only marks the Metaverse Objects it leaves without a connector; the worker's housekeeping
+        # deletes them, at most once a minute and only while idle (Scheduled Metaverse Object Deletion), and a large
+        # system's removal is itself queued. So wait for both before restoring the grace period the deletion is
+        # evaluated under. Once the systems are gone, a count that has held for longer than one housekeeping interval
+        # is not going to reach zero (objects no SQL Matrix system projected); the check below reports those, rather
+        # than this waiting out the deadline for them.
+        $deadline = (Get-Date).AddMinutes(15)
+        $lastCount = -1
+        $steadySince = Get-Date
+        while ($true) {
+            $systemsLeft = @(Get-JIMConnectedSystem | Where-Object { $_.name -like 'SQL Matrix *' }).Count
+            $usersLeft = Get-ProjectedUserCount
+            if ($systemsLeft -eq 0 -and $usersLeft -eq 0) { break }
+            if ($usersLeft -ne $lastCount) { $lastCount = $usersLeft; $steadySince = Get-Date }
+            if ($systemsLeft -eq 0 -and ((Get-Date) - $steadySince).TotalSeconds -ge 90) { break }
+            if ((Get-Date) -gt $deadline) {
+                throw "Setup failed: 15 minutes after removing the earlier SQL Matrix Connected Systems, $systemsLeft of them and $usersLeft projected User Metaverse Object(s) remain."
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    finally {
+        if ($originalGracePeriod -ne [TimeSpan]::Zero) {
+            Set-JIMMetaverseObjectType -Id $userType.id -DeletionGracePeriod $originalGracePeriod | Out-Null
+        }
     }
 }
+
+# Holds on the first pass too: anything already in the Metaverse would be provisioned by this pass's export rules.
+$usersPresent = Get-ProjectedUserCount
+if ($usersPresent -ne 0) {
+    throw "Setup failed: with no SQL Matrix Connected System left, the Metaverse still holds $usersPresent projected User object(s), which this pass's export rules would provision; the matrix's export counts assume it holds none. Run from a reset environment."
+}
+Write-Host "  The Metaverse holds no projected User objects" -ForegroundColor Gray
 
 # ─── Step 4: Resolve the connector definition and its settings ─────────────────
 

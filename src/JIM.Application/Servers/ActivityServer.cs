@@ -693,6 +693,16 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// One Run Profile Execution Item's own fields (error type, message and stack trace, snapshots and the ids of what
+    /// it is about) without the graph <see cref="GetActivityRunProfileExecutionItemAsync"/> loads for the portal. Null
+    /// when no item has the id.
+    /// </summary>
+    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)
+    {
+        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemCoreAsync(id);
+    }
+
+    /// <summary>
     /// Walks upward from a Run Profile Execution Item through the causal edges recorded against it, returning
     /// what caused the changes it describes as a tree of cohorts (#1223).
     /// </summary>

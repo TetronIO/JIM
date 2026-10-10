@@ -9,8 +9,16 @@
 .DESCRIPTION
     Phases, run in this order with a restart between them where a phase reports RebootRequired:
 
+      License    On evaluation media only: convert the evaluation edition to full Datacenter with the AVMA key (one
+                 restart), after which the guest activates through Automatic Virtual Machine Activation. It must run
+                 before Promote: Microsoft does not support converting an evaluation domain controller. On full media
+                 there is nothing to do.
       Prepare    Rename the computer, set the static IP address, install the AD DS and DNS roles.
       Promote    Install-ADDSForest (a new single-domain forest, Windows Server 2016 functional level, with DNS).
+      Extend     Only when -DirectoryExtension lists products: extend the forest with each, in order, from its media,
+                 which the host has attached. Exchange: Setup /PrepareSchema, /PrepareAD (the organisation, named after
+                 the forest) and /PrepareAllDomains, the only supported way to add Exchange's schema. Skips whatever a
+                 previous run already did.
       Configure  Everything the directory carries after the build, identical to
                  test/integration/docker/samba-ad-prebuilt/post-provision.sh: DNS forwarder, w32time, Windows
                  Update off, Administrator password never expires, the OUs, svc-jim and the JIM Connectors group,
@@ -31,7 +39,10 @@
     refused, which Verify confirms), so everything talks LDAPS on 636.
 
 .PARAMETER Phase
-    Prepare, Promote, Configure or Verify.
+    License, Prepare, Promote, Extend, Configure or Verify.
+
+.PARAMETER DirectoryExtension
+    The products extending the forest, in order (Extend applies them; Verify checks them). Exchange only, for now.
 
 .PARAMETER ComputerName
     The domain controller's host name, for example dc1 (giving dc1.panoply.local).
@@ -97,7 +108,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+    [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
     [string]$Phase,
 
     [string]$ComputerName,
@@ -113,6 +124,8 @@ param(
     [securestring]$ServiceAccountPassword,
     [switch]$EnableRecycleBin,
     [string[]]$ExtraCertificateNames = @(),
+    [ValidateSet('Exchange')]
+    [string[]]$DirectoryExtension = @(),
     [string]$VmName,
     [string]$LabRoot = 'C:\jim-ad-lab'
 )
@@ -165,15 +178,46 @@ function Test-IsDomainController {
     return ((Get-DomainRole) -ge 4)
 }
 
+function Get-EditionId {
+    return [string](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').EditionID
+}
+
 function Wait-ActiveDirectory {
     # After the promotion restart, Active Directory Web Services takes a while to answer. Wait for it.
     param([int]$TimeoutSeconds = 900)
-    Import-Module ActiveDirectory -ErrorAction Stop
+
+    # The ActiveDirectory module talks to Active Directory Web Services, and promotion normally sets that service to
+    # start automatically. On the first real build (Windows Server 2025 build 26100.32230, from evaluation media) it was
+    # left Disabled with no start-type change ever logged, so the wait below ran out; the likely cause was the host
+    # hard-resetting the guest straight after promotion (Restart-LabGuest now restarts cleanly). Own the dependency
+    # anyway: make sure it starts automatically and is running, whatever left it otherwise.
+    $webServices = Get-Service -Name 'ADWS' -ErrorAction Stop
+    if ($webServices.StartType -ne 'Automatic') {
+        Set-Service -Name 'ADWS' -StartupType Automatic
+        Set-Changed "Set Active Directory Web Services to start automatically (it was $($webServices.StartType))"
+    }
+    if ((Get-Service -Name 'ADWS').Status -ne 'Running') {
+        Start-Service -Name 'ADWS'
+        Write-Step 'Started Active Directory Web Services'
+    }
+
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = 'no attempt was made'
     while ((Get-Date) -lt $deadline) {
         try {
+            # Loading the module is part of the wait, not a step before it: loaded while Web Services is still starting
+            # it either warns ("Error initializing default drive") or, part-way up, fails outright ("Attempting to
+            # perform the InitializeDefaultDrives operation on the 'ActiveDirectory' provider failed"). Retried here.
+            if (-not (Get-Module -Name ActiveDirectory)) {
+                Import-Module ActiveDirectory -ErrorAction Stop -WarningAction SilentlyContinue
+            }
             $null = Get-ADDomain -ErrorAction Stop
+            # The module creates its AD: drive only at import, and only if Web Services answered then; imported before
+            # they were up ("Error initializing default drive"), it never does, and the delegation (Get-Acl AD:\...)
+            # would fail later. Create it once they answer.
+            if (-not (Get-PSDrive -Name AD -ErrorAction SilentlyContinue)) {
+                $null = New-PSDrive -Name AD -PSProvider ActiveDirectory -Root '//RootDSE/' -Scope Global -ErrorAction Stop
+            }
             return
         }
         catch {
@@ -182,6 +226,32 @@ function Wait-ActiveDirectory {
         }
     }
     throw "Active Directory did not answer within $TimeoutSeconds seconds. Last error: $lastError"
+}
+
+# ---------------------------------------------------------------------------------------------
+# License
+# ---------------------------------------------------------------------------------------------
+
+function Invoke-LicensePhase {
+    $edition = Get-EditionId
+    if (-not (Test-LabEvaluationEdition -EditionId $edition)) {
+        Write-Step "Edition $edition is not an evaluation edition; nothing to convert."
+        return
+    }
+    if (Test-IsDomainController) {
+        throw "This is an evaluation edition ($edition) that is already a domain controller, which Microsoft does not support converting. Remove the VM and build it again."
+    }
+
+    # https://learn.microsoft.com/windows-server/get-started/upgrade-conversion-options#convert-an-evaluation-version-to-a-retail-version
+    # The AVMA key converts ServerDatacenterEval to ServerDatacenter (proven on Windows Server 2025 build 26100), and
+    # once the restart applies the new edition the guest activates through AVMA against the Datacenter host, with no
+    # further step. DISM returns 3010 when the change needs the restart, which the host performs.
+    $output = & dism.exe /Online /Set-Edition:ServerDatacenter "/ProductKey:$(Get-LabAvmaKey -Edition Datacenter)" /AcceptEula /NoRestart /English 2>&1
+    if ($LASTEXITCODE -notin 0, 3010) {
+        throw ("DISM could not convert $edition to ServerDatacenter (exit $LASTEXITCODE): " + (($output | Select-Object -Last 5) -join ' '))
+    }
+    $script:RebootRequired = $true
+    Set-Changed "Converted $edition to ServerDatacenter with the AVMA key (applies on restart)"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -246,6 +316,13 @@ function Invoke-PromotePhase {
         return
     }
 
+    # The last point at which an evaluation edition can still be converted. Promoting one would leave a domain
+    # controller that expires in real time and can never be converted, so refuse rather than build it.
+    $edition = Get-EditionId
+    if (Test-LabEvaluationEdition -EditionId $edition) {
+        throw "Refusing to promote an evaluation edition ($edition): run the License phase and restart first."
+    }
+
     Import-Module ADDSDeployment -ErrorAction Stop
 
     # -ForestMode and -DomainMode WinThreshold are the Windows Server 2016 functional level: the Install-ADDSForest
@@ -255,8 +332,9 @@ function Invoke-PromotePhase {
     #   https://learn.microsoft.com/powershell/module/addsdeployment/install-addsforest
     #   https://learn.microsoft.com/windows-server/identity/ad-ds/plan/raise-domain-forest-functional-levels
     #
-    # -NoRebootOnCompletion: the host restarts the VM itself (Restart-VM), which a PowerShell Direct session
-    # survives better than a restart from inside the guest. RebootRequired tells it to.
+    # -NoRebootOnCompletion: the host restarts the VM itself (Restart-VM -Type Reboot, a clean restart, never a hard
+    # reset, which can lose promotion's last writes), which a PowerShell Direct session survives better than a
+    # restart from inside the guest. RebootRequired tells it to.
     # -CreateDnsDelegation:$false: there is no parent zone. -Force skips the prompts and the warnings about
     # delegation and the static address, which are expected here.
     $result = Install-ADDSForest `
@@ -275,6 +353,115 @@ function Invoke-PromotePhase {
     }
     $script:RebootRequired = $true
     Set-Changed "Promoted this server to the first domain controller of $Domain"
+}
+
+# ---------------------------------------------------------------------------------------------
+# Extend: directory extensions (Exchange; room for Skype for Business)
+# ---------------------------------------------------------------------------------------------
+
+function Get-AdObjectProperty {
+    # One property of an AD object, or $null when the object or the attribute is not there (StrictMode-safe).
+    param([object]$Object, [string]$Name)
+    if (($null -eq $Object) -or ($null -eq $Object.PSObject.Properties[$Name])) { return $null }
+    return $Object.$Name
+}
+
+function Get-ExchangeForestState {
+    # Where Exchange stands in this forest: the schema version (rangeUpper of ms-Exch-Schema-Version-Pt), the
+    # organisation (name and objectVersion under CN=Microsoft Exchange,CN=Services) and the domain preparation
+    # (objectVersion of CN=Microsoft Exchange System Objects). Each is $null when absent.
+    $root = Get-ADRootDSE
+    $version = Get-ADObject -SearchBase $root.schemaNamingContext -SearchScope OneLevel -LDAPFilter '(cn=ms-Exch-Schema-Version-Pt)' -Properties rangeUpper | Select-Object -First 1
+    $organization = $null
+    try {
+        $organization = Get-ADObject -SearchBase "CN=Microsoft Exchange,CN=Services,$($root.configurationNamingContext)" -SearchScope OneLevel -LDAPFilter '(objectClass=msExchOrganizationContainer)' -Properties objectVersion -ErrorAction Stop | Select-Object -First 1
+    }
+    catch {
+        # No CN=Microsoft Exchange container: the organisation has not been created.
+        $organization = $null
+    }
+    $systemObjects = Get-ADObject -SearchBase $root.defaultNamingContext -SearchScope OneLevel -LDAPFilter '(cn=Microsoft Exchange System Objects)' -Properties objectVersion | Select-Object -First 1
+
+    $rangeUpper = Get-AdObjectProperty -Object $version -Name 'rangeUpper'
+    return [pscustomobject][ordered]@{
+        SchemaRangeUpper    = $(if ($null -ne $rangeUpper) { [int]$rangeUpper } else { $null })
+        OrganizationName    = $(if ($null -ne $organization) { [string]$organization.Name } else { $null })
+        OrganizationVersion = (Get-AdObjectProperty -Object $organization -Name 'objectVersion')
+        DomainVersion       = (Get-AdObjectProperty -Object $systemObjects -Name 'objectVersion')
+    }
+}
+
+function Find-ExchangeMedia {
+    # The root of the Exchange media the host attached: a DVD drive holding Setup.exe and Setup\Data\SchemaVersion.ldf.
+    foreach ($volume in @(Get-Volume | Where-Object { ($_.DriveType -eq 'CD-ROM') -and $_.DriveLetter })) {
+        $root = "$($volume.DriveLetter):"
+        if ((Test-Path -LiteralPath "$root\Setup.exe") -and (Test-Path -LiteralPath "$root\Setup\Data\SchemaVersion.ldf")) {
+            return $root
+        }
+    }
+    throw 'No Exchange media is attached: no DVD drive holds Setup.exe and Setup\Data\SchemaVersion.ldf. The host attaches -ExchangeIsoPath before Extend.'
+}
+
+function Invoke-ExchangeExtension {
+    $currentVersion = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+    if (-not (Test-LabExchangeSchemaMasterBuild -CurrentBuild ([int]$currentVersion.CurrentBuild) -Ubr ([int]$currentVersion.UBR))) {
+        throw "Windows build $($currentVersion.CurrentBuild).$($currentVersion.UBR) is older than 26100.7171: Microsoft requires the November 2025 update on a Windows Server 2025 schema master before Exchange extends the schema. Pass -CumulativeUpdatePath."
+    }
+
+    $media = Find-ExchangeMedia
+    $target = Get-LabExchangeSchemaTarget -LdfText (Get-Content -LiteralPath "$media\Setup\Data\SchemaVersion.ldf" -Raw)
+    $organizationName = Get-LabExchangeOrganizationName -NetBiosName $NetBiosName
+    $state = Get-ExchangeForestState
+    if ($state.OrganizationName -and ($state.OrganizationName -ne $organizationName)) {
+        throw "This forest already has the Exchange organisation '$($state.OrganizationName)', not '$organizationName'; an organisation cannot be renamed."
+    }
+
+    $steps = @(Get-LabExchangePreparationStep -SchemaRangeUpper $state.SchemaRangeUpper -TargetRangeUpper $target `
+            -OrganizationPresent ([bool]$state.OrganizationName) -DomainPrepared ($null -ne $state.DomainVersion))
+    if ($steps.Count -eq 0) {
+        Write-Step "Exchange is already prepared: schema $($state.SchemaRangeUpper), organisation '$($state.OrganizationName)' $($state.OrganizationVersion), domain $($state.DomainVersion)."
+        return
+    }
+
+    # Setup runs from the media and writes its log to C:\ExchangeSetupLogs\ExchangeSetup.log.
+    $setup = "$media\Setup.exe"
+    foreach ($step in $steps) {
+        Write-Step "Exchange Setup /$step (this takes several minutes)"
+        $arguments = Get-LabExchangeSetupArgument -Step $step -OrganizationName $organizationName
+        $output = & $setup @arguments 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $log = 'C:\ExchangeSetupLogs\ExchangeSetup.log'
+            $tail = if (Test-Path -LiteralPath $log) { (Get-Content -LiteralPath $log -Tail 15) -join ' | ' } else { (($output | Select-Object -Last 15) -join ' | ') }
+            throw "Exchange Setup /$step failed (exit $LASTEXITCODE): $tail"
+        }
+        Set-Changed "Exchange Setup /$step completed"
+    }
+
+    $after = Get-ExchangeForestState
+    if (($after.SchemaRangeUpper -ne $target) -or ($after.OrganizationName -ne $organizationName) -or ($null -eq $after.DomainVersion)) {
+        throw "Exchange Setup reported success but the forest reads schema $($after.SchemaRangeUpper) (want $target), organisation '$($after.OrganizationName)' (want '$organizationName'), domain $($after.DomainVersion)."
+    }
+    Set-Changed "Exchange organisation '$organizationName' prepared: schema $($after.SchemaRangeUpper), organisation $($after.OrganizationVersion), domain $($after.DomainVersion)"
+    # A fresh boot before Configure, so nothing downstream reads a schema cache from before the extension.
+    $script:RebootRequired = $true
+}
+
+function Invoke-ExtendPhase {
+    Assert-Setting -Name 'Domain', 'NetBiosName'
+    if (@($DirectoryExtension).Count -eq 0) {
+        Write-Step 'No directory extensions requested; nothing to do.'
+        return
+    }
+    if (-not (Test-IsDomainController)) {
+        throw 'Extend runs after Promote: this server is not a domain controller yet.'
+    }
+    Wait-ActiveDirectory
+    foreach ($product in $DirectoryExtension) {
+        switch ($product) {
+            'Exchange' { Invoke-ExchangeExtension }
+            default { throw "No Extend handler for the directory extension '$product'." }
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -409,6 +596,17 @@ function Set-LdapsCertificate {
 
     $exportPath = Join-Path $LabRoot ("{0}-ca.cer" -f $ExportName)
     $null = Export-Certificate -Cert $certificate -FilePath $exportPath -Type CERT -Force
+
+    # AD DS only uses a certificate whose chain the domain controller itself trusts. A self-signed one is its own root,
+    # so its public half has to be in the machine's Trusted Root store too; without it Schannel logs 36886 ("No
+    # suitable default server credential exists"), the directory logs 1220 (error 8009030e) and LDAPS drops every
+    # handshake. Copies of an earlier certificate with the same subject are removed, so only the current one is trusted.
+    $root = 'Cert:\LocalMachine\Root'
+    Get-ChildItem -LiteralPath $root | Where-Object { ($_.Subject -eq $subject) -and ($_.Thumbprint -ne $certificate.Thumbprint) } | Remove-Item -Force
+    if (-not (Get-ChildItem -LiteralPath $root | Where-Object { $_.Thumbprint -eq $certificate.Thumbprint })) {
+        $null = Import-Certificate -FilePath $exportPath -CertStoreLocation $root
+        Set-Changed 'Trusted the LDAPS certificate on the domain controller itself (machine Trusted Root store)'
+    }
     return $certificate
 }
 
@@ -584,7 +782,8 @@ function Invoke-VerifyPhase {
         $sid = Get-LabGroupSid
         $missing = @()
         foreach ($dn in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
-            $sddl = (Get-Acl -LiteralPath "AD:\$dn").GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
+            # -Path, escaped: Get-Acl -LiteralPath does not work on the AD: drive (see Get-LabAdProviderPath).
+            $sddl = (Get-Acl -Path (Get-LabAdProviderPath -DistinguishedName $dn) -ErrorAction Stop).GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
             if (-not (Test-LabSddlContainsSid -Sddl $sddl -Sid $sid)) { $missing += $dn }
         }
         [pscustomobject]@{ Passed = ($missing.Count -eq 0); Detail = ('missing on: ' + ($missing -join '; ')) }
@@ -602,6 +801,19 @@ function Invoke-VerifyPhase {
         $script:Checks.Add([pscustomobject][ordered]@{ Name = $probe.Name; Passed = [bool]$probe.Passed; Advisory = $false; Detail = [string]$probe.Detail })
         if ($probe.Passed) { $mark = 'ok  ' } else { $mark = 'FAIL' }
         Write-Step ("{0} {1}: {2}" -f $mark, $probe.Name, $probe.Detail)
+    }
+
+    if (@($DirectoryExtension) -contains 'Exchange') {
+        Add-Check 'The Exchange organisation is prepared (schema, organisation named after the forest, domain)' {
+            $exchange = Get-ExchangeForestState
+            $ok = ($null -ne $exchange.SchemaRangeUpper) -and ($exchange.OrganizationName -eq $NetBiosName) -and ($null -ne $exchange.OrganizationVersion) -and ($null -ne $exchange.DomainVersion)
+            [pscustomobject]@{ Passed = [bool]$ok; Detail = "schema rangeUpper $($exchange.SchemaRangeUpper), organisation '$($exchange.OrganizationName)' objectVersion $($exchange.OrganizationVersion), domain objectVersion $($exchange.DomainVersion)" }
+        }
+    }
+
+    Add-Check 'Windows is a full Datacenter edition, not evaluation' {
+        $edition = Get-EditionId
+        [pscustomobject]@{ Passed = ($edition -eq 'ServerDatacenter'); Detail = "EditionID=$edition" }
     }
 
     Add-Check 'Windows is activated through Automatic Virtual Machine Activation' -Advisory {
@@ -628,8 +840,10 @@ Write-Step ('Starting; ' + (ConvertTo-LabArgumentString -Argument ([ordered]@{
             })))
 
 switch ($Phase) {
+    'License' { Invoke-LicensePhase }
     'Prepare' { Invoke-PreparePhase }
     'Promote' { Invoke-PromotePhase }
+    'Extend' { Invoke-ExtendPhase }
     'Configure' { Invoke-ConfigurePhase }
     'Verify' { Invoke-VerifyPhase }
 }

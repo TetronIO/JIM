@@ -18,6 +18,14 @@ delegation from `jim-ad-delegation.acl`, applied unchanged; read over Deleted Ob
 same subject and names. It differs from Samba where Windows Server 2025 differs: LDAP signing is enforced (everything
 talks LDAPS on 636) and the domain password policy keeps its defaults (complexity on).
 
+Each forest also carries the **full Exchange organisation**, as an Exchange customer's forest does: Exchange's schema
+(all of its classes and attributes, `extensionAttribute1`-`15` among them), an organisation named after the forest
+(`PANOPLY`, `RESURGAM`, `GENTIAN`) and the domain prepared, made by Exchange Setup itself (`/PrepareSchema`,
+`/PrepareAD`, `/PrepareAllDomains`), the only supported way. No Exchange server is installed. The Samba images carry
+only a hand-written `extensionAttribute1`-`15`, so scenarios that need more of Exchange's schema run on this lab only.
+Products that extend a forest are listed in `settings.json` `directoryExtensions`; Exchange is the first, and another
+(Skype for Business, say) is added as a new entry and a handler in the `Extend` phase.
+
 ## What is in this folder
 
 | Path | Runs on | What it does |
@@ -31,7 +39,7 @@ talks LDAPS on 636) and the domain password policy keeps its defaults (complexit
 | `host/Invoke-LabRebuild.ps1` | Hyper-V host | One phase of the monthly rebuild (`Prune`, `Build`, `Stage`, `Promote`, `Rollback`, `Status`): builds a candidate set beside the live one and swaps names only when the suite passes; see [Monthly rebuild](#monthly-rebuild) |
 | `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above; see [Deploying to the host](#deploying-to-the-host) |
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
-| `guest/Initialize-LabDomainController.ps1` | Guest | The build phases: `Prepare`, `Promote`, `Configure`, `Verify` |
+| `guest/Initialize-LabDomainController.ps1` | Guest | The build phases: `License`, `Prepare`, `Promote`, `Extend`, `Configure`, `Verify` |
 | `guest/LabDomainController.psm1` | Both | Pure functions (tested) and the Windows-only helpers |
 | `LabDomainController.Tests.ps1` | CI (any OS) | Pester tests for every pure function, the rebuild planning included |
 | `LabDnsForwarder.Tests.ps1` | CI (any OS) | Pester tests for the optional DNS forwarder of the build scripts |
@@ -47,8 +55,9 @@ The hypervisor host needs, once:
 1. **Windows Server Datacenter with the Hyper-V role, activated.** Guests then activate through Automatic Virtual
    Machine Activation (AVMA) with the generic Windows Server 2025 Datacenter key in the unattend file; no per-VM licence
    is involved. AVMA needs the host activated and the guest's Data Exchange integration service enabled (the build does
-   that). Evaluation editions are not used: an evaluation domain controller cannot be converted and its timer runs in
-   real time regardless of checkpoint reverts. The build refuses Evaluation media.
+   that). The host itself must be a full, activated edition. No domain controller is ever left on an evaluation edition:
+   one cannot be converted once promoted, and its timer runs in real time regardless of checkpoint reverts. Evaluation
+   *media* is fine, though: see item 5.
 2. **An Internal virtual switch called `Lab`** (not External, and not Private), which the domain controllers and the
    runner VM's second adapter attach to. An Internal switch gives the host an adapter of its own on the lab network and
    has no uplink, so nothing routes out: the domain controllers reach only the host and each other, and the host does not
@@ -63,7 +72,18 @@ The hypervisor host needs, once:
    it to the build as `-NtpServer`); the host follows an upstream source, the one the runner VM follows too, and serves
    it on the `Lab` adapter only. A domain controller reverted to a checkpoint boots with the host's clock and stays
    within the runner's 5 second window.
-5. **Non-evaluation Windows Server 2025 media** (an ISO), and optionally the latest cumulative update (a `.msu`).
+5. **Windows Server 2025 media** (an ISO), and optionally the latest cumulative update (a `.msu`). Full media is used
+   as it is. The free evaluation ISO from Microsoft's Evaluation Center works too: the build installs its Datacenter
+   Evaluation image without a product key, and the guest's `License` phase converts it to full Datacenter with the AVMA
+   key before promotion (`DISM /Set-Edition`, one restart), after which it activates through AVMA like any other guest.
+   That is the only point at which the conversion is supported, so `Promote` refuses an evaluation edition and `Verify`
+   checks the result is `ServerDatacenter`.
+6. **Exchange Server media** for the Exchange organisation: the Exchange Server SE ISO (`ExchangeServerSE-x64.iso`,
+   a free download from the Microsoft Download Center). Only Setup's preparation steps run from it; no Exchange server
+   is installed and no product key is used, but Setup's licence terms are accepted. The schema version the forests
+   get is read from the media (`Setup\Data\SchemaVersion.ldf`), so newer media needs no code change. Microsoft requires
+   a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or later before Exchange
+   extends the schema; the `Extend` phase refuses an older one.
 
 Preparing the host is the ci-runners repository's job (its `docs/hyperv-host.md`). Then deploy the scripts with
 `Install-LabScripts.ps1`, described in "Deploying to the host" below: the runner calls
@@ -108,11 +128,12 @@ the first build below is easiest when it is driven from the same values:
 
 | Key | Meaning |
 |-----|---------|
-| `isoPath` | The non-evaluation Windows Server 2025 ISO |
+| `isoPath` | The Windows Server 2025 ISO (full or evaluation media; see host prerequisite 5) |
 | `cumulativeUpdateDirectory` | Where the newest cumulative update `.msu` is kept (the rebuild picks the latest) |
 | `vhdDirectory` | Where the virtual machines' disks live |
 | `switchName` | The Internal `Lab` switch the domain controllers attach to (not the external `CI` switch) |
 | `ntpServer` | The host's own address on the `Lab` switch (for example `10.99.0.1`): the only NTP-synchronised machine the domain controllers can reach |
+| `directoryExtensions` | The products extending every forest, in the order applied: `[{ "product": "Exchange", "isoPath": "<Exchange Server SE ISO>" }]`. Empty or absent builds plain forests |
 | `domainControllers` | Per virtual machine (`dc-primary`, `dc-source`, `dc-target`): `domain`, `ipAddress`, `prefixLength`, `gateway` (also the host's address on `Lab`, which leads nowhere by design: the switch has no uplink), `enableRecycleBin` |
 
 There is no `dnsForwarder`: the lab network has no uplink, so a domain controller has nothing to forward DNS to and
@@ -146,6 +167,7 @@ $arguments = @{
 if ($dc.enableRecycleBin) { $arguments.EnableRecycleBin = $true }
 $update = Get-ChildItem $settings.cumulativeUpdateDirectory -Filter *.msu -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
 if ($update) { $arguments.CumulativeUpdatePath = $update.FullName }
+foreach ($extension in @($settings.directoryExtensions)) { if ($extension.product -eq 'Exchange') { $arguments.ExchangeIsoPath = $extension.isoPath } }
 
 C:\jim-ad-lab\New-LabDomainController.ps1 @arguments
 ```
@@ -200,16 +222,19 @@ $jim   = Read-Host 'svc-jim password' -AsSecureString
 ```
 
 Useful extras: `-CumulativeUpdatePath <msu>` installs a cumulative update between promotion and configuration;
+`-ExchangeIsoPath <iso>` adds the Exchange organisation (settings.json `directoryExtensions`);
 `-ExtraCertificateNames <names>` adds DNS names to the LDAPS certificate (beyond the FQDN, the short name and the
 domain); `-ComputerName` changes the host name from `dc1`; `-MemoryStartupBytes`, `-ProcessorCount` and `-VhdSizeBytes`
 size the VM; `-SkipBaselineCheckpoint` builds without checkpointing.
 
 What the build does, in order: creates a Generation 2 VM (UEFI, Secure Boot, static memory, production checkpoints only);
 builds a second small ISO holding a rendered `autounattend.xml` (pure PowerShell, IMAPI2, no extra tool); installs Windows
-Server 2025 Datacenter (Desktop Experience) unattended with the AVMA key, then ejects the media and deletes that ISO;
-copies the guest files into `C:\jim-ad-lab` in the guest; runs `Initialize-LabDomainController.ps1` phase by phase over
-PowerShell Direct, restarting between phases (`Prepare` rename, static IP and roles; `Promote` new forest; optional
-cumulative update; `Configure` directory content, delegation, LDAPS certificate, Recycle Bin, Windows Update off, w32time;
+Server 2025 Datacenter (Desktop Experience) unattended with the AVMA key (no key for evaluation media), then ejects the
+media and deletes that ISO; copies the guest files into `C:\jim-ad-lab` in the guest; runs
+`Initialize-LabDomainController.ps1` phase by phase over PowerShell Direct, restarting between phases (`License` converts
+an evaluation edition to full Datacenter, and does nothing on full media; `Prepare` rename, static IP and roles; `Promote` new forest; optional
+cumulative update; `Extend` with each directory extension's media attached for that phase only, Exchange Setup
+`/PrepareSchema`, `/PrepareAD` and `/PrepareAllDomains`, skipping what is already done; `Configure` directory content, delegation, LDAPS certificate, Recycle Bin, Windows Update off, w32time;
 `Verify` a read-back of all of it plus the same probes `post-provision.sh` runs as `svc-jim` over LDAPS); and finally takes
 the `baseline` checkpoint. There is no guest listener and no OpenSSH in the guests: PowerShell Direct is the only control
 path and needs no network.

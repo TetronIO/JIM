@@ -459,7 +459,9 @@ function Get-LabDomainInfo {
         [ValidatePattern('^[A-Za-z0-9]([A-Za-z0-9-]{0,13}[A-Za-z0-9])?$')]
         [string]$ShortName,
 
-        [ValidatePattern('^[A-Za-z0-9-]{1,15}$')]
+        # Empty is allowed and means "derive it from the domain": New-LabDomainController always passes its own
+        # -NetBiosName through, which is an empty string when the operator did not give one.
+        [ValidatePattern('^([A-Za-z0-9-]{1,15})?$')]
         [string]$NetBiosName
     )
 
@@ -772,15 +774,331 @@ function ConvertTo-LabUnattendXml {
     return $builder.ToString()
 }
 
+function ConvertTo-LabKeylessUnattend {
+    <#
+    .SYNOPSIS
+        Removes both product key settings from the unattend template, for evaluation media.
+
+    .DESCRIPTION
+        Evaluation media takes no product key at install time (the AVMA key does not match an evaluation edition, and
+        Setup stops on it). The key is applied afterwards instead, by the guest's License phase, which converts the
+        edition with it. Throws if the template has no product key to remove, so a template change cannot make this
+        a silent no-op.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Template
+    )
+
+    # The windowsPE pass: <ProductKey><Key>__PRODUCT_KEY__</Key>...</ProductKey>; the specialize pass:
+    # <ProductKey>__PRODUCT_KEY__</ProductKey>. Each with its leading whitespace, so no blank line is left behind.
+    $patterns = @('(?s)\r?\n[ \t]*<ProductKey>\s*<Key>__PRODUCT_KEY__</Key>.*?</ProductKey>', '\r?\n[ \t]*<ProductKey>__PRODUCT_KEY__</ProductKey>')
+    $result = $Template
+    foreach ($pattern in $patterns) {
+        if ($result -notmatch $pattern) {
+            throw 'The unattend template has no ProductKey setting in the expected form to remove; update ConvertTo-LabKeylessUnattend with the template.'
+        }
+        $result = [regex]::Replace($result, $pattern, '')
+    }
+    return $result
+}
+
+# ---------------------------------------------------------------------------------------------
+# Directory extensions (pure)
+#
+# A product that extends the forest (Exchange today; Skype for Business could follow) is listed in settings.json
+# directoryExtensions, in the order to apply them. Adding a product means: its name in $script:DirectoryExtensionProduct,
+# its build script parameter there, a handler in the guest's Extend phase, and its Verify check. Nothing else about the
+# sequencing changes.
+# ---------------------------------------------------------------------------------------------
+
+# Product name (as the lab spells it) -> the New-LabDomainController.ps1 parameter that carries its media.
+$script:DirectoryExtensionProduct = [ordered]@{
+    Exchange = 'ExchangeIsoPath'
+}
+
+function ConvertFrom-LabDirectoryExtensionSetting {
+    <#
+    .SYNOPSIS
+        Validates settings.json directoryExtensions and returns the extensions in order: { Product, IsoPath }.
+
+    .DESCRIPTION
+        Absent or empty means a plain forest. Each entry needs a known product and its media; a product may appear only
+        once. The order is the order the products are applied in, which matters once a product depends on another
+        (Skype for Business on Exchange, say).
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    $result = New-Object System.Collections.Generic.List[object]
+    if ($null -eq $Value) {
+        return @()
+    }
+    $known = @($script:DirectoryExtensionProduct.Keys)
+    $seen = @{}
+    foreach ($entry in @($Value)) {
+        $productText = [string](Get-LabSettingValue -Object $entry -Name 'product')
+        $product = $known | Where-Object { $_ -eq $productText.Trim() } | Select-Object -First 1
+        if (-not $product) {
+            throw ("settings.json directoryExtensions names the product '{0}', which this lab does not know (known: {1})." -f $productText, ($known -join ', '))
+        }
+        $isoPath = [string](Get-LabSettingValue -Object $entry -Name 'isoPath')
+        if ([string]::IsNullOrWhiteSpace($isoPath)) {
+            throw "settings.json directoryExtensions entry '$product' has no 'isoPath' (the product's installation media)."
+        }
+        if ($seen.ContainsKey($product)) {
+            throw "settings.json directoryExtensions lists '$product' more than once."
+        }
+        $seen[$product] = $true
+        $result.Add([pscustomobject][ordered]@{ Product = [string]$product; IsoPath = $isoPath.Trim() })
+    }
+    return $result.ToArray()
+}
+
+function Get-LabDirectoryExtensionBuildParameter {
+    <#
+    .SYNOPSIS
+        The New-LabDomainController.ps1 parameters that carry the directory extensions' media: { ExchangeIsoPath = ... }.
+
+    .DESCRIPTION
+        Single values only, because the monthly rebuild passes build parameters to a child process.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Extension
+    )
+
+    $parameters = @{}
+    foreach ($entry in $Extension) {
+        $parameters[$script:DirectoryExtensionProduct[[string]$entry.Product]] = [string]$entry.IsoPath
+    }
+    return $parameters
+}
+
+function Get-LabExchangeOrganizationName {
+    <#
+    .SYNOPSIS
+        The Exchange organisation name for a forest: its NetBIOS name (PANOPLY, RESURGAM, GENTIAN).
+
+    .DESCRIPTION
+        Permanent once /PrepareAD has set it. Exchange allows letters, digits, hyphens and spaces, up to 64 characters,
+        with no leading or trailing space:
+        https://learn.microsoft.com/exchange/plan-and-deploy/prepare-ad-and-domains#step-2-prepare-active-directory
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$NetBiosName
+    )
+
+    if (($NetBiosName -notmatch '^[A-Za-z0-9-]([A-Za-z0-9 -]{0,62}[A-Za-z0-9-])?$')) {
+        throw "'$NetBiosName' cannot be an Exchange organisation name: letters, digits, hyphens and inner spaces only, up to 64 characters."
+    }
+    return $NetBiosName
+}
+
+function Get-LabExchangeSchemaTarget {
+    <#
+    .SYNOPSIS
+        The Exchange schema version (rangeUpper of ms-Exch-Schema-Version-Pt) the media installs, from the text of its
+        Setup\Data\SchemaVersion.ldf.
+
+    .DESCRIPTION
+        Read from the media rather than a table, so newer media needs no change here. 17003 for Exchange SE RTM.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$LdfText
+    )
+
+    $found = @([regex]::Matches($LdfText, '(?m)^rangeUpper:\s*(\d+)\s*$'))
+    if ($found.Count -ne 1) {
+        throw "SchemaVersion.ldf should state exactly one rangeUpper; found $($found.Count)."
+    }
+    return [int]$found[0].Groups[1].Value
+}
+
+function Get-LabExchangePreparationStep {
+    <#
+    .SYNOPSIS
+        Which Exchange Setup preparation steps a forest still needs, in order: PrepareSchema, PrepareAD,
+        PrepareAllDomains.
+
+    .DESCRIPTION
+        A forest already prepared by this media needs nothing, so a re-run converges; an interrupted preparation is
+        finished from where it stopped. A schema update from newer media is always followed by PrepareAD and
+        PrepareAllDomains, as Exchange requires. Media older than the forest's schema is refused: Exchange Setup cannot
+        use it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [AllowNull()]
+        [Nullable[int]]$SchemaRangeUpper,
+
+        [Parameter(Mandatory)]
+        [int]$TargetRangeUpper,
+
+        [Parameter(Mandatory)]
+        [bool]$OrganizationPresent,
+
+        [Parameter(Mandatory)]
+        [bool]$DomainPrepared
+    )
+
+    if (($null -ne $SchemaRangeUpper) -and ($SchemaRangeUpper -gt $TargetRangeUpper)) {
+        throw "The forest's Exchange schema ($SchemaRangeUpper) is newer than the media's ($TargetRangeUpper); use newer Exchange media."
+    }
+    $steps = New-Object System.Collections.Generic.List[string]
+    $schemaNeeded = ($null -eq $SchemaRangeUpper) -or ($SchemaRangeUpper -lt $TargetRangeUpper)
+    if ($schemaNeeded) { $steps.Add('PrepareSchema') }
+    if ($schemaNeeded -or (-not $OrganizationPresent)) { $steps.Add('PrepareAD') }
+    if ($schemaNeeded -or (-not $OrganizationPresent) -or (-not $DomainPrepared)) { $steps.Add('PrepareAllDomains') }
+    return [string[]]$steps.ToArray()
+}
+
+function Test-LabExchangeSchemaMasterBuild {
+    <#
+    .SYNOPSIS
+        Whether a schema master's Windows build is safe for Exchange to extend the schema on.
+
+    .DESCRIPTION
+        Microsoft requires a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or
+        later before Exchange extends the schema, or replication breaks:
+        https://learn.microsoft.com/exchange/plan-and-deploy/supportability-matrix#supported-active-directory-environments
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$CurrentBuild,
+
+        [Parameter(Mandatory)]
+        [int]$Ubr
+    )
+
+    if ($CurrentBuild -ne 26100) {
+        return $true
+    }
+    return ($Ubr -ge 7171)
+}
+
+function Get-LabExchangeSetupArgument {
+    <#
+    .SYNOPSIS
+        Exchange Setup's arguments for one preparation step, accepting the licence terms with diagnostic data off.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')]
+        [string]$Step,
+
+        [Parameter(Mandatory)]
+        [string]$OrganizationName
+    )
+
+    $arguments = @('/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF', "/$Step")
+    if ($Step -eq 'PrepareAD') {
+        $arguments += "/OrganizationName:$(Get-LabExchangeOrganizationName -NetBiosName $OrganizationName)"
+    }
+    return [string[]]$arguments
+}
+
+function Get-LabDirectoryResultCode {
+    <#
+    .SYNOPSIS
+        The LDAP result code a directory exception stands for, as a ResultCode name, or nothing when unrecognised.
+
+    .DESCRIPTION
+        Reads Response.ResultCode when the exception carries a response. A Windows Server 2025 domain controller
+        refusing a simple bind over plain LDAP raises a DirectoryOperationException with no Response at all, only the
+        message "Strong authentication is required for this operation.", so the message is the fallback (the lab guests
+        are installed en-US, so the text is stable). Looks inside the MethodInvocationException PowerShell wraps round
+        an exception from a .NET method call such as Bind(). Anything unrecognised returns nothing, so a check can
+        never read an unrelated failure (the server being down, say) as the refusal it wanted.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Exception
+    )
+
+    $current = $Exception
+    while (($null -eq $current.PSObject.Properties['Response']) -and $current.PSObject.Properties['InnerException'] -and ($null -ne $current.InnerException)) {
+        $current = $current.InnerException
+    }
+    if ($current.PSObject.Properties['Response'] -and ($null -ne $current.Response) -and $current.Response.PSObject.Properties['ResultCode']) {
+        return [string]$current.Response.ResultCode
+    }
+    $message = [string]$current.Message
+    if ($message -match 'Strong authentication is required') { return 'StrongAuthRequired' }
+    if ($message -match 'insufficient access rights') { return 'InsufficientAccessRights' }
+    return $null
+}
+
+function Get-LabAdProviderPath {
+    <#
+    .SYNOPSIS
+        The AD: drive path for a distinguished name, escaped for -Path.
+
+    .DESCRIPTION
+        Get-Acl -LiteralPath does not work on the ActiveDirectory provider's drive (it returns nothing and writes
+        "Cannot find path '//RootDSE/...'"), so callers use -Path, which treats [ ] * ? as wildcards. Escaping them
+        keeps a distinguished name that contains one meaning exactly itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DistinguishedName
+    )
+
+    return ('AD:\' + [System.Management.Automation.WildcardPattern]::Escape($DistinguishedName))
+}
+
+function Test-LabEvaluationEdition {
+    <#
+    .SYNOPSIS
+        Whether a Windows EditionID (HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion) is an evaluation edition.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$EditionId
+    )
+
+    return ($EditionId -match 'Eval$')
+}
+
 function Resolve-LabInstallImage {
     <#
     .SYNOPSIS
         Chooses the Datacenter image (Desktop Experience unless -ServerCore) from the media's image list.
 
     .DESCRIPTION
-        Refuses Evaluation images: an evaluation domain controller cannot be converted and its timer runs in
-        real time regardless of checkpoint reverts. Handles both naming schemes, "Windows Server 2025
-        Datacenter (Desktop Experience)" and the older upper-case "SERVERDATACENTER".
+        Prefers a full (non-evaluation) Datacenter image. When the media holds only Evaluation Datacenter images (the
+        free ISO from Microsoft's Evaluation Center), it returns the Evaluation one with Evaluation set: the build then
+        installs it without a product key and the guest's License phase converts it to full Datacenter with the AVMA
+        key before promotion. That order matters: Microsoft does not support converting an evaluation edition once it
+        is a domain controller, and an evaluation one expires in real time regardless of checkpoint reverts.
+
+        Returns { ImageIndex, ImageName, Evaluation }. Handles both naming schemes, "Windows Server 2025 Datacenter
+        (Desktop Experience)" and the older upper-case "SERVERDATACENTER".
     #>
     [CmdletBinding()]
     param(
@@ -792,17 +1110,15 @@ function Resolve-LabInstallImage {
 
     $all = @($Image | ForEach-Object { [string]$_.ImageName })
     $datacenter = @($Image | Where-Object { $_.ImageName -match 'Datacenter' })
-    $licensed = @($datacenter | Where-Object { $_.ImageName -notmatch 'Evaluation' })
-
-    if ($licensed.Count -eq 0) {
-        if ($datacenter.Count -gt 0) {
-            throw ("The media holds only Evaluation Datacenter images ({0}). An Evaluation domain controller cannot be converted and expires in real time; use non-evaluation media." -f ($all -join '; '))
-        }
+    if ($datacenter.Count -eq 0) {
         throw ("The media holds no Datacenter image, so Automatic Virtual Machine Activation cannot apply. It holds: {0}" -f ($all -join '; '))
     }
+    $licensed = @($datacenter | Where-Object { $_.ImageName -notmatch 'Evaluation' })
+    $evaluation = ($licensed.Count -eq 0)
+    $candidates = if ($evaluation) { $datacenter } else { $licensed }
 
-    $desktop = @($licensed | Where-Object { ($_.ImageName -match 'Desktop Experience') -or ($_.ImageName -cmatch 'SERVERDATACENTER$') })
-    $core = @($licensed | Where-Object { $desktop -notcontains $_ })
+    $desktop = @($candidates | Where-Object { ($_.ImageName -match 'Desktop Experience') -or ($_.ImageName -cmatch 'SERVERDATACENTER$') })
+    $core = @($candidates | Where-Object { $desktop -notcontains $_ })
 
     if ($ServerCore) {
         $pool = $core
@@ -813,7 +1129,11 @@ function Resolve-LabInstallImage {
     if ($pool.Count -eq 0) {
         throw ("The media has no matching Datacenter image. It holds: {0}" -f ($all -join '; '))
     }
-    return $pool[0]
+    return [pscustomobject]@{
+        ImageIndex = $pool[0].ImageIndex
+        ImageName  = [string]$pool[0].ImageName
+        Evaluation = $evaluation
+    }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -834,7 +1154,7 @@ function Get-LabGuestPhaseArgument {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -842,28 +1162,37 @@ function Get-LabGuestPhaseArgument {
     )
 
     $required = @{
+        License   = @()
         Prepare   = @('ComputerName', 'IPAddress', 'PrefixLength', 'Gateway')
         Promote   = @('Domain', 'NetBiosName', 'SafeModePassword')
+        Extend    = @('Domain', 'NetBiosName')
         Configure = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
         Verify    = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
     }
     # The DNS forwarder is optional: the lab network has no uplink, so there is normally nothing to forward to. It
     # is passed only when it has a value, so the guest never receives an empty argument.
     $optionalScalar = @{
+        License   = @()
         Prepare   = @('DnsForwarder')
         Promote   = @()
+        Extend    = @()
         Configure = @('DnsForwarder')
         Verify    = @()
     }
+    # DirectoryExtension: the products extending the forest, in order (Exchange). Absent for a plain forest.
     $optionalArray = @{
+        License   = @()
         Prepare   = @()
         Promote   = @()
+        Extend    = @('DirectoryExtension')
         Configure = @('ExtraCertificateNames')
-        Verify    = @('ExtraCertificateNames')
+        Verify    = @('ExtraCertificateNames', 'DirectoryExtension')
     }
     $optionalSwitch = @{
+        License   = @()
         Prepare   = @()
         Promote   = @()
+        Extend    = @()
         Configure = @('EnableRecycleBin')
         Verify    = @('EnableRecycleBin')
     }
@@ -1378,6 +1707,9 @@ function ConvertFrom-LabRebuildSetting {
         $shared['dnsForwarder'] = $forwarderText
     }
 
+    # Every forest gets the same extensions, in the order listed (validated before anything is built).
+    $extensions = @(ConvertFrom-LabDirectoryExtensionSetting -Value (Get-LabSettingValue -Object $Settings -Name 'directoryExtensions'))
+
     $controllers = Get-LabSettingValue -Object $Settings -Name 'domainControllers'
     if ($null -eq $controllers) {
         throw "settings.json has no 'domainControllers'."
@@ -1449,6 +1781,10 @@ function ConvertFrom-LabRebuildSetting {
         }
         if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
             $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $extensionParameters = Get-LabDirectoryExtensionBuildParameter -Extension $extensions
+        foreach ($key in $extensionParameters.Keys) {
+            $parameters[$key] = $extensionParameters[$key]
         }
         $roles.Add((Get-LabRebuildRoleEntry -LiveName $liveName -BuildParameters $parameters))
     }
@@ -2436,8 +2772,9 @@ public static class LabIsoStream
     $image = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
     $result = $null
     try {
-        # FsiFileSystems: ISO9660 = 1, Joliet = 2, UDF = 4.
-        $image.FileSystemsToCreate = 6
+        # FsiFileSystems: ISO9660 = 1, Joliet = 2, UDF = 4. Joliet is an extension of ISO 9660, so IMAPI2 refuses
+        # Joliet without it ("The value specified for parameter 'fileSystems' is not valid"): all three, 7.
+        $image.FileSystemsToCreate = 7
         $image.VolumeName = $VolumeLabel
         $image.Root.AddTree($SourceDirectory, $false)
         $result = $image.CreateResultImage()
@@ -2503,6 +2840,13 @@ function Restart-LabGuest {
         Restarts through Hyper-V rather than from inside the guest, so the PowerShell Direct session is not
         broken mid-command. Waits for the VM's uptime to reset before polling the guest, so a guest that has
         not yet begun to shut down is not mistaken for one that has come back.
+
+        The restart is a clean one (-Type Reboot, through the guest's Shutdown integration service), never the
+        default, which is a hard reset: "like powering the computer down ... This can result in data loss"
+        (https://learn.microsoft.com/powershell/module/hyper-v/restart-vm). Every phase restarts straight after
+        writing its changes, so a hard reset lost what had not yet reached the disk: a Trusted Root import two
+        seconds old, and very likely promotion's own final settings (Active Directory Web Services was left
+        Disabled on the first real build).
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([System.Management.Automation.PSCredential])]
@@ -2522,7 +2866,7 @@ function Restart-LabGuest {
     }
 
     $before = (Get-VM -Name $VMName).Uptime
-    Restart-VM -Name $VMName -Force -Confirm:$false
+    Restart-VM -Name $VMName -Type Reboot -Force -Confirm:$false
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $vm = Get-VM -Name $VMName
@@ -2584,7 +2928,7 @@ function Invoke-LabGuestPhase {
         [System.Management.Automation.PSCredential]$Credential,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Prepare', 'Promote', 'Configure', 'Verify')]
+        [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
         [Parameter(Mandatory)]
@@ -2758,13 +3102,16 @@ function Grant-LabContainerDelegation {
 
     $sid = Get-LabGroupSid -GroupName $GroupName
     $sddl = ConvertTo-LabDelegationSddl -AclPath $AclPath -TrusteeSid $sid
-    $path = "AD:\$ContainerDn"
-    if (-not (Test-Path -LiteralPath $path)) {
+    # -Path with an escaped name, never -LiteralPath: on the AD: drive, Get-Acl -LiteralPath returns nothing and writes
+    # "Cannot find path '//RootDSE/...'" (seen on Windows Server 2025, Windows PowerShell 5.1), and -ErrorAction Stop so
+    # a failed read can never be mistaken for an empty DACL.
+    $path = Get-LabAdProviderPath -DistinguishedName $ContainerDn
+    if (-not (Test-Path -Path $path)) {
         throw "Could not read the permissions of '$ContainerDn'; does it exist?"
     }
 
     $access = [System.Security.AccessControl.AccessControlSections]::Access
-    $acl = Get-Acl -LiteralPath $path
+    $acl = Get-Acl -Path $path -ErrorAction Stop
     $existing = $acl.GetSecurityDescriptorSddlForm($access)
     if (Test-LabSddlContainsSid -Sddl $existing -Sid $sid) {
         return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'AlreadyPresent'; TrusteeSid = $sid }
@@ -2772,9 +3119,9 @@ function Grant-LabContainerDelegation {
 
     $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl -TrusteeSid $sid
     $acl.SetSecurityDescriptorSddlForm($merged, $access)
-    Set-Acl -LiteralPath $path -AclObject $acl
+    Set-Acl -Path $path -AclObject $acl -ErrorAction Stop
 
-    $after = (Get-Acl -LiteralPath $path).GetSecurityDescriptorSddlForm($access)
+    $after = (Get-Acl -Path $path -ErrorAction Stop).GetSecurityDescriptorSddlForm($access)
     if (-not (Test-LabSddlContainsSid -Sddl $after -Sid $sid)) {
         throw "The delegation was written to '$ContainerDn' but reading it back does not show the '$GroupName' group."
     }
@@ -3126,8 +3473,8 @@ function Test-LabServiceAccountDelegation {
             Get-ADUser -Filter "SamAccountName -eq 'jim-probe-outside'" | Remove-ADUser -Confirm:$false
         }
         catch [System.DirectoryServices.Protocols.DirectoryOperationException] {
-            $refused = ($_.Exception.Response.ResultCode -eq [System.DirectoryServices.Protocols.ResultCode]::InsufficientAccessRights)
-            & $record 'svc-jim cannot create a user outside the delegated containers' $refused "result: $($_.Exception.Response.ResultCode)"
+            $code = Get-LabDirectoryResultCode -Exception $_.Exception
+            & $record 'svc-jim cannot create a user outside the delegated containers' ($code -eq 'InsufficientAccessRights') "result: $code ($($_.Exception.Message))"
         }
         catch {
             & $record 'svc-jim cannot create a user outside the delegated containers' $false $_.Exception.Message
@@ -3169,7 +3516,8 @@ function Test-LabPlainLdapRefused {
         return $false
     }
     catch [System.DirectoryServices.Protocols.DirectoryOperationException] {
-        return ($_.Exception.Response.ResultCode -eq [System.DirectoryServices.Protocols.ResultCode]::StrongAuthRequired)
+        # Windows Server 2025 refuses with "Strong authentication is required for this operation." and no Response.
+        return ((Get-LabDirectoryResultCode -Exception $_.Exception) -eq 'StrongAuthRequired')
     }
     catch [System.DirectoryServices.Protocols.LdapException] {
         # Error 8 is strongerAuthRequired; error 49 with the signing data code also counts as a refusal.
@@ -3187,7 +3535,9 @@ Export-ModuleMember -Function @(
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',
     'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote',
     'Get-LabAvmaKey', 'ConvertTo-LabUnattendPassword', 'Get-LabUnattendPlaceholder', 'ConvertTo-LabUnattendXml',
-    'Resolve-LabInstallImage',
+    'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Get-LabAdProviderPath', 'Get-LabDirectoryResultCode',
+    'ConvertFrom-LabDirectoryExtensionSetting', 'Get-LabDirectoryExtensionBuildParameter', 'Get-LabExchangeOrganizationName',
+    'Get-LabExchangeSchemaTarget', 'Get-LabExchangePreparationStep', 'Test-LabExchangeSchemaMasterBuild', 'Get-LabExchangeSetupArgument', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',

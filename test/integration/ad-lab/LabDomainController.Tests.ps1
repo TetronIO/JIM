@@ -390,6 +390,14 @@ Describe 'Get-LabDomainInfo' {
         $info.BaseDn | Should -Be 'DC=panoply,DC=local'
     }
 
+    It 'derives the NetBIOS name when it is passed empty, as New-LabDomainController passes it when not given one' {
+        (Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName '').NetBiosName | Should -Be 'PANOPLY'
+    }
+
+    It 'still rejects a NetBIOS name with characters NetBIOS does not allow' {
+        { Get-LabDomainInfo -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PAN OPLY' } | Should -Throw
+    }
+
     It 'honours an explicit NetBIOS name' {
         (Get-LabDomainInfo -Domain 'RESURGAM.LOCAL' -ShortName 'dc1' -NetBiosName 'RSG').NetBiosName | Should -Be 'RSG'
     }
@@ -508,6 +516,30 @@ Describe 'Get-LabGuestPhaseArgument' {
         }
     }
 
+    It 'gives Extend the forest name and the products to apply, in order, and no secret' {
+        $withExtensions = $script:Settings.Clone()
+        $withExtensions.DirectoryExtension = @('Exchange')
+        $arguments = Get-LabGuestPhaseArgument -Phase Extend -Settings $withExtensions
+        $arguments.NetBiosName | Should -Be 'PANOPLY'
+        $arguments.Domain | Should -Be 'PANOPLY.LOCAL'
+        $arguments.DirectoryExtension | Should -Be @('Exchange')
+        $arguments.Contains('SafeModePassword') | Should -BeFalse
+        $arguments.Contains('ServiceAccountPassword') | Should -BeFalse
+    }
+
+    It 'tells Verify which products to check, and nothing when the forest is plain' {
+        $withExtensions = $script:Settings.Clone()
+        $withExtensions.DirectoryExtension = @('Exchange')
+        (Get-LabGuestPhaseArgument -Phase Verify -Settings $withExtensions).DirectoryExtension | Should -Be @('Exchange')
+        (Get-LabGuestPhaseArgument -Phase Verify -Settings $script:Settings).Contains('DirectoryExtension') | Should -BeFalse
+    }
+
+    It 'gives License nothing but the phase: it needs no settings and no secret' {
+        $arguments = Get-LabGuestPhaseArgument -Phase License -Settings $script:Settings
+        @($arguments.Keys) | Should -Be @('Phase')
+        $arguments.Phase | Should -Be 'License'
+    }
+
     It 'gives Prepare the network settings and nothing that belongs to a later phase' {
         $arguments = Get-LabGuestPhaseArgument -Phase Prepare -Settings $script:Settings
         $arguments.Phase | Should -Be 'Prepare'
@@ -624,14 +656,245 @@ Describe 'Resolve-LabInstallImage' {
         (Resolve-LabInstallImage -Image $legacy).ImageIndex | Should -Be 4
     }
 
-    It 'throws listing what the media does hold when there is no Datacenter image, as an evaluation-only ISO might' {
+    It 'throws listing what the media does hold when there is no Datacenter image, as a Standard-only ISO might' {
         $evaluation = @([pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Standard Evaluation' })
         { Resolve-LabInstallImage -Image $evaluation } | Should -Throw '*Standard Evaluation*'
     }
 
-    It 'refuses an Evaluation edition even when it is Datacenter, because it cannot be converted and would expire' {
-        $evaluation = @([pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' })
-        { Resolve-LabInstallImage -Image $evaluation } | Should -Throw '*Evaluation*'
+    It 'flags a full Datacenter image as not Evaluation' {
+        (Resolve-LabInstallImage -Image $script:Images).Evaluation | Should -BeFalse
+    }
+
+    It 'falls back to the Datacenter Evaluation image, flagged, when the media holds nothing else (the free Evaluation Center ISO)' {
+        $evaluation = @(
+            [pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Standard Evaluation' }
+            [pscustomobject]@{ ImageIndex = 2; ImageName = 'Windows Server 2025 Standard Evaluation (Desktop Experience)' }
+            [pscustomobject]@{ ImageIndex = 3; ImageName = 'Windows Server 2025 Datacenter Evaluation' }
+            [pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' }
+        )
+        $image = Resolve-LabInstallImage -Image $evaluation
+        $image.ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $image.ImageIndex | Should -Be 4
+        $image.Evaluation | Should -BeTrue
+        (Resolve-LabInstallImage -Image $evaluation -ServerCore).ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation'
+    }
+
+    It 'prefers a full Datacenter image over an Evaluation one on the same media' {
+        $mixed = @(
+            [pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)' }
+            [pscustomobject]@{ ImageIndex = 2; ImageName = 'Windows Server 2025 Datacenter (Desktop Experience)' }
+        )
+        $image = Resolve-LabInstallImage -Image $mixed
+        $image.ImageIndex | Should -Be 2
+        $image.Evaluation | Should -BeFalse
+    }
+}
+
+Describe 'ConvertFrom-LabDirectoryExtensionSetting' {
+    It 'returns nothing when the settings list no extensions, which is a plain forest' {
+        @(ConvertFrom-LabDirectoryExtensionSetting -Value $null).Count | Should -Be 0
+        @(ConvertFrom-LabDirectoryExtensionSetting -Value @()).Count | Should -Be 0
+    }
+
+    It 'reads each extension in the order given, from a hashtable or parsed JSON' {
+        $json = '[{ "product": "Exchange", "isoPath": "C:\\media\\ExchangeServerSE-x64.iso" }]' | ConvertFrom-Json
+        $extensions = @(ConvertFrom-LabDirectoryExtensionSetting -Value $json)
+        $extensions.Count | Should -Be 1
+        $extensions[0].Product | Should -Be 'Exchange'
+        $extensions[0].IsoPath | Should -Be 'C:\media\ExchangeServerSE-x64.iso'
+    }
+
+    It 'accepts the product name in any case and returns it as the lab spells it' {
+        (ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'exchange'; isoPath = 'C:\x.iso' }))[0].Product | Should -Be 'Exchange'
+    }
+
+    It 'refuses an unknown product, naming it and the products it knows' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Lync'; isoPath = 'C:\x.iso' }) } | Should -Throw '*Lync*Exchange*'
+    }
+
+    It 'refuses an extension with no media' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Exchange' }) } | Should -Throw '*isoPath*'
+    }
+
+    It 'refuses the same product twice' {
+        { ConvertFrom-LabDirectoryExtensionSetting -Value @(@{ product = 'Exchange'; isoPath = 'C:\a.iso' }, @{ product = 'Exchange'; isoPath = 'C:\b.iso' }) } | Should -Throw '*more than once*'
+    }
+}
+
+Describe 'Get-LabDirectoryExtensionBuildParameter' {
+    It 'maps Exchange onto the build script parameter that carries its media' {
+        $parameters = Get-LabDirectoryExtensionBuildParameter -Extension @([pscustomobject]@{ Product = 'Exchange'; IsoPath = 'C:\media\ex.iso' })
+        $parameters.ExchangeIsoPath | Should -Be 'C:\media\ex.iso'
+        @($parameters.Keys).Count | Should -Be 1
+    }
+
+    It 'returns no parameters for a plain forest' {
+        @((Get-LabDirectoryExtensionBuildParameter -Extension @()).Keys).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-LabExchangeOrganizationName' {
+    It 'names the organisation after the forest' {
+        Get-LabExchangeOrganizationName -NetBiosName 'PANOPLY' | Should -Be 'PANOPLY'
+    }
+
+    It 'refuses a name Exchange does not allow' {
+        { Get-LabExchangeOrganizationName -NetBiosName 'PAN_OPLY' } | Should -Throw '*organisation name*'
+    }
+}
+
+Describe 'Get-LabExchangeSchemaTarget' {
+    It 'reads the schema version the media installs from SchemaVersion.ldf' {
+        $ldf = "dn: CN=ms-Exch-Schema-Version-Pt,<SchemaContainerDN>`nchangetype: modify`nreplace: rangeUpper`nrangeUpper: 17003`n-`n"
+        Get-LabExchangeSchemaTarget -LdfText $ldf | Should -Be 17003
+    }
+
+    It 'refuses a file that does not state exactly one version' {
+        { Get-LabExchangeSchemaTarget -LdfText 'dn: CN=something' } | Should -Throw '*rangeUpper*'
+        { Get-LabExchangeSchemaTarget -LdfText "rangeUpper: 1`nrangeUpper: 2" } | Should -Throw '*rangeUpper*'
+    }
+}
+
+Describe 'Get-LabExchangePreparationStep' {
+    It 'prepares everything in a forest Exchange has never touched' {
+        Get-LabExchangePreparationStep -TargetRangeUpper 17003 -OrganizationPresent:$false -DomainPrepared:$false |
+            Should -Be @('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')
+    }
+
+    It 'does nothing in a forest already prepared by this media, so a re-run converges' {
+        @(Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$true).Count | Should -Be 0
+    }
+
+    It 'finishes what an interrupted preparation left undone' {
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$false -DomainPrepared:$false |
+            Should -Be @('PrepareAD', 'PrepareAllDomains')
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$false |
+            Should -Be @('PrepareAllDomains')
+    }
+
+    It 'prepares the organisation and domains again after a schema update from newer media, as Exchange requires' {
+        Get-LabExchangePreparationStep -SchemaRangeUpper 17003 -TargetRangeUpper 17004 -OrganizationPresent:$true -DomainPrepared:$true |
+            Should -Be @('PrepareSchema', 'PrepareAD', 'PrepareAllDomains')
+    }
+
+    It 'refuses older media than the forest was prepared with, which Exchange Setup cannot use' {
+        { Get-LabExchangePreparationStep -SchemaRangeUpper 17004 -TargetRangeUpper 17003 -OrganizationPresent:$true -DomainPrepared:$true } | Should -Throw '*newer*'
+    }
+}
+
+Describe 'Test-LabExchangeSchemaMasterBuild' {
+    It 'accepts Windows Server 2025 at the November 2025 update or later' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 7171 | Should -BeTrue
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 32230 | Should -BeTrue
+    }
+
+    It 'refuses Windows Server 2025 older than that, which corrupts replication when Exchange extends the schema' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26100 -Ubr 7092 | Should -BeFalse
+    }
+
+    It 'has no objection to a later Windows Server release' {
+        Test-LabExchangeSchemaMasterBuild -CurrentBuild 26200 -Ubr 1 | Should -BeTrue
+    }
+}
+
+Describe 'Get-LabExchangeSetupArgument' {
+    It 'accepts the licence terms with diagnostic data off for every step' {
+        foreach ($step in 'PrepareSchema', 'PrepareAD', 'PrepareAllDomains') {
+            Get-LabExchangeSetupArgument -Step $step -OrganizationName 'PANOPLY' | Should -Contain '/IAcceptExchangeServerLicenseTerms_DiagnosticDataOFF'
+        }
+    }
+
+    It 'names the organisation only when preparing Active Directory' {
+        $prepareAd = Get-LabExchangeSetupArgument -Step PrepareAD -OrganizationName 'PANOPLY'
+        $prepareAd | Should -Contain '/PrepareAD'
+        $prepareAd | Should -Contain '/OrganizationName:PANOPLY'
+        (Get-LabExchangeSetupArgument -Step PrepareSchema -OrganizationName 'PANOPLY') -join ' ' | Should -Not -Match 'OrganizationName'
+        Get-LabExchangeSetupArgument -Step PrepareAllDomains -OrganizationName 'PANOPLY' | Should -Contain '/PrepareAllDomains'
+    }
+}
+
+Describe 'Get-LabDirectoryResultCode' {
+    It 'reads the result code from the response when the exception carries one' {
+        $exception = [pscustomobject]@{ Message = 'The user has insufficient access rights.'; Response = [pscustomobject]@{ ResultCode = 'InsufficientAccessRights' } }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'InsufficientAccessRights'
+    }
+
+    It 'recognises a strong-authentication refusal that arrives with no response, as a Windows Server 2025 simple bind does' {
+        $exception = [pscustomobject]@{ Message = 'Strong authentication is required for this operation.'; Response = $null }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'recognises an access refusal that arrives with no response' {
+        $exception = [pscustomobject]@{ Message = 'The user has insufficient access rights.'; Response = $null }
+        Get-LabDirectoryResultCode -Exception $exception | Should -Be 'InsufficientAccessRights'
+    }
+
+    It 'copes with an exception that has no Response property at all' {
+        Get-LabDirectoryResultCode -Exception ([pscustomobject]@{ Message = 'Strong authentication is required for this operation.' }) | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'looks inside the wrapper PowerShell puts round an exception from a .NET method call such as Bind()' {
+        $inner = [pscustomobject]@{ Message = 'Strong authentication is required for this operation.'; Response = $null; InnerException = $null }
+        $wrapper = [pscustomobject]@{ Message = 'Exception calling "Bind" with "0" argument(s): "Strong authentication is required."'; InnerException = $inner }
+        Get-LabDirectoryResultCode -Exception $wrapper | Should -Be 'StrongAuthRequired'
+    }
+
+    It 'returns nothing for an error it does not recognise, so a check cannot mistake it for a refusal' {
+        Get-LabDirectoryResultCode -Exception ([pscustomobject]@{ Message = 'The LDAP server is unavailable.'; Response = $null }) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-LabAdProviderPath' {
+    It 'puts the distinguished name on the AD: drive' {
+        Get-LabAdProviderPath -DistinguishedName 'OU=Corp,DC=panoply,DC=local' | Should -Be 'AD:\OU=Corp,DC=panoply,DC=local'
+    }
+
+    It 'escapes wildcard characters, because Get-Acl -LiteralPath does not work on the AD: drive and -Path expands them' {
+        Get-LabAdProviderPath -DistinguishedName 'OU=Team [A]*?,DC=panoply,DC=local' | Should -Be 'AD:\OU=Team `[A`]`*`?,DC=panoply,DC=local'
+    }
+}
+
+Describe 'Test-LabEvaluationEdition' {
+    It 'recognises the evaluation edition IDs Windows reports' {
+        Test-LabEvaluationEdition -EditionId 'ServerDatacenterEval' | Should -BeTrue
+        Test-LabEvaluationEdition -EditionId 'ServerStandardEval' | Should -BeTrue
+    }
+
+    It 'does not mistake a full edition for an evaluation one' {
+        Test-LabEvaluationEdition -EditionId 'ServerDatacenter' | Should -BeFalse
+        Test-LabEvaluationEdition -EditionId 'ServerStandard' | Should -BeFalse
+    }
+}
+
+Describe 'ConvertTo-LabKeylessUnattend' {
+    BeforeAll {
+        $script:Template = Get-Content -LiteralPath $script:TemplatePath -Raw
+        $script:KeylessValues = @{
+            COMPUTER_NAME              = 'dc1'
+            ADMIN_PASSWORD_ENCODED     = 'QUJD'
+            AUTOLOGON_PASSWORD_ENCODED = 'REVG'
+            IMAGE_NAME                 = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+            UI_LANGUAGE                = 'en-US'
+            LOCALE                     = 'en-GB'
+            TIME_ZONE                  = 'UTC'
+        }
+    }
+
+    It 'removes both product key settings, so evaluation media installs with none' {
+        $keyless = ConvertTo-LabKeylessUnattend -Template $script:Template
+        Get-LabUnattendPlaceholder -Template $keyless | Should -Not -Contain 'PRODUCT_KEY'
+        $keyless | Should -Not -Match '<ProductKey>'
+    }
+
+    It 'leaves a template that renders to well-formed XML from every other value' {
+        $xml = ConvertTo-LabUnattendXml -Template (ConvertTo-LabKeylessUnattend -Template $script:Template) -Values $script:KeylessValues
+        { [xml]$xml } | Should -Not -Throw
+        $xml | Should -Match '<ComputerName>dc1</ComputerName>'
+        $xml | Should -Match '<AcceptEula>true</AcceptEula>'
+    }
+
+    It 'throws when the template carries no product key, rather than silently doing nothing' {
+        { ConvertTo-LabKeylessUnattend -Template '<unattend></unattend>' } | Should -Throw '*ProductKey*'
     }
 }
 
@@ -923,6 +1186,22 @@ Describe 'ConvertFrom-LabRebuildSetting' {
 
         $without = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
         foreach ($role in $without.Roles) { $role.BuildParameters.ContainsKey('CumulativeUpdatePath') | Should -BeFalse }
+    }
+
+    It 'passes each directory extension to every build, and none when there are none' {
+        $settings = Get-RebuildSetting
+        $settings.directoryExtensions = @(@{ product = 'Exchange'; isoPath = 'D:\media\ExchangeServerSE-x64.iso' })
+        $with = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1'
+        @($with.Roles | ForEach-Object { $_.BuildParameters.ExchangeIsoPath }) | Should -Be @('D:\media\ExchangeServerSE-x64.iso', 'D:\media\ExchangeServerSE-x64.iso', 'D:\media\ExchangeServerSE-x64.iso')
+
+        $without = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        foreach ($role in $without.Roles) { $role.BuildParameters.ContainsKey('ExchangeIsoPath') | Should -BeFalse }
+    }
+
+    It 'refuses a directory extension it does not know, before building anything' {
+        $settings = Get-RebuildSetting
+        $settings.directoryExtensions = @(@{ product = 'Lync'; isoPath = 'D:\media\lync.iso' })
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*Lync*'
     }
 
     It 'reads settings parsed from JSON as well as a hashtable' {

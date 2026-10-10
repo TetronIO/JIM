@@ -638,3 +638,85 @@ Describe 'Get-JIMActivity -Follow' {
         }
     }
 }
+
+Describe 'Get-JIMActivityExecutionItem' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMActivityExecutionItem
+        }
+
+        It 'Should have a mandatory Id parameter of type guid' {
+            $param = $command.Parameters['Id']
+            $param.ParameterType | Should -Be ([guid])
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should not alias Id as ActivityId (an item id is not an Activity id)' {
+            $command.Parameters['Id'].Aliases | Should -Not -Contain 'ActivityId'
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Get-JIMActivityExecutionItem -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Request' {
+
+        It 'Requests the item from the execution item detail endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = $itemId; errorMessage = 'No free value was found.' } }
+
+                $result = Get-JIMActivityExecutionItem -Id $itemId
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$itemId" }
+                $result.errorMessage | Should -Be 'No free value was found.'
+            }
+        }
+
+        It 'Fetches each item piped in from the execution item list, by its Id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ errorMessage = 'x' } }
+                $first = [guid]::NewGuid()
+                $second = [guid]::NewGuid()
+                # The shape Get-JIMActivity -ExecutionItems returns: headers carrying Id and ErrorType, no message.
+                $headers = @(
+                    [PSCustomObject]@{ Id = $first; ErrorType = 'GeneratedValueExhausted'; DisplayName = 'Osric Tamworth' }
+                    [PSCustomObject]@{ Id = $second; ErrorType = 'UnhandledError'; DisplayName = 'Nerys Vandal' }
+                )
+
+                $headers | Get-JIMActivityExecutionItem | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$first" }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$second" }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Get-JIMActivityExecutionItem -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+}

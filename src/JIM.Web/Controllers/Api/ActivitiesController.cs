@@ -294,6 +294,36 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
+    /// Get a Run Profile Execution Item
+    /// </summary>
+    /// <remarks>
+    /// One item's detail: what happened to the object and, when it failed, the error message and stack trace the
+    /// list's headers do not carry, with the snapshots taken when it was recorded and the ids of what it is about.
+    /// Item ids come from the list (<c>GET /activities/{id}/items</c>).
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Execution Item.</param>
+    /// <returns>The Execution Item's detail.</returns>
+    /// <response code="200">Returns the Execution Item.</response>
+    /// <response code="404">If no Execution Item has the id.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("items/{id:guid}", Name = "GetActivityExecutionItem")]
+    [ProducesResponseType(typeof(ActivityRunProfileExecutionItemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetActivityExecutionItemAsync(Guid id)
+    {
+        _logger.LogDebug("Getting activity execution item: {Id}", id);
+
+        var item = await _application.Activities.GetActivityRunProfileExecutionItemCoreAsync(id);
+        if (item == null)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
+        }
+
+        return Ok(ActivityRunProfileExecutionItemDetailDto.FromEntity(item));
+    }
+
+    /// <summary>
     /// List child Activities
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the parent Activity.</param>

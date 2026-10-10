@@ -85,6 +85,13 @@ Describe 'Get-LabSettingsExample' {
         $script:Settings.switchName | Should -Be 'Lab'
     }
 
+    It 'extends every forest with the Exchange organisation, in a list a later product can join' {
+        $extensions = @($script:Settings.directoryExtensions)
+        $extensions.Count | Should -Be 1
+        $extensions[0].product | Should -Be 'Exchange'
+        $extensions[0].isoPath | Should -Match '\.iso$'
+    }
+
     It 'has no dnsForwarder: the Lab switch has no uplink, so there is nothing to forward to' {
         $script:Settings.PSObject.Properties.Name | Should -Not -Contain 'dnsForwarder'
     }

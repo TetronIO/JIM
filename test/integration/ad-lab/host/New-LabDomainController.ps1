@@ -10,8 +10,12 @@
     small second ISO carrying autounattend.xml, installs unattended with the Automatic Virtual Machine Activation
     key, then drives the guest through PowerShell Direct (Invoke-Command -VMName; no network or guest listener is
     needed): it copies the guest files into C:\jim-ad-lab, runs Initialize-LabDomainController.ps1 phase by phase
-    across restarts (Prepare, Promote, Configure, Verify), installs the cumulative update if one was given, and
-    finally takes the 'baseline' checkpoint.
+    across restarts (License, Prepare, Promote, Configure, Verify), installs the cumulative update if one was given,
+    and finally takes the 'baseline' checkpoint.
+
+    Evaluation media (the free ISO from Microsoft's Evaluation Center) is accepted when it holds no full Datacenter
+    image: it installs without a product key, and the License phase converts the guest to full Datacenter with the
+    AVMA key, before promotion, which is the only point at which that conversion is supported.
 
     Safe to re-run after a failed step. If the VM exists the create step is skipped, and every guest phase checks
     whether it has already happened, so the sequence converges. To start again from nothing, run
@@ -30,8 +34,9 @@
     The forest root domain, for example PANOPLY.LOCAL. The domain controller is <ComputerName>.<domain>.
 
 .PARAMETER IsoPath
-    Path to a NON-evaluation Windows Server 2025 ISO (an evaluation domain controller cannot be converted, and its
-    timer runs in real time regardless of checkpoint reverts).
+    Path to a Windows Server 2025 ISO holding a Datacenter image. Full media is preferred; evaluation media is
+    converted to full Datacenter by the License phase before promotion (an evaluation domain controller cannot be
+    converted afterwards, and its timer runs in real time regardless of checkpoint reverts).
 
 .PARAMETER VhdDirectory
     Folder that receives the VM's files: <VhdDirectory>\<Name>\.
@@ -73,6 +78,12 @@
 
 .PARAMETER CumulativeUpdatePath
     A .msu cumulative update to install (from inside the guest, by DISM) after promotion and before configuration.
+
+.PARAMETER ExchangeIsoPath
+    Exchange Server media (the Exchange Server SE ISO). When given, the Extend phase extends the forest with the full
+    Exchange organisation, named after the forest: Setup /PrepareSchema, /PrepareAD and /PrepareAllDomains, the only
+    supported way to add Exchange's schema. The ISO is attached to the guest for that phase only. settings.json lists it
+    under directoryExtensions.
 
 .PARAMETER MemoryStartupBytes
     Static memory. Default 4 GB.
@@ -172,6 +183,8 @@ param(
 
     [string]$CumulativeUpdatePath,
 
+    [string]$ExchangeIsoPath,
+
     [uint64]$MemoryStartupBytes = 4GB,
 
     [ValidateRange(1, 32)]
@@ -221,8 +234,9 @@ function Write-Ok {
     Write-Host "  $Text" -ForegroundColor Green
 }
 
-function Get-InstallImageName {
-    # Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one.
+function Get-InstallImage {
+    # Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
+    # { ImageIndex, ImageName, Evaluation }.
     $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
     try {
         $drive = ($mounted | Get-Volume).DriveLetter
@@ -231,7 +245,7 @@ function Get-InstallImageName {
             $wim = "${drive}:\sources\install.esd"
         }
         $images = @(Get-WindowsImage -ImagePath $wim)
-        return (Resolve-LabInstallImage -Image $images).ImageName
+        return (Resolve-LabInstallImage -Image $images)
     }
     finally {
         $null = Dismount-DiskImage -ImagePath $IsoPath
@@ -239,18 +253,24 @@ function Get-InstallImageName {
 }
 
 function Invoke-UnattendIsoBuild {
-    param([string]$ImageName, [securestring]$Password, [string]$IsoOutputPath)
+    param([object]$Image, [securestring]$Password, [string]$IsoOutputPath)
 
     $template = Get-Content -LiteralPath (Join-Path $layout.GuestDirectory 'autounattend.xml') -Raw
     $values = @{
         COMPUTER_NAME              = $info.ShortName
         ADMIN_PASSWORD_ENCODED     = (ConvertTo-LabUnattendPassword -Password $Password -Kind AdministratorPassword)
         AUTOLOGON_PASSWORD_ENCODED = (ConvertTo-LabUnattendPassword -Password $Password -Kind Password)
-        IMAGE_NAME                 = $ImageName
-        PRODUCT_KEY                = (Get-LabAvmaKey -Edition Datacenter)
+        IMAGE_NAME                 = $Image.ImageName
         UI_LANGUAGE                = $UILanguage
         LOCALE                     = $Locale
         TIME_ZONE                  = $TimeZone
+    }
+    if ($Image.Evaluation) {
+        # Evaluation media takes no product key; the License phase applies the AVMA key by converting the edition.
+        $template = ConvertTo-LabKeylessUnattend -Template $template
+    }
+    else {
+        $values['PRODUCT_KEY'] = Get-LabAvmaKey -Edition Datacenter
     }
     $xml = ConvertTo-LabUnattendXml -Template $template -Values $values
 
@@ -266,7 +286,7 @@ function Invoke-UnattendIsoBuild {
 }
 
 function Invoke-VmCreation {
-    param([string]$ImageName, [securestring]$Password)
+    param([object]$Image, [securestring]$Password)
 
     $vmFolder = Join-Path $VhdDirectory $Name
     $vhdPath = Join-Path $vmFolder "$Name.vhdx"
@@ -285,7 +305,7 @@ function Invoke-VmCreation {
     Set-VMFirmware -VMName $Name -EnableSecureBoot On
 
     $windowsDrive = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
-    Invoke-UnattendIsoBuild -ImageName $ImageName -Password $Password -IsoOutputPath $script:UnattendIso
+    Invoke-UnattendIsoBuild -Image $Image -Password $Password -IsoOutputPath $script:UnattendIso
     $null = Add-VMDvdDrive -VMName $Name -Path $script:UnattendIso
     Set-VMFirmware -VMName $Name -FirstBootDevice $windowsDrive
     Write-Ok "Created $Name (Generation 2, $($MemoryStartupBytes / 1GB) GB, $ProcessorCount vCPU, production checkpoints only)"
@@ -300,6 +320,15 @@ try {
     }
     if ($CumulativeUpdatePath -and -not (Test-Path -LiteralPath $CumulativeUpdatePath -PathType Leaf)) {
         throw "The cumulative update '$CumulativeUpdatePath' does not exist."
+    }
+    if ($ExchangeIsoPath -and -not (Test-Path -LiteralPath $ExchangeIsoPath -PathType Leaf)) {
+        throw "The Exchange media '$ExchangeIsoPath' does not exist."
+    }
+    # The directory extensions this build applies, in order, with their media. Skype for Business would follow
+    # Exchange here.
+    $directoryExtensions = [ordered]@{}
+    if ($ExchangeIsoPath) {
+        $directoryExtensions['Exchange'] = $ExchangeIsoPath
     }
     if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue)) {
         throw "The virtual switch '$SwitchName' does not exist on this host."
@@ -321,9 +350,14 @@ try {
     $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
     $installPending = $false
     if ($null -eq $vm) {
-        $imageName = Get-InstallImageName
-        Write-Ok "Installation image: $imageName"
-        Invoke-VmCreation -ImageName $imageName -Password $adminSecret
+        $image = Get-InstallImage
+        if ($image.Evaluation) {
+            Write-Ok "Installation image: $($image.ImageName) (evaluation media: installed without a key, converted to full Datacenter by the License phase)"
+        }
+        else {
+            Write-Ok "Installation image: $($image.ImageName)"
+        }
+        Invoke-VmCreation -Image $image -Password $adminSecret
         $installPending = $true
     }
     else {
@@ -390,13 +424,16 @@ try {
         ExtraCertificateNames  = @($ExtraCertificateNames)
         VmName                 = $Name
         LabRoot                = $guestRoot
+        DirectoryExtension     = @($directoryExtensions.Keys)
     }
     # The lab network has no uplink, so normally there is no forwarder and the setting is left out altogether.
     if ($null -ne $DnsForwarder) {
         $settings['DnsForwarder'] = $DnsForwarder.ToString()
     }
 
-    foreach ($phase in @('Prepare', 'Promote')) {
+    # License first: on evaluation media it converts the edition, which must happen before promotion. On full media,
+    # and on any re-run after it has converted, it changes nothing and needs no restart.
+    foreach ($phase in @('License', 'Prepare', 'Promote')) {
         Write-Heading "Phase: $phase"
         $result = Invoke-LabGuestPhase -VMName $Name -Credential $credential -Phase $phase -Settings $settings
         if ($result.RebootRequired) {
@@ -418,6 +455,34 @@ try {
         }
         Write-Ok 'Installed; restarting'
         $credential = Restart-LabGuest -VMName $Name -Credential $credentials
+    }
+
+    # After the cumulative update (Exchange needs a Windows Server 2025 schema master at the November 2025 update or
+    # later) and before Configure. Each product's media is attached for this phase only.
+    if ($directoryExtensions.Count -gt 0) {
+        Write-Heading "Phase: Extend ($(@($directoryExtensions.Keys) -join ', '))"
+        $attached = New-Object System.Collections.Generic.List[object]
+        try {
+            foreach ($product in $directoryExtensions.Keys) {
+                $media = $directoryExtensions[$product]
+                $existing = @(Get-VMDvdDrive -VMName $Name | Where-Object { $_.Path -eq $media })
+                if ($existing.Count -eq 0) {
+                    $attached.Add((Add-VMDvdDrive -VMName $Name -Path $media -Passthru))
+                    Write-Ok "Attached the $product media ($(Split-Path $media -Leaf))"
+                }
+            }
+            $result = Invoke-LabGuestPhase -VMName $Name -Credential $credential -Phase 'Extend' -Settings $settings
+        }
+        finally {
+            # Detach whatever this run attached, and any earlier run's leftover, so no media stays in the guest.
+            foreach ($drive in @(Get-VMDvdDrive -VMName $Name | Where-Object { $directoryExtensions.Values -contains $_.Path })) {
+                Remove-VMDvdDrive -VMName $Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation
+            }
+        }
+        if ($result.RebootRequired) {
+            Write-Ok 'Restarting after Extend'
+            $credential = Restart-LabGuest -VMName $Name -Credential $credentials
+        }
     }
 
     Write-Heading 'Phase: Configure'
@@ -443,6 +508,9 @@ try {
         Write-Heading 'Taking the baseline checkpoint'
         # Let the directory settle after the restart before capturing it.
         Start-Sleep -Seconds 30
+        # The script runs in this session and sets an exit code only when it fails, so clear whatever an earlier native
+        # command left in LASTEXITCODE first; otherwise a checkpoint that was taken reads as a failure.
+        $global:LASTEXITCODE = 0
         & (Join-Path $PSScriptRoot 'Checkpoint-LabDomainController.ps1') -Name $Name -Checkpoint (Get-LabCheckpointName -Baseline) -Replace
         if ($LASTEXITCODE -ne 0) { throw 'Taking the baseline checkpoint failed.' }
     }
