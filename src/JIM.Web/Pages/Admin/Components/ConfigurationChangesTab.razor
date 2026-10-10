@@ -139,7 +139,7 @@ else
     @if (_items.Count < _totalResults)
     {
         <div class="d-flex justify-center mt-3">
-            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
         </div>
     }
 }

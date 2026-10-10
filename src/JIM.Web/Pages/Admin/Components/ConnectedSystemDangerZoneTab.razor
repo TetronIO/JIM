@@ -25,8 +25,8 @@
             be exported downstream. Nothing changes while the preview runs, and you can leave this page while it does.
         </MudText>
         <div class="d-flex align-center flex-wrap gap-3 mt-4">
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Secondary"
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
                        DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility"
                        Disabled="@(_startingPreview || _previewState.Status == ConnectedSystemPreviewStatus.Running)"
@@ -91,7 +91,7 @@
     @* Stays live for a fenced (Status = Deleting) system: the dialog's two modes become the retry and
        finish-immediately exits (#809), and the server refuses anything that cannot proceed. *@
     <MudButton
-        Variant="Variant.Filled"
+        Variant="Variant.Outlined"
         Color="Color.Error"
         Class="mt-5"
         DropShadow="false"

@@ -6,13 +6,22 @@
 @* A segmented control for choosing one of a few settings or views: a recessed track with the chosen option raised
    as a card. Use it where the choice is a state (which view, which scope) rather than an action, which is what a
    button group reads as. Styled by .jim-seg in site.css through custom properties, so a host with its own palette
-   (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class. *@
+   (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class.
+   Options with an Href are links, for choosing between sibling pages; the current one is marked aria-current.
+   An option with a Tooltip explains itself on hover, for a label too terse to say what it chooses ("Inspect"). *@
 <div class="jim-seg @(Dense ? "jim-seg-dense" : null) @Class" role="group" aria-label="@AriaLabel" data-testid="@TestId">
     @foreach (var option in Options)
     {
-        var isOn = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
-        <button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
-                data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>
+        @if (option.Tooltip is { } tooltip)
+        {
+            <MudTooltip Text="@tooltip" Arrow="true" Placement="Placement.Top">
+                @OptionMarkup(option)
+            </MudTooltip>
+        }
+        else
+        {
+            @OptionMarkup(option)
+        }
     }
 </div>
 
@@ -41,6 +50,17 @@
 
     [Parameter]
     public string? TestId { get; set; }
+
+    /// <summary>One option: a link where it has an Href, otherwise a button choosing its value.</summary>
+    private RenderFragment OptionMarkup(SegmentedToggleOption<TValue> option)
+    {
+        var isOn = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
+        return option.Href is { } href
+            ? @<a href="@href" class="@(isOn ? "on" : null)" aria-current="@(isOn ? "page" : null)"
+                  data-testid="@option.TestId">@option.Label</a>
+            : @<button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
+                       data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>;
+    }
 
     private async Task SelectAsync(TValue value)
     {

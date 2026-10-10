@@ -204,8 +204,8 @@
                         Ensure the Connected System identity has the permissions needed to read the full schema; a partial
                         read can make entries appear removed when they are not.
                     </InfoPopover>
-                    <MudButton Color="Color.Secondary"
-                               Variant="Variant.Filled"
+                    <MudButton Color="Color.Primary"
+                               Variant="Variant.Outlined"
                                Size="Size.Small"
                                Class="text-no-wrap"
                                Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
@@ -642,8 +642,8 @@
                         <CellTemplate>
                             <MudButton
                                 DropShadow="false"
-                                Color="Color.Secondary"
-                                Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                Variant="Variant.Text"
                                 Size="Size.Small"
                                 OnClick="() => HandleShowEditAttributeDialogAsync(context.Item)"
                                 StartIcon="@Icons.Material.Filled.Edit">
@@ -729,8 +729,8 @@
            save (#1474), and deselecting an attribute has no visible effect at all. Either way this is the count an
            administrator needs before saving, not afterwards. *@
         <MudButton data-testid="jim-preview-schema-selection"
-                   Variant="Variant.Filled"
-                   Color="Color.Secondary"
+                   Variant="Variant.Outlined"
+                   Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Visibility"
                    OnClick="PreviewSchemaSelectionAsync"
                    Disabled="@_startingSchemaPreview"

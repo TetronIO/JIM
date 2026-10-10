@@ -73,7 +73,7 @@ else
 
             @if (SyncRule.ObjectScopingCriteriaGroups.Count == 0)
             {
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Color="Color.Primary"
                     OnClick="HandleOpenAddScopingCriteriaGroupDialog" Class="mt-5" DropShadow="false">Add Criteria Group</MudButton>
             }
 
@@ -93,7 +93,7 @@ else
                     </MudSelect>
                 </DialogContent>
                 <DialogActions>
-                    <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                    <MudButton DropShadow="false"
                         OnClick="@(() => _addScopingCriteriaGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddCriteriaGroupButtonClick"
                         Disabled="DisableAddScopingCriteriaGroupFormButton()" DropShadow="false">Add Group

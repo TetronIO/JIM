@@ -15,10 +15,8 @@
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudButtonGroup Class="mt-3" OverrideStyles="false">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary">Templates</MudButton>
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/example-data/datasets">Data Sets</MudButton>
-</MudButtonGroup>
+<SegmentedToggle TValue="string" Options="@SiblingPages.ExampleData" Value="@("templates")"
+                 AriaLabel="Templates or Data Sets" Class="mt-3" />
 
 @* ─── Templates ─── *@
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
