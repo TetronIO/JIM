@@ -64,7 +64,8 @@ public class ActiveDirectoryImportProbeTests
         var group = result.ImportObjects.SingleOrDefault(importObject => importObject.Attributes.Any(attribute =>
             attribute.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) &&
             attribute.StringValues.Any(value => value.Equals(groupDn, StringComparison.OrdinalIgnoreCase))));
-        Assert.That(group, Is.Not.Null, $"{groupDn} was not imported. Errors: {string.Join("; ", result.ImportObjects.Where(o => o.ErrorType != null).Select(o => o.ErrorMessage))}");
+        Assert.That(group, Is.Not.Null,
+            $"{groupDn} was not imported; {result.ImportObjects.Count} objects were. Errors: {string.Join("; ", result.ImportObjects.Where(o => o.ErrorType != null).Select(o => o.ErrorMessage))}");
         Assert.That(group!.ErrorType, Is.Null, group.ErrorMessage);
 
         var member = group.Attributes.SingleOrDefault(attribute => attribute.Name.Equals("member", StringComparison.OrdinalIgnoreCase));

@@ -185,13 +185,17 @@ internal static class ActiveDirectoryLab
     /// </summary>
     internal static ConnectedSystemObjectType GroupObjectType()
     {
-        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "group" };
+        // Selected, as a deployment's would be: an import reads only the selected Object Types, so an unselected one
+        // imports nothing at all.
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "group", Selected = true };
         objectType.Attributes.AddRange(
         [
             Attribute(objectType, 1, "objectGUID", AttributeDataType.Guid, isExternalId: true),
             Attribute(objectType, 2, "distinguishedName", AttributeDataType.Text, isSecondaryExternalId: true),
             Attribute(objectType, 3, "cn", AttributeDataType.Text),
-            Attribute(objectType, 4, "member", AttributeDataType.Reference, AttributePlurality.MultiValued)
+            Attribute(objectType, 4, "member", AttributeDataType.Reference, AttributePlurality.MultiValued),
+            // The import always reads objectClass, to tell what each entry is, and a discovered schema always has it.
+            Attribute(objectType, 5, "objectClass", AttributeDataType.Text, AttributePlurality.MultiValued)
         ]);
         return objectType;
     }
