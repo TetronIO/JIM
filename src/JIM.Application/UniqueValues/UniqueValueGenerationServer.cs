@@ -1307,6 +1307,46 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
+    /// Hands back the sequence numbers the run reserved and never drew (#2044): for each attribute's latest block, moves
+    /// the counter back to the first undrawn number, so the next run carries on from there instead of from the end of
+    /// the block. Call once, when the run has finished drawing; the undrawn numbers are discarded from
+    /// <paramref name="options"/> first, so nothing can be drawn from them afterwards. Each hand-back is a
+    /// compare-and-swap that only applies while nothing else has moved the counter since the reservation (another
+    /// run's reservation, a raised start, Start again); otherwise the tail simply stays a gap. Numbers drawn and not
+    /// issued (a gate rejected them, or the object failed) are never handed back. A no-op under
+    /// <see cref="UniqueValueResolveOptions.DryRun"/>, which reserves nothing.
+    /// </summary>
+    /// <returns>How many numbers were handed back.</returns>
+    public async Task<long> ReturnUnusedSequenceNumbersAsync(UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.DryRun)
+            return 0;
+
+        // Only the latest block can have an undrawn tail: a queue is refilled only once it is empty.
+        var tails = options.SequenceReservations
+            .Select(reservation => (reservation.Key, Block: reservation.Value, Queue: options.SequenceBlocks.GetValueOrDefault(reservation.Key)))
+            .Where(tail => tail.Queue is { IsEmpty: false })
+            .ToList();
+
+        long returned = 0;
+        foreach (var (key, block, queue) in tails)
+        {
+            // A snapshot in queue order, so its first number is the first undrawn one; cleared at once so nothing is
+            // drawn from numbers that are about to belong to the counter again.
+            var undrawn = queue!.ToArray();
+            queue.Clear();
+
+            if (await _repository.ReturnUnusedGeneratedValueSequenceNumbersAsync(key.MetaverseAttributeId, key.ConnectedSystemObjectTypeAttributeId, block, undrawn[0]))
+                returned += undrawn.Length;
+        }
+
+        options.SequenceReservations.Clear();
+        return returned;
+    }
+
+    /// <summary>
     /// "Start again" (plan "The service": <c>StartAgainAsync</c>): for a generated Sequence mapping, moves the
     /// target attribute's counter back (or forward; the direction is whatever the flow's configured
     /// <see cref="SyncRuleMappingGeneration.SequenceStart"/> calls for) to that start value. Existing values and

@@ -330,7 +330,7 @@ public class SyncRepositoryGeneratedValueTests
     [Test]
     public async Task ReserveGeneratedValueSequenceBlockAsync_FirstReservation_SeedsAtFloorAndReturnsItAsync()
     {
-        var first = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1);
+        var first = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1)).First;
 
         Assert.That(first, Is.EqualTo(100));
 
@@ -342,7 +342,7 @@ public class SyncRepositoryGeneratedValueTests
     public async Task ReserveGeneratedValueSequenceBlockAsync_SecondReservation_ContinuesFromTheCounterAsync()
     {
         await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1);
-        var second = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 3, increment: 1);
+        var second = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 3, increment: 1)).First;
 
         Assert.That(second, Is.EqualTo(105));
     }
@@ -354,7 +354,7 @@ public class SyncRepositoryGeneratedValueTests
 
         // The counter is now at 110; a reservation with a lower floor must still continue from 110, not drop
         // back to the floor (plan decision 3: the counter only ever moves forward).
-        var next = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 1, increment: 1);
+        var next = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 1, increment: 1)).First;
 
         Assert.That(next, Is.EqualTo(110));
     }
@@ -362,10 +362,10 @@ public class SyncRepositoryGeneratedValueTests
     [Test]
     public async Task ReserveGeneratedValueSequenceBlockAsync_HonoursIncrement_ReturnedBlockStepsByIncrementAsync()
     {
-        var first = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 4, increment: 10);
+        var first = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 4, increment: 10)).First;
         Assert.That(first, Is.EqualTo(0));
 
-        var second = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 1, increment: 10);
+        var second = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 1, increment: 10)).First;
         Assert.That(second, Is.EqualTo(40));
     }
 
@@ -375,7 +375,7 @@ public class SyncRepositoryGeneratedValueTests
         var results = new long[20];
         var tasks = Enumerable.Range(0, 20).Select(async i =>
         {
-            results[i] = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+            results[i] = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1)).First;
         });
 
         await Task.WhenAll(tasks);
@@ -460,6 +460,75 @@ public class SyncRepositoryGeneratedValueTests
         Assert.That(result, Is.EqualTo(150));
         var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
         Assert.That(sequence?.NextValue, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ReserveGeneratedValueSequenceBlockAsync_ReportsTheCounterAndItsLastMoveAfterReservingAsync()
+    {
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+        await _repo.RaiseGeneratedValueSequenceIfHigherAsync(1, null, newStart: 100, syncRuleMappingId: 7);
+
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 10, increment: 1);
+        var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(block.First, Is.EqualTo(100));
+            Assert.That(block.CounterAfter, Is.EqualTo(110));
+            Assert.That(block.CounterMovedStamp, Is.EqualTo(sequence!.LastMovedAt!.Value.Ticks));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingMovedTheCounter_MovesItBackAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.True);
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(4));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AnotherReservationSince_LeavesTheCounterAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False);
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(201));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AdministratorMovedTheCounterSinceEvenBackToTheSamePlace_LeavesItAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+        await _repo.ResetGeneratedValueSequenceAsync(1, null, newValue: 101, syncRuleMappingId: 7);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False, "the counter reads 101 as it did, but an administrator put it there");
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(101));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingUndrawn_LeavesTheCounterAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+
+        Assert.That(await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: block.CounterAfter), Is.False);
     }
 
     #endregion

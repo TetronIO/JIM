@@ -347,7 +347,7 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+    public async Task<GeneratedValueSequenceBlock> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
     {
         ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
@@ -371,7 +371,9 @@ public partial class SyncRepository
 
         // The atomic advance: the counter only ever moves forward (GREATEST against both the flow's floor and
         // the counter's own position), and RETURNING hands back the first number of the block just reserved
-        // ("NextValue" after this UPDATE, minus the block just added, is exactly where the block started). Two
+        // ("NextValue" after this UPDATE, minus the block just added, is exactly where the block started), the
+        // counter itself, and its last administrator move as whole microseconds (exact, unlike a timestamp
+        // round-tripped through a parameter), which a hand-back of the unused tail compares (#2044). Two
         // concurrent reservations against the same attribute serialise on this row's lock, so the second one's
         // GREATEST always sees the first one's advance rather than a stale value.
         //
@@ -385,7 +387,7 @@ public partial class SyncRepository
             SET "NextValue" = GREATEST("NextValue", @floor) + @count * @increment, "LastUpdated" = now()
             WHERE "MetaverseAttributeId" IS NOT DISTINCT FROM @metaverseAttributeId
               AND "ConnectedSystemObjectTypeAttributeId" IS NOT DISTINCT FROM @connectedSystemObjectTypeAttributeId
-            RETURNING "NextValue" - @count * @increment
+            RETURNING "NextValue" - @count * @increment, "NextValue", (extract(epoch FROM "LastMovedAt") * 1000000)::bigint
             """;
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
@@ -404,7 +406,52 @@ public partial class SyncRepository
         command.Parameters.Add(metaverseAttributeIdParam);
         command.Parameters.Add(connectedSystemObjectTypeAttributeIdParam);
 
-        return (long)(await command.ExecuteScalarAsync())!;
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            throw new InvalidOperationException("Reserving a sequence block updated no counter row, although the insert before it guarantees one exists.");
+
+        return new GeneratedValueSequenceBlock(reader.GetInt64(0), reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetInt64(2));
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ReturnUnusedGeneratedValueSequenceNumbersAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, GeneratedValueSequenceBlock block, long firstUnused)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (firstUnused >= block.CounterAfter)
+            return false;
+
+        // One compare-and-swap: the counter moves back only while it stands exactly where the reservation left it and
+        // its last administrator move is the one the reservation saw, so a later reservation by another run, or a
+        // raised start or Start again in the meantime, leaves it alone. "LastMovedAt" is deliberately not stamped.
+        const string handBackSql = """
+            UPDATE "GeneratedValueSequences"
+            SET "NextValue" = @firstUnused, "LastUpdated" = now()
+            WHERE "MetaverseAttributeId" IS NOT DISTINCT FROM @metaverseAttributeId
+              AND "ConnectedSystemObjectTypeAttributeId" IS NOT DISTINCT FROM @connectedSystemObjectTypeAttributeId
+              AND "NextValue" = @counterAfter
+              AND (extract(epoch FROM "LastMovedAt") * 1000000)::bigint IS NOT DISTINCT FROM @counterMovedStamp
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        var metaverseAttributeIdParam = BulkSqlHelpers.NullableParam(metaverseAttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+        metaverseAttributeIdParam.ParameterName = "metaverseAttributeId";
+        var connectedSystemObjectTypeAttributeIdParam = BulkSqlHelpers.NullableParam(connectedSystemObjectTypeAttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+        connectedSystemObjectTypeAttributeIdParam.ParameterName = "connectedSystemObjectTypeAttributeId";
+        var counterMovedStampParam = BulkSqlHelpers.NullableParam(block.CounterMovedStamp, NpgsqlTypes.NpgsqlDbType.Bigint);
+        counterMovedStampParam.ParameterName = "counterMovedStamp";
+
+        await using var command = new NpgsqlCommand(handBackSql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("firstUnused", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = firstUnused });
+        command.Parameters.Add(new NpgsqlParameter("counterAfter", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = block.CounterAfter });
+        command.Parameters.Add(metaverseAttributeIdParam);
+        command.Parameters.Add(connectedSystemObjectTypeAttributeIdParam);
+        command.Parameters.Add(counterMovedStampParam);
+
+        return await command.ExecuteNonQueryAsync() == 1;
     }
 
     /// <inheritdoc />

@@ -66,8 +66,13 @@ internal static class SequenceAllocator
             }
             else
             {
-                first = await repository.ReserveGeneratedValueSequenceBlockAsync(
+                var block = await repository.ReserveGeneratedValueSequenceBlockAsync(
                     metaverseAttributeId, connectedSystemObjectTypeAttributeId, floor, count, increment);
+                first = block.First;
+
+                // Remembered so the run can hand back whatever it leaves undrawn (#2044); only the latest block's
+                // tail can be undrawn, because the queue is refilled only once it is empty.
+                options.SequenceReservations[key] = block;
             }
 
             for (var i = 1; i < count; i++)

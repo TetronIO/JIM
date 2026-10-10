@@ -1712,7 +1712,9 @@ public interface ISyncRepository
 
     /// <summary>
     /// Atomically reserves a block of <paramref name="count"/> numbers from the attribute's counter and returns
-    /// the first number of the block; the reserved block is
+    /// the block: its first number, the counter as it stood straight afterwards and a marker of the counter's last
+    /// administrator move, the last two being what <see cref="ReturnUnusedGeneratedValueSequenceNumbersAsync"/> needs
+    /// to hand back the numbers a run did not issue. The reserved block is
     /// <c>first, first + increment, ..., first + (count - 1) * increment</c>. Creates the counter row, seeded at
     /// <paramref name="floor"/>, the first time this attribute is reserved against; a concurrent creation that
     /// loses the race is a harmless no-op, since the advance that follows is what actually moves the counter.
@@ -1723,12 +1725,27 @@ public interface ISyncRepository
     /// same attribute serialise on the row and never overlap.
     /// </para>
     /// <para>
-    /// Any numbers in the reserved block the caller ultimately does not issue (for example because the object
-    /// generation failed after the block was reserved) are simply never used; the resulting gap in the sequence
-    /// is expected (plan decision 3), is never backfilled, and never causes a number to be re-issued.
+    /// Numbers drawn from the block and not issued (a gate rejected them, or the object's generation failed after
+    /// drawing) are never used again. The block's undrawn tail is handed back at the end of the run
+    /// (<see cref="ReturnUnusedGeneratedValueSequenceNumbersAsync"/>) when nothing else has moved the counter since,
+    /// and is otherwise a gap; a gap is expected (plan decision 3), is never backfilled, and never causes a number
+    /// to be re-issued.
     /// </para>
     /// </summary>
-    Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment);
+    Task<GeneratedValueSequenceBlock> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment);
+
+    /// <summary>
+    /// Hands back the undrawn tail of <paramref name="block"/>, from <paramref name="firstUnused"/> on, by moving the
+    /// attribute's counter back to <paramref name="firstUnused"/> (#2044), so the next run carries on from the number
+    /// after the last one this run drew rather than from the end of its block. A compare-and-swap: it only moves the
+    /// counter when it still stands exactly where this reservation left it (<see cref="GeneratedValueSequenceBlock.CounterAfter"/>)
+    /// and no administrator has moved it since (<see cref="GeneratedValueSequenceBlock.CounterMovedStamp"/>); otherwise
+    /// another run has reserved after this one, or a raised start or Start again has moved it, and the tail stays a gap.
+    /// Either way no number another run may issue is ever handed back. <see cref="GeneratedValueSequence.LastMovedAt"/>
+    /// is left alone: this is not an administrator move.
+    /// </summary>
+    /// <returns>Whether the counter was moved back.</returns>
+    Task<bool> ReturnUnusedGeneratedValueSequenceNumbersAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, GeneratedValueSequenceBlock block, long firstUnused);
 
     /// <summary>
     /// Advances a counter's display-only <see cref="GeneratedValueSequence.AssignedCount"/> by

@@ -510,6 +510,22 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Hands the sequence numbers this run reserved and never drew back to their counters (#2044), so consecutive runs
+    /// that each issue a few numbers issue consecutive numbers. Call once the run has drawn every number it will; a run
+    /// that never generated a value has nothing to hand back. Each hand-back only applies when nothing else has moved
+    /// the counter since this run reserved from it, so it can never return a number another run may issue.
+    /// </summary>
+    protected async Task ReturnUnusedSequenceNumbersAsync()
+    {
+        if (_uniqueValueGenerationServer == null || _uniqueValueResolveOptions == null)
+            return;
+
+        var returned = await _uniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync(_uniqueValueResolveOptions);
+        if (returned > 0)
+            Log.Information("ReturnUnusedSequenceNumbersAsync: Handed {Count} unused sequence numbers back to their counters for Activity {ActivityId}", returned, _activity.Id);
+    }
+
+    /// <summary>
     /// Ends the run's probe session (release 3): call from the <c>finally</c> of <c>PerformFullSyncAsync</c> and
     /// <c>PerformDeltaSyncAsync</c>. Appends one Activity warning per Connected System that could not be probed for a
     /// value the run went on to issue, so the Activity completes with a warning rather than in silence, then closes
