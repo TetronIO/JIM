@@ -24,11 +24,12 @@ internal static class SequenceAllocator
     /// <paramref name="dryRun"/>, simulating) <c>Math.Max(1, options.SequenceBlockSize)</c> more.
     /// <para>
     /// A block is keyed by attribute alone, so two flows sharing an attribute (decision 3) share its queued
-    /// remainder. When the number this call would otherwise return is below <paramref name="sequenceStart"/> -
-    /// the block was filled for a flow whose own start was lower - the whole remainder is discarded (those
-    /// numbers become gaps, which is fine: the counter only ever moves forward) and a fresh block is reserved
-    /// at this flow's own floor instead. A number found taken by a later gate is, likewise, simply never
-    /// returned to the caller again: the block still advances, which is the documented, expected sequence gap.
+    /// remainder. <paramref name="sequenceStart"/> is the lowest number this call may return: the flow's own start,
+    /// or higher when a skip over a run of held numbers (#2031) has found where the run ends. Queued numbers below it
+    /// are discarded (they become gaps, which is fine: the counter only ever moves forward) and the rest of the block
+    /// is still used; when nothing queued is high enough, a fresh block is reserved at that floor instead. A number
+    /// found taken by a later gate is, likewise, simply never returned to the caller again: the block still advances,
+    /// which is the documented, expected sequence gap.
     /// </para>
     /// </summary>
     public static async Task<long> NextNumberAsync(
@@ -87,20 +88,18 @@ internal static class SequenceAllocator
     }
 
     /// <summary>
-    /// Dequeues the next number, or discards the whole remainder and reports none available when that number
-    /// (and so, since a block is a contiguous ascending range, every number after it) is below
-    /// <paramref name="sequenceStart"/>. A block straddling the start value is not split; the numbers below it
-    /// are simply gaps, per decision 3.
+    /// Dequeues the next number at or above <paramref name="sequenceStart"/>, discarding the queued numbers below it
+    /// (a block is a contiguous ascending range, so they are all at its head), or reports none available when the
+    /// whole remainder is below it. The discarded numbers are simply gaps, per decision 3.
     /// </summary>
     private static bool TryDequeueAtOrAboveStart(ConcurrentQueue<long> queue, long sequenceStart, out long number)
     {
-        if (!queue.TryDequeue(out number))
-            return false;
+        while (queue.TryDequeue(out number))
+        {
+            if (number >= sequenceStart)
+                return true;
+        }
 
-        if (number >= sequenceStart)
-            return true;
-
-        while (queue.TryDequeue(out _)) { }
         return false;
     }
 

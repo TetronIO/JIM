@@ -425,6 +425,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
         => _inner.GetHighestNumericValueForAttributeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
+    public Task<SequenceHeldRun> GetSequenceHeldRunAsync(SequenceSkipQuery query)
+        => _inner.GetSequenceHeldRunAsync(query);
+
     #endregion
 
     #region Writes (always throw)

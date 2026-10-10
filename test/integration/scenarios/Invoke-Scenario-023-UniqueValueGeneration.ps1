@@ -1177,23 +1177,47 @@ try {
         Assert-NotNull -Value $survivorBefore -Message "Survivor (Quillan Ashby, from the Sequence test) exists before Start again"
         $survivorNumberBefore = $survivorBefore.attributes.'Staff Number'
 
-        $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        # The flow's configured Start as it stands now (the Sequence step raised it above the counter and then
-        # lowered it to 1; lowering never moves the counter, but it is the value Start again returns to).
-        $configuredStart = (@(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }).generation.sequenceStart
+        # Start again over numbers the population still holds, which is what rebuilding a solution does (#2031):
+        # point the flow's Start at the lowest Staff Number in use, so Start again puts the counter at the bottom of a
+        # run of held numbers. The initial population holds consecutive numbers from there (3 of them even at Nano),
+        # so an attempt limit of 3 is shorter than the run: walking it one number per attempt, as JIM did before,
+        # fails the joiner with GeneratedValueExhausted, while skipping it costs one rejected number and one more
+        # draw, with one attempt to spare for a genuine collision above the run.
+        $heldStaffNumbers = [System.Collections.Generic.HashSet[long]]::new()
+        foreach ($staffNumber in @((Get-Population) | ForEach-Object { "$($_.attributes.'Staff Number')" } | Where-Object { $_ -match '^EMP-\d+$' })) {
+            [void]$heldStaffNumbers.Add([long]($staffNumber -replace '^EMP-', ''))
+        }
+        $lowestStaffNumber = ($heldStaffNumbers | Measure-Object -Minimum).Minimum
+        $firstFreeAboveLowest = $lowestStaffNumber
+        while ($heldStaffNumbers.Contains($firstFreeAboveLowest)) { $firstFreeAboveLowest++ }
+        $mappingBefore = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }
+        $attemptLimitBefore = $mappingBefore.generation.attemptLimit
+        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart $lowestStaffNumber -AttemptLimit 3 | Out-Null
 
+        $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
         $restartResult = Restart-JIMGeneratedValues -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -Confirm:$false
-        Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $configuredStart) `
-            -Detail "Expected CounterTo=$configuredStart, got $($restartResult.counterTo) (CounterFrom was $($restartResult.counterFrom); counter stood at $($sequenceBefore.nextNumber) beforehand)"
+        Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $lowestStaffNumber) `
+            -Detail "Expected CounterTo=$lowestStaffNumber, got $($restartResult.counterTo) (CounterFrom was $($restartResult.counterFrom); counter stood at $($sequenceBefore.nextNumber) beforehand)"
+
+        # Surface parity: exercise the raw REST restart route once too (a second, harmless restart; Start again only
+        # ever moves the counter to its already-configured Start, which is exactly where it now stands).
+        $rawRestartResult = Invoke-RawJimApi -Method POST -Endpoint "/api/v1/synchronisation/sync-rules/$($config.ImportRuleId)/mappings/$($config.EmployeeNumberMappingId)/generation/restart"
+        Add-TestResult -Name "The REST restart route answers directly (surface parity)" -Passed ($null -ne $rawRestartResult) `
+            -Detail "Raw response: $($rawRestartResult | ConvertTo-Json -Compress)"
 
         $survivorNumberAfter = Get-MvoAttributeValue -MvoId $survivorBefore.id -AttributeName "Staff Number"
         Add-TestResult -Name "The surviving object keeps its Staff Number after Start again" -Passed ($survivorNumberAfter -eq $survivorNumberBefore) `
             -Detail "Expected unchanged '$survivorNumberBefore', got '$survivorNumberAfter'"
 
+        # Invoke-Cycle asserts every run succeeded, so a joiner failed with GeneratedValueExhausted stops the test here.
         Add-HrCsvJoiner -EmployeeId "EMP900030" -FirstName "Beatrix" -LastName "Nightingale"
         Invoke-Cycle -Config $config | Out-Null
 
         $newJoiner = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Beatrix' -and $_.attributes.'Last Name' -eq 'Nightingale' }) | Select-Object -First 1
+        $newJoinerStaffNumber = "$($newJoiner.attributes.'Staff Number')"
+        Add-TestResult -Name "A joiner after Start again skips the numbers still held, past an attempt limit shorter than the run" `
+            -Passed ($newJoinerStaffNumber -match '^EMP-\d+$' -and [long]($newJoinerStaffNumber -replace '^EMP-', '') -ge $firstFreeAboveLowest) `
+            -Detail "Staff Numbers $lowestStaffNumber to $($firstFreeAboveLowest - 1) are held; the joiner got '$($newJoiner.attributes.'Staff Number')'"
         Add-TestResult -Name "A joiner after Start again does not collide with the surviving object's number" -Passed ($newJoiner.attributes.'Staff Number' -ne $survivorNumberBefore) `
             -Detail "Both got '$($newJoiner.attributes.'Staff Number')'"
 
@@ -1202,26 +1226,7 @@ try {
         Add-TestResult -Name "No duplicate Staff Number exists after Start again" -Passed ($dupesAfterRestart.Count -eq 0) `
             -Detail "Duplicates: $(($dupesAfterRestart | ForEach-Object { $_.Name }) -join ', ')"
 
-        # Surface parity: exercise the raw REST restart route once too (a second, harmless restart;
-        # release 1's Start again is idempotent by design - it only ever moves the counter to its
-        # already-configured Start, which is exactly where it now stands).
-        $rawRestartResult = Invoke-RawJimApi -Method POST -Endpoint "/api/v1/synchronisation/sync-rules/$($config.ImportRuleId)/mappings/$($config.EmployeeNumberMappingId)/generation/restart"
-        Add-TestResult -Name "The REST restart route answers directly (surface parity)" -Passed ($null -ne $rawRestartResult) `
-            -Detail "Raw response: $($rawRestartResult | ConvertTo-Json -Compress)"
-
-        # Put the counter back above the population before any later step draws a Staff Number. Start again left it
-        # at 1, below the block the initial population holds (EMP-001000 upwards, one number per person), and every
-        # synchronisation that draws reserves a block of 100, so each later joiner moves it 100 closer. Ten joiners
-        # on (the Samba AD order: Tests 13 and 16 add the two OpenLDAP skips), a joiner's sync reached the block and
-        # had to skip every number in it, more than the attempt limit at Medium, so Test 18 failed Pre-Release
-        # with GeneratedValueExhausted for Staff Number, nothing to do with what it tests.
-        $highestStaffNumber = (@((Get-Population) | ForEach-Object { [int]("$($_.attributes.'Staff Number')" -replace '^EMP-0*', '') }) |
-            Measure-Object -Maximum).Maximum
-        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart ($highestStaffNumber + 1) | Out-Null
-        $sequenceAfterRaise = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        Add-TestResult -Name "Raising Sequence Start after Start again moves the counter past every Staff Number in use" `
-            -Passed ($sequenceAfterRaise.nextNumber -gt $highestStaffNumber) `
-            -Detail "Highest Staff Number in use: $highestStaffNumber; NextNumber: $($sequenceAfterRaise.nextNumber)"
+        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -AttemptLimit $attemptLimitBefore | Out-Null
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────

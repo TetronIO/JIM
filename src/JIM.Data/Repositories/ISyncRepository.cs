@@ -1711,6 +1711,25 @@ public interface ISyncRepository
     Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
 
     /// <summary>
+    /// The run of held numbers starting at <see cref="SequenceSkipQuery.From"/> (#2031): the lowest number at or
+    /// above it, stepping by <see cref="SequenceSkipQuery.Increment"/>, that nothing JIM records holds for the query's
+    /// attribute, and every holding of the numbers below that. Holdings are read from every store the uniqueness
+    /// gates read: the attribute's own values (Metaverse in import mode, Connected System in export mode), in import
+    /// mode the participating targets' values, live generated value assignments, and the retired values register.
+    /// <para>
+    /// Nothing is excluded here; the holders come back so the caller can apply the gates' own-value rules per object
+    /// in memory, the same way <see cref="GetConnectedSystemAttributeValueHoldersAsync"/> serves the connector-space
+    /// gate. One query however long the run is, so a Sequence whose counter sits below a population that already
+    /// holds its numbers (typically after Start again) skips the whole run in one step.
+    /// </para>
+    /// <para>
+    /// The answer is where to resume drawing, never a value to issue; the gates still check the number drawn next
+    /// (see <see cref="SequenceSkipQuery"/>).
+    /// </para>
+    /// </summary>
+    Task<SequenceHeldRun> GetSequenceHeldRunAsync(SequenceSkipQuery query);
+
+    /// <summary>
     /// Atomically reserves a block of <paramref name="count"/> numbers from the attribute's counter and returns
     /// the block: its first number, the counter as it stood straight afterwards and a marker of the counter's last
     /// administrator move, the last two being what <see cref="ReturnUnusedGeneratedValueSequenceNumbersAsync"/> needs

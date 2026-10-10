@@ -119,3 +119,21 @@ public enum OutboundPreviewEntryKind
     /// </summary>
     ProvisioningCancelled
 }
+
+/// <summary>
+/// Where a held sequence number was found (#2031), which decides whether it counts against the object asking: the
+/// uniqueness gates let an object have a value that only it holds (its own value, its own assignment, its own
+/// account), and a skip over a run of held numbers must stop at such a number rather than jump past it.
+/// </summary>
+public enum SequenceNumberHolderKind
+{
+    /// <summary>The target attribute's own value: a Metaverse Object's in import mode, a Connected System Object's in
+    /// export mode.</summary>
+    AttributeValue,
+    /// <summary>Import mode: a participating target's Connected System Object holds it.</summary>
+    ConnectorSpace,
+    /// <summary>A live generated value assignment holds it.</summary>
+    Assignment,
+    /// <summary>The retired values register holds it; it is taken for every object, its former holder included.</summary>
+    Retired
+}

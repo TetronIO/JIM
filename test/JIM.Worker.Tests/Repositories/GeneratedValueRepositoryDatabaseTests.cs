@@ -504,6 +504,152 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(highest, Is.Null);
     }
 
+    // ---- Held sequence runs (#2031) ----
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_TextRunAcrossEveryStore_ReturnsWhereItEndsAndWhoHoldsEachNumberAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondMvoId = await CreateSecondMvoAsync(estate);
+        await JoinCsoToMvoAsync(estate);
+
+        await AddMvoStringValueAsync(estate.MvoId, estate.MvTextAttributeId, "EMP-001000");
+        await AddMvoStringValueAsync(secondMvoId, estate.MvTextAttributeId, "emp-001001");
+        await AddMvoStringValueAsync(secondMvoId, estate.MvTextAttributeId, "EMP-1006"); // Not how the sequence writes 1006.
+        await using (var ctx = NewContext())
+        {
+            await NewSyncRepository(ctx).CreateGeneratedValueAssignmentsAsync([ImportAssignment(estate, "EMP-001002")]);
+            ctx.RetiredGeneratedValues.Add(new RetiredGeneratedValue
+            {
+                MetaverseAttributeId = estate.MvTextAttributeId, Value = "EMP-001003", NormalisedValue = "emp-001003",
+                RetiredAt = DateTime.UtcNow, Reason = RetiredGeneratedValueReason.ObjectDeleted
+            });
+            await ctx.SaveChangesAsync();
+        }
+        await AddCsoTextValueAsync(estate.CsoId, estate.CsTextAttributeId, "Emp-001004");
+
+        await using var readCtx = NewContext();
+        var run = await NewSyncRepository(readCtx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId,
+            From = 1000,
+            Increment = 1,
+            NumericTarget = false,
+            Prefix = "emp-",
+            FixedWidth = 6,
+            ConnectorSpaceAttributeIds = [estate.CsTextAttributeId]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1005), "1000 to 1004 are each held somewhere; 1006 is not written as the sequence writes it");
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(1000, SequenceNumberHolderKind.AttributeValue, estate.MvoId, null),
+                new SequenceNumberHolder(1001, SequenceNumberHolderKind.AttributeValue, secondMvoId, null),
+                new SequenceNumberHolder(1002, SequenceNumberHolderKind.Assignment, estate.MvoId, null),
+                new SequenceNumberHolder(1003, SequenceNumberHolderKind.Retired, null, null),
+                new SequenceNumberHolder(1004, SequenceNumberHolderKind.ConnectorSpace, estate.CsoId, estate.MvoId)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_FromIsFree_ReturnsItWithNoHoldersAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await AddMvoStringValueAsync(estate.MvoId, estate.MvTextAttributeId, "EMP-001001");
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId, From = 1000, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1000));
+            Assert.That(run.Holders, Is.Empty, "1001 is held, but it is above the first free number, so it is no part of a run starting at 1000");
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_NumericTarget_ReadsIntAndLongValuesInTheSequencesOwnStepAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondMvoId = await CreateSecondMvoAsync(estate);
+        await AddMvoNumberValueAsync(estate.MvoId, estate.MvNumberAttributeId, intValue: 10);
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, longValue: 20);
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, intValue: 25); // Not a step of 10 from 10.
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, longValue: 30);
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvNumberAttributeId, From = 10, Increment = 10, NumericTarget = true
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(40));
+            Assert.That(run.Holders.Select(h => h.Number), Is.EqualTo(new long[] { 10, 20, 30 }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_RunLongerThanTheIndexedWindow_FindsWhereItEndsAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var runLength = SyncRepository.SequenceHeldRunWindow + 5;
+        await using (var seedCtx = NewContext())
+        {
+            foreach (var n in Enumerable.Range(1, runLength))
+            {
+                var value = new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.MvTextAttributeId, StringValue = $"EMP-{n:000000}" };
+                seedCtx.MetaverseObjectAttributeValues.Add(value);
+                seedCtx.Entry(value).Property("MetaverseObjectId").CurrentValue = estate.MvoId;
+            }
+            await seedCtx.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId, From = 1, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(runLength + 1), "the first window is held from end to end, so every value is read to find the end");
+            Assert.That(run.Holders, Has.Count.EqualTo(runLength));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_ExportMode_ReadsTheConnectedSystemAttributesValuesAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondCsoId = await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Normal);
+        await AddCsoTextValueAsync(estate.CsoId, estate.CsTextAttributeId, "u100");
+        await AddCsoTextValueAsync(secondCsoId, estate.CsTextAttributeId, "U101");
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            ConnectedSystemObjectTypeAttributeId = estate.CsTextAttributeId, From = 100, Increment = 1, NumericTarget = false, Prefix = "u"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(102));
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(100, SequenceNumberHolderKind.AttributeValue, estate.CsoId, null),
+                new SequenceNumberHolder(101, SequenceNumberHolderKind.AttributeValue, secondCsoId, null)
+            }));
+        }
+    }
+
     // ---- Block reservation ----
 
     [Test]
