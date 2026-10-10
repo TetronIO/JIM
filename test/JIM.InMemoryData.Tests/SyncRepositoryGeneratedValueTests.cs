@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.InMemoryData.Tests;
@@ -460,6 +461,79 @@ public class SyncRepositoryGeneratedValueTests
         Assert.That(result, Is.EqualTo(150));
         var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
         Assert.That(sequence?.NextValue, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region GetSequenceHeldRunAsync (#2031)
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_TextRunAcrossEveryStore_ReturnsWhereItEndsAndWhoHoldsEachNumberAsync()
+    {
+        var ownerId = SeedMvoWithStringValue(attributeId: 1, value: "EMP-001000");
+        var otherId = SeedMvoWithStringValue(attributeId: 1, value: "emp-001001");
+        SeedMvoWithStringValue(attributeId: 1, value: "EMP-1006"); // Not how the sequence writes 1006.
+        _repo.SeedGeneratedValueAssignment(NewMetaverseAssignment(1, ownerId, "EMP-001002"));
+        _repo.SeedRetiredGeneratedValue(new RetiredGeneratedValue
+        {
+            MetaverseAttributeId = 1, Value = "EMP-001003", NormalisedValue = "emp-001003", RetiredAt = DateTime.UtcNow, Reason = RetiredGeneratedValueReason.ObjectDeleted
+        });
+        var account = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = ownerId,
+            AttributeValues = [new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = 7, StringValue = "Emp-001004" }]
+        };
+        _repo.SeedConnectedSystemObject(account);
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = 1, From = 1000, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6, ConnectorSpaceAttributeIds = [7]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1005));
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(1000, SequenceNumberHolderKind.AttributeValue, ownerId, null),
+                new SequenceNumberHolder(1001, SequenceNumberHolderKind.AttributeValue, otherId, null),
+                new SequenceNumberHolder(1002, SequenceNumberHolderKind.Assignment, ownerId, null),
+                new SequenceNumberHolder(1003, SequenceNumberHolderKind.Retired, null, null),
+                new SequenceNumberHolder(1004, SequenceNumberHolderKind.ConnectorSpace, account.Id, ownerId)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_NumericTarget_ReadsIntAndLongValuesInTheSequencesOwnStepAsync()
+    {
+        SeedMvoWithIntValue(attributeId: 2, value: 10);
+        SeedMvoWithLongValue(attributeId: 2, value: 20);
+        SeedMvoWithIntValue(attributeId: 2, value: 25); // Not a step of 10 from 10.
+        SeedMvoWithLongValue(attributeId: 2, value: 30);
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery { MetaverseAttributeId = 2, From = 10, Increment = 10, NumericTarget = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(40));
+            Assert.That(run.Holders.Select(h => h.Number), Is.EqualTo(new long[] { 10, 20, 30 }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_FromIsFree_ReturnsItWithNoHoldersAsync()
+    {
+        SeedMvoWithStringValue(attributeId: 3, value: "1001");
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery { MetaverseAttributeId = 3, From = 1000, Increment = 1, NumericTarget = false });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1000));
+            Assert.That(run.Holders, Is.Empty);
+        }
     }
 
     #endregion
