@@ -15,6 +15,10 @@
                  there is nothing to do.
       Prepare    Rename the computer, set the static IP address, install the AD DS and DNS roles.
       Promote    Install-ADDSForest (a new single-domain forest, Windows Server 2016 functional level, with DNS).
+      Extend     Only when -DirectoryExtension lists products: extend the forest with each, in order, from its media,
+                 which the host has attached. Exchange: Setup /PrepareSchema, /PrepareAD (the organisation, named after
+                 the forest) and /PrepareAllDomains, the only supported way to add Exchange's schema. Skips whatever a
+                 previous run already did.
       Configure  Everything the directory carries after the build, identical to
                  test/integration/docker/samba-ad-prebuilt/post-provision.sh: DNS forwarder, w32time, Windows
                  Update off, Administrator password never expires, the OUs, svc-jim and the JIM Connectors group,
@@ -35,7 +39,10 @@
     refused, which Verify confirms), so everything talks LDAPS on 636.
 
 .PARAMETER Phase
-    License, Prepare, Promote, Configure or Verify.
+    License, Prepare, Promote, Extend, Configure or Verify.
+
+.PARAMETER DirectoryExtension
+    The products extending the forest, in order (Extend applies them; Verify checks them). Exchange only, for now.
 
 .PARAMETER ComputerName
     The domain controller's host name, for example dc1 (giving dc1.panoply.local).
@@ -101,7 +108,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('License', 'Prepare', 'Promote', 'Configure', 'Verify')]
+    [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
     [string]$Phase,
 
     [string]$ComputerName,
@@ -117,6 +124,8 @@ param(
     [securestring]$ServiceAccountPassword,
     [switch]$EnableRecycleBin,
     [string[]]$ExtraCertificateNames = @(),
+    [ValidateSet('Exchange')]
+    [string[]]$DirectoryExtension = @(),
     [string]$VmName,
     [string]$LabRoot = 'C:\jim-ad-lab'
 )
@@ -344,6 +353,115 @@ function Invoke-PromotePhase {
     }
     $script:RebootRequired = $true
     Set-Changed "Promoted this server to the first domain controller of $Domain"
+}
+
+# ---------------------------------------------------------------------------------------------
+# Extend: directory extensions (Exchange; room for Skype for Business)
+# ---------------------------------------------------------------------------------------------
+
+function Get-AdObjectProperty {
+    # One property of an AD object, or $null when the object or the attribute is not there (StrictMode-safe).
+    param([object]$Object, [string]$Name)
+    if (($null -eq $Object) -or ($null -eq $Object.PSObject.Properties[$Name])) { return $null }
+    return $Object.$Name
+}
+
+function Get-ExchangeForestState {
+    # Where Exchange stands in this forest: the schema version (rangeUpper of ms-Exch-Schema-Version-Pt), the
+    # organisation (name and objectVersion under CN=Microsoft Exchange,CN=Services) and the domain preparation
+    # (objectVersion of CN=Microsoft Exchange System Objects). Each is $null when absent.
+    $root = Get-ADRootDSE
+    $version = Get-ADObject -SearchBase $root.schemaNamingContext -SearchScope OneLevel -LDAPFilter '(cn=ms-Exch-Schema-Version-Pt)' -Properties rangeUpper | Select-Object -First 1
+    $organization = $null
+    try {
+        $organization = Get-ADObject -SearchBase "CN=Microsoft Exchange,CN=Services,$($root.configurationNamingContext)" -SearchScope OneLevel -LDAPFilter '(objectClass=msExchOrganizationContainer)' -Properties objectVersion -ErrorAction Stop | Select-Object -First 1
+    }
+    catch {
+        # No CN=Microsoft Exchange container: the organisation has not been created.
+        $organization = $null
+    }
+    $systemObjects = Get-ADObject -SearchBase $root.defaultNamingContext -SearchScope OneLevel -LDAPFilter '(cn=Microsoft Exchange System Objects)' -Properties objectVersion | Select-Object -First 1
+
+    $rangeUpper = Get-AdObjectProperty -Object $version -Name 'rangeUpper'
+    return [pscustomobject][ordered]@{
+        SchemaRangeUpper    = $(if ($null -ne $rangeUpper) { [int]$rangeUpper } else { $null })
+        OrganizationName    = $(if ($null -ne $organization) { [string]$organization.Name } else { $null })
+        OrganizationVersion = (Get-AdObjectProperty -Object $organization -Name 'objectVersion')
+        DomainVersion       = (Get-AdObjectProperty -Object $systemObjects -Name 'objectVersion')
+    }
+}
+
+function Find-ExchangeMedia {
+    # The root of the Exchange media the host attached: a DVD drive holding Setup.exe and Setup\Data\SchemaVersion.ldf.
+    foreach ($volume in @(Get-Volume | Where-Object { ($_.DriveType -eq 'CD-ROM') -and $_.DriveLetter })) {
+        $root = "$($volume.DriveLetter):"
+        if ((Test-Path -LiteralPath "$root\Setup.exe") -and (Test-Path -LiteralPath "$root\Setup\Data\SchemaVersion.ldf")) {
+            return $root
+        }
+    }
+    throw 'No Exchange media is attached: no DVD drive holds Setup.exe and Setup\Data\SchemaVersion.ldf. The host attaches -ExchangeIsoPath before Extend.'
+}
+
+function Invoke-ExchangeExtension {
+    $currentVersion = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+    if (-not (Test-LabExchangeSchemaMasterBuild -CurrentBuild ([int]$currentVersion.CurrentBuild) -Ubr ([int]$currentVersion.UBR))) {
+        throw "Windows build $($currentVersion.CurrentBuild).$($currentVersion.UBR) is older than 26100.7171: Microsoft requires the November 2025 update on a Windows Server 2025 schema master before Exchange extends the schema. Pass -CumulativeUpdatePath."
+    }
+
+    $media = Find-ExchangeMedia
+    $target = Get-LabExchangeSchemaTarget -LdfText (Get-Content -LiteralPath "$media\Setup\Data\SchemaVersion.ldf" -Raw)
+    $organizationName = Get-LabExchangeOrganizationName -NetBiosName $NetBiosName
+    $state = Get-ExchangeForestState
+    if ($state.OrganizationName -and ($state.OrganizationName -ne $organizationName)) {
+        throw "This forest already has the Exchange organisation '$($state.OrganizationName)', not '$organizationName'; an organisation cannot be renamed."
+    }
+
+    $steps = @(Get-LabExchangePreparationStep -SchemaRangeUpper $state.SchemaRangeUpper -TargetRangeUpper $target `
+            -OrganizationPresent ([bool]$state.OrganizationName) -DomainPrepared ($null -ne $state.DomainVersion))
+    if ($steps.Count -eq 0) {
+        Write-Step "Exchange is already prepared: schema $($state.SchemaRangeUpper), organisation '$($state.OrganizationName)' $($state.OrganizationVersion), domain $($state.DomainVersion)."
+        return
+    }
+
+    # Setup runs from the media and writes its log to C:\ExchangeSetupLogs\ExchangeSetup.log.
+    $setup = "$media\Setup.exe"
+    foreach ($step in $steps) {
+        Write-Step "Exchange Setup /$step (this takes several minutes)"
+        $arguments = Get-LabExchangeSetupArgument -Step $step -OrganizationName $organizationName
+        $output = & $setup @arguments 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $log = 'C:\ExchangeSetupLogs\ExchangeSetup.log'
+            $tail = if (Test-Path -LiteralPath $log) { (Get-Content -LiteralPath $log -Tail 15) -join ' | ' } else { (($output | Select-Object -Last 15) -join ' | ') }
+            throw "Exchange Setup /$step failed (exit $LASTEXITCODE): $tail"
+        }
+        Set-Changed "Exchange Setup /$step completed"
+    }
+
+    $after = Get-ExchangeForestState
+    if (($after.SchemaRangeUpper -ne $target) -or ($after.OrganizationName -ne $organizationName) -or ($null -eq $after.DomainVersion)) {
+        throw "Exchange Setup reported success but the forest reads schema $($after.SchemaRangeUpper) (want $target), organisation '$($after.OrganizationName)' (want '$organizationName'), domain $($after.DomainVersion)."
+    }
+    Set-Changed "Exchange organisation '$organizationName' prepared: schema $($after.SchemaRangeUpper), organisation $($after.OrganizationVersion), domain $($after.DomainVersion)"
+    # A fresh boot before Configure, so nothing downstream reads a schema cache from before the extension.
+    $script:RebootRequired = $true
+}
+
+function Invoke-ExtendPhase {
+    Assert-Setting -Name 'Domain', 'NetBiosName'
+    if (@($DirectoryExtension).Count -eq 0) {
+        Write-Step 'No directory extensions requested; nothing to do.'
+        return
+    }
+    if (-not (Test-IsDomainController)) {
+        throw 'Extend runs after Promote: this server is not a domain controller yet.'
+    }
+    Wait-ActiveDirectory
+    foreach ($product in $DirectoryExtension) {
+        switch ($product) {
+            'Exchange' { Invoke-ExchangeExtension }
+            default { throw "No Extend handler for the directory extension '$product'." }
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -685,6 +803,14 @@ function Invoke-VerifyPhase {
         Write-Step ("{0} {1}: {2}" -f $mark, $probe.Name, $probe.Detail)
     }
 
+    if (@($DirectoryExtension) -contains 'Exchange') {
+        Add-Check 'The Exchange organisation is prepared (schema, organisation named after the forest, domain)' {
+            $exchange = Get-ExchangeForestState
+            $ok = ($null -ne $exchange.SchemaRangeUpper) -and ($exchange.OrganizationName -eq $NetBiosName) -and ($null -ne $exchange.OrganizationVersion) -and ($null -ne $exchange.DomainVersion)
+            [pscustomobject]@{ Passed = [bool]$ok; Detail = "schema rangeUpper $($exchange.SchemaRangeUpper), organisation '$($exchange.OrganizationName)' objectVersion $($exchange.OrganizationVersion), domain objectVersion $($exchange.DomainVersion)" }
+        }
+    }
+
     Add-Check 'Windows is a full Datacenter edition, not evaluation' {
         $edition = Get-EditionId
         [pscustomobject]@{ Passed = ($edition -eq 'ServerDatacenter'); Detail = "EditionID=$edition" }
@@ -717,6 +843,7 @@ switch ($Phase) {
     'License' { Invoke-LicensePhase }
     'Prepare' { Invoke-PreparePhase }
     'Promote' { Invoke-PromotePhase }
+    'Extend' { Invoke-ExtendPhase }
     'Configure' { Invoke-ConfigurePhase }
     'Verify' { Invoke-VerifyPhase }
 }

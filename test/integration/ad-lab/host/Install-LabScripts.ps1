@@ -134,6 +134,8 @@ function Get-LabSettingsExample {
         vhdDirectory              = 'D:\Hyper-V\Virtual Hard Disks'
         switchName                = 'Lab'
         ntpServer                 = '10.99.0.1'
+        # Applied to every forest, in this order (Extend phase). Exchange: the full organisation, named after the forest.
+        directoryExtensions       = @([ordered]@{ product = 'Exchange'; isoPath = 'D:\media\ExchangeServerSE-x64.iso' })
         domainControllers         = [ordered]@{
             'dc-primary' = [ordered]@{ domain = 'PANOPLY.LOCAL'; ipAddress = '10.99.0.11'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $true }
             'dc-source'  = [ordered]@{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $false }
