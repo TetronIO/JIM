@@ -48,8 +48,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# lychee 0.24.2 (released 2026-05-01), the official multi-architecture image, pinned by digest.
-# Docker verifies the digest; the tag is kept beside it for readability.
+# lychee 0.24.2, the official multi-architecture image, pinned by digest.
+# Docker verifies the digest; the tag is kept beside it for readability. tooling-pin-check
+# watches the pin and proposes the next release's tag and digest together.
 $LycheeImage = 'lycheeverse/lychee:0.24.2@sha256:e2d19e57cf6ab037026f20b8e449a1f30d9d7f81eef4194763aab2eab20bd28d'
 
 if (-not (Test-Path -LiteralPath 'mkdocs.yml')) {
