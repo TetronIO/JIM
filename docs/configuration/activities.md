@@ -15,7 +15,7 @@ Activities move through a small set of statuses:
 - **In progress**<br /> Currently executing.
 - **Complete**<br /> Finished successfully.
 - **Complete with warning**<br /> Finished, but with warnings, or with errors recorded against some of its objects (a rejected import object, a failed export). Each object's error is on its execution item.
-- **Complete with error**<br /> Finished, but JIM hit an unexpected error processing at least one object, which points to a fault in JIM rather than in the data; review the items and report it.
+- **Complete with error**<br /> For a Run Profile execution, JIM hit an unexpected error processing at least one object, which points to a fault in JIM rather than in the data; review the items and report it. For a password delivery, the target system refused the password, and the message says why.
 - **Failed with error**<br /> Failed due to a critical error before or during execution, or every object the run recorded had an error.
 - **Cancelled**<br /> Cancelled before completion.
 

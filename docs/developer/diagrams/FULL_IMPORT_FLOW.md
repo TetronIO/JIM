@@ -176,8 +176,12 @@ flowchart TD
     AlreadyObsolete --> Loop
     NewlyMarked --> Loop
 
-    NextType -.->|All object types resolved| Limits{Newly marked count above<br/>MaxDetectedDeletions, or share of<br/>in-scope CSOs above<br/>MaxDetectedDeletionsPercent?}
-    Limits -->|Yes| Refuse[Refuse: touch nothing<br/>not even stale Pending Export cleanup<br/>Activity.DetectedDeletionsWithheld = count<br/>Warning appended to the Activity]
+    NextType -.->|All object types resolved| Limits{Newly marked count, not counting<br/>CSOs retired by an allowed<br/>Object Type change #2049, above<br/>MaxDetectedDeletions, or share of<br/>in-scope CSOs above<br/>MaxDetectedDeletionsPercent?}
+    Limits -->|Yes| Refuse[Refuse: touch nothing else<br/>not even stale Pending Export cleanup<br/>Activity.DetectedDeletionsWithheld = count<br/>Warning appended to the Activity<br/>Object Type change retirements still applied]
+    Refuse --> Reconcile
+    Obsolete --> Reconcile
+    StillGone --> Reconcile
+    Reconcile[Reconcile allowed Object Type changes #2049:<br/>a replacement whose held CSO was not retired<br/>is withdrawn before it is created<br/>RPEI: ObjectTypeChanged]
     Limits -->|No, or no limits set| Apply[Apply each candidate]
     Apply --> ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
     ClearPes --> WasObsolete{Already<br/>Obsolete?}

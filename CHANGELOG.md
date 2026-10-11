@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
 - ✨ A Full Import Run Profile can now **Allow Object Type Changes**, carrying out an intended change of Object Type: the object imports under its new type and the old one is retired. Portal, REST (`allowObjectTypeChanges`) or `-AllowObjectTypeChanges`. (#2049)
-- ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. PowerShell previews show warnings via `Write-Warning`. (#2049)
+- ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. (#2049)
 
 ### Changed
 
@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
 - 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
+- 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
 
 ### Fixed
 
