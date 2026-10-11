@@ -60,7 +60,10 @@ public sealed class GeneratedValueFormSource : IGeneratedValueFormSource
         if (_evaluated.TryGetValue((candidate, numericCandidate), out var known))
             return known;
 
-        var replayed = _replay.Replay(candidate, numericCandidate);
+        // Once per candidate per object: the added cost of checking the values built from a generated value.
+        GeneratedValueFormReplayResult replayed;
+        using (Diagnostics.Diagnostics.Sync.StartSpan("EvaluateGeneratedValueForms"))
+            replayed = _replay.Replay(candidate, numericCandidate);
         var evaluation = replayed.IsWaiting
             ? GeneratedValueFormEvaluation.Waiting(replayed.Waits)
             : GeneratedValueFormEvaluation.Checking([.. replayed.Values.Select(v => CheckOf(_forms[v.Form], v.Value))]);

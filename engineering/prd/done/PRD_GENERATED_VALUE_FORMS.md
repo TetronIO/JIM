@@ -1,6 +1,7 @@
 # Generated Value Forms
 
-- **Status:** Doing (implementation plan: [GENERATED_VALUE_FORMS.md](../../plans/doing/GENERATED_VALUE_FORMS.md))
+- **Status:** Done (implementation plan: [GENERATED_VALUE_FORMS.md](../../plans/done/GENERATED_VALUE_FORMS.md))
+- **Note:** A value written to another target only by an export expression does not yet anchor the generated value against correction (Collision Remediation counts values written there unchanged by a direct export Attribute Flow).
 - **Created:** 2026-10-08
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#2023](https://github.com/TetronIO/JIM/issues/2023)

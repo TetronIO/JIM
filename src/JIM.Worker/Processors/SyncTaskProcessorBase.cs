@@ -2666,7 +2666,13 @@ public abstract class SyncTaskProcessorBase
             }
 
             EnsureUniquenessProbeSession(requests, formsProbe);
-            var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+            IReadOnlyList<GenerationOutcome> outcomes;
+            // Generation time, including the values built from each candidate (Generated Value Forms, #2023): the PRD
+            // asks for it in the run's performance diagnostics.
+            using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues")
+                       .SetTag("requests", requests.Count)
+                       .SetTag("withForms", requests.Count(r => r.FormSource != null)))
+                outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
             for (var i = 0; i < outcomes.Count; i++)
             {
@@ -3014,7 +3020,9 @@ public abstract class SyncTaskProcessorBase
         }
 
         EnsureUniquenessProbeSession(requests);
-        var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+        IReadOnlyList<GenerationOutcome> outcomes;
+        using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues").SetTag("requests", requests.Count))
+            outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
         for (var i = 0; i < outcomes.Count; i++)
         {
