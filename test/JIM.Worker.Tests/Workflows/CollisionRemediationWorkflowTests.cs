@@ -144,6 +144,47 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs1"), "a User Principal Name derived from one generated value is that value's collision");
     }
 
+    /// <summary>
+    /// Drawing the next value checks the values built from it too (Generated Value Forms, #2023): joe.bloggs1 would give
+    /// a User Principal Name another person already holds, so it is passed over.
+    /// </summary>
+    [Test]
+    public async Task Export_NextCandidatesUpnAlreadyHeld_CorrectsToTheFirstWhoseUpnIsFreeAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedMetaverseObjectHolding(ctx, ctx.UserPrincipalName, "joe.bloggs1@corp.local");
+
+        await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+
+        Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("joe.bloggs2"));
+    }
+
+    /// <summary>
+    /// A value built from the next candidate that cannot be worked out holds the correction back: the export fails as
+    /// an ordinary error, and nobody is asked for a decision a fixed expression makes unnecessary.
+    /// </summary>
+    [Test]
+    public async Task Export_UpnOfTheNextCandidateCannotBeWorkedOut_IsAnOrdinaryErrorAndLeavesTheAccountNameAsync()
+    {
+        var ctx = await SetUpAsync();
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        var export = DirectoryExport(ctx);
+        SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules
+            .Single(m => m.TargetMetaverseAttributeId == ctx.UserPrincipalName.Id).Sources[0].Expression = "mv[\"Account Name\"] + @@@";
+
+        var activity = await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.Not.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            AssertOrdinaryError(ctx, activity, export);
+        }
+    }
+
     [Test]
     public async Task Export_SequenceValueCorrected_HandsTheRestOfItsBlockBackSoTheNextJoinerGetsTheNextNumberAsync()
     {
@@ -897,6 +938,13 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         };
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = ctx.ContractorUid.Id, Attribute = ctx.ContractorUid, StringValue = uid });
         SyncRepo.SeedConnectedSystemObject(cso);
+    }
+
+    private void SeedMetaverseObjectHolding(Context ctx, MetaverseAttribute attribute, string value)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow, Type = ctx.MvType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = value, MetaverseObject = mvo });
+        SyncRepo.SeedMetaverseObject(mvo);
     }
 
     private SyncRuleMapping GeneratedMapping(Context ctx) =>

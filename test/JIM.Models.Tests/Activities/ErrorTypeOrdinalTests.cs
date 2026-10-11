@@ -56,7 +56,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = 26,
 
         // A Connected System rejected an export because a value is already in use there (#242, release 4).
-        [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27
+        [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
+
+        // An Object Matching Rule could not be worked out for an object (#2052).
+        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28
     };
 
     [Test]

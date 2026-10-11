@@ -51,7 +51,7 @@ LANG-4	concepts/jml-lifecycle.md	39
 LANG-4	concepts/synchronisation-pipeline.md	32
 LANG-4	configuration/activities.md	1
 LANG-4	configuration/connected-systems.md	9
-LANG-4	configuration/synchronisation-rules.md	28
+LANG-4	configuration/synchronisation-rules.md	24
 LANG-4	connectors/index.md	3
 LANG-4	connectors/jim-file-connector.md	1
 LANG-4	powershell/connected-systems.md	3

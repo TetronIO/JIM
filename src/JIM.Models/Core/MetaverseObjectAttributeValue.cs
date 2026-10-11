@@ -101,6 +101,20 @@ public class MetaverseObjectAttributeValue
                !NullValue;
     }
 
+    /// <summary>
+    /// A copy of this value belonging to <paramref name="owner"/>, every other field as it is (references included), for
+    /// working out changes on a scratch copy of a Metaverse Object without touching the real one (Generated Value Forms,
+    /// #2023): Attribute Flow stamps provenance on a value in place, so a scratch object cannot share its values.
+    /// </summary>
+    public MetaverseObjectAttributeValue CopyFor(MetaverseObject owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+
+        var copy = (MetaverseObjectAttributeValue)MemberwiseClone();
+        copy.MetaverseObject = owner;
+        return copy;
+    }
+
     public override string ToString()
     {
         var output = "";

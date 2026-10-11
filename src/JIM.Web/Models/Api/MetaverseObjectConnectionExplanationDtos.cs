@@ -136,6 +136,12 @@ public class JoinRecordDto
 
     public Guid? RunProfileExecutionItemId { get; set; }
 
+    /// <summary>The Object Matching Rule that found the match, for a join made by matching; null when not recorded or since deleted.</summary>
+    public int? ObjectMatchingRuleId { get; set; }
+
+    /// <summary>What a join made by matching matched on, as recorded when it was made.</summary>
+    public string? MatchValue { get; set; }
+
     public static JoinRecordDto FromModel(JoinRecord model) => new()
     {
         JoinType = model.JoinType,
@@ -146,7 +152,9 @@ public class JoinRecordDto
         Source = model.Source,
         Description = model.Description,
         ActivityId = model.ActivityId,
-        RunProfileExecutionItemId = model.RunProfileExecutionItemId
+        RunProfileExecutionItemId = model.RunProfileExecutionItemId,
+        ObjectMatchingRuleId = model.ObjectMatchingRuleId,
+        MatchValue = model.MatchValue
     };
 }
 

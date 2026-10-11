@@ -320,7 +320,15 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             return NotFound(ApiErrorResponse.NotFound($"Execution item with ID {id} not found."));
         }
 
-        return Ok(ActivityRunProfileExecutionItemDetailDto.FromEntity(item));
+        var dto = ActivityRunProfileExecutionItemDetailDto.FromEntity(item);
+        if (ActivityRunProfileExecutionItemMatchCandidate.AreRecordedFor(item.ErrorType))
+        {
+            dto.MatchCandidates = (await _application.Activities.GetMatchCandidatesAsync(id))
+                .Select(MatchCandidateDetailDto.FromModel)
+                .ToList();
+        }
+
+        return Ok(dto);
     }
 
     /// <summary>

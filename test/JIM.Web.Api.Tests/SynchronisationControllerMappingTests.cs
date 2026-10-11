@@ -525,6 +525,32 @@ public class SynchronisationControllerMappingTests
     }
 
     [Test]
+    public void GeneratedValueBuiltValueDto_FromModel_CarriesHowTheValueIsCheckedBeforeIssuing()
+    {
+        // Generated Value Forms (#2023, PRD requirement 12): whether the value is checked before the generated value is
+        // issued, where it is probed, and, for one built on another rule, the rule to move it to.
+        var checkedValue = GeneratedValueBuiltValueDto.FromModel(new GeneratedValueBuiltValueDescription
+        {
+            MetaverseAttributeName = "Email", Kind = GeneratedValueBuiltValueKind.Form, KeepUnique = true,
+            CheckedBeforeIssuing = true, ProbedIn = ["Corp AD"]
+        });
+        var correctedOnly = GeneratedValueBuiltValueDto.FromModel(new GeneratedValueBuiltValueDescription
+        {
+            MetaverseAttributeName = "Email", Kind = GeneratedValueBuiltValueKind.BuiltOnAnotherRule, KeepUnique = true,
+            MoveToSyncRuleName = "HR Import"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(checkedValue.CheckedBeforeIssuing, Is.True);
+            Assert.That(checkedValue.ProbedIn, Is.EqualTo(new[] { "Corp AD" }));
+            Assert.That(checkedValue.MoveToSyncRuleName, Is.Null);
+            Assert.That(correctedOnly.CheckedBeforeIssuing, Is.False);
+            Assert.That(correctedOnly.MoveToSyncRuleName, Is.EqualTo("HR Import"));
+        }
+    }
+
+    [Test]
     public async Task CreateSyncRuleMappingAsync_ExpressionMapping_SetsKeepUniqueFromRequest()
     {
         const int syncRuleId = 2;

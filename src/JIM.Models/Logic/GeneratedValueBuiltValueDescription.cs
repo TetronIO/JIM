@@ -79,4 +79,29 @@ public sealed class GeneratedValueBuiltValueDescription
     /// Every Connected System attribute the value is written to unchanged.
     /// </summary>
     public IReadOnlyList<GeneratedValueBuiltValueTarget> ExportedTo { get; init; } = [];
+
+    /// <summary>
+    /// Whether the value is checked before the generated value is issued: built on the generated flow's own
+    /// Synchronisation Rule, its Keep unique switch on, and bound for at least one Connected System the generated value's
+    /// exclusions leave in. A candidate whose value is already held is passed over.
+    /// </summary>
+    public bool CheckedBeforeIssuing { get; init; }
+
+    /// <summary>
+    /// The Connected Systems the value is probed in before the generated value is issued, besides JIM's own records, by
+    /// name; empty when it is not checked, or checked against JIM's records alone.
+    /// </summary>
+    public IReadOnlyList<string> ProbedIn { get; init; } = [];
+
+    /// <summary>
+    /// For a value built on another Synchronisation Rule whose Attribute Flow reads only Metaverse attributes, the
+    /// generated flow's own rule: moving the flow there would have the value checked before issuing. Null otherwise.
+    /// </summary>
+    public string? MoveToSyncRuleName { get; init; }
+
+    /// <summary>
+    /// The expression that builds the value, for the generated flow's preview to work it out from a candidate; null when
+    /// the Attribute Flow has no single expression source.
+    /// </summary>
+    public string? Expression { get; init; }
 }
