@@ -2781,15 +2781,22 @@ public class ExportEvaluationServer
                 var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
                     attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges);
 
-                // Every incoming change restated a held change and nothing queued is withdrawn: the evaluation changes
-                // nothing, so the persisted Pending Export is left exactly as it is, as the no-change path above leaves
-                // it. Rebuilding it would re-stamp the item that queued it over the provisioning that did, and report a
-                // staged export on every synchronisation until the Initial Password arrives (#2039).
-                if (evaluatedChangeCount > 0 && attributeChanges.Count == 0 && withdrawnFromPersisted.Count == 0)
+                // Every incoming change restated a held change: the evaluation stages nothing new, so the persisted
+                // Pending Export is kept, as the no-change path above keeps it. Anything the target no longer needs is
+                // withdrawn from it in place, and otherwise it is left exactly as it is. Rebuilding it would re-stamp the
+                // item that queued it over the provisioning that did, and report a staged export on every
+                // synchronisation until the Initial Password arrives (#2039).
+                if (evaluatedChangeCount > 0 && attributeChanges.Count == 0)
                 {
+                    if (withdrawnFromPersisted.Count > 0)
+                    {
+                        await RemoveWithdrawnChangesFromPersistedPendingExportAsync(dbPendingExport, withdrawnFromPersisted, cache, csoId.Value, mvo.Id);
+                        RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id, withdrawnFromPersisted);
+                    }
+
                     Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Nothing to stage for CSO {CsoId}; Pending Export {PendingExportId} " +
-                        "already holds what the Metaverse Object wants until an Initial Password is delivered. Source: MVO {MvoId}",
-                        csoId.Value, dbPendingExport.Id, mvo.Id);
+                        "already holds what the Metaverse Object wants until an Initial Password is delivered ({WithdrawnCount} queued change(s) withdrawn). Source: MVO {MvoId}",
+                        csoId.Value, dbPendingExport.Id, withdrawnFromPersisted.Count, mvo.Id);
                     return (null, null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
@@ -3157,30 +3164,45 @@ public class ExportEvaluationServer
         if (persisted is not { ChangeType: PendingExportChangeType.Update } || persisted.Status == PendingExportStatus.Executing)
             return withdrawn;
 
-        var survivors = SelectSurvivingDriftChanges([], persisted.AttributeValueChanges, alreadyCurrentChanges);
-        if (survivors.Count == persisted.AttributeValueChanges.Count)
+        var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], persisted.AttributeValueChanges, alreadyCurrentChanges);
+        if (withdrawnFromPersisted.Count == 0)
             return withdrawn;
 
-        // Read before the writes below, which detach the persisted rows from the change tracker.
-        var survivorIds = survivors.Select(c => c.Id).ToHashSet();
-        var withdrawnFromPersisted = persisted.AttributeValueChanges.Where(c => !survivorIds.Contains(c.Id)).ToList();
         withdrawn.AddRange(withdrawnFromPersisted);
+        await RemoveWithdrawnChangesFromPersistedPendingExportAsync(persisted, withdrawnFromPersisted, cache, csoId, mvoId);
+        return withdrawn;
+    }
 
-        if (survivors.Count == 0)
+    /// <summary>
+    /// Removes <paramref name="withdrawnChanges"/> from <paramref name="persisted"/>, a Pending Export persisted by an
+    /// earlier run or page, in place: the row keeps its id, its status and the item that queued it, and only the
+    /// withdrawn changes go (#2001). A Pending Export left with no changes is removed, and the page's cache told so.
+    /// </summary>
+    private async Task RemoveWithdrawnChangesFromPersistedPendingExportAsync(
+        PendingExport persisted,
+        List<PendingExportAttributeValueChange> withdrawnChanges,
+        ExportEvaluationCache cache,
+        Guid csoId,
+        Guid mvoId)
+    {
+        // Read before the writes below, which detach the persisted rows from the change tracker.
+        var withdrawnIds = withdrawnChanges.Select(c => c.Id).ToHashSet();
+        var removed = persisted.AttributeValueChanges.TrueForAll(c => withdrawnIds.Contains(c.Id));
+
+        if (removed)
         {
             await SyncRepo.DeletePendingExportAsync(persisted);
             cache.CsoIdsWithPersistedPendingExports?.Remove(csoId);
         }
         else
         {
-            await SyncRepo.AppendAttributeChangesToPendingExportAsync(persisted.Id, [], withdrawnFromPersisted.Select(c => c.Id).ToList());
+            await SyncRepo.AppendAttributeChangesToPendingExportAsync(persisted.Id, [], [.. withdrawnIds]);
         }
 
-        Log.Information("WithdrawQueuedChangesAlreadyCurrentAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} for CSO {CsoId}; " +
+        Log.Information("RemoveWithdrawnChangesFromPersistedPendingExportAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} for CSO {CsoId}; " +
             "the target already holds the values the Metaverse now wants{Removed}. Source: MVO {MvoId}",
-            withdrawnFromPersisted.Count, persisted.Id, csoId,
-            survivors.Count == 0 ? " (Pending Export removed)" : string.Empty, mvoId);
-        return withdrawn;
+            withdrawnIds.Count, persisted.Id, csoId,
+            removed ? " (Pending Export removed)" : string.Empty, mvoId);
     }
 
     /// <summary>
@@ -3472,9 +3494,9 @@ public class ExportEvaluationServer
                 queuedPendingExport = await ReadQueuedPendingExportForPreviewAsync(cache, existingCso, effectiveChangeType.Value, existingPendingExport);
 
             // A restatement of a held change is no change at all, so the run drops it before merging into the queued
-            // Pending Export; when nothing else is left (and nothing is withdrawn) it stages nothing and records no
-            // Pending Export, so the preview proposes none. Dropped before generated values are resolved below, as the
-            // run drops it before its own resolution.
+            // Pending Export; when nothing else is left it stages nothing and records no Pending Export (withdrawing in
+            // place anything the target no longer needs), so the preview proposes none. Dropped before generated values
+            // are resolved below, as the run drops it before its own resolution.
             if (queuedPendingExport != null)
                 attributeChanges = SyncEngine.WithoutChangesRestatingAHeldChange(attributeChanges, queuedPendingExport.AttributeValueChanges);
 
@@ -3547,7 +3569,8 @@ public class ExportEvaluationServer
     /// a queued Update export no connector is executing is touched; when new changes merge into the queued export, the
     /// changes they replace are not withdrawals, and a Create already sent and awaiting confirmation is appended to
     /// rather than rebuilt, so nothing is withdrawn from it. An evaluation whose every change restated a held change
-    /// (#2039) takes the merge path, as the run's does, with what is left after the restatements are dropped.
+    /// (#2039) selects as the merge path does, with what is left after the restatements are dropped; the run then
+    /// withdraws those changes from the queued export in place rather than rebuilding it, which selects the same ones.
     /// </summary>
     /// <param name="evaluatedChangeCount">How many changes the evaluation found before any restatement was dropped,
     /// which is what decides the path the run takes.</param>

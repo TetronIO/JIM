@@ -61,6 +61,49 @@ public partial class SyncPreviewFidelityTests
         AssertNoExportProposedAndNoneStaged(ctx, preview, activity);
     }
 
+    /// <summary>
+    /// A DisplayName change staged during the hold is reverted to the value the account already holds. The restated
+    /// enabled value is dropped and the reverted change withdrawn; the Pending Export holding the change is left in place
+    /// with only the held change on it, so the withdrawal is all the run records and all the preview proposes. Rebuilding
+    /// that export instead would record a Pending Export the preview does not show, re-stamped with this synchronisation's
+    /// item.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ChangeStagedDuringTheHoldRevertedToTheAccountsValue_ProposesOnlyTheWithdrawalTheRunMakesAsync()
+    {
+        var ctx = await SetUpHeldChangeAsync(onAnUnconfirmedCreate: false);
+        SetWithdrawalValue(ctx.HrCso, "DisplayName", "Alicia");
+        await ModifyCsoAsync(ctx.HrCso);
+        await RunFullSyncAsync(await ReloadEntityAsync(ctx.Hr));
+        var holding = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ctx.DirectoryCso.Id);
+        var heldChange = holding.AttributeValueChanges.Single(c => c.AwaitsInitialPassword);
+        Assert.That(holding.AttributeValueChanges.Where(c => !c.AwaitsInitialPassword).Select(c => c.StringValue), Is.EqualTo(new[] { "Alicia" }),
+            "arrange: the change staged during the hold is queued beside the held change");
+        var queuingItemId = holding.QueuedByRunProfileExecutionItemId;
+
+        SetWithdrawalValue(ctx.HrCso, "DisplayName", "Alice");
+        await ModifyCsoAsync(ctx.HrCso);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Hr.Id, ctx.HrCso.Id);
+        var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Hr));
+
+        var described = DescribeTree(preview.OutcomeTree);
+        var queuedForAccount = SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == ctx.DirectoryCso.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(described, Does.Contain(nameof(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)),
+                "the preview proposes the withdrawal");
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty, "the preview proposes no export");
+            Assert.That(described, Is.EqualTo(DescribeTree(MapRealOutcomeTree(activity))));
+            Assert.That(queuedForAccount.Select(pe => pe.Id), Is.EqualTo(new[] { holding.Id }),
+                "the Pending Export holding the change is kept, not rebuilt");
+            Assert.That(queuedForAccount.SelectMany(pe => pe.AttributeValueChanges).Select(c => c.Id), Is.EqualTo(new[] { heldChange.Id }),
+                "only the held change remains queued");
+            Assert.That(queuedForAccount.Single().QueuedByRunProfileExecutionItemId, Is.EqualTo(queuingItemId),
+                "the item that queued it still names its cause");
+        }
+    }
+
     private void AssertNoExportProposedAndNoneStaged(HeldChangeContext ctx, SyncPreviewResult preview, Activity activity)
     {
         var described = DescribeTree(preview.OutcomeTree);
