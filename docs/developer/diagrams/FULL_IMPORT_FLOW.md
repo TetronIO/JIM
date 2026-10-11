@@ -254,7 +254,13 @@ flowchart TD
     Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Per page, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
     Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed /<br/>Held / Released]
-    Summary --> Done([Done])
+    Summary --> Sweep[JudgeUnreconciledInitialPasswordHoldsAsync #2039:<br/>every held change whose CSO this import<br/>did not reconcile, Full and Delta Import alike<br/>One query from the partial index on the flag,<br/>one owed-password lookup for them all]
+    Sweep --> SweepOwed{Password still owed<br/>to its Metaverse Object?}
+    SweepOwed -->|Yes| SweepHeld[Still held: untouched]
+    SweepOwed -->|No, or no Metaverse Object| SweepReleased[Released exactly as above, no RPEI<br/>Nothing else on the object is<br/>confirmed or retried<br/>An unconfirmed Create keeps its status]
+    SweepHeld --> SweepSummary[Log held / released summary]
+    SweepReleased --> SweepSummary
+    SweepSummary --> Done([Done])
 
     Loop -->|Yes| StatusGate{Pending Export<br/>status? #1826}
     StatusGate -->|Executing, or Pending<br/>with nothing written yet| Untouched[Left untouched<br/>Executing ones stranded by a crash<br/>are recovered at Worker startup]
@@ -297,6 +303,8 @@ flowchart TD
 - **Zero-import safety**<br /> If no objects are imported, deletion detection is skipped entirely to prevent accidental mass-deletion when connectivity to the source system fails.
 
 - **PendingProvisioning transition**<br /> CSOs created during export (provisioning) start with `PendingProvisioning` status. The confirming import transitions them to `Normal` when the object is confirmed to exist in the target system.
+
+- **Holds are judged at every import, returned or not (#2039)**<br /> Reconciliation runs only over the CSOs an import updated, but a change held until an Initial Password is delivered usually sits on an account that stops changing: the confirming import stamped its disabled state, so a later Full Import skips it by its content hash, and a Delta Import never returns it. A password that then expires or is cancelled, or is delivered without enabling the account, changes nothing an import reads. So after reconciliation every import, Full or Delta, judges each held change on a CSO it did not reconcile (`JudgeUnreconciledInitialPasswordHoldsAsync`): still held while a password is owed to the Metaverse Object, released otherwise. It releases and nothing more, because that CSO's values may predate the export. The held set comes from one query per run (`ISyncRepository.GetInitialPasswordHoldSummariesAsync`) led by the partial index on `AwaitsInitialPassword`, so a Connected System with nothing held pays an empty index probe. See "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
 - **Parallel LDAP connections (#72)**<br /> OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
 
