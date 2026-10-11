@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
 - ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
 - ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
+- ✨ An execution item's Lineage now shows what its change went on to cause in later runs, down to the accounts and Groups it reached, and where each branch stopped or what it waits for. Check again appears only while something is still to happen. (#1811)
 - ✨ The REST API and PowerShell can read what caused an Activity's execution item and what it went on to cause, with exact counts and where each branch ended (`Get-JIMActivityExecutionItem -Causes` and `-Consequences`, `Get-JIMCausalCohortMember`). (#1811)
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 

@@ -130,6 +130,7 @@ nav:
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
+      - Causality: configuration/causality.md
       - API Keys: configuration/api-keys.md
       - Certificates: configuration/certificates.md
       - Service Settings: configuration/service-settings.md
