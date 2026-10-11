@@ -120,6 +120,16 @@ internal static class LdapConnectorConstants
     internal const string LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417";
 
     /// <summary>
+    /// LDAP_SERVER_PERMISSIVE_MODIFY_OID - Server control under which a modify that adds a value already present, or
+    /// deletes one already absent, succeeds instead of being rejected. Without it an LDAP modify is refused whole for
+    /// one such value, and none of the others it carries are applied. Sent only where the directory advertises it in
+    /// its rootDSE supportedControl: Active Directory and Samba AD do (Samba honours it for adds but still refuses the
+    /// removal of an absent member); OpenLDAP implements it for adds but does not advertise it, and 389 Directory
+    /// Server refuses it (unavailableCriticalExtension).
+    /// </summary>
+    internal const string LDAP_SERVER_PERMISSIVE_MODIFY_OID = "1.2.840.113556.1.4.1413";
+
+    /// <summary>
     /// Attribute names where Active Directory's SAM layer enforces single-valued behaviour despite the
     /// LDAP schema declaring them as multi-valued. This applies to all SAM-managed object classes
     /// (user, group, computer, samDomain, samServer, inetOrgPerson).

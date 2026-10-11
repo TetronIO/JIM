@@ -1,0 +1,761 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System.DirectoryServices.Protocols;
+using JIM.Connectors.LDAP;
+using JIM.Models.Core;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using NUnit.Framework;
+using Serilog;
+
+namespace JIM.Worker.Tests.Connectors;
+
+/// <summary>
+/// An export that adds a value the directory already holds, or removes one it does not, asks for a state that already
+/// exists. An LDAP modify is atomic, so the directory rejects the whole request for that one value and applies none of
+/// the others it carried. These tests cover how the LDAP Connector reaches the desired state anyway: by attaching the
+/// Permissive Modify control where the directory advertises it, and otherwise by retrying one value at a time, without
+/// ever reporting a rejected modify as a success.
+/// </summary>
+[TestFixture]
+public class LdapConnectorExportDesiredStateTests
+{
+    private const string GroupDn = "CN=Engineers,OU=Groups,DC=test,DC=local";
+    private const string PermissiveModifyOid = "1.2.840.113556.1.4.1413";
+    private const string Alice = "CN=Alice,OU=Users,DC=test,DC=local";
+    private const string Bob = "CN=Bob,OU=Users,DC=test,DC=local";
+    private const string Carol = "CN=Carol,OU=Users,DC=test,DC=local";
+    private const string Dave = "CN=Dave,OU=Users,DC=test,DC=local";
+
+    // Active Directory's and Samba AD's own words, as the domain controllers answer.
+    private const string SambaMemberAlreadyPresent = "The object exists. Attribute member already exists for target GUID 06a38326-feac-4cef-bde2-1792c97fcf52";
+    private const string ActiveDirectoryMemberAlreadyPresent = "00000562: UpdErr: DSID-031A11E2, problem 6005 (ENTRY_EXISTS), data 0";
+    private const string ActiveDirectoryMemberNotInGroup = "00000561: SvcErr: DSID-031A1254, problem 5003 (WILL_NOT_PERFORM), data 0";
+
+    // Samba AD answers unwillingToPerform for the removal of a member the group does not hold, even with Permissive
+    // Modify attached, in its own words rather than Active Directory's code.
+    private const string SambaMemberNotPresent = "Attribute member doesn't exist for target GUID df8c9ffe-ae21-492c-8e77-ea8833e35f6a";
+
+    // ERROR_MEMBERS_PRIMARY_GROUP: the member cannot be removed because this is its primary group. A genuine refusal.
+    private const string ActiveDirectoryMembersPrimaryGroup = "0000055E: SvcErr: DSID-031A1254, problem 5003 (WILL_NOT_PERFORM), data 0";
+
+    private static readonly IList<ConnectedSystemSettingValue> Settings =
+    [
+        new() { Setting = new ConnectorDefinitionSetting { Name = "Delete Behaviour" }, StringValue = "Delete" }
+    ];
+
+    #region The rootDSE says whether the control is offered
+
+    [Test]
+    public void AdvertisesPermissiveModify_ControlListedInSupportedControl_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { SupportedControls = ["1.2.840.113556.1.4.319", PermissiveModifyOid] };
+
+        Assert.That(rootDse.AdvertisesPermissiveModify, Is.True);
+    }
+
+    [Test]
+    public void AdvertisesPermissiveModify_ControlNotListed_ReturnsFalse()
+    {
+        // OpenLDAP's rootDSE, as a stock slapd answers it: the control is not among those it lists.
+        var rootDse = new LdapConnectorRootDse
+        {
+            SupportedControls = ["2.16.840.1.113730.3.4.18", "2.16.840.1.113730.3.4.2", "1.3.6.1.4.1.4203.1.10.1", "1.3.6.1.1.22",
+                "1.2.840.113556.1.4.319", "1.2.826.0.1.3344810.2.3", "1.3.6.1.1.13.2", "1.3.6.1.1.13.1", "1.3.6.1.1.12"]
+        };
+
+        Assert.That(rootDse.AdvertisesPermissiveModify, Is.False);
+    }
+
+    [Test]
+    public void AdvertisesPermissiveModify_SupportedControlNotRead_ReturnsFalse()
+    {
+        var rootDse = new LdapConnectorRootDse { SupportedControls = null };
+
+        Assert.That(rootDse.AdvertisesPermissiveModify, Is.False);
+    }
+
+    #endregion
+
+    #region Where the directory advertises Permissive Modify
+
+    [TestCase(1, TestName = "Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatAddsValues(sequential)")]
+    [TestCase(4, TestName = "Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatAddsValues(concurrent)")]
+    public async Task Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatAddsValuesAsync(int concurrency)
+    {
+        var directory = new FakeDirectory().With("member", Alice);
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Bob))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(1));
+            Assert.That(CarriesPermissiveModify(directory.ModifyRequests[0]), Is.True);
+        }
+    }
+
+    [TestCase(1, TestName = "Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatDeletesValues(sequential)")]
+    [TestCase(4, TestName = "Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatDeletesValues(concurrent)")]
+    public async Task Export_DirectoryAdvertisesPermissiveModify_AttachesItToAModifyThatDeletesValuesAsync(int concurrency)
+    {
+        var directory = new FakeDirectory().With("member", Alice);
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Alice))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(CarriesPermissiveModify(directory.ModifyRequests.Single()), Is.True);
+        }
+    }
+
+    [TestCase(1, TestName = "Export_DirectoryDoesNotAdvertisePermissiveModify_AttachesNoControl(sequential)")]
+    [TestCase(4, TestName = "Export_DirectoryDoesNotAdvertisePermissiveModify_AttachesNoControl(concurrent)")]
+    public async Task Export_DirectoryDoesNotAdvertisePermissiveModify_AttachesNoControlAsync(int concurrency)
+    {
+        // 389 Directory Server refuses the control outright (unavailableCriticalExtension), so it must never be sent
+        // to a directory that has not said it understands it.
+        var directory = new FakeDirectory().With("member", Alice);
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: false);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Bob), Remove("member", Alice))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ModifyRequests.Any(CarriesPermissiveModify), Is.False);
+        }
+    }
+
+    [TestCase(1, TestName = "Export_ModifyThatOnlyReplaces_IsSentUnchanged(sequential)")]
+    [TestCase(4, TestName = "Export_ModifyThatOnlyReplaces_IsSentUnchanged(concurrent)")]
+    public async Task Export_ModifyThatOnlyReplaces_IsSentUnchangedAsync(int concurrency)
+    {
+        var directory = new FakeDirectory().With("description", "Old");
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Replace("description", "New"))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(1));
+            Assert.That(CarriesPermissiveModify(directory.ModifyRequests[0]), Is.False,
+                "A replace cannot meet a value already present or already absent, so it has no use for the control");
+            Assert.That(directory.ValuesOf("description"), Is.EquivalentTo(new[] { "New" }));
+        }
+    }
+
+    [TestCase(1, TestName = "Export_CreateWhoseMembersOverflowTheBatch_AttachesItToEveryOverflowModify(sequential)")]
+    [TestCase(4, TestName = "Export_CreateWhoseMembersOverflowTheBatch_AttachesItToEveryOverflowModify(concurrent)")]
+    public async Task Export_CreateWhoseMembersOverflowTheBatch_AttachesItToEveryOverflowModifyAsync(int concurrency)
+    {
+        var directory = new FakeDirectory();
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true, batchSize: 10);
+        var members = Enumerable.Range(1, 25).Select(i => $"CN=User{i:D2},OU=Users,DC=test,DC=local").ToArray();
+
+        var results = await export.ExecuteAsync([GroupCreate(members)], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(2), "25 members in batches of 10: 10 on the add, then two overflow modifies");
+            Assert.That(directory.ModifyRequests.All(CarriesPermissiveModify), Is.True);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(members));
+        }
+    }
+
+    [TestCase(1, TestName = "Export_DirectoryHonoursPermissiveModify_AddOfAPresentMemberSucceedsInOneRequest(sequential)")]
+    [TestCase(4, TestName = "Export_DirectoryHonoursPermissiveModify_AddOfAPresentMemberSucceedsInOneRequest(concurrent)")]
+    public async Task Export_DirectoryHonoursPermissiveModify_AddOfAPresentMemberSucceedsInOneRequestAsync(int concurrency)
+    {
+        var directory = new FakeDirectory { HonoursPermissiveModify = true }.With("member", Alice);
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Bob), Remove("member", Dave))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(1));
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Alice, Bob }));
+        }
+    }
+
+    [Test]
+    public async Task Export_DirectoryStillRejectsDespitePermissiveModify_RetriesOneValueAtATimeAsync()
+    {
+        // OpenLDAP honours the control for an add but still answers noSuchAttribute for the delete of an absent value.
+        var directory = new FakeDirectory { HonoursPermissiveModify = false }.With("member", Alice);
+        var export = CreateExport(directory, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Alice), Remove("member", Dave))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.Empty);
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1));
+        }
+    }
+
+    #endregion
+
+    #region Where it does not: one value at a time
+
+    [TestCase(1, TestName = "Export_AddOfAMemberAlreadyPresent_AppliesTheOtherMembersAndSucceeds(sequential)")]
+    [TestCase(4, TestName = "Export_AddOfAMemberAlreadyPresent_AppliesTheOtherMembersAndSucceeds(concurrent)")]
+    public async Task Export_AddOfAMemberAlreadyPresent_AppliesTheOtherMembersAndSucceedsAsync(int concurrency)
+    {
+        var directory = new FakeDirectory().With("member", Alice);
+        var export = CreateExport(directory, concurrency);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Bob), Add("member", Carol))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Alice, Bob, Carol }),
+                "The directory rejected the whole modify for Alice; Bob and Carol must still be added");
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1));
+        }
+    }
+
+    [TestCase(1, TestName = "Export_DeleteOfAMemberAlreadyAbsent_RemovesTheOtherMembersAndSucceeds(sequential)")]
+    [TestCase(4, TestName = "Export_DeleteOfAMemberAlreadyAbsent_RemovesTheOtherMembersAndSucceeds(concurrent)")]
+    public async Task Export_DeleteOfAMemberAlreadyAbsent_RemovesTheOtherMembersAndSucceedsAsync(int concurrency)
+    {
+        var directory = new FakeDirectory().With("member", Alice, Bob, Carol);
+        var export = CreateExport(directory, concurrency);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Dave), Remove("member", Alice), Remove("member", Bob))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Carol }));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1));
+        }
+    }
+
+    [TestCase(1, TestName = "Export_GenuineRefusalOfOneValue_FailsTheExport(sequential)")]
+    [TestCase(4, TestName = "Export_GenuineRefusalOfOneValue_FailsTheExport(concurrent)")]
+    public async Task Export_GenuineRefusalOfOneValue_FailsTheExportAsync(int concurrency)
+    {
+        var directory = new FakeDirectory
+        {
+            RefuseValue = (modification, value) => value == Carol
+                ? Rejection(ResultCode.InsufficientAccessRights, "Insufficient access rights to add Carol")
+                : null
+        }.With("member", Alice);
+        var export = CreateExport(directory, concurrency);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Carol))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False, "One value the directory genuinely refused means the export did not reach its desired state");
+            Assert.That(results.Single().ErrorMessage, Does.Contain("Insufficient access rights to add Carol"));
+            Assert.That(directory.ValuesOf("member"), Does.Not.Contain(Carol));
+        }
+    }
+
+    [Test]
+    public async Task Export_AtomicModifyRefusedForAnotherReason_IsNotRetriedValueByValueAsync()
+    {
+        var directory = new FakeDirectory
+        {
+            RefuseValue = (_, _) => Rejection(ResultCode.InsufficientAccessRights, "Insufficient access rights")
+        };
+        var export = CreateExport(directory);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Bob))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task Export_ModifyThatOnlyReplacesRejectedWithValueExists_FailsWithoutRetryingAsync()
+    {
+        // A replace that the directory answers with attributeOrValueExists (duplicate values in the list, say) is not
+        // a value already in place: nothing about it can be achieved by retrying one value at a time.
+        var directory = new FakeDirectory
+        {
+            RefuseValue = (modification, _) => modification.Operation == DirectoryAttributeOperation.Replace
+                ? Rejection(ResultCode.AttributeOrValueExists, "duplicate values provided")
+                : null
+        };
+        var export = CreateExport(directory);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Replace("description", "New"))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False);
+            Assert.That(directory.ModifyRequests, Has.Count.EqualTo(1));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task Export_OneValueAtATime_SendsTheReplacesTogetherThenEachValueAloneAsync()
+    {
+        var directory = new FakeDirectory().With("member", Alice).With("description", "Old").With("info", "Old");
+        var export = CreateExport(directory);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate(Add("member", Alice), Replace("description", "New"), Add("member", Bob), Replace("info", "New"))],
+            CancellationToken.None);
+
+        var retries = directory.ModifyRequests.Skip(1).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(retries, Has.Count.EqualTo(3), "one request for both replaces, then one for each member");
+            Assert.That(Modifications(retries[0]).Select(m => m.Operation), Is.All.EqualTo(DirectoryAttributeOperation.Replace));
+            Assert.That(Modifications(retries[0]).Select(m => m.Name), Is.EquivalentTo(new[] { "description", "info" }));
+            Assert.That(retries.Skip(1).Select(r => Modifications(r).Single().Count), Is.All.EqualTo(1));
+            Assert.That(directory.ValuesOf("description"), Is.EquivalentTo(new[] { "New" }));
+            Assert.That(directory.ValuesOf("info"), Is.EquivalentTo(new[] { "New" }));
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Alice, Bob }));
+        }
+    }
+
+    [Test]
+    public async Task Export_OneValueAtATime_AddsBeforeItDeletes_SoAGroupThatMustHaveAMemberIsNeverLeftEmptyAsync()
+    {
+        // groupOfNames must always hold a member. Atomically, removing Alice and adding Carol is fine; one value at a
+        // time, removing Alice first would leave the group empty and be refused.
+        var directory = new FakeDirectory { AttributeThatMustHaveAValue = "member" }.With("member", Alice);
+        var export = CreateExport(directory);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Alice), Remove("member", Dave), Add("member", Carol))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Carol }));
+        }
+    }
+
+    [Test]
+    public async Task Export_OneValueAtATime_AddsAClassBeforeTheAttributesItAllowsAndRemovesOneAfterThemAsync()
+    {
+        var directory = new FakeDirectory
+        {
+            ClassRequiredByAttribute = new(StringComparer.OrdinalIgnoreCase) { ["jimBadge"] = "jimBadgeHolder", ["jimLegacyCode"] = "jimLegacy" }
+        }.With("member", Alice).With("objectClass", "top", "group", "jimLegacy").With("jimLegacyCode", "L1");
+        var export = CreateExport(directory);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate(Add("member", Alice), Add("objectClass", "jimBadgeHolder"), Replace("jimBadge", "B7"),
+                Remove("jimLegacyCode", "L1"), Remove("objectClass", "jimLegacy"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("objectClass"), Is.EquivalentTo(new[] { "top", "group", "jimBadgeHolder" }));
+            Assert.That(directory.ValuesOf("jimBadge"), Is.EquivalentTo(new[] { "B7" }));
+            Assert.That(directory.ValuesOf("jimLegacyCode"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Export_OneValueAtATime_CountsEveryValueAlreadyInDesiredStateAcrossTheRunAsync()
+    {
+        var first = new FakeDirectory().With("member", Alice, Bob);
+        var export = CreateExport(first);
+
+        await export.ExecuteAsync(
+            [GroupUpdate(Add("member", Alice), Add("member", Bob), Add("member", Carol), Remove("member", Dave))],
+            CancellationToken.None);
+
+        Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(3), "Alice and Bob already present, Dave already absent");
+    }
+
+    [TestCase(1, TestName = "Export_RenameThenAddOfAPresentMember_ReportsTheRenamedDn(sequential)")]
+    [TestCase(4, TestName = "Export_RenameThenAddOfAPresentMember_ReportsTheRenamedDn(concurrent)")]
+    public async Task Export_RenameThenAddOfAPresentMember_ReportsTheRenamedDnAsync(int concurrency)
+    {
+        const string renamedDn = "CN=Platform Engineers,OU=Groups,DC=test,DC=local";
+        var directory = new FakeDirectory().With("member", Alice);
+        var export = CreateExport(directory, concurrency);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Replace("distinguishedName", renamedDn), Add("member", Alice), Add("member", Bob))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(results.Single().SecondaryExternalId, Is.EqualTo(renamedDn));
+            Assert.That(directory.ModifyRequests.Select(r => r.DistinguishedName), Is.All.EqualTo(renamedDn));
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Alice, Bob }));
+        }
+    }
+
+    #endregion
+
+    #region Active Directory and Samba AD answer group membership with their own codes
+
+    [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberAlreadyPresent)]
+    [TestCase(nameof(LdapDirectoryType.ActiveDirectory), ActiveDirectoryMemberAlreadyPresent)]
+    public async Task Export_ActiveDirectoryFamilyAnswersEntryAlreadyExistsForAPresentMember_AddsTheOtherMembersAsync(
+        string directoryTypeName, string message)
+    {
+        var directoryType = Enum.Parse<LdapDirectoryType>(directoryTypeName);
+        var directory = new FakeDirectory { ValuePresentCode = ResultCode.EntryAlreadyExists, ValuePresentMessage = message }.With("member", Alice);
+        var export = CreateExport(directory, directoryType: directoryType);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Bob))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Alice, Bob }));
+        }
+    }
+
+    [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberNotPresent, true)]
+    [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberNotPresent, false)]
+    [TestCase(nameof(LdapDirectoryType.ActiveDirectory), ActiveDirectoryMemberNotInGroup, false)]
+    public async Task Export_ActiveDirectoryFamilyAnswersMemberNotInGroup_RemovesTheOtherMembersAsync(
+        string directoryTypeName, string message, bool advertisesPermissiveModify)
+    {
+        var directoryType = Enum.Parse<LdapDirectoryType>(directoryTypeName);
+        var directory = new FakeDirectory { ValueAbsentCode = ResultCode.UnwillingToPerform, ValueAbsentMessage = message }
+            .With("member", Alice, Bob);
+        var export = CreateExport(directory, directoryType: directoryType, advertisesPermissiveModify: advertisesPermissiveModify);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Dave), Remove("member", Alice))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { Bob }));
+        }
+    }
+
+    [Test]
+    public async Task Export_EntryAlreadyExistsOutsideTheActiveDirectoryFamily_FailsTheExportAsync()
+    {
+        var directory = new FakeDirectory { ValuePresentCode = ResultCode.EntryAlreadyExists, ValuePresentMessage = "Entry already exists" }
+            .With("member", Alice);
+        var export = CreateExport(directory, directoryType: LdapDirectoryType.OpenLDAP);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("member", Alice), Add("member", Bob))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False);
+            Assert.That(directory.ValuesOf("member"), Does.Not.Contain(Bob));
+        }
+    }
+
+    [Test]
+    public async Task Export_ActiveDirectoryEntryAlreadyExistsOnAnAttributeOtherThanMember_FailsTheExportAsync()
+    {
+        // entryAlreadyExists is also how Active Directory reports an account name already in use; only group
+        // membership is read as "the value is already there".
+        var directory = new FakeDirectory { ValuePresentCode = ResultCode.EntryAlreadyExists, ValuePresentMessage = ActiveDirectoryMemberAlreadyPresent }
+            .With("otherMailbox", "a@test.local");
+        var export = CreateExport(directory, directoryType: LdapDirectoryType.ActiveDirectory);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Add("otherMailbox", "a@test.local"), Add("otherMailbox", "b@test.local"))], CancellationToken.None);
+
+        Assert.That(results.Single().Success, Is.False);
+    }
+
+    [Test]
+    public async Task Export_ActiveDirectoryUnwillingToPerformForAnotherReason_FailsTheExportAsync()
+    {
+        var directory = new FakeDirectory
+        {
+            ValueAbsentCode = ResultCode.UnwillingToPerform,
+            ValueAbsentMessage = ActiveDirectoryMembersPrimaryGroup
+        }.With("member", Alice);
+        var export = CreateExport(directory, directoryType: LdapDirectoryType.ActiveDirectory);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Dave), Remove("member", Alice))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False);
+            Assert.That(directory.ValuesOf("member"), Does.Contain(Alice));
+        }
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static LdapConnectorExport CreateExport(
+        FakeDirectory directory,
+        int concurrency = 1,
+        bool advertisesPermissiveModify = false,
+        int batchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE,
+        LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory) =>
+        new(directory, Settings, Log.Logger, concurrency, batchSize, directoryType,
+            directoryAdvertisesPermissiveModify: advertisesPermissiveModify);
+
+    private static bool CarriesPermissiveModify(ModifyRequest request) =>
+        request.Controls.Cast<DirectoryControl>().Any(control => control.Type == PermissiveModifyOid);
+
+    private static List<DirectoryAttributeModification> Modifications(ModifyRequest request) =>
+        request.Modifications.Cast<DirectoryAttributeModification>().ToList();
+
+    private static DirectoryOperationException Rejection(ResultCode resultCode, string message) =>
+        new(LdapTestResponses.Create<ModifyResponse>(resultCode, message), message);
+
+    private static (PendingExportAttributeChangeType ChangeType, string Attribute, string Value) Add(string attribute, string value) =>
+        (PendingExportAttributeChangeType.Add, attribute, value);
+
+    private static (PendingExportAttributeChangeType ChangeType, string Attribute, string Value) Remove(string attribute, string value) =>
+        (PendingExportAttributeChangeType.Remove, attribute, value);
+
+    private static (PendingExportAttributeChangeType ChangeType, string Attribute, string Value) Replace(string attribute, string value) =>
+        (PendingExportAttributeChangeType.Update, attribute, value);
+
+    private static PendingExport GroupUpdate(params (PendingExportAttributeChangeType ChangeType, string Attribute, string Value)[] changes)
+    {
+        var objectType = new ConnectedSystemObjectType { Name = "group" };
+        var dnAttribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "distinguishedName", ConnectedSystemObjectType = objectType };
+        var attributes = new Dictionary<string, ConnectedSystemObjectTypeAttribute>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["distinguishedName"] = dnAttribute
+        };
+
+        return new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Update,
+            ConnectedSystemObject = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = objectType,
+                SecondaryExternalIdAttributeId = dnAttribute.Id,
+                AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = dnAttribute.Id, StringValue = GroupDn }]
+            },
+            AttributeValueChanges = changes.Select(change => new PendingExportAttributeValueChange
+            {
+                Attribute = AttributeNamed(change.Attribute),
+                ChangeType = change.ChangeType,
+                StringValue = change.Value
+            }).ToList()
+        };
+
+        ConnectedSystemObjectTypeAttribute AttributeNamed(string name)
+        {
+            if (!attributes.TryGetValue(name, out var attribute))
+            {
+                attribute = new ConnectedSystemObjectTypeAttribute
+                {
+                    Id = attributes.Count + 1,
+                    Name = name,
+                    ConnectedSystemObjectType = objectType,
+                    AttributePlurality = AttributePlurality.MultiValued
+                };
+                attributes[name] = attribute;
+            }
+
+            return attribute;
+        }
+    }
+
+    private static PendingExport GroupCreate(IEnumerable<string> members)
+    {
+        var objectType = new ConnectedSystemObjectType { Name = "group" };
+        var dnAttribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "distinguishedName", ConnectedSystemObjectType = objectType };
+        var memberAttribute = new ConnectedSystemObjectTypeAttribute
+            { Id = 2, Name = "member", ConnectedSystemObjectType = objectType, AttributePlurality = AttributePlurality.MultiValued };
+
+        var changes = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = dnAttribute, ChangeType = PendingExportAttributeChangeType.Add, StringValue = GroupDn }
+        };
+        changes.AddRange(members.Select(member => new PendingExportAttributeValueChange
+        {
+            Attribute = memberAttribute,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            StringValue = member
+        }));
+
+        return new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = objectType },
+            AttributeValueChanges = changes
+        };
+    }
+
+    /// <summary>
+    /// One directory entry that answers requests the way an LDAP directory does. A modify is atomic: when any Add names
+    /// a value already present, or any Delete names one that is not, the whole request is rejected and nothing in it is
+    /// applied, unless it carries the Permissive Modify control and this directory honours it.
+    /// </summary>
+    private sealed class FakeDirectory : ILdapOperationExecutor
+    {
+        private readonly Dictionary<string, HashSet<string>> _entry = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _lock = new();
+
+        public List<ModifyRequest> ModifyRequests { get; } = [];
+        public bool HonoursPermissiveModify { get; init; }
+        public ResultCode ValuePresentCode { get; init; } = ResultCode.AttributeOrValueExists;
+        public string ValuePresentMessage { get; init; } = "modify/add: member: value #0 already exists";
+        public ResultCode ValueAbsentCode { get; init; } = ResultCode.NoSuchAttribute;
+        public string ValueAbsentMessage { get; init; } = "modify/delete: member: no such value";
+
+        /// <summary>A genuine refusal for a particular value, or null to let it through.</summary>
+        public Func<DirectoryAttributeModification, string?, DirectoryOperationException?>? RefuseValue { get; init; }
+
+        /// <summary>An attribute the entry's class requires to hold at least one value, as groupOfNames requires member.</summary>
+        public string? AttributeThatMustHaveAValue { get; init; }
+
+        /// <summary>Attributes the entry may hold only while it carries the named object class.</summary>
+        public Dictionary<string, string> ClassRequiredByAttribute { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public FakeDirectory With(string attribute, params string[] values)
+        {
+            Values(_entry, attribute).UnionWith(values);
+            return this;
+        }
+
+        public IReadOnlyCollection<string> ValuesOf(string attribute)
+        {
+            lock (_lock)
+                return _entry.TryGetValue(attribute, out var values) ? values.ToList() : [];
+        }
+
+        public DirectoryResponse SendRequest(DirectoryRequest request) => request switch
+        {
+            ModifyRequest modify => Modify(modify),
+            AddRequest add => Add(add),
+            ModifyDNRequest => LdapTestResponses.Create<ModifyDNResponse>(ResultCode.Success),
+            SearchRequest => LdapTestResponses.EmptySearchResponse(),
+            _ => throw new NotSupportedException($"The fake directory does not answer {request.GetType().Name}")
+        };
+
+        public DirectoryResponse SendRequest(DirectoryRequest request, TimeSpan timeout) => SendRequest(request);
+
+        public Task<DirectoryResponse> SendRequestAsync(DirectoryRequest request)
+        {
+            try
+            {
+                return Task.FromResult(SendRequest(request));
+            }
+            catch (DirectoryOperationException ex)
+            {
+                return Task.FromException<DirectoryResponse>(ex);
+            }
+        }
+
+        private AddResponse Add(AddRequest request)
+        {
+            lock (_lock)
+            {
+                foreach (var attribute in request.Attributes.Cast<DirectoryAttribute>())
+                    Values(_entry, attribute.Name).UnionWith(StringValues(attribute));
+            }
+
+            return LdapTestResponses.Create<AddResponse>(ResultCode.Success);
+        }
+
+        private ModifyResponse Modify(ModifyRequest request)
+        {
+            lock (_lock)
+            {
+                ModifyRequests.Add(request);
+                var permissive = HonoursPermissiveModify &&
+                                 request.Controls.Cast<DirectoryControl>().Any(control => control.Type == PermissiveModifyOid);
+
+                // Work on a copy, committed only when every modification is accepted: a modify is atomic.
+                var working = _entry.ToDictionary(pair => pair.Key, pair => new HashSet<string>(pair.Value, StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var modification in request.Modifications.Cast<DirectoryAttributeModification>())
+                    Apply(working, modification, permissive);
+
+                CheckSchema(working);
+
+                _entry.Clear();
+                foreach (var (name, values) in working)
+                    _entry[name] = values;
+            }
+
+            return LdapTestResponses.Create<ModifyResponse>(ResultCode.Success);
+        }
+
+        private void Apply(Dictionary<string, HashSet<string>> entry, DirectoryAttributeModification modification, bool permissive)
+        {
+            var current = Values(entry, modification.Name);
+            var named = StringValues(modification);
+
+            if (named.Count == 0 && RefuseValue?.Invoke(modification, null) is { } wholeAttributeRefusal)
+                throw wholeAttributeRefusal;
+
+            foreach (var value in named)
+            {
+                if (!permissive && modification.Operation == DirectoryAttributeOperation.Add && current.Contains(value))
+                    throw Rejection(ValuePresentCode, ValuePresentMessage);
+                if (!permissive && modification.Operation == DirectoryAttributeOperation.Delete && !current.Contains(value))
+                    throw Rejection(ValueAbsentCode, ValueAbsentMessage);
+                if (RefuseValue?.Invoke(modification, value) is { } refusal)
+                    throw refusal;
+            }
+
+            switch (modification.Operation)
+            {
+                case DirectoryAttributeOperation.Add:
+                    current.UnionWith(named);
+                    break;
+                case DirectoryAttributeOperation.Delete when named.Count == 0:
+                    current.Clear();
+                    break;
+                case DirectoryAttributeOperation.Delete:
+                    current.ExceptWith(named);
+                    break;
+                case DirectoryAttributeOperation.Replace:
+                    current.Clear();
+                    current.UnionWith(named);
+                    break;
+            }
+        }
+
+        private void CheckSchema(Dictionary<string, HashSet<string>> entry)
+        {
+            if (AttributeThatMustHaveAValue != null && Values(entry, AttributeThatMustHaveAValue).Count == 0)
+                throw Rejection(ResultCode.ObjectClassViolation, $"object class 'groupOfNames' requires attribute '{AttributeThatMustHaveAValue}'");
+
+            var classes = Values(entry, "objectClass");
+            var disallowed = ClassRequiredByAttribute
+                .FirstOrDefault(rule => Values(entry, rule.Key).Count > 0 && !classes.Contains(rule.Value));
+            if (disallowed.Key != null)
+                throw Rejection(ResultCode.ObjectClassViolation, $"attribute '{disallowed.Key}' not allowed");
+        }
+
+        private static HashSet<string> Values(Dictionary<string, HashSet<string>> entry, string attribute)
+        {
+            if (!entry.TryGetValue(attribute, out var values))
+            {
+                values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                entry[attribute] = values;
+            }
+
+            return values;
+        }
+
+        private static List<string> StringValues(DirectoryAttribute attribute) =>
+            Enumerable.Range(0, attribute.Count).Select(i => attribute[i] as string ?? string.Empty).ToList();
+    }
+
+    #endregion
+}

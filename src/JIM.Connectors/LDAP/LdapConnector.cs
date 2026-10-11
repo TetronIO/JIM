@@ -20,6 +20,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
     private LdapDirectoryType _directoryType = LdapDirectoryType.Generic;
+
+    // Whether the directory behind the open export connection advertised the Permissive Modify control in its rootDSE.
+    // Read once per export connection, never assumed: a directory that does not understand the (critical) control
+    // refuses every modify carrying it.
+    private bool _exportDirectoryAdvertisesPermissiveModify;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -967,6 +972,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         _exportSettings = settings;
+        _exportDirectoryAdvertisesPermissiveModify = false;
 
         // Reuse the same connection logic as import
         OpenImportConnection(settings.ToList(), persistedConnectorData, Log.Logger);
@@ -976,6 +982,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
             _directoryType = rootDse.DirectoryType;
+            _exportDirectoryAdvertisesPermissiveModify = rootDse.AdvertisesPermissiveModify;
+            Log.Logger.Information("OpenExportConnection: Directory type {DirectoryType}; Permissive Modify control advertised: {AdvertisesPermissiveModify}. " +
+                "Without it, a modify the directory refuses because a value is already present or already absent is applied one value at a time.",
+                rootDse.DirectoryType, rootDse.AdvertisesPermissiveModify);
 
             // Pin creation (issue #230 Phase 2): export does not re-query rootDSE and re-pin on every run
             // the way import self-heals via LdapConnectorImport.GetRootDseInformation; it only needs to
@@ -1038,7 +1048,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // from it would replace a moving "N of M" with a message that says less. See
         // engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md.
         var executor = new LdapOperationExecutor(_connection);
-        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn,
+            _exportDirectoryAdvertisesPermissiveModify);
         _currentExport.SetManagedScope(_managedScope);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }

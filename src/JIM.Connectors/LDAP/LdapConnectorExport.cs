@@ -22,6 +22,11 @@ internal class LdapConnectorExport
     private readonly int _modifyBatchSize;
     private readonly LdapDirectoryType _directoryType;
     private readonly string _placeholderMemberDn;
+    private readonly bool _directoryAdvertisesPermissiveModify;
+
+    // Value changes found already in the state an export asked for, across this export run. Written from concurrent
+    // exports on the async path, so only through Interlocked.
+    private int _valuesAlreadyInDesiredState;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -81,6 +86,14 @@ internal class LdapConnectorExport
     /// </summary>
     internal IReadOnlyList<string> CreatedContainerExternalIds => _createdContainerExternalIds.AsReadOnly();
 
+    /// <summary>
+    /// How many value changes this export run found already in the state their export asked for (a value to add that
+    /// was already present, one to remove that was already absent), counted where the directory refused a modify for
+    /// that reason and the connector applied it one value at a time instead. A directory that honours Permissive Modify
+    /// accepts such changes without saying so, and they are not counted.
+    /// </summary>
+    internal int ValuesAlreadyInDesiredState => Volatile.Read(ref _valuesAlreadyInDesiredState);
+
     internal LdapConnectorExport(
         ILdapOperationExecutor executor,
         IList<ConnectedSystemSettingValue> settings,
@@ -88,7 +101,8 @@ internal class LdapConnectorExport
         int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE,
         LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory,
-        string? placeholderMemberDn = null)
+        string? placeholderMemberDn = null,
+        bool directoryAdvertisesPermissiveModify = false)
     {
         _executor = executor;
         _settings = settings;
@@ -97,6 +111,7 @@ internal class LdapConnectorExport
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
         _modifyBatchSize = Math.Clamp(modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
         _placeholderMemberDn = placeholderMemberDn ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
+        _directoryAdvertisesPermissiveModify = directoryAdvertisesPermissiveModify;
 
         if (exportConcurrency > LdapConnectorConstants.MAX_EXPORT_CONCURRENCY)
         {
@@ -144,6 +159,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} Pending Exports", pendingExports.Count);
+        LogValuesAlreadyInDesiredStateSummary("LdapConnectorExport.Execute");
         return results;
     }
 
@@ -306,12 +322,7 @@ internal class LdapConnectorExport
 
         // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
         foreach (var modifyRequest in overflowModifyRequests)
-        {
-            var modifyResponse = (ModifyResponse)_executor.SendRequest(modifyRequest);
-            if (modifyResponse.ResultCode != ResultCode.Success)
-                throw new LdapException((int)modifyResponse.ResultCode,
-                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
-        }
+            SendModify(modifyRequest, dn);
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -393,7 +404,6 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
-        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -405,8 +415,7 @@ internal class LdapConnectorExport
 
             try
             {
-                var response = (ModifyResponse)_executor.SendRequest(request);
-                lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+                SendModify(request, workingDn);
             }
             catch (DirectoryOperationException ex) when (hasPlaceholderModifications && IsPlaceholderConstraintViolation(ex))
             {
@@ -414,7 +423,7 @@ internal class LdapConnectorExport
             }
         }
 
-        return lastResult;
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests.Count);
     }
 
     /// <summary>
@@ -693,6 +702,7 @@ internal class LdapConnectorExport
 
         _logger.Information("LdapConnectorExport.ExecuteAsync: Completed export processing of {Count} Pending Exports",
             pendingExports.Count);
+        LogValuesAlreadyInDesiredStateSummary("LdapConnectorExport.ExecuteAsync");
         return results.ToList();
     }
 
@@ -762,12 +772,7 @@ internal class LdapConnectorExport
 
         // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
         foreach (var modifyRequest in overflowModifyRequests)
-        {
-            var modifyResponse = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
-            if (modifyResponse.ResultCode != ResultCode.Success)
-                throw new LdapException((int)modifyResponse.ResultCode,
-                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
-        }
+            await SendModifyAsync(modifyRequest, dn);
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -839,7 +844,6 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
-        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -849,11 +853,10 @@ internal class LdapConnectorExport
                     i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
-            var response = (ModifyResponse)await _executor.SendRequestAsync(request);
-            lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+            await SendModifyAsync(request, workingDn);
         }
 
-        return lastResult;
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests.Count);
     }
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
@@ -1547,40 +1550,330 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Handles the response from a ModifyRequest, including the special case for AttributeOrValueExists.
+    /// The result of an update whose modify requests have all reached the state they asked for. A renamed object
+    /// reports its new Distinguished Name, so JIM records where the object now lives.
     /// </summary>
-    private ConnectedSystemExportResult HandleModifyResponse(ModifyResponse response, ModifyRequest modifyRequest, string workingDn, bool wasRenamed)
+    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, int modifyRequestCount)
     {
-        if (response.ResultCode != ResultCode.Success)
-        {
-            // Handle "attribute or value exists" error gracefully for Add operations.
-            // This can happen when trying to add a member that already exists in a group.
-            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
-            // Since the desired state (member is in group) is already achieved, treat as success.
-            if (response.ResultCode == ResultCode.AttributeOrValueExists)
-            {
-                _logger.Warning("LdapConnectorExport.HandleModifyResponse: Some attribute values already exist at '{Dn}'. " +
-                    "This typically means a group member was already present. Treating as success. Error: {Error}",
-                    LogSanitiser.Sanitise(workingDn), LogSanitiser.Sanitise(response.ErrorMessage));
-                return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
-            }
-
-            // Build a more descriptive error message that includes the attributes being modified
-            var modifiedAttrs = string.Join(", ", modifyRequest.Modifications
-                .Cast<DirectoryAttributeModification>()
-                .Select(m => $"'{m.Name}' ({m.Operation})"));
-            var errorDetail = $"LDAP modify failed for DN '{workingDn}'. " +
-                $"Modified attributes: {modifiedAttrs}. " +
-                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
-
-            throw new LdapException((int)response.ResultCode, errorDetail);
-        }
-
-        _logger.Debug("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
-            LogSanitiser.Sanitise(workingDn), modifyRequest.Modifications.Count);
+        _logger.Debug("LdapConnectorExport: Successfully updated object at '{Dn}' with {Count} modify requests",
+            LogSanitiser.Sanitise(workingDn), modifyRequestCount);
 
         return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
     }
+
+    #region Modify requests: Permissive Modify and the one-value-at-a-time fallback
+
+    // Active Directory's ERROR_MEMBER_NOT_IN_GROUP (0x561), which it reports with unwillingToPerform (53) when asked
+    // to remove a member a group does not hold.
+    private const string ActiveDirectoryMemberNotInGroupCode = "00000561";
+
+    // Samba AD's words for the same refusal, also under unwillingToPerform (53): "Attribute member doesn't exist for
+    // target GUID <guid>". Samba sends it even when the modify carries Permissive Modify, which it honours only for adds.
+    private const string SambaMemberNotPresentWording = "doesn't exist for target GUID";
+
+    // The attribute Active Directory and Samba AD hold group membership in, and the only one whose entryAlreadyExists
+    // and unwillingToPerform answers are read as "already there" or "already gone": entryAlreadyExists is also how
+    // they report an account name in use, which is a genuine failure.
+    private const string ActiveDirectoryMemberAttributeName = "member";
+
+    /// <summary>
+    /// Sends one ModifyRequest of an export and sees it through to the state it asks for, or fails.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An LDAP modify is atomic: a directory that finds one value to add already present, or one value to remove
+    /// already absent, refuses the whole request and applies none of the others. An export asks for a state, and that
+    /// state holds for such a value, so the refusal must not fail the export; but nor may the request be treated as a
+    /// success, because every other change it carried was dropped with it.
+    /// </para>
+    /// <para>
+    /// Where the directory advertises Permissive Modify the request carries it, and the directory itself accepts such
+    /// values. Where it does not, or where a directory refuses regardless (Samba AD still refuses the removal of an
+    /// absent member, and OpenLDAP the delete of any absent value), the request is applied again one value at a time;
+    /// see <see cref="PlanOneValueAtATime"/>. Any other refusal propagates and fails the export, as it always has.
+    /// </para>
+    /// </remarks>
+    private void SendModify(ModifyRequest request, string dn)
+    {
+        AttachPermissiveModifyIfOffered(request);
+        DirectoryOperationException? refusedForAValueInPlace = null;
+        try
+        {
+            SendModifyOrThrow(request);
+        }
+        catch (DirectoryOperationException rejection) when (IsRefusedForAValueAlreadyInDesiredState(rejection, request))
+        {
+            refusedForAValueInPlace = rejection;
+        }
+
+        if (refusedForAValueInPlace == null)
+            return;
+
+        var plan = BeginOneValueAtATime(request, dn, refusedForAValueInPlace);
+        var alreadyInDesiredState = 0;
+        foreach (var step in plan)
+        {
+            try
+            {
+                SendModifyOrThrow(step);
+            }
+            catch (DirectoryOperationException stepRejection) when (IsRefusedForAValueAlreadyInDesiredState(stepRejection, step))
+            {
+                alreadyInDesiredState++;
+            }
+        }
+
+        CompleteOneValueAtATime(dn, plan, alreadyInDesiredState);
+    }
+
+    /// <summary>
+    /// The async form of <see cref="SendModify"/>, for the concurrent export path.
+    /// </summary>
+    private async Task SendModifyAsync(ModifyRequest request, string dn)
+    {
+        AttachPermissiveModifyIfOffered(request);
+        DirectoryOperationException? refusedForAValueInPlace = null;
+        try
+        {
+            await SendModifyOrThrowAsync(request);
+        }
+        catch (DirectoryOperationException rejection) when (IsRefusedForAValueAlreadyInDesiredState(rejection, request))
+        {
+            refusedForAValueInPlace = rejection;
+        }
+
+        if (refusedForAValueInPlace == null)
+            return;
+
+        var plan = BeginOneValueAtATime(request, dn, refusedForAValueInPlace);
+        var alreadyInDesiredState = 0;
+        foreach (var step in plan)
+        {
+            try
+            {
+                await SendModifyOrThrowAsync(step);
+            }
+            catch (DirectoryOperationException stepRejection) when (IsRefusedForAValueAlreadyInDesiredState(stepRejection, step))
+            {
+                alreadyInDesiredState++;
+            }
+        }
+
+        CompleteOneValueAtATime(dn, plan, alreadyInDesiredState);
+    }
+
+    private void SendModifyOrThrow(ModifyRequest request) =>
+        ThrowUnlessSuccessful((ModifyResponse)_executor.SendRequest(request));
+
+    private async Task SendModifyOrThrowAsync(ModifyRequest request) =>
+        ThrowUnlessSuccessful((ModifyResponse)await _executor.SendRequestAsync(request));
+
+    /// <summary>
+    /// Raises a returned failure the way the platform raises one. LdapConnection throws DirectoryOperationException,
+    /// carrying the response, for every result other than success, so a failure is only ever returned by an executor
+    /// that does not; raising it identically means one path decides what every refusal means.
+    /// </summary>
+    private static void ThrowUnlessSuccessful(ModifyResponse response)
+    {
+        if (response.ResultCode != ResultCode.Success)
+            throw new DirectoryOperationException(response, response.ErrorMessage);
+    }
+
+    /// <summary>
+    /// Attaches the Permissive Modify control to a request that adds or deletes values, where the directory advertised
+    /// it on this connection. A request that only replaces cannot meet a value already present or already absent, and
+    /// is left as it is.
+    /// </summary>
+    private void AttachPermissiveModifyIfOffered(ModifyRequest request)
+    {
+        if (!_directoryAdvertisesPermissiveModify || !CarriesValueChanges(request))
+            return;
+
+        var alreadyAttached = request.Controls.Cast<DirectoryControl>()
+            .Any(control => control.Type == LdapConnectorConstants.LDAP_SERVER_PERMISSIVE_MODIFY_OID);
+        if (!alreadyAttached)
+            request.Controls.Add(new PermissiveModifyControl());
+    }
+
+    private static bool CarriesValueChanges(ModifyRequest request) =>
+        request.Modifications.Cast<DirectoryAttributeModification>()
+            .Any(modification => modification.Operation is DirectoryAttributeOperation.Add or DirectoryAttributeOperation.Delete);
+
+    /// <summary>
+    /// Whether the directory refused this request because a value it adds is already present, or a value it deletes is
+    /// already absent: the only refusal that retrying one value at a time can resolve.
+    /// </summary>
+    private bool IsRefusedForAValueAlreadyInDesiredState(DirectoryOperationException rejection, ModifyRequest request) =>
+        request.Modifications.Cast<DirectoryAttributeModification>()
+            .Any(modification => MeansAlreadyInDesiredState(rejection, modification));
+
+    /// <summary>
+    /// Whether a refusal says this modification's value is already where the export wants it.
+    /// </summary>
+    /// <remarks>
+    /// RFC directories (OpenLDAP, 389 Directory Server) answer attributeOrValueExists (20) for a value already present
+    /// and noSuchAttribute (16) for a value already absent, on any attribute, and Active Directory does the same for
+    /// most attributes. For group membership, Active Directory and Samba AD answer entryAlreadyExists (68) for a member
+    /// already present, and unwillingToPerform (53) for one already absent, naming the reason (Active Directory's
+    /// ERROR_MEMBER_NOT_IN_GROUP code, Samba AD's "doesn't exist for target GUID"). Both codes mean something else
+    /// elsewhere (entryAlreadyExists is also an account name in use; unwillingToPerform also refuses to take a member
+    /// out of its primary group), so they are read this way only for the AD family's member attribute, and
+    /// unwillingToPerform only when the directory gave that reason.
+    /// </remarks>
+    private bool MeansAlreadyInDesiredState(DirectoryOperationException rejection, DirectoryAttributeModification modification)
+    {
+        if (rejection.Response is not { } response)
+            return false;
+
+        var isActiveDirectoryMembership = (_directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD) &&
+                                          modification.Name.Equals(ActiveDirectoryMemberAttributeName, StringComparison.OrdinalIgnoreCase);
+
+        return modification.Operation switch
+        {
+            DirectoryAttributeOperation.Add =>
+                response.ResultCode == ResultCode.AttributeOrValueExists ||
+                (isActiveDirectoryMembership && response.ResultCode == ResultCode.EntryAlreadyExists),
+            DirectoryAttributeOperation.Delete =>
+                response.ResultCode == ResultCode.NoSuchAttribute ||
+                (isActiveDirectoryMembership && response.ResultCode == ResultCode.UnwillingToPerform &&
+                 SaysMemberNotInGroup(rejection, response)),
+            _ => false
+        };
+    }
+
+    private static bool SaysMemberNotInGroup(DirectoryOperationException rejection, DirectoryResponse response)
+    {
+        var message = $"{response.ErrorMessage} {rejection.Message}";
+        return message.Contains(ActiveDirectoryMemberNotInGroupCode, StringComparison.OrdinalIgnoreCase) ||
+               message.Contains(SambaMemberNotPresentWording, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The requests that apply a refused modify one value at a time, in the order that keeps the entry valid after
+    /// each: object classes added, then every replacement together, then each other value added, then each other value
+    /// deleted, then object classes removed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Atomically, a directory checks the entry against its schema once, after every change; one value at a time, it
+    /// checks after each. So a class must arrive before the attributes it allows and leave after them, and values are
+    /// added before any are deleted, so an attribute an entry must hold (groupOfNames' member) never passes through
+    /// empty on its way from the old values to the new.
+    /// </para>
+    /// <para>
+    /// Replacements cannot meet a value already in place and stay together in one request. Every add or delete becomes
+    /// a request of its own carrying one value, so that the directory's answer to it speaks for that value alone.
+    /// </para>
+    /// </remarks>
+    private static List<ModifyRequest> PlanOneValueAtATime(ModifyRequest rejected)
+    {
+        var modifications = rejected.Modifications.Cast<DirectoryAttributeModification>().ToList();
+        var dn = rejected.DistinguishedName;
+
+        static bool IsObjectClass(DirectoryAttributeModification modification) =>
+            modification.Name.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase);
+
+        var plan = new List<ModifyRequest>();
+        plan.AddRange(OneValueEach(modifications.Where(m => IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Add), dn));
+
+        var replacements = modifications.Where(m => m.Operation == DirectoryAttributeOperation.Replace).Select(CopyOf).ToList();
+        if (replacements.Count > 0)
+        {
+            var replaceRequest = new ModifyRequest(dn);
+            replaceRequest.Modifications.AddRange(replacements.ToArray());
+            plan.Add(replaceRequest);
+        }
+
+        plan.AddRange(OneValueEach(modifications.Where(m => !IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Add), dn));
+        plan.AddRange(OneValueEach(modifications.Where(m => !IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Delete), dn));
+        plan.AddRange(OneValueEach(modifications.Where(m => IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Delete), dn));
+        return plan;
+    }
+
+    /// <summary>
+    /// One request per value.
+    /// </summary>
+    private static IEnumerable<ModifyRequest> OneValueEach(IEnumerable<DirectoryAttributeModification> modifications, string dn) =>
+        modifications.SelectMany(SplitIntoSingleValues).Select(single => new ModifyRequest(dn) { Modifications = { single } });
+
+    private static IEnumerable<DirectoryAttributeModification> SplitIntoSingleValues(DirectoryAttributeModification modification)
+    {
+        // A delete naming no values removes the attribute whole, and stays one change.
+        if (modification.Count == 0)
+        {
+            yield return CopyOf(modification);
+            yield break;
+        }
+
+        for (var i = 0; i < modification.Count; i++)
+        {
+            var single = new DirectoryAttributeModification { Name = modification.Name, Operation = modification.Operation };
+            AddValue(single, modification[i]);
+            yield return single;
+        }
+    }
+
+    private static DirectoryAttributeModification CopyOf(DirectoryAttributeModification modification)
+    {
+        var copy = new DirectoryAttributeModification { Name = modification.Name, Operation = modification.Operation };
+        for (var i = 0; i < modification.Count; i++)
+            AddValue(copy, modification[i]);
+        return copy;
+    }
+
+    private static void AddValue(DirectoryAttribute attribute, object value)
+    {
+        switch (value)
+        {
+            case byte[] bytes:
+                attribute.Add(bytes);
+                break;
+            case Uri uri:
+                attribute.Add(uri);
+                break;
+            default:
+                attribute.Add(value.ToString());
+                break;
+        }
+    }
+
+    private List<ModifyRequest> BeginOneValueAtATime(ModifyRequest rejected, string dn, DirectoryOperationException rejection)
+    {
+        var plan = PlanOneValueAtATime(rejected);
+        foreach (var step in plan)
+            AttachPermissiveModifyIfOffered(step);
+
+        _logger.Information("LdapConnectorExport: The directory refused the whole modify of '{Dn}' ({ResultCode}: {Message}) because a value " +
+            "it carries is already in the state the export asks for, so none of its changes were applied. Applying them one value at a time " +
+            "({RequestCount} requests).",
+            LogSanitiser.Sanitise(dn), rejection.Response?.ResultCode,
+            LogSanitiser.Sanitise(string.IsNullOrEmpty(rejection.Response?.ErrorMessage) ? rejection.Message : rejection.Response.ErrorMessage),
+            plan.Count);
+
+        return plan;
+    }
+
+    private void CompleteOneValueAtATime(string dn, List<ModifyRequest> plan, int alreadyInDesiredState)
+    {
+        Interlocked.Add(ref _valuesAlreadyInDesiredState, alreadyInDesiredState);
+        var valueChanges = plan.Count(CarriesValueChanges);
+
+        _logger.Information("LdapConnectorExport: Applied the modify of '{Dn}' one value at a time. {AlreadyInDesiredState} of {ValueChanges} " +
+            "value changes were already in the desired state; the rest were applied.",
+            LogSanitiser.Sanitise(dn), alreadyInDesiredState, valueChanges);
+    }
+
+    private void LogValuesAlreadyInDesiredStateSummary(string caller)
+    {
+        var total = ValuesAlreadyInDesiredState;
+        if (total == 0)
+            return;
+
+        _logger.Information("{Caller}: {Count} value changes were already in the desired state (a value to add already present, or one to " +
+            "remove already absent) and were treated as achieved", caller, total);
+    }
+
+    #endregion
 
     /// <summary>
     /// Builds a ModifyDNRequest for renaming/moving an LDAP object.
