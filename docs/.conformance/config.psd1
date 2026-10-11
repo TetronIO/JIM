@@ -31,6 +31,9 @@
         'TYP-1'  = 'Block'
         # A tutorial's Portal tab names only labels the portal shows (Phase 3).
         'TUT-2'  = 'Block'
+        # A conformant priority page records the release it was last checked against, which
+        # /release reads to list the pages due for re-validation (Phase 3).
+        'PRI-1'  = 'Block'
         # The language rules (Phase 2a). Small debt was fixed before they landed, so they block;
         # lower-case product nouns, prose abbreviations and minimisers ratchet down from the baseline.
         'LANG-1' = 'Block'
@@ -45,7 +48,7 @@
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')
-    AllowedFrontMatter      = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario')
+    AllowedFrontMatter      = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
 
     # One primary audience per page; see the standard's "Audiences".
     Audiences               = @('evaluator', 'implementer', 'administrator', 'operator', 'automation-author', 'security-assessor')
@@ -107,7 +110,15 @@
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
     ConformantFolders       = @()
-    ConformantPages         = @()
+    ConformantPages         = @(
+        'index.md'
+        'concepts/index.md'
+        'getting-started/prerequisites.md'
+        'getting-started/first-synchronisation.md'
+        'configuration/run-profiles.md'
+        'administration/troubleshooting-synchronisation.md'
+        'administration/backup-recovery.md'
+    )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
     ScenarioPathFormat      = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
