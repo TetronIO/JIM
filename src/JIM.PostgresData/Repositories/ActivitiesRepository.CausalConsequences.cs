@@ -55,7 +55,12 @@ public partial class ActivityRepository
                    r."DeletionPolicySnapshotJson" AS policy_json,
                    a."ConnectedSystemId" AS cs_id, a."Executed" AS executed,
                    (r."ObjectChangeType" = ANY(@import_change_types)
-                       AND a."ConnectedSystemRunType" = ANY(@import_run_types)) AS is_import
+                       AND a."ConnectedSystemRunType" = ANY(@import_run_types)
+                       -- An import that only confirmed an export found what JIM wrote: no Synchronisation acts on that.
+                       AND NOT (EXISTS (SELECT 1 FROM "ActivityRunProfileExecutionItemSyncOutcomes" co
+                                        WHERE co."ActivityRunProfileExecutionItemId" = r."Id" AND co."OutcomeType" = @export_confirmed)
+                                AND NOT EXISTS (SELECT 1 FROM "ActivityRunProfileExecutionItemSyncOutcomes" oo
+                                                WHERE oo."ActivityRunProfileExecutionItemId" = r."Id" AND oo."OutcomeType" <> @export_confirmed))) AS is_import
             FROM frontier f
             JOIN "ActivityRunProfileExecutionItems" r ON r."Id" = f.item_id
             JOIN "Activities" a ON a."Id" = r."ActivityId"
@@ -434,6 +439,7 @@ public partial class ActivityRepository
         AddParameter(command, "import_run_types",
             new[] { (int)ConnectedSystemRunType.FullImport, (int)ConnectedSystemRunType.DeltaImport },
             NpgsqlDbType.Array | NpgsqlDbType.Integer);
+        AddParameter(command, "export_confirmed", (int)ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed, NpgsqlDbType.Integer);
         AddParameter(command, "sync_run_types",
             new[] { (int)ConnectedSystemRunType.FullSynchronisation, (int)ConnectedSystemRunType.DeltaSynchronisation },
             NpgsqlDbType.Array | NpgsqlDbType.Integer);

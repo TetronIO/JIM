@@ -14,7 +14,7 @@
 @switch (Consequence.Kind)
 {
     case CausalityLineageConsequenceKind.Outcome:
-        @OutcomeContent
+        @OutcomeCard(useTitle: true)
         break;
 
     case CausalityLineageConsequenceKind.Confirmation:
@@ -26,7 +26,8 @@
             </div>
             @if (_expanded)
             {
-                @OutcomeContent
+                @* The fold line already says it was confirmed; the card says what the import recorded. *@
+                @OutcomeCard(useTitle: false)
             }
         </div>
         break;
@@ -101,7 +102,7 @@
     private int _membersPage = 1;
     private string? _search;
 
-    private RenderFragment OutcomeContent => __builder =>
+    private RenderFragment OutcomeCard(bool useTitle) => __builder =>
     {
         <div class="ln-later">
             @if (Consequence.RunLabel != null || Consequence.Occurred != null)
@@ -121,7 +122,7 @@
             @if (Consequence.Event is { } consequenceEvent)
             {
                 <CausalityEventCard Event="consequenceEvent"
-                                    Label="@Consequence.Title"
+                                    Label="@(useTitle ? Consequence.Title : null)"
                                     Note="@Consequence.Text"
                                     HideSystemChip="true"
                                     HideObjectGlyphs="true"

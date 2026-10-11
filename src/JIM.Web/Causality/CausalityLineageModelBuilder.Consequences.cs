@@ -162,13 +162,14 @@ public static partial class CausalityLineageModelBuilder
                         causalityEvent.SystemName, isSourceSide: causalityEvent.Lane == CausalityLane.Source);
 
                 // Until an item about the object names it, an object reached by an event is named by the event's own
-                // link to it, or by its system.
+                // link to it, else as this run's own staging targets are: the story's subject, arriving in that system.
                 if (target is { IsConsequenceObject: true, ConsequenceHead: null })
                 {
                     var recordLink = causalityEvent.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Record);
+                    var subjectName = ObjectDescription.ChipName(representative.DisplayNameSnapshot, representative.ExternalIdSnapshot);
                     target.ConsequenceHead = recordLink != null
                         ? new ColumnHead(recordLink.Label, IsRoleHead: false, recordLink.Href, recordLink.ObjectTypeName)
-                        : new ColumnHead(target.SystemName ?? "Connected System Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
+                        : new ColumnHead(subjectName ?? target.SystemName ?? "Connected System Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
                 }
 
                 var isReferenceRemoval = first && removalObject != null;
@@ -400,7 +401,21 @@ public static partial class CausalityLineageModelBuilder
             var href = representative.ConnectedSystemObjectId is { } csoId && target.SystemId is { } systemId
                 ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
                 : null;
+
+            // The first item about the object names it; a later one (a confirming import, which often snapshots no type)
+            // only fills in what the name is still missing.
+            if (target.IsHeadFromItem && target.ConsequenceHead is { } named)
+            {
+                target.ConsequenceHead = named with
+                {
+                    Href = named.Href ?? href,
+                    ObjectTypeName = named.ObjectTypeName ?? representative.ObjectTypeSnapshot
+                };
+                return;
+            }
+
             target.ConsequenceHead = new ColumnHead(name, IsRoleHead: false, href, representative.ObjectTypeSnapshot);
+            target.IsHeadFromItem = true;
         }
 
         private ColumnState ObjectFor(Scope scope, int? systemId, string? systemName, bool isSourceSide)

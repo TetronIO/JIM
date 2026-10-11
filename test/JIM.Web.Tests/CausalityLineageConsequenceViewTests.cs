@@ -53,7 +53,10 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
 
         fold.QuerySelector(".ln-fold-toggle")!.Click();
 
-        Assert.That(cut.FindAll(".ln-fold")[0].QuerySelector(".evt-card"), Is.Not.Null);
+        var card = cut.FindAll(".ln-fold")[0].QuerySelector(".evt-card");
+        Assert.That(card, Is.Not.Null);
+        Assert.That(card!.QuerySelector(".evt-title")!.TextContent.Trim(), Is.EqualTo("Export confirmed"),
+            "the fold line already says it was confirmed; the card says what the import recorded");
     }
 
     [Test]

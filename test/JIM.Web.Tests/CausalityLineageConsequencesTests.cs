@@ -163,6 +163,23 @@ public class CausalityLineageConsequencesTests
     }
 
     [Test]
+    public void Build_ConfirmingImportThatSnapshottedNoType_DoesNotRenameTheAccount()
+    {
+        var cascade = CompleteCascade();
+        var accountExport = cascade.Cohorts[0].Consequences[0];
+        accountExport.Consequences[0].Representative!.ObjectTypeSnapshot = null;
+
+        var lineage = BuildImportLineage(cascade);
+
+        var account = lineage.Columns[2].Objects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(account.Title, Is.EqualTo("tina.adams99"));
+            Assert.That(account.ObjectTypeName, Is.EqualTo("person"), "the export named it first, with its type");
+        }
+    }
+
+    [Test]
     public void Build_PendingExportSinceCarriedOut_LinksTheQueueRatherThanTheGoneRow()
     {
         // A Pending Export is deleted once exported, so a later run's card must not link a row that no longer exists.
@@ -237,6 +254,8 @@ public class CausalityLineageConsequencesTests
         var waiting = account.Consequences[^1];
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(account.Title, Is.EqualTo("Tina Adams"),
+                "before any export names it, the account is the story's subject arriving in that system, as this run's own targets are");
             Assert.That(waiting.Kind, Is.EqualTo(CausalityLineageConsequenceKind.Waiting));
             Assert.That(waiting.DisplayTitle, Is.EqualTo("Waiting for the next Export of Glitterband EMEA"));
             Assert.That(waiting.LinkHref, Is.EqualTo($"/admin/connected-systems/{Glitterband}/pending-exports/{pendingExportId}"));

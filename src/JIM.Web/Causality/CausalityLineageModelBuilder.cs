@@ -675,6 +675,11 @@ public static partial class CausalityLineageModelBuilder
         public ColumnHead? ConsequenceHead { get; set; }
 
         /// <summary>
+        /// Whether <see cref="ConsequenceHead"/> came from an item about the object itself, which no later item renames.
+        /// </summary>
+        public bool IsHeadFromItem { get; set; }
+
+        /// <summary>
         /// How many objects a consequence object's role head speaks for.
         /// </summary>
         public int? MemberCount { get; set; }

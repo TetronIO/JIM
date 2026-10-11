@@ -262,6 +262,30 @@ public class CausalConsequenceReadDatabaseTests
     }
 
     [Test]
+    public async Task GetCausalConsequenceLevelAsync_ImportThatOnlyConfirmedAnExport_CausesNothingAsync()
+    {
+        // A confirming import found what JIM exported, so there is nothing for a Synchronisation to act on: it ends with
+        // no further consequences rather than waiting on, or being "settled" by, a run that can never follow from it.
+        var glitterband = await SeedConnectedSystemAsync("Glitterband EMEA");
+        var csoId = await SeedCsoAsync(glitterband);
+        var importActivity = await SeedActivityAsync(glitterband.SystemId, ConnectedSystemRunType.DeltaImport, T0);
+        var confirming = await SeedItemAsync(importActivity, ObjectChangeType.Updated, "Project-Pulse", "group", csoId: csoId);
+        await SeedOutcomeAsync(confirming, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed, csoId);
+        var changed = await SeedItemAsync(importActivity, ObjectChangeType.Updated, "Project-Atlas", "group", csoId: await SeedCsoAsync(glitterband));
+        await SeedOutcomeAsync(changed, ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed, csoId);
+        await SeedOutcomeAsync(changed, ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, csoId);
+
+        var level = await ReadLevelAsync([new(confirming, 0), new(changed, 1)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(level.Leaves.Single(l => l.ParentCohortOrdinal == 0).Ending, Is.EqualTo(CausalConsequenceEnding.NoFurtherConsequences));
+            Assert.That(level.Leaves.Single(l => l.ParentCohortOrdinal == 1).Ending, Is.EqualTo(CausalConsequenceEnding.WaitingForSynchronisation),
+                "an import that also brought a change of its own is still one a Synchronisation acts on");
+        }
+    }
+
+    [Test]
     public async Task GetCausalConsequenceLevelAsync_ItemWithNothingRecordedAfterIt_EndsWithNoFurtherConsequencesAsync()
     {
         var sync = await SeedActivityAsync(null, ConnectedSystemRunType.NotSet, T0);
