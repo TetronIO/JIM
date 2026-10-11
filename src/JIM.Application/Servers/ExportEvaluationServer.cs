@@ -798,7 +798,7 @@ public class ExportEvaluationServer
 
         // Recorded only after both deletes succeed, so a failed batch write cannot leave the working set
         // claiming a cancellation that never happened.
-        workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvo.Id));
+        workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvo.Id, cso.TypeId));
 
         Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: Cancelled never-exported provisioning of CSO {CsoId} in system {SystemId} for MVO {MvoId}: removed unsent Create Pending Export {PendingExportId} and the CSO; nothing was exported",
             cso.Id, cso.ConnectedSystemId, mvo.Id, existingPe.Id);
@@ -875,7 +875,7 @@ public class ExportEvaluationServer
         // Recorded only after both deletes succeed, so a failed batch write cannot leave the working set
         // claiming a cancellation that never happened.
         foreach (var cso in csosToCancel)
-            workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvoIdByCsoId[cso.Id]));
+            workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvoIdByCsoId[cso.Id], cso.TypeId));
 
         Log.Information("{Caller}: Cancelled never-exported provisioning of {CsoCount} CSO(s): removed {PeCount} unsent Create Pending Export(s) and the CSO(s); nothing was exported",
             callerName, csosToCancel.Count, cancelledPeCount);

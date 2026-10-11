@@ -14,4 +14,10 @@ namespace JIM.Models.Transactional;
 /// <param name="ConnectedSystemObjectId">The id of the Connected System Object whose provisioning was cancelled.</param>
 /// <param name="ConnectedSystemId">The Connected System the cancelled provisioning targeted.</param>
 /// <param name="MetaverseObjectId">The Metaverse Object the cancelled Connected System Object was joined to.</param>
-public sealed record CancelledProvisioning(Guid ConnectedSystemObjectId, int ConnectedSystemId, Guid MetaverseObjectId);
+/// <param name="ConnectedSystemObjectTypeId">The cancelled object's type, so the outcome reporting it names the
+/// object's own type rather than one guessed from its Connected System.</param>
+public sealed record CancelledProvisioning(
+    Guid ConnectedSystemObjectId,
+    int ConnectedSystemId,
+    Guid MetaverseObjectId,
+    int ConnectedSystemObjectTypeId);

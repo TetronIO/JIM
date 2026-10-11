@@ -42,7 +42,9 @@ Chromium is pre-installed at `/opt/pw-browsers/chromium` with Playwright availab
 const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  // The published screenshots' geometry: 1674x1046 at 2x density, so a 3348x2092 image. A 1x capture is
+  // half the resolution in each direction and reads as blurry when shown to anyone.
+  const page = await browser.newPage({ viewport: { width: 1674, height: 1046 }, deviceScaleFactor: 2 });
   await page.goto('http://localhost:5200', { waitUntil: 'networkidle' });
   if (page.url().includes('8181')) {                       // Keycloak sign-in
     await page.fill('#username', 'admin');
@@ -58,6 +60,8 @@ const { chromium } = require('playwright');
   await browser.close();
 })();
 ```
+
+For a page that appears in the published screenshots, `pwsh ./scripts/Capture-Screenshots.ps1 -Version dev -Name <entry>` captures it exactly as published (both themes, navigation expanded, size checked) into `artifacts/screenshots/dev/`; the entries are listed in `scripts/screenshots/manifest.json`.
 
 Verification protocol for UI changes:
 

@@ -1,0 +1,12 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# Runs the portal as a customer sees it, for the published screenshots (#582). Applied by Capture-Screenshots.ps1
+# -PrepareData after docker-compose.yml and docker-compose.override.yml, when it rebuilds and recreates the JIM
+# services once the integration runner has loaded the data. The development override runs jim.web as Development,
+# which changes the Settings page, the Operations queue, the user menu and the error page; the Worker and Scheduler
+# already run as Production. Every other setting, and the database volume, is left as the runner made it.
+services:
+  jim.web:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production

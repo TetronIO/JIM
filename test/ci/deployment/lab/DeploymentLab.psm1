@@ -15,7 +15,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install')
+$script:Scenarios = @('Install', 'Upgrade')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
@@ -94,6 +94,116 @@ function Select-LabCell {
         }
         $candidate
     }
+}
+
+#endregion
+
+#region Upgrades
+
+function Get-LabPostgresMemory {
+    <#
+    .SYNOPSIS
+        Returns the bundled PostgreSQL's memory settings for a host, sized as the installer sizes them (setup.sh
+        size_database; Bundled PostgreSQL Memory in the configuration guide), for an upgrade the guide says to size by
+        hand.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [int]$MemoryMB
+    )
+
+    $shared = [math]::Min([math]::Floor($MemoryMB / 4), 8192)
+    $maintenance = [math]::Min([math]::Floor($MemoryMB / 16), 2048)
+    $work = [math]::Max([math]::Floor(($MemoryMB - $shared) / 600), 4)
+    [ordered]@{
+        JIM_DB_SHARED_BUFFERS = "${shared}MB"
+        JIM_DB_EFFECTIVE_CACHE_SIZE = "$([math]::Floor($MemoryMB / 2))MB"
+        JIM_DB_MAINTENANCE_WORK_MEM = "${maintenance}MB"
+        JIM_DB_WORK_MEM = "${work}MB"
+        JIM_DB_SHM_SIZE = "$($shared + [math]::Floor($shared / 4))mb"
+    }
+}
+
+function ConvertTo-LabMegabytes {
+    <#
+    .SYNOPSIS
+        Returns a PostgreSQL memory size (kB, MB, GB or TB, case-sensitive as PostgreSQL's units are) in MB.
+    #>
+    [CmdletBinding()]
+    [OutputType([long])]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Size
+    )
+
+    if ($Size -cnotmatch '^\s*(\d+)\s*(kB|MB|GB|TB)\s*$') {
+        throw "'$Size' is not a PostgreSQL size"
+    }
+    $factor = @{ kB = 1 / 1024; MB = 1; GB = 1024; TB = 1048576 }[$Matches[2]]
+    [long]([long]$Matches[1] * $factor)
+}
+
+function ConvertTo-LabReleaseNumber {
+    param([string]$Version)
+    if ($Version -notmatch '^v?(\d+)\.(\d+)\.(\d+)') {
+        throw "'$Version' is not a version"
+    }
+    [version]::new([int]$Matches[1], [int]$Matches[2], [int]$Matches[3])
+}
+
+function Test-LabVersionAtMost {
+    <#
+    .SYNOPSIS
+        Says whether a version is the limit given or earlier, by its release number, for the upgrade guide's notes
+        that apply to "v0.16.0 or earlier".
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Version,
+
+        [Parameter(Mandatory)]
+        [string]$Limit
+    )
+
+    (ConvertTo-LabReleaseNumber $Version) -le (ConvertTo-LabReleaseNumber $Limit)
+}
+
+function Get-LabNextVersion {
+    <#
+    .SYNOPSIS
+        Returns the patch release after the version given: what a build of the commits after a release reports, so
+        that the installer takes it as newer than that release.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Version
+    )
+
+    $number = ConvertTo-LabReleaseNumber $Version
+    "$($number.Major).$($number.Minor).$($number.Build + 1)"
+}
+
+function ConvertTo-LabRootlessCommand {
+    <#
+    .SYNOPSIS
+        Rewrites a documented command for a rootful JIM for a rootless one, as Running on Podman says: the
+        jim-systemctl and jim-podman helpers in place of systemctl and (sudo) podman. A podman that is not a command,
+        such as the bundle's podman folder, is left as it is.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command
+    )
+
+    $rewritten = $Command -replace '(?<![-\w/.])(?:sudo\s+)?podman(?=\s)', 'jim-podman'
+    $rewritten -replace '(?<![-\w/.])(?:sudo\s+)?systemctl(?=\s)', 'jim-systemctl'
 }
 
 #endregion
@@ -691,8 +801,65 @@ function Get-LabPowerShellArchive {
     $path
 }
 
+function Get-LabReleaseBundle {
+    <#
+    .SYNOPSIS
+        Returns the path of a published release's bundle archive, with its .sha256 beside it, downloading both from
+        GitHub into the lab's cache the first time: the latest release, or the one tagged.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$CachePath,
+
+        [string]$Tag
+    )
+
+    $api = if ($Tag) { "https://api.github.com/repos/TetronIO/JIM/releases/tags/$Tag" } else { 'https://api.github.com/repos/TetronIO/JIM/releases/latest' }
+    $release = Invoke-RestMethod -Uri $api -Headers @{ Accept = 'application/vnd.github+json' }
+    $archive = $release.assets | Where-Object { $_.name -match '^jim-release-.*\.tar\.gz$' } | Select-Object -First 1
+    # The archive's own .sha256 since #1942; before it, the release's checksums.sha256, which lists every asset.
+    $checksum = $release.assets | Where-Object { $_.name -eq "$($archive.name).sha256" } | Select-Object -First 1
+    if (-not $checksum) {
+        $checksum = $release.assets | Where-Object { $_.name -eq 'checksums.sha256' } | Select-Object -First 1
+    }
+    if (-not $archive -or -not $checksum) {
+        throw "Release $($release.tag_name) has no bundle archive with a published checksum"
+    }
+    $folder = Join-Path $CachePath 'releases' $release.tag_name
+    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+    foreach ($asset in @($checksum, $archive)) {
+        $path = Join-Path $folder $asset.name
+        if (-not (Test-Path $path)) {
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$path.partial"
+            Move-Item "$path.partial" $path -Force
+        }
+    }
+    $line = Get-Content (Join-Path $folder $checksum.name) | Where-Object { $_ -match "\s\*?$([regex]::Escape($archive.name))$" } | Select-Object -First 1
+    if (-not $line) {
+        # v0.16.0 and earlier published no checksum of the archive (#1942); it came from GitHub over HTTPS.
+        Write-Warning "Release $($release.tag_name) publishes no checksum of $($archive.name), so it is used unchecked"
+        return Join-Path $folder $archive.name
+    }
+    $line | Set-Content (Join-Path $folder "$($archive.name).sha256")
+    Push-Location $folder
+    try {
+        $null = & sha256sum -c --quiet "$($archive.name).sha256"
+        if ($LASTEXITCODE -ne 0) {
+            throw "$($archive.name) does not match its published checksum"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    Join-Path $folder $archive.name
+}
+
 #endregion
 
 Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabMemoryBudget, Select-LabCellToStart,
+    Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc, Invoke-LabVm, Wait-LabVm, New-LabVm,
-    Remove-LabVm, Restart-LabVm, Copy-LabFile, Get-LabVmAddress, Invoke-LabSignIn, Get-LabPowerShellArchive
+    Remove-LabVm, Restart-LabVm, Copy-LabFile, Get-LabVmAddress, Invoke-LabSignIn, Get-LabPowerShellArchive,
+    Get-LabReleaseBundle
