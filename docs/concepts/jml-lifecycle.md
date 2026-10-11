@@ -72,7 +72,7 @@ Jane Smith transfers from the Marketing department to Engineering:
 
 A mover event can also change whether an identity is **in scope** for a particular Synchronisation Rule. For example:
 
-- An employee changes from "Full-Time" to "Contractor" -- they may fall out of scope for the full-time employee Synchronisation Rule and into scope for a contractor Synchronisation Rule
+- An employee changes from "Full-Time" to "Contractor"; they may fall out of scope for the full-time employee Synchronisation Rule and into scope for a contractor Synchronisation Rule
 - An employee transfers to a department that is excluded from a particular target system
 
 When an identity falls out of scope for an outbound Synchronisation Rule, this triggers **deprovisioning** behaviour for that specific target system (see Leaver below).
@@ -103,7 +103,7 @@ Deprovisioning is the process of removing or releasing accounts in target system
 | **Disconnect** (default) | Unlinks the CSO from the MVO but leaves the target account in place, untouched |
 | **Delete** | Removes the account from the target system entirely |
 
-The action applies regardless of how JIM came to manage the account: accounts JIM provisioned and pre-existing accounts JIM matched (joined) are treated the same. This gives you fine-grained, per-target-system control over what happens when an identity leaves. A **Disable** action (disable the account rather than delete it, e.g. set `userAccountControl` to 514 in Active Directory) is planned for a future release.
+The action applies regardless of how JIM came to manage the account: accounts JIM provisioned and pre-existing accounts JIM matched (joined) are treated the same. This gives you fine-grained, per-target-system control over what happens when an identity leaves.
 
 The Deprovisioning Action is configured on each export Synchronisation Rule, and can also be reviewed and changed for all of a type's export rules at once on the Metaverse Object Type page's Downstream Deprovisioning panel.
 

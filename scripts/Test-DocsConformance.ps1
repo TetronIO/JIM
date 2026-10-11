@@ -28,8 +28,24 @@
       A11Y-2  every image has alt text; every included diagram has a <title>
               and a <desc>
       TYP-1   a page that declares a type has the shape that type requires
+      LANG-1  no em dash, and no spaced -- standing in for one
+      LANG-2  British English, not American spellings
+      LANG-3  product nouns in Title Case, and never a rejected variant
+      LANG-4  abbreviations such as CSO and MVO only in table headers
+      LANG-5  no wording relative to when it was written ("until now")
+      LANG-6  no promises about the future
+      LANG-7  no minimisers ("simply")
+      LANG-8  no GitHub issue or pull request numbers
+      TERM-1  the vocabulary and the glossary agree, and every product noun
+              has a home page
       EXC-1   every exception marker is well formed, names a rule, gives a
               reason, and suppresses something
+
+    The language rules read running text only: front matter, code blocks,
+    inline code, link targets, URLs, HTML and placeholder text (STR-6's) are
+    left out. LANG-3 and TERM-1 read the product vocabulary: the glossary page
+    gives each noun its canonical form and anchor, and the vocabulary file adds
+    its home page, its rejected variants and whether Title Case is enforced.
 
     Each rule has a tier, set in the configuration file:
 
@@ -80,6 +96,12 @@
 .PARAMETER MkDocsConfigPath
     mkdocs.yml, read for the nav labels STR-3 compares. Defaults to mkdocs.yml.
 
+.PARAMETER VocabularyPath
+    The product vocabulary LANG-3, LANG-4 and TERM-1 read: per glossary entry,
+    its home page, rejected variants and whether Title Case is enforced, plus
+    the abbreviations and their full terms. Defaults to
+    docs/.conformance/vocabulary.psd1.
+
 .PARAMETER RepositoryRoot
     The repository root, used to find tutorial scenario scripts and to read a
     page's base-branch version for MNT-3. Defaults to the current directory.
@@ -122,6 +144,7 @@ param(
     [string]$ConfigPath = 'docs/.conformance/config.psd1',
     [string]$BaselinePath = 'docs/.conformance/baseline.tsv',
     [string]$MkDocsConfigPath = 'mkdocs.yml',
+    [string]$VocabularyPath = 'docs/.conformance/vocabulary.psd1',
     [string]$RepositoryRoot = '.',
     [string]$BaseRef = $env:BASE_SHA,
     [string[]]$ChangedFiles,
@@ -133,7 +156,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'EXC-1')
+$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1',
+    'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request.
@@ -152,7 +176,8 @@ function Read-Configuration {
     $config = Import-PowerShellDataFile -LiteralPath $Path
 
     foreach ($key in 'Exclude', 'Rules', 'RequiredFrontMatter', 'AllowedFrontMatter', 'Audiences', 'PageTypes', 'DescriptionLength',
-        'SizeBudgetWords', 'PrioritySizeBudgetWords', 'StubPatterns', 'PriorityPages', 'ConformantFolders', 'ConformantPages', 'ScenarioPathFormat') {
+        'SizeBudgetWords', 'PrioritySizeBudgetWords', 'StubPatterns', 'PriorityPages', 'ConformantFolders', 'ConformantPages', 'ScenarioPathFormat',
+        'GlossaryPage', 'AmericanSpellings', 'IzeExceptions', 'AllowedSpellings', 'TimeRelativePatterns', 'FuturePatterns', 'MinimiserPatterns') {
         if (-not $config.ContainsKey($key)) { throw "Configuration '$Path' has no '$key'." }
     }
     foreach ($r in $script:KnownRules | Where-Object { $_ -ne 'EXC-1' }) {
@@ -206,6 +231,37 @@ function Write-Baseline {
     $directory = Split-Path -Parent $Path
     if ($directory -and -not (Test-Path -LiteralPath $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($Path), (($lines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+}
+
+function Read-Vocabulary {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { throw "Vocabulary file not found at '$Path'." }
+    $data = Import-PowerShellDataFile -LiteralPath $Path
+    foreach ($key in 'Abbreviations', 'Terms') {
+        if (-not $data.ContainsKey($key)) { throw "Vocabulary '$Path' has no '$key'." }
+    }
+    $fileLines = [System.IO.File]::ReadAllLines((Resolve-Path -LiteralPath $Path).Path)
+    $terms = foreach ($entry in @($data.Terms)) {
+        if (-not $entry) { continue }
+        foreach ($key in 'Anchor', 'Home', 'TitleCase') {
+            if (-not $entry.ContainsKey($key)) { throw "Vocabulary '$Path' has an entry with no '$key': every entry names its glossary anchor, its home page and whether Title Case is enforced." }
+        }
+        # The entry's line, so a finding points at it.
+        $line = 1
+        $anchorPattern = "'?Anchor'?\s*=\s*'$([regex]::Escape($entry.Anchor))'"
+        for ($i = 0; $i -lt $fileLines.Count; $i++) {
+            if ($fileLines[$i] -match $anchorPattern) { $line = $i + 1; break }
+        }
+        [pscustomobject]@{
+            Anchor    = [string]$entry.Anchor
+            Home      = [string]$entry.Home
+            TitleCase = [bool]$entry.TitleCase
+            Rejected  = @($entry.Rejected | Where-Object { $_ })
+            Line      = $line
+        }
+    }
+    [pscustomobject]@{ Terms = @($terms); Abbreviations = $data.Abbreviations }
 }
 
 function Get-NavLabel {
@@ -719,12 +775,258 @@ function Test-PageShape {
 }
 
 # ---------------------------------------------------------------------------
+# Language and vocabulary
+# ---------------------------------------------------------------------------
+
+# The glossary's entries: "Term { #anchor }" or "Term (ABBR) { #anchor }" lines of its definition list.
+function Get-GlossaryEntry {
+    param($Page)
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i]) { continue }
+        if ($Page.Lines[$i] -match '^(?<name>[^\s:|>#!*-][^{]*?)\s*\{\s*#(?<anchor>[A-Za-z0-9_-]+)\s*\}\s*$') {
+            [pscustomobject]@{
+                Term   = ($Matches['name'] -replace '\s*\([A-Z]{2,}s?\)$', '').Trim()
+                Anchor = $Matches['anchor']
+                Line   = $i + 1
+            }
+        }
+    }
+}
+
+function ConvertTo-TermPattern {
+    param([string]$Term)
+    ([regex]::Escape($Term) -replace '\\ ', '\s+')
+}
+
+# Everything the language rules match against, compiled once.
+function New-LanguageModel {
+    param($Config, $Vocabulary, [object[]]$GlossaryEntries)
+
+    $canonical = @{}
+    foreach ($g in $GlossaryEntries) { $canonical[$g.Anchor] = $g.Term }
+    $options = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+
+    $titleCase = foreach ($t in $Vocabulary.Terms | Where-Object { $_.TitleCase -and $canonical.ContainsKey($_.Anchor) }) {
+        $term = $canonical[$t.Anchor]
+        [pscustomobject]@{
+            Canonical = $term
+            Regex     = [regex]::new("(?<![\w])(?<stem>$(ConvertTo-TermPattern $term))(?:s|es)?(?![\w])", $options)
+        }
+    }
+    $rejected = foreach ($t in $Vocabulary.Terms) {
+        $term = if ($canonical.ContainsKey($t.Anchor)) { $canonical[$t.Anchor] } else { $t.Anchor }
+        foreach ($variant in $t.Rejected) {
+            [pscustomobject]@{
+                Canonical = $term
+                Regex     = [regex]::new("(?<![\w])$(ConvertTo-TermPattern $variant)s?(?![\w])", $options)
+            }
+        }
+    }
+    $abbreviations = foreach ($key in @($Vocabulary.Abbreviations.Keys | Sort-Object)) {
+        $full = $Vocabulary.Abbreviations[$key]
+        [pscustomobject]@{
+            Abbreviation = $key
+            Full         = $full
+            Definition   = [regex]::new("$(ConvertTo-TermPattern $full)s?\s*\($([regex]::Escape($key))s?\)", $options)
+            Regex        = [regex]::new("(?<![\w])$([regex]::Escape($key))s?(?![\w])")
+        }
+    }
+    $spellings = @{}
+    foreach ($key in $Config.AmericanSpellings.Keys) { $spellings[$key.ToLowerInvariant()] = $Config.AmericanSpellings[$key] }
+    $spellingRegex = if ($spellings.Count) {
+        [regex]::new("(?<![\w])(?:$(($spellings.Keys | Sort-Object { -$_.Length } | ForEach-Object { [regex]::Escape($_) }) -join '|'))(?![\w])", $options)
+    }
+
+    [pscustomobject]@{
+        TitleCase     = @($titleCase | Sort-Object { -$_.Canonical.Length })
+        Rejected      = @($rejected)
+        Abbreviations = @($abbreviations)
+        Spellings     = $spellings
+        SpellingRegex = $spellingRegex
+        IzeRegex      = [regex]::new('(?<![\w])[A-Za-z]+iz(?:e|es|ed|ing|ation|ations|ational|er|ers|able)(?![\w])')
+        IzeExceptions = @($Config.IzeExceptions | ForEach-Object { $_.ToLowerInvariant() })
+        Allowed       = @($Config.AllowedSpellings | ForEach-Object { [regex]::new([regex]::Escape($_), $options) })
+        TimeRelative  = @($Config.TimeRelativePatterns | ForEach-Object { [regex]::new($_, $options) })
+        Future        = @($Config.FuturePatterns | ForEach-Object { [regex]::new($_, $options) })
+        Minimisers    = @($Config.MinimiserPatterns | ForEach-Object { [regex]::new($_, $options) })
+    }
+}
+
+# The page's running text, one entry per line: no front matter, code, HTML comments, snippet
+# includes, link reference definitions or placeholder text. Text also drops link targets, URLs,
+# HTML tags, attribute lists and entities; WithLinks keeps link targets, for LANG-8.
+function Get-ProseLine {
+    param($Page, [string[]]$StubPatterns)
+
+    $inComment = $false
+    $lines = $Page.Lines
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $lines.Count; $i++) {
+        if ($Page.InFenceLine[$i]) { continue }
+
+        $rest = $lines[$i]
+        $kept = [System.Text.StringBuilder]::new()
+        while ($true) {
+            if ($inComment) {
+                $end = $rest.IndexOf('-->')
+                if ($end -lt 0) { $rest = ''; break }
+                $rest = $rest.Substring($end + 3)
+                $inComment = $false
+            }
+            $start = $rest.IndexOf('<!--')
+            if ($start -lt 0) { [void]$kept.Append($rest); break }
+            [void]$kept.Append($rest.Substring(0, $start))
+            $rest = $rest.Substring($start + 4)
+            $inComment = $true
+        }
+        $line = $kept.ToString()
+
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.Contains('--8<--') -or $line -match '^\s*\[[^\]]+\]:\s*\S') { continue }
+        if (@($StubPatterns | Where-Object { $_ -and $line.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { continue }
+
+        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ')
+        $text = $withLinks -replace '\]\([^)]*\)', ']' -replace '\]\[[^\]]*\]', ']' -replace '<[^>]+>', ' ' -replace 'https?://\S+', ' ' -replace '\{[^}]*\}', ' ' -replace '&#?\w+;', ' '
+        $tableHeader = $text.TrimStart().StartsWith('|') -and ($i + 1 -lt $lines.Count) -and $lines[$i + 1] -match '^\s*\|?\s*:?-{3,}'
+
+        [pscustomobject]@{ Line = $i + 1; Text = $text; WithLinks = $withLinks; TableHeader = $tableHeader }
+    }
+}
+
+# Keeps the first letter's case, so a suggestion reads naturally in place.
+function Format-LikeWord {
+    param([string]$Word, [string]$Suggestion)
+    if ($Word.Length -gt 0 -and [char]::IsUpper($Word[0])) { return $Suggestion.Substring(0, 1).ToUpperInvariant() + $Suggestion.Substring(1) }
+    return $Suggestion
+}
+
+function Test-Language {
+    param($Page, $Config, $Language)
+
+    $emDash = [string][char]0x2014
+    $mask = [System.Text.RegularExpressions.MatchEvaluator] { param($m) ' ' * $m.Length }
+
+    foreach ($p in Get-ProseLine -Page $Page -StubPatterns $Config.StubPatterns) {
+        $text = $p.Text
+
+        # LANG-1
+        for ($at = $text.IndexOf($emDash); $at -ge 0; $at = $text.IndexOf($emDash, $at + 1)) {
+            New-Finding 'LANG-1' $p.Line 'an em dash; use a semicolon, comma, colon or parentheses.'
+        }
+        foreach ($m in [regex]::Matches($text, '(?<!\S)--(?!\S)')) {
+            New-Finding 'LANG-1' $p.Line "' -- ' shows as two hyphens on the site; use a semicolon, comma, colon or parentheses."
+        }
+        foreach ($m in [regex]::Matches($text, '(?<range>(?<from>\w+)--(?<to>\w+))')) {
+            New-Finding 'LANG-1' $p.Line "'$($m.Groups['range'].Value)' shows as two hyphens on the site; write a range as '$($m.Groups['from'].Value) to $($m.Groups['to'].Value)'."
+        }
+
+        # LANG-2
+        $spelling = $text
+        foreach ($allowed in $Language.Allowed) { $spelling = $allowed.Replace($spelling, $mask) }
+        if ($Language.SpellingRegex) {
+            foreach ($m in $Language.SpellingRegex.Matches($spelling)) {
+                $british = Format-LikeWord $m.Value $Language.Spellings[$m.Value.ToLowerInvariant()]
+                New-Finding 'LANG-2' $p.Line "'$($m.Value)' is an American spelling; write '$british'."
+            }
+        }
+        foreach ($m in $Language.IzeRegex.Matches($spelling)) {
+            if ($m.Value.ToLowerInvariant() -in $Language.IzeExceptions) { continue }
+            $at = $m.Value.LastIndexOf('iz')
+            $british = $m.Value.Substring(0, $at) + 'is' + $m.Value.Substring($at + 2)
+            New-Finding 'LANG-2' $p.Line "'$($m.Value)' is an American spelling; write '$british'."
+        }
+
+        # LANG-3: rejected variants first, then Title Case, longest term first. Each match is
+        # masked, so a lower-case "metaverse object" is one finding, not two.
+        $nouns = $text
+        foreach ($r in $Language.Rejected) {
+            foreach ($m in $r.Regex.Matches($nouns)) {
+                New-Finding 'LANG-3' $p.Line "'$($m.Value)' is not product vocabulary; write '$($r.Canonical)'."
+            }
+            $nouns = $r.Regex.Replace($nouns, $mask)
+        }
+        foreach ($t in $Language.TitleCase) {
+            foreach ($m in $t.Regex.Matches($nouns)) {
+                $stem = $m.Groups['stem'].Value -replace '\s+', ' '
+                if ($stem -cne $t.Canonical) {
+                    New-Finding 'LANG-3' $p.Line "'$($m.Value)' is a product noun; write '$($t.Canonical)$($m.Value.Substring($m.Groups['stem'].Length))'."
+                }
+            }
+            $nouns = $t.Regex.Replace($nouns, $mask)
+        }
+
+        # LANG-4
+        if (-not $p.TableHeader) {
+            $abbreviated = $text
+            foreach ($a in $Language.Abbreviations) {
+                $abbreviated = $a.Definition.Replace($abbreviated, $mask)
+                foreach ($m in $a.Regex.Matches($abbreviated)) {
+                    New-Finding 'LANG-4' $p.Line "'$($m.Value)' in running text; write '$($a.Full)' in full (abbreviations belong only in tight table headers)."
+                }
+            }
+        }
+
+        # LANG-5, LANG-6, LANG-7
+        foreach ($r in $Language.TimeRelative) {
+            foreach ($m in $r.Matches($text)) {
+                New-Finding 'LANG-5' $p.Line "'$($m.Value)' is relative to when it was written; state the behaviour, and mark a difference between releases 'Available from vX.Y.Z'."
+            }
+        }
+        foreach ($r in $Language.Future) {
+            foreach ($m in $r.Matches($text)) {
+                New-Finding 'LANG-6' $p.Line "'$($m.Value)' promises the future; say what JIM does today, and leave plans to the roadmap."
+            }
+        }
+        foreach ($r in $Language.Minimisers) {
+            foreach ($m in $r.Matches($text)) {
+                New-Finding 'LANG-7' $p.Line "'$($m.Value)' tells the reader it is easy; cut it."
+            }
+        }
+
+        # LANG-8
+        foreach ($m in [regex]::Matches($text, '(?<![\w&#/])#\d+\b')) {
+            New-Finding 'LANG-8' $p.Line "'$($m.Value)' is an issue or pull request number; a public page leaves JIM's own workings out (VOI-4)."
+        }
+        foreach ($m in [regex]::Matches($p.WithLinks, 'github\.com/[^/\s)]+/[^/\s)]+/(?:issues|pull|discussions)/\d+')) {
+            New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
+        }
+    }
+}
+
+# TERM-1: the vocabulary holds every glossary entry and nothing else, once each, and every
+# product noun's home page is a page this check covers.
+function Test-Vocabulary {
+    param($Vocabulary, [object[]]$GlossaryEntries, [hashtable]$PageSet, [string]$VocabularyPath)
+
+    $glossary = @{}
+    foreach ($g in $GlossaryEntries) { $glossary[$g.Anchor] = $g }
+    $seen = @{}
+    foreach ($t in $Vocabulary.Terms) {
+        if ($seen.ContainsKey($t.Anchor)) {
+            [pscustomobject]@{ Where = 'Vocabulary'; Line = $t.Line; Message = "the vocabulary lists '$($t.Anchor)' twice; keep one entry." }
+            continue
+        }
+        $seen[$t.Anchor] = $true
+        if (-not $glossary.ContainsKey($t.Anchor)) {
+            [pscustomobject]@{ Where = 'Vocabulary'; Line = $t.Line; Message = "the vocabulary entry '$($t.Anchor)' has no glossary entry; define the term in the glossary, or remove the entry." }
+        }
+        if (-not $PageSet.ContainsKey($t.Home)) {
+            [pscustomobject]@{ Where = 'Vocabulary'; Line = $t.Line; Message = "the home page '$($t.Home)' for '$($t.Anchor)' is not a page this check covers; name the page that explains the term (HOME-1)." }
+        }
+    }
+    foreach ($g in $GlossaryEntries) {
+        if (-not $seen.ContainsKey($g.Anchor)) {
+            [pscustomobject]@{ Where = 'Glossary'; Line = $g.Line; Message = "the glossary entry '$($g.Term)' has no vocabulary entry; add one to $VocabularyPath, naming its home page." }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 try {
     $config = Read-Configuration -Path $ConfigPath
     $baseline = Read-Baseline -Path $BaselinePath
+    $vocabulary = Read-Vocabulary -Path $VocabularyPath
 }
 catch {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
@@ -765,6 +1067,15 @@ if (-not $BaseRef) {
     else { $mntNote = 'MNT-3 skipped: no base to compare page sizes against (pass -BaseRef, or fetch origin/main).' }
 }
 
+# The glossary gives each product noun its canonical form; the vocabulary says what to enforce.
+$glossaryEntries = @()
+$glossaryFull = Join-Path $docsFull $config.GlossaryPage
+if (Test-Path -LiteralPath $glossaryFull) {
+    $glossaryModel = Get-PageModel -FullPath $glossaryFull -RelativePath $config.GlossaryPage -DisplayPath "$docsDisplayPrefix/$($config.GlossaryPage)"
+    $glossaryEntries = @(Get-GlossaryEntry -Page $glossaryModel)
+}
+$language = New-LanguageModel -Config $config -Vocabulary $vocabulary -GlossaryEntries $glossaryEntries
+
 # --- Collect findings per page ---
 
 $pages = [System.Collections.Generic.List[object]]::new()
@@ -794,6 +1105,7 @@ foreach ($file in $files) {
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
+        Test-Language -Page $page -Config $config -Language $language
     ) | Where-Object { $_ }
 
     # Exception markers: apply, then report the markers themselves.
@@ -849,6 +1161,20 @@ foreach ($file in $files) {
 
 $pageSet = @{}
 foreach ($p in $pages) { $pageSet[$p.RelativePath] = $true }
+
+$vocabularyDisplay = [System.IO.Path]::GetRelativePath($cwd, (Resolve-Path -LiteralPath $VocabularyPath).Path) -replace '\\', '/'
+foreach ($v in Test-Vocabulary -Vocabulary $vocabulary -GlossaryEntries $glossaryEntries -PageSet $pageSet -VocabularyPath $vocabularyDisplay) {
+    $onGlossary = $v.Where -eq 'Glossary'
+    $findings.Add([pscustomobject]@{
+            Rule        = 'TERM-1'
+            Page        = if ($onGlossary) { $config.GlossaryPage } else { $vocabularyDisplay }
+            DisplayPath = if ($onGlossary) { "$docsDisplayPrefix/$($config.GlossaryPage)" } else { $vocabularyDisplay }
+            Line        = $v.Line
+            Message     = $v.Message
+            Mode        = $config.Rules['TERM-1']
+            Conformant  = $false
+        })
+}
 $conformantSet = @{}
 foreach ($p in $pages) {
     if (($p.RelativePath -in $config.ConformantPages) -or [bool]($config.ConformantFolders | Where-Object { $p.RelativePath.StartsWith($_.TrimEnd('/') + '/') })) {

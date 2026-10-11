@@ -109,7 +109,7 @@ Combine multiple conditions using logical operators:
 | `\|\|`  | OR      | `10 > 3 \|\| 5 < 2`   | `true`  |
 | `!`      | NOT     | `!(10 > 3)`            | `false` |
 
-Example -- check that an employee is both active and in the IT department:
+Example: check that an employee is both active and in the IT department:
 
 ```csharp
 Eq(mv["Employee Status"], "Active") && Eq(mv["Department"], "IT")
@@ -377,7 +377,7 @@ FromFileTime(cs["accountExpires"])
 **Important notes:**
 
 - If the date attribute is empty or missing, these functions return nothing (null), which asserts "no value" for the target: for a sole contributor any existing value is removed; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace)
-- AD treats `0` and very large numbers as "never expires" -- `FromFileTime()` returns nothing for these values
+- AD treats `0` and very large numbers as "never expires", so `FromFileTime()` returns nothing for these values
 - `ToFileTime()` safely handles empty text, missing values, and invalid dates by returning nothing
 
 ### Building Email Addresses
@@ -394,7 +394,7 @@ For "Jane Smith", this produces: `jane.smith@company.com`
 Coalesce(mv["Title"], "") + " " + mv["First Name"] + " " + mv["Last Name"]
 ```
 
-`Coalesce` uses the title if one exists, otherwise uses an empty string -- avoiding a "null" appearing in the output.
+`Coalesce` uses the title if one exists, otherwise uses an empty string, avoiding a "null" appearing in the output.
 
 ### Building Distinguished Names (DNs)
 
@@ -438,7 +438,7 @@ IT department users get a "tech-" prefix; everyone else keeps their account name
 
 When a source system stores multiple values in a single field separated by a delimiter (e.g., `"COURSE1|COURSE2|COURSE3"`), use `Split()` to break them into separate values.
 
-**Example -- training courses from a CSV file:**
+**Example (training courses from a CSV file):**
 
 The source CSV has pipe-separated courses in a single column:
 

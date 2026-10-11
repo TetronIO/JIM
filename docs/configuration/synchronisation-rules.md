@@ -292,7 +292,7 @@ Some changes deliberately mark nothing:
 
 A change saved while a synchronisation is already running is not lost: that run carries on with the rules as they were when it started, and leaves the review for the next one.
 
-**Changes saved before this release.** Only changes saved from this release onwards are reviewed. If an export rule was created, re-enabled, switched to provisioning or re-scoped on an earlier release, objects it should have provisioned or deprovisioned may still be waiting for a change of their own. On a rule that provisions, switch **Provision to Connected System** off and save, then switch it on and save again: the next synchronisation reviews every object of the rule's type. On a rule that does not provision, the next change saved to its Scoping Criteria reviews them. A Deprovisioning Action switched from Delete to Disconnect on an earlier release leaves the deletes it queued before the switch in place; to have them withdrawn, switch it to Delete and back to Disconnect, saving each time, before the next export runs. That reaches accounts JIM still manages; a delete the earlier release left queued for an account it had already disconnected is still exported.
+**Changes saved on v0.16.0 or earlier.** Only changes saved on a later release are reviewed. If an export rule was created, re-enabled, switched to provisioning or re-scoped on v0.16.0 or earlier, objects it should have provisioned or deprovisioned may still be waiting for a change of their own. On a rule that provisions, switch **Provision to Connected System** off and save, then switch it on and save again: the next synchronisation reviews every object of the rule's type. On a rule that does not provision, the next change saved to its Scoping Criteria reviews them. A Deprovisioning Action switched from Delete to Disconnect on v0.16.0 or earlier leaves the deletes it queued before the switch in place; to have them withdrawn, switch it to Delete and back to Disconnect, saving each time, before the next export runs. That reaches accounts JIM still manages; a delete v0.16.0 or earlier left queued for an account it had already disconnected is still exported.
 
 ### Seeing what a run has deprovisioned
 
@@ -714,7 +714,7 @@ JIM recognises such a flow from its expression; there is nothing to declare. It 
 Saving would create a dependency cycle: Mail Nickname (Synchronisation Rule 'AD Import') reads Display Name, which (Synchronisation Rule 'HR Import') reads Mail Nickname.
 ```
 
-An expression that reads its own target (`mv["Email"]` in the flow to Email) is a loop of one. Disabled flows count, so enabling one later can never complete a loop; disabling one of a loop's flows is how you break a loop that already exists. JIM also refuses an `mv["..."]` name that is not an attribute of the Metaverse Object Type and, in this release, a Reference attribute as an input or as the target, because references are resolved later in synchronisation than derived flows are evaluated.
+An expression that reads its own target (`mv["Email"]` in the flow to Email) is a loop of one. Disabled flows count, so enabling one later can never complete a loop; disabling one of a loop's flows is how you break a loop that already exists. JIM also refuses an `mv["..."]` name that is not an attribute of the Metaverse Object Type and a Reference attribute as an input or as the target, because references are resolved later in synchronisation than derived flows are evaluated.
 
 **Non-repeatable functions warn.** A derived expression that calls `Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` or `Guid.NewGuid()` produces a different value on every synchronisation, which changes the Metaverse value and can export it every time. JIM saves it and warns: a `warnings` entry on the REST response, and a warning from `New-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping` and `Set-JIMSyncRule`.
 
@@ -880,10 +880,10 @@ For the full recall semantics (re-election, Value cleared outcomes, and how disa
 
 ## See also
 
-- [Configuration changes](configuration-changes.md) -- how JIM classifies and confirms configuration changes
-- [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
-- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
-- [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
-- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
-- [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
-- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- the four questions JIM asks when comparing text, and which features ask which
+- [Configuration changes](configuration-changes.md): how JIM classifies and confirms configuration changes
+- [Connected Systems](connected-systems.md): the systems a Synchronisation Rule connects to
+- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): where Synchronisation Rules fit in the import/sync/export flow
+- [Concepts: Attribute Priority](../concepts/attribute-priority.md): how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
+- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md): how scoping and provisioning drive joiner/mover/leaver behaviour
+- [Concepts: Expressions](../concepts/expressions.md): the expression language used in scoping criteria and attribute mappings
+- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md): the four questions JIM asks when comparing text, and which features ask which

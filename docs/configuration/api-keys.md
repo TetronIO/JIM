@@ -72,5 +72,5 @@ Open a key's history from the Changes tab on its detail page, or retrieve it wit
 
 ## See also
 
-- [API Authentication](../api/authentication.md) -- how keys are presented on requests, plus the alternative JWT Bearer flow
-- [Roles](roles.md) -- the permission grants assigned to a key
+- [API Authentication](../api/authentication.md): how keys are presented on requests, plus the alternative JWT Bearer flow
+- [Roles](roles.md): the permission grants assigned to a key
