@@ -4,7 +4,7 @@ title: Security Audit Events
 
 # Security Audit Events
 
-JIM records authentication activity, interactive sign-in success and failure, and API key authentication failure, in the same [Activity](../configuration/activities.md) system used for every other tracked operation, so there is a single audit log rather than a parallel security store. This is the audit-trail leg of OWASP Top 10 A09 (Security Logging and Monitoring Failures); it complements [rate limiting](../api/rate-limiting.md) and [security headers](security-headers.md) from the same assessment.
+JIM records authentication activity, interactive sign-in success and failure, and failed API authentication with an API key or an SSO access token, in the same [Activity](../configuration/activities.md) system used for every other tracked operation, so there is a single audit log rather than a parallel security store. This is the audit-trail leg of OWASP Top 10 A09 (Security Logging and Monitoring Failures); it complements [rate limiting](../api/rate-limiting.md) and [security headers](security-headers.md) from the same assessment.
 
 ## What is recorded
 
@@ -13,6 +13,7 @@ JIM records authentication activity, interactive sign-in success and failure, an
 | Interactive sign-in succeeded | The signed-in user | One Activity per session establishment |
 | Interactive sign-in failed | **Anonymous** | Aggregated (see below) |
 | API key authentication failed | **Anonymous** | Aggregated (see below) |
+| Access token authentication failed | **Anonymous** | Aggregated (see below) |
 | API key authentication succeeded | *n/a* | Not written as an Activity; API key lifecycle (create, update, disable, delete) is already audited via [configuration change history](../configuration/activities.md#configuration-change-history), and each successful call updates the key's last-used timestamp |
 
 Every security audit event carries `Authentication` as its Activity target type, and a client IP address where one was available. Filter the [Activity list](../configuration/activities.md#filtering-the-activity-list) to the **Security** category, or the `Authentication` type, to see these events on their own.
@@ -23,7 +24,17 @@ Failed authentication is the only event class written on behalf of an unauthenti
 
 This bounds the worst case to a handful of rows regardless of attack volume, while preserving the count: a 500-attempt spray against one key from one IP in a 15-minute window produces a single Activity with an attempt count of 500, not 500 rows. [Rate limiting](../api/rate-limiting.md) sits in front of these writes as the primary throttle; aggregation is the backstop for whatever gets through.
 
-A failure's reason is one of: `API key not found`, `API key is disabled`, `API key has expired`, `Authentication error` (API key path), or a short, sanitised category of the interactive sign-in failure (for example `OIDC correlation failed`, `OIDC token expired`). The raw exception or provider error text is never stored: it can be attacker-influenced and is unbounded in length, neither of which belongs in an audit record.
+A failure's reason is a short, sanitised category:
+
+| Event | Reasons |
+|-------|---------|
+| API key authentication failed | `API key not found`, `API key is disabled`, `API key has expired`, `Authentication error` |
+| Access token authentication failed | `Access token expired`, `Access token not yet valid`, `Access token lifetime invalid`, `Access token signature invalid`, `Access token signing key not found`, `Access token signing key invalid`, `Access token algorithm not allowed`, `Access token issuer invalid`, `Access token audience invalid`, `Access token type invalid`, `Access token replayed`, `Access token malformed`, `Access token decryption failed`, `Access token validation failed` |
+| Interactive sign-in failed | For example `OIDC correlation failed`, `OIDC token expired`, `OIDC access denied` |
+
+The raw exception or provider error text is never stored: it can be attacker-influenced and is unbounded in length, neither of which belongs in an audit record. Nor is the credential itself: an API key failure records only the key's identifying prefix, and an access token failure records none of the token.
+
+JIM recognises an API key by its `jim_ak_` prefix, so a bearer token without that prefix is treated as an SSO access token. A mistyped or truncated key therefore shows up as `Access token malformed` rather than as an API key failure.
 
 ## Retention
 

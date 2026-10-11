@@ -4,12 +4,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Security;
+using JIM.Web.Authentication;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -29,13 +31,18 @@ namespace JIM.Web.Api.Tests;
 public class ApiKeyAuthenticationHandlerTests
 {
     private const string ValidKey = "jim_ak_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    private const string ClientIp = "203.0.113.7";
 
     private Mock<IApiKeyRepository> _apiKeyRepository = null!;
+    private Mock<IFailedAuthenticationRecorder> _recorder = null!;
 
     [SetUp]
     public void SetUp()
     {
         _apiKeyRepository = new Mock<IApiKeyRepository>();
+        _recorder = new Mock<IFailedAuthenticationRecorder>();
+        _recorder.Setup(r => r.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns(Task.CompletedTask);
     }
 
     [Test]
@@ -50,6 +57,7 @@ public class ApiKeyAuthenticationHandlerTests
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Principal!.FindFirst("auth_method")?.Value, Is.EqualTo("api_key"));
             Assert.That(result.Principal!.FindFirst("key_prefix")?.Value, Is.EqualTo(apiKey.KeyPrefix));
+            VerifyNothingRecorded();
         }
     }
 
@@ -71,7 +79,11 @@ public class ApiKeyAuthenticationHandlerTests
 
         var result = await AuthenticateAsync(authorization: null, xApiKey: ValidKey);
 
-        Assert.That(result.None, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.None, Is.True);
+            VerifyNothingRecorded();
+        }
     }
 
     [Test]
@@ -84,6 +96,7 @@ public class ApiKeyAuthenticationHandlerTests
         {
             Assert.That(result.None, Is.True);
             _apiKeyRepository.Verify(r => r.GetByHashAsync(It.IsAny<string>()), Times.Never);
+            VerifyNothingRecorded();
         }
     }
 
@@ -92,7 +105,11 @@ public class ApiKeyAuthenticationHandlerTests
     {
         var result = await AuthenticateAsync(authorization: null);
 
-        Assert.That(result.None, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.None, Is.True);
+            VerifyNothingRecorded();
+        }
     }
 
     [Test]
@@ -107,6 +124,7 @@ public class ApiKeyAuthenticationHandlerTests
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.None, Is.False);
             Assert.That(result.Failure, Is.Not.Null);
+            VerifyRecorded("API key not found", ValidKey[..12]);
         }
     }
 
@@ -122,6 +140,7 @@ public class ApiKeyAuthenticationHandlerTests
         {
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Failure?.Message, Is.EqualTo("API key is disabled"));
+            VerifyRecorded("API key is disabled", apiKey.KeyPrefix);
         }
     }
 
@@ -137,8 +156,16 @@ public class ApiKeyAuthenticationHandlerTests
         {
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Failure?.Message, Is.EqualTo("API key has expired"));
+            VerifyRecorded("API key has expired", apiKey.KeyPrefix);
         }
     }
+
+    private void VerifyRecorded(string reason, string apiKeyPrefix) =>
+        _recorder.Verify(r => r.RecordAsync(FailedAuthenticationEventNames.ApiKey, reason, apiKeyPrefix, ClientIp), Times.Once);
+
+    private void VerifyNothingRecorded() =>
+        _recorder.Verify(r => r.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
 
     private ApiKey StoredKey()
     {
@@ -159,7 +186,7 @@ public class ApiKeyAuthenticationHandlerTests
     {
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepository.Object);
-        // Usage and failed-authentication audit writes run on background tasks against these; they need only exist.
+        // Usage recording runs on a background task against this; it need only exist.
         repository.Setup(r => r.Activity).Returns(Mock.Of<IActivityRepository>());
         var application = new JimApplication(repository.Object);
 
@@ -170,10 +197,12 @@ public class ApiKeyAuthenticationHandlerTests
         var options = new Mock<IOptionsMonitor<ApiKeyAuthenticationOptions>>();
         options.Setup(o => o.Get(It.IsAny<string>())).Returns(new ApiKeyAuthenticationOptions());
 
-        var handler = new ApiKeyAuthenticationHandler(options.Object, NullLoggerFactory.Instance, UrlEncoder.Default, scopeFactory);
+        var handler = new ApiKeyAuthenticationHandler(
+            options.Object, NullLoggerFactory.Instance, UrlEncoder.Default, scopeFactory, _recorder.Object);
 
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/userinfo";
+        context.Connection.RemoteIpAddress = IPAddress.Parse(ClientIp);
         if (authorization != null)
             context.Request.Headers.Authorization = authorization;
         if (xApiKey != null)

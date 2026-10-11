@@ -166,6 +166,7 @@ try
         return jim;
     });
     builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
+    builder.Services.AddSingleton<IFailedAuthenticationRecorder, FailedAuthenticationRecorder>();
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 
@@ -409,7 +410,12 @@ try
                 OnTokenValidated = async ctx =>
                 {
                     await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
-                }
+                },
+
+                // Security audit events (issue #2108): an access token that fails validation is recorded as failed
+                // API keys and failed interactive sign-ins are. This includes a malformed API key, since any bearer
+                // token without the key prefix is validated here.
+                OnAuthenticationFailed = AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync
             };
         });
 
@@ -597,7 +603,10 @@ try
                 }
                 """)
             .WithOpenApiRoutePattern(openApiRoutePattern)
-            .AddPreferredSecuritySchemes(OpenApiSecurityConfiguration.OAuth2SchemeName, OpenApiSecurityConfiguration.ApiKeySchemeName)
+            // One preferred scheme, not both: Scalar applies every preferred scheme together, and with API keys and
+            // SSO tokens now both in the Authorization header it merged them ("Bearer , Bearer jim_ak_..."), which
+            // JIM rightly refuses. OAuth2 stays selectable from Try It's authentication drop-down.
+            .AddPreferredSecuritySchemes(OpenApiSecurityConfiguration.ApiKeySchemeName)
             .AddAuthorizationCodeFlow(OpenApiSecurityConfiguration.OAuth2SchemeName, flow =>
             {
                 flow.ClientId = clientId!;
@@ -1079,32 +1088,20 @@ static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject
 }
 
 /// <summary>
-/// Records an aggregated interactive sign-in failure security audit event on a background task with a fresh DI
-/// scope, mirroring <see cref="RecordSuccessfulSignInEvent"/>. Non-blocking and never throws into the caller:
-/// <c>SecurityAuditServer.RecordFailedAuthenticationAsync</c> itself swallows audit-write failures.
+/// Records an aggregated interactive sign-in failure security audit event, off the request path, through the shared
+/// <see cref="IFailedAuthenticationRecorder"/>. Never throws into the caller.
 /// </summary>
 static void RecordFailedSignInEvent(HttpContext httpContext, string reason)
 {
-    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
-    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
-    if (factory == null)
+    var recorder = httpContext.RequestServices.GetService<IFailedAuthenticationRecorder>();
+    if (recorder == null)
     {
-        Log.Warning("RecordFailedSignInEvent: Could not resolve IJimApplicationFactory; failed sign-in event not recorded.");
+        Log.Warning("RecordFailedSignInEvent: Could not resolve IFailedAuthenticationRecorder; failed sign-in event not recorded.");
         return;
     }
 
-    _ = Task.Run(async () =>
-    {
-        try
-        {
-            using var jim = factory.Create();
-            await jim.SecurityAudit.RecordFailedAuthenticationAsync("Interactive sign-in failed", reason, apiKeyPrefix: null, clientIp);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Log.Warning(ex, "RecordFailedSignInEvent: Failed to record failed authentication event");
-        }
-    });
+    var clientIp = httpContext.Connection.RemoteIpAddress.ToNormalisedString();
+    _ = recorder.RecordAsync(FailedAuthenticationEventNames.InteractiveSignIn, reason, apiKeyPrefix: null, clientIp);
 }
 
 /// <summary>
