@@ -45,7 +45,7 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
         Assert.That(correctivePe!.SourceMetaverseObjectId, Is.Not.EqualTo(Guid.Empty),
             "the corrective Pending Export must not capture the Metaverse Object id before it is persisted; " +
             "a Guid.Empty source violates FK_PendingExports_MetaverseObjects_SourceMetaverseObjectId at flush");
-        Assert.That(correctivePe.SourceMetaverseObjectId, Is.EqualTo(mvo.Id),
+        Assert.That(correctivePe!.SourceMetaverseObjectId, Is.EqualTo(mvo.Id),
             "the corrective Pending Export must reference the projected Metaverse Object");
     }
 
