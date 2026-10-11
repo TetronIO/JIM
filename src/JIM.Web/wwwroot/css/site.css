@@ -416,8 +416,8 @@ html[lang] .mud-alert-close {
 /* Info popover (<InfoPopover />, behind <TermHint /> and <PageInfo />). MudMenu's list gives its content
    vertical padding only, so unpadded text ran flush against the popover's left edge; the body carries the
    horizontal padding itself, a measure that keeps an explanation to a readable width, and a title that
-   reads as a heading rather than as the first sentence. The Glossary link sits apart from the text it
-   follows, on its own line. */
+   reads as a heading rather than as the first sentence. The links (Documentation, then Glossary) sit apart
+   from the text they follow, on a line of their own. */
 .jim-info-popover {
     padding: 8px 16px;
     max-width: 24rem;
@@ -435,9 +435,15 @@ html[lang] .mud-alert-close {
     color: var(--mud-palette-text-secondary);
 }
 
+.jim-info-popover-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    margin-top: 10px;
+}
+
 .jim-info-popover-link {
     display: inline-block;
-    margin-top: 10px;
     font-weight: 600;
 }
 

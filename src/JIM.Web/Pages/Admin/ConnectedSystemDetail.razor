@@ -22,7 +22,11 @@
    below) as page actions on its right. A row of their own left a gap under the audit chips; the tab bar has no room
    to take them without scrolling further. They wrap under the title on a narrow screen. *@
 <div class="d-flex justify-space-between align-center flex-wrap gap-3">
-    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span></MudText>
+    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span>
+        <PageInfo Title="Connected System" DocsPage="configuration/connected-systems.md">
+            A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.
+        </PageInfo>
+    </MudText>
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">

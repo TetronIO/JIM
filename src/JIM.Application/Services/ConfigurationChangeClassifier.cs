@@ -361,8 +361,6 @@ public static class ConfigurationChangeClassifier
         // When a preview asks before capping its drill-down rows. Summary counts are exact whatever the answer, so
         // this moves how much of a preview can be inspected and how much storage it uses, never what it reports.
         [Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold] = C,
-        [Constants.SettingKeys.VerboseNoChangeRecording] = C,
-        [Constants.SettingKeys.MaintenanceMode] = C,
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,
         [Constants.SettingKeys.ConfigurationChangeRetentionPeriod] = C,
         [Constants.SettingKeys.SecurityEventRetentionPeriod] = C,
@@ -378,20 +376,18 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.SsoApiScope] = C,
         [Constants.SettingKeys.SsoClaimType] = C,
         [Constants.SettingKeys.SsoMvAttribute] = C,
-        [Constants.SettingKeys.SsoUniqueIdentifierClaimType] = C,
         [Constants.SettingKeys.SsoEnableLogOut] = C,
-        [Constants.SettingKeys.CredentialEncryptionEnabled] = C,
         [Constants.SettingKeys.EncryptionKeyPath] = C,
         [Constants.SettingKeys.RateLimitingEnabled] = C,
         [Constants.SettingKeys.RateLimitingAuthenticatedRequestsPerMinute] = C,
         [Constants.SettingKeys.RateLimitingUnauthenticatedRequestsPerMinute] = C,
         [Constants.SettingKeys.ProgressUpdateInterval] = C,
         [Constants.SettingKeys.ServiceName] = C,
+        [Constants.SettingKeys.StaleTaskTimeout] = C,
 
         // Internal settings, not surfaced for administrators to edit, but classified so the
         // completeness test covers every key Constants.SettingKeys declares.
         [Constants.SettingKeys.ConfigurationChangeHashKey] = C,
-        [Constants.SettingKeys.StaleTaskTimeout] = C,
         [Constants.SettingKeys.ServiceId] = C
     };
 

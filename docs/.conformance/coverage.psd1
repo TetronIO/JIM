@@ -31,6 +31,9 @@
     # themselves are checked against the OpenAPI document build-and-test generates.
     ApiIndex            = 'docs/api/index.md'
 
+    # COV-5: the portal's Razor components. Every routable page names its docs page from its PageInfo.
+    PortalSources       = @('src/JIM.Web')
+
     # The docs the checks read: the public site, less what leaves it.
     DocsPath            = 'docs'
     DocsExclude         = @('CLAUDE.md', 'developer/**', 'reference/changelog.md')
@@ -55,15 +58,25 @@
         DocsLinks            = @{}
         ApiRoutes            = @{}
         ApiResourceGroups    = @{}
+        # Keyed by the page's path. A page that has a PageInfo but no docs page to name still describes itself.
+        PortalPages          = @{
+            'src/JIM.Web/Pages/Index.razor'                       = 'The home page: it orients a first-time visitor and leads to pages that each name their own docs page.'
+            'src/JIM.Web/Pages/Admin/AdminIndex.razor'            = 'The Administration landing page: it orients a first-time visitor and leads to pages that each name their own docs page.'
+            'src/JIM.Web/Pages/Admin/ThemePreview.razor'          = 'A design specimen page for developers, not a feature an administrator uses.'
+            'src/JIM.Web/Pages/Admin/LoadingPreview.razor'        = 'A design specimen page for developers, showing the loading states; not a feature an administrator uses.'
+            'src/JIM.Web/Pages/Dev/ErrorPagePreview.razor'        = 'A design specimen page for developers, previewing the error pages; not a feature an administrator uses.'
+            'src/JIM.Web/Pages/Admin/DeletedObjects.razor'        = 'No docs page covers Deleted Objects yet (#2114).'
+            'src/JIM.Web/Pages/Admin/ExampleDataSetDetail.razor'  = 'No docs page covers Example Data yet (#2114).'
+            'src/JIM.Web/Pages/Admin/ExampleDataSetList.razor'    = 'No docs page covers Example Data yet (#2114).'
+            'src/JIM.Web/Pages/Admin/ExampleDataTemplateDetail.razor' = 'No docs page covers Example Data yet (#2114).'
+            'src/JIM.Web/Pages/Admin/ExampleDataTemplateList.razor'   = 'No docs page covers Example Data yet (#2114).'
+            'src/JIM.Web/Pages/Admin/FactoryReset.razor'          = 'No docs page covers the Factory Reset yet (#2114).'
+            'src/JIM.Web/Pages/Admin/Logs.razor'                  = 'No docs page covers the Logs page yet (#2114).'
+        }
         # Read by the NUnit coverage tests in test/JIM.Worker.Tests/Docs (COV-3 and the Connector settings of
         # COV-6), which need the compiled product to take their inventories. A Connector setting is keyed
         # 'Connector name: setting name'.
-        ServiceSettings      = @{
-            'Maintenance.IsEnabled'             = 'Shown to administrators but nothing reads it, so it pauses nothing (#2101); document it once it is wired or removed.'
-            'Security.CredentialEncryptionEnabled' = 'Shown to administrators but nothing reads it, so it switches nothing off (#2101); document it once it is wired or removed.'
-            'Sync.VerboseNoChangeRecording'     = 'Shown to administrators but nothing reads it, so it records nothing extra (#2101); document it once it is wired or removed.'
-            'SSO.UniqueIdentifierClaimType'     = 'Always shows sub, while JIM matches on the claim JIM_SSO_CLAIM_TYPE names (#2101); document it once the two agree.'
-        }
+        ServiceSettings      = @{}
         ConnectorSettings    = @{}
     }
 }

@@ -4,9 +4,9 @@
 <#
 .SYNOPSIS
     Detects when newer versions of the manually-pinned development tooling (npm
-    and NuGet packages installed outside any manifest Dependabot can read) are
-    available, and (optionally) rewrites the pins in place so a bump can be
-    proposed for evaluation.
+    and NuGet packages, and Docker Hub images, pinned outside any manifest
+    Dependabot can read) are available, and (optionally) rewrites the pins in
+    place so a bump can be proposed for evaluation.
 
 .DESCRIPTION
     A few development tools are pinned to exact versions in places Dependabot does
@@ -17,6 +17,12 @@
         `.mcp.json` (the launch-at-runtime config). The two MUST move together or
         the installed browser and the server drift apart.
       - `dotnet-ef` (the EF Core CLI) is pinned in `.devcontainer/setup.sh`.
+      - `lycheeverse/lychee` (the docs site's link checker) is pinned by tag AND
+        digest in `scripts/Test-DocsSite.ps1`, which runs it with `docker run`.
+        The two move together: a bump writes the new release's tag and the
+        digest Docker Hub gives it. A pinned release pushed again upstream (same
+        tag, new digest; a rebuild over a fixed base image, say) is proposed as
+        a bump too, since the pin no longer pulls what its tag names.
 
     Dependabot only reads real manifests (`package.json`, `.csproj`, Dockerfile
     FROM lines, workflow `uses:`). None of these pins live in one, so without this
@@ -25,8 +31,10 @@
     This script closes that gap:
 
       1. For each tool, reads the currently-pinned version from its file(s).
-      2. Queries the upstream registry (npm or NuGet) for the latest stable
-         version.
+      2. Queries the upstream registry (npm, NuGet or Docker Hub) for the
+         latest stable version. On Docker Hub that is the highest full release
+         tag (`0.24.2`); floating (`0.24`, `latest`), variant (`0.24.2-alpine`)
+         and build tags are never a release a pin should move to.
       3. Flags any tool whose pinned version is behind the latest.
       4. Checks that the pinned version ITSELF is still published. A version that
          has been unpublished (npm) or deleted (NuGet) cannot be installed, so
@@ -46,8 +54,9 @@
 
         pwsh -NoProfile -File .github/scripts/check-tooling-pins.ps1
 
-    Requires outbound HTTPS to registry.npmjs.org and api.nuget.org. Unlike the
-    apt pin check it needs no Docker; these are registry HTTP lookups.
+    Requires outbound HTTPS to registry.npmjs.org, api.nuget.org and
+    hub.docker.com. Unlike the apt pin check it needs no Docker; these are
+    registry HTTP lookups.
 
 .PARAMETER Apply
     Rewrite the available bumps into the pin files in place. Without it, the
@@ -83,7 +92,9 @@ $repoRoot = (Get-Location).Path
 # one or more locations. A location is a file plus a .NET regex whose ENTIRE
 # match is the version string (achieved with look-around), so applying a bump is
 # a straight [regex]::Replace of the match with the new version. Multiple
-# occurrences within a file are all replaced.
+# occurrences within a file are all replaced. An image pinned by digest also
+# gives a digestPattern, whose entire match is the `sha256:...` digest, so the
+# tag and its digest are rewritten together.
 $tools = @(
     @{
         name      = '@playwright/mcp'
@@ -101,6 +112,19 @@ $tools = @(
         locations = @(
             @{ file = '.devcontainer/setup.sh'; pattern = '(?<=dotnet-ef --version )\d[\w.\-]*' }
             @{ file = '.devcontainer/setup.sh'; pattern = '(?<=dotnet-ef )\d[\w.\-]*(?= installed globally)' }
+        )
+    },
+    @{
+        name      = 'lycheeverse/lychee'
+        registry  = 'dockerhub'
+        id        = 'lycheeverse/lychee'
+        locations = @(
+            @{
+                file          = 'scripts/Test-DocsSite.ps1'
+                pattern       = '(?<=lycheeverse/lychee:)\d[\w.\-]*(?=@sha256:)'
+                digestPattern = '(?<=lycheeverse/lychee:\d[\w.\-]*@)sha256:[0-9a-f]{64}'
+            }
+            @{ file = 'scripts/Test-DocsSite.ps1'; pattern = '(?m)(?<=^# lychee )\d[\w.\-]*' }
         )
     }
 )
@@ -137,6 +161,29 @@ function Get-NuGetRegistryInfo {
     return [pscustomobject]@{ latest = $stable[-1]; versions = $versions }
 }
 
+function Get-DockerHubRegistryInfo {
+    param([string]$Id)
+    # `name=.` keeps to tags with a dot in them, which every release tag has and
+    # the per-commit build tags do not (lychee publishes about 2,000 of those, so
+    # without the filter this is twenty pages rather than one). Pages are linked
+    # by `next`; the cap only stops a misbehaving API looping forever.
+    $digests = @{}
+    $uri = "https://hub.docker.com/v2/repositories/$Id/tags?page_size=100&name=."
+    for ($page = 0; $uri; $page++) {
+        if ($page -ge 50) { throw "Docker Hub kept returning pages of tags for $Id; gave up after 50." }
+        $resp = Invoke-RestMethod -Uri $uri -TimeoutSec 30
+        foreach ($tag in @($resp.results)) { $digests[$tag.name] = $tag.digest }
+        $uri = $resp.next
+    }
+    if ($digests.Count -eq 0) { throw "Docker Hub returned no tags for $Id." }
+    # A release tag is a full version and nothing else: not a floating `0.24`, a
+    # variant `0.24.2-alpine` or a moving `latest`.
+    $releases = @($digests.Keys | Where-Object { $_ -match '^\d+(\.\d+){2,3}$' })
+    if ($releases.Count -eq 0) { throw "Docker Hub returned no release tags for $Id." }
+    $latest = (@($releases | Sort-Object { [version]$_ }))[-1]
+    return [pscustomobject]@{ latest = $latest; versions = @($digests.Keys); digests = $digests }
+}
+
 function Compare-Version {
     # Returns $true if $Candidate is strictly newer than $Current.
     param([string]$Candidate, [string]$Current)
@@ -150,12 +197,12 @@ function Compare-Version {
 # --- Read the current pins ---------------------------------------------------
 
 function Get-PinnedVersion {
-    param([hashtable]$Location)
+    param([hashtable]$Location, [string]$Pattern = $Location.pattern)
     $path = Join-Path $repoRoot $Location.file
     if (-not (Test-Path $path)) { throw "Pin file not found: $($Location.file)" }
     $text = Get-Content -Path $path -Raw
-    $m = [regex]::Match($text, $Location.pattern)
-    if (-not $m.Success) { throw "Pattern did not match in $($Location.file): $($Location.pattern)" }
+    $m = [regex]::Match($text, $Pattern)
+    if (-not $m.Success) { throw "Pattern did not match in $($Location.file): $Pattern" }
     return $m.Value
 }
 
@@ -179,12 +226,16 @@ foreach ($tool in $tools) {
     }
     # Lowest current via [version] sort.
     $current = (@($distinct | Sort-Object { [version]$_ }))[0]
+    # The digests an image is pinned by, from the locations that carry one.
+    $pinnedDigests = @($tool.locations | Where-Object { $_.digestPattern } |
+        ForEach-Object { Get-PinnedVersion -Location $_ -Pattern $_.digestPattern } | Select-Object -Unique)
 
     try {
         $info = switch ($tool.registry) {
-            'npm'   { Get-NpmRegistryInfo   -Id $tool.id }
-            'nuget' { Get-NuGetRegistryInfo -Id $tool.id }
-            default { throw "Unknown registry '$($tool.registry)' for $($tool.name)." }
+            'npm'       { Get-NpmRegistryInfo       -Id $tool.id }
+            'nuget'     { Get-NuGetRegistryInfo     -Id $tool.id }
+            'dockerhub' { Get-DockerHubRegistryInfo -Id $tool.id }
+            default     { throw "Unknown registry '$($tool.registry)' for $($tool.name)." }
         }
     } catch {
         $queryFailures += $tool.name
@@ -199,8 +250,14 @@ foreach ($tool in $tools) {
     $gone = @($distinct | Where-Object { $info.versions -notcontains $_ })
 
     $behind = Compare-Version -Candidate $latest -Current $current
+    # An image whose release is current but whose digest is not: the release was
+    # pushed again upstream, so the pin no longer pulls what its tag names.
+    $latestDigest = if ($info.PSObject.Properties['digests']) { $info.digests[$latest] } else { $null }
+    $repushed = (-not $behind) -and $latestDigest -and $gone.Count -eq 0 -and
+        @($pinnedDigests | Where-Object { $_ -ne $latestDigest }).Count -gt 0
     $state = if ($gone.Count -gt 0) { "WITHDRAWN from $($tool.registry)" }
              elseif ($behind) { 'UPDATE' }
+             elseif ($repushed) { 'UPDATE (the release was pushed again)' }
              else { 'current' }
     Write-Host ("  {0,-22} {1,-12} -> {2,-12} {3}" -f $tool.name, $current, $latest, $state)
 
@@ -213,11 +270,14 @@ foreach ($tool in $tools) {
         }
     }
 
-    if ($behind) {
+    if ($behind -or $repushed) {
+        $shown = { param($version, $digests) if ($digests) { "$version ($(@($digests | ForEach-Object { $_.Substring(0, 19) }) -join ', '))" } else { $version } }
         $findings += [pscustomobject]@{
             name    = $tool.name
-            current = ($distinct -join ', ')
-            latest  = $latest
+            current = (& $shown ($distinct -join ', ') $pinnedDigests)
+            latest  = (& $shown $latest @($latestDigest | Where-Object { $_ }))
+            version = $latest
+            digest  = $latestDigest
             files   = (@($tool.locations | ForEach-Object { $_.file } | Select-Object -Unique) -join ', ')
             tool    = $tool
         }
@@ -252,7 +312,10 @@ function Publish-BumpProposal {
         foreach ($loc in $f.tool.locations) {
             $path = Join-Path $repoRoot $loc.file
             $text = Get-Content -Path $path -Raw
-            $new  = [regex]::Replace($text, $loc.pattern, $f.latest)
+            # The digest first: its pattern finds the digest by the tag in front of
+            # it, which the version rewrite below may change.
+            $new  = if ($loc.digestPattern -and $f.digest) { [regex]::Replace($text, $loc.digestPattern, $f.digest) } else { $text }
+            $new  = [regex]::Replace($new, $loc.pattern, $f.version)
             if ($new -ne $text) {
                 Set-Content -Path $path -Value $new -NoNewline
                 Write-Host "  $($loc.file): $($f.name) -> $($f.latest)"
