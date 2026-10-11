@@ -2984,11 +2984,18 @@ public class SyncImportTaskProcessor
 
         var heldTypeName = held.ObjectType.Name;
         var arrivingTypeName = arrivingObjectType.Name;
+
+        // An object an earlier import already marked obsolete is disconnected by the next synchronisation whatever this
+        // run does, so saying nothing is deprovisioned would be untrue for it.
+        var keptClause = held.Entry.Status == ConnectedSystemObjectStatus.Obsolete
+            ? $"the existing '{heldTypeName}' object, which an earlier import marked obsolete, has been left as it is"
+            : $"the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned";
+
         activityRunProfileExecutionItem.ObjectTypeSnapshot = arrivingTypeName;
         activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
         activityRunProfileExecutionItem.ErrorMessage =
             $"JIM holds this object as a '{heldTypeName}', but the Connector now returns it as a '{arrivingTypeName}' (External ID '{activityRunProfileExecutionItem.ExternalIdSnapshot}'). " +
-            $"It has not been imported, and the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
+            $"It has not been imported, and {keptClause}. " +
             $"If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{heldTypeName}' object and import a new '{arrivingTypeName}' one. " +
             "If it has not, review the Object Types selected on the Connected System.";
 
