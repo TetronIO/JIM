@@ -4,7 +4,7 @@ title: API
 
 # API
 
-JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
+JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the Metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
 ## Where to find what
 
@@ -17,6 +17,36 @@ JIM exposes a REST API for programmatic access to all identity management operat
 | PowerShell cmdlets that wrap the API | [PowerShell Module](../powershell/index.md) |
 
 The interactive API reference is the canonical, up-to-date specification of every endpoint. The pages in this section cover the cross-cutting concerns of using the API itself; the per-object behaviour (what a Connected System is, how a Schedule works) lives in the Configuration section.
+
+## Resource groups
+
+The interactive API reference groups its endpoints by resource. Each group, and the page that explains what it manages:
+
+| Resource group | What it covers |
+|----------------|----------------|
+| Activities | [Activities](../configuration/activities.md), their items and their progress (`/api/v1/activities`) |
+| ApiKeys | The [API keys](../configuration/api-keys.md) scripts and integrations authenticate with (`/api/v1/apikeys`) |
+| Auth | The OIDC settings a client needs before it can sign in (`/api/v1/auth/config`); unauthenticated |
+| Certificates | [Trusted Certificates](../configuration/certificates.md) for connections to Connected Systems (`/api/v1/certificates`) |
+| ExampleData | Example Data templates and sets, for filling a test instance with realistic objects (`/api/v1/example-data`) |
+| FeatureFlags | Turning [Preview features](../administration/preview-features.md) on and off (`/api/v1/features`) |
+| FileSystem | Browsing the files a connector can read inside the container, such as the [File Connector](../connectors/jim-file-connector.md)'s import files (`/api/v1/filesystem`) |
+| GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
+| Health | Health, readiness, liveness and version probes for load balancers and orchestrators (`/api/v1/health`); unauthenticated, and answering for the web tier only |
+| History | Counting and clearing old change history and deleted-object records (`/api/v1/history`) |
+| Logs | Reading JIM's [service logs](../administration/configuration.md#logging) (`/api/v1/logs`) |
+| Metaverse | The [Metaverse](../configuration/metaverse.md) schema, Metaverse Objects, [Attribute Priority](../concepts/attribute-priority.md) and pending deletions (`/api/v1/metaverse`) |
+| PasswordSynchronisation | The [Password Synchronisation queue](../concepts/passwords.md#watching-the-queue) (`/api/v1/password-synchronisation`) |
+| PredefinedSearches | [Predefined Searches](../configuration/predefined-searches.md) and their criteria (`/api/v1/predefined-searches`) |
+| Previews | Reading and cancelling a [Configuration Change Preview](../configuration/configuration-changes.md) (`/api/v1/previews`) |
+| ScheduleExecutions | [Schedule Executions](../configuration/schedules.md#executions): watching and cancelling runs (`/api/v1/schedule-executions`) |
+| Schedules | [Schedules](../configuration/schedules.md), and running one on demand (`/api/v1/schedules`) |
+| Security | [Roles](../configuration/roles.md) and who holds them (`/api/v1/security`) |
+| ServiceSettings | [Service Settings](../configuration/service-settings.md) (`/api/v1/service-settings`) |
+| Synchronisation | [Connected Systems](../configuration/connected-systems.md), the objects in each Connector Space, [Run Profiles](../configuration/run-profiles.md), [Synchronisation Rules](../configuration/synchronisation-rules.md), [Data Flow](../configuration/data-flow.md) and Pending Exports (`/api/v1/synchronisation`) |
+| System | [Service Health](../configuration/operations.md#service-health) for the Worker and the Scheduler, and resetting an instance (`/api/v1/system`) |
+| UserInfo | The signed-in user (`/api/v1/userinfo`) |
+| WorkerTasks | The worker's task queue, and cancelling a task (`/api/v1/worker-tasks`) |
 
 ## Versioning
 
