@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
 - 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
 - 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
+- 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
 
 ### Fixed
 
@@ -66,6 +67,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An LDAP entry carrying two selected Object Types now imports as the more specific (an Active Directory computer as `computer`, not `user`), whatever order its classes are listed in. Refresh the schema of a Connected System with overlapping Object Types selected. (#2043)
 - 🐛 A deletion a Delta Import reads for an LDAP object JIM holds under another Object Type now retires that object, instead of being ignored until the next Full Import. (#2049)
 - 🐛 An LDAP, SCIM or SQL import that returns the same object twice in one page now rejects both copies as duplicates, as file imports do, instead of importing the first. Neither copy changes an object JIM already holds. (#2063)
+- 🐛 An LDAP export that adds a member already in the group, or removes one already gone, no longer fails, and the rest of that membership change is applied. JIM uses Permissive Modify where the directory offers it, and otherwise applies the change one value at a time.
+- 🐛 Provisioning an enabled Active Directory account whose Synchronisation Rule has an Initial Password no longer fails with `0000052D`: JIM creates the account disabled and enables it once the password is set, so a `userAccountControl` Attribute Flow keeps working. (#2039)
+- 🐛 A Pending Export rebuilt while one of its changes awaits confirmation now keeps that change's export state and attempt count, instead of starting it again as though never sent. (#2039)
 - 🐛 Changing a Run Profile's Safeguards limits or Verification Mode is now recorded in its Connected System's configuration change history; until now these changes left no trace. (#2049)
 - 🐛 When a domain controller refuses the LDAP Connector's sign-in over plain LDAP because it requires LDAP signing (the Windows Server 2025 default), JIM now says to enable LDAPS, instead of only "Strong authentication is required for this operation". (#2042)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)

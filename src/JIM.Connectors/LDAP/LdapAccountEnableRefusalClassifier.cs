@@ -57,7 +57,7 @@ internal static class LdapAccountEnableRefusalClassifier
             "Initial Password, so that JIM creates the account disabled and enables it once the password is set, or create " +
             $"the account disabled ({LdapConnectorConstants.UserAccountControlAttributeName} with ACCOUNTDISABLE, " +
             $"0x{LdapConnectorConstants.UAC_ACCOUNTDISABLE:X}, set). If the Synchronisation Rule already has an Initial " +
-            "Password, look under Operations > Passwords for one that is parked or has expired. " +
+            "Password, look under Operations > Passwords for one that expired or was cancelled before it was set. " +
             $"The directory said: {DirectoryMessage(exception)}",
             ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount);
 
