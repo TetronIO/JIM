@@ -751,7 +751,7 @@ The **Preview Attribute Flow Impact** button, which appears beside the editor's 
 
 The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
 
-Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
+Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the saved configuration leaves the object holding in the target Connected System, including where it writes nothing because the target is already correct, which is exactly the case a domain cutover is.
 
 Three answers are deliberately negative rather than reassuring:
 

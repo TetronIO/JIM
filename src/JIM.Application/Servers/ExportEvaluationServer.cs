@@ -3480,6 +3480,7 @@ public class ExportEvaluationServer
         // from a Metaverse Object.
         PendingExport? queuedPendingExport = null;
         var evaluatedChangeCount = 0;
+        List<PendingExportAttributeValueChange> heldChangeRestatements = [];
         if (effectiveChangeType.HasValue)
         {
             attributeChanges = _syncEngine.ComputeAttributeValueChanges(
@@ -3496,9 +3497,19 @@ public class ExportEvaluationServer
             // A restatement of a held change is no change at all, so the run drops it before merging into the queued
             // Pending Export; when nothing else is left it stages nothing and records no Pending Export (withdrawing in
             // place anything the target no longer needs), so the preview proposes none. Dropped before generated values
-            // are resolved below, as the run drops it before its own resolution.
+            // are resolved below, as the run drops it before its own resolution. What was dropped is kept aside for the
+            // entry (see below).
             if (queuedPendingExport != null)
-                attributeChanges = SyncEngine.WithoutChangesRestatingAHeldChange(attributeChanges, queuedPendingExport.AttributeValueChanges);
+            {
+                var kept = SyncEngine.WithoutChangesRestatingAHeldChange(attributeChanges, queuedPendingExport.AttributeValueChanges);
+                if (kept.Count != attributeChanges.Count)
+                {
+                    var keptSet = kept.ToHashSet();
+                    heldChangeRestatements = [.. attributeChanges.Where(change => !keptSet.Contains(change))];
+                }
+
+                attributeChanges = kept;
+            }
 
             // Unique Value Generation (#242, Phase 2 work package H): a generated export mapping stages a
             // marked, unresolved change (decision 6: the engine performs no I/O). The preview never writes, so
@@ -3527,6 +3538,9 @@ public class ExportEvaluationServer
             AttributeChanges = attributeChanges,
             NoNetChangeSkippedCount = noNetChangeSkipped,
             NoNetChangeSkippedChanges = noNetChangeSkippedChanges,
+            // Read by the configuration change preview alone, for the old side of a held attribute's pair; the outcome
+            // tree, the proposed exports and the withdrawal above never see them, as the run never stages them.
+            HeldChangeRestatements = heldChangeRestatements,
             WithdrawnChanges = withdrawnChanges,
             CurrentTargetValues = effectiveExistingCso == null
                 ? []
