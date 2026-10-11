@@ -43,7 +43,7 @@
         <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
             <div>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
-                <MudChipSet T="SyncRuleMappingSourcesType"
+                <MudChipSet T="AttributeFlowMappingType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedMappingTypes"
                             SelectedValuesChanged="OnMappingTypeFilterChangedAsync">
@@ -1036,7 +1036,7 @@
         return MappingAlreadyContributesToSelectedAttribute() ? contributors > 1 : contributors > 0;
     }
     private SyncRuleMapping? _attributeFlowMapping;
-    private IReadOnlyCollection<SyncRuleMappingSourcesType> _selectedMappingTypes = new List<SyncRuleMappingSourcesType>();
+    private IReadOnlyCollection<AttributeFlowMappingType> _selectedMappingTypes = new List<AttributeFlowMappingType>();
     private IReadOnlyCollection<AttributeDataType> _selectedDataTypes = new List<AttributeDataType>();
     private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
     private SyncRuleMappingSource? _attributeFlowMappingSource;
@@ -2130,7 +2130,7 @@
 
     private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
     {
-        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(mapping.GetSourceType()))
+        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(AttributeFlowMappingTypes.Of(mapping, SyncRule.Direction)))
             return false;
 
         AttributeDataType? dataType = SyncRule.Direction == SyncRuleDirection.Import
@@ -2173,12 +2173,16 @@
         return mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
     }
 
-    private IEnumerable<KeyValuePair<SyncRuleMappingSourcesType, int>> GetAvailableMappingTypes()
+    /// <summary>
+    /// The Mapping Type filter's chips: each category the rule's flows fall into, with its count, Derived Attribute Flows
+    /// counted apart from ordinary Expressions (#2014), in <see cref="AttributeFlowMappingType"/>'s declared order.
+    /// </summary>
+    private IEnumerable<KeyValuePair<AttributeFlowMappingType, int>> GetAvailableMappingTypes()
     {
         return SyncRule.AttributeFlowRules
-            .GroupBy(m => m.GetSourceType())
-            .Select(g => new KeyValuePair<SyncRuleMappingSourcesType, int>(g.Key, g.Count()))
-            .OrderBy(x => x.Key.ToString());
+            .GroupBy(m => AttributeFlowMappingTypes.Of(m, SyncRule.Direction))
+            .Select(g => new KeyValuePair<AttributeFlowMappingType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
     }
 
     private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableFlowDataTypes()
@@ -2205,7 +2209,7 @@
             .OrderBy(x => x.Key);
     }
 
-    private async Task OnMappingTypeFilterChangedAsync(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
+    private async Task OnMappingTypeFilterChangedAsync(IReadOnlyCollection<AttributeFlowMappingType> selected)
     {
         _selectedMappingTypes = selected;
         await RefreshFlowGridAsync();

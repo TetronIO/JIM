@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.TestSupport;
+using JIM.Web.Models;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components.Web;
@@ -337,6 +338,45 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
         provider.Find("[data-testid='jim-dependent-derived-flows-cancel']").Click();
         provider.WaitForState(() => provider.FindAll("[data-testid='jim-dependent-derived-flows-confirm']").Count == 0);
         Assert.That(UpdateButton(provider).Instance.Disabled, Is.False, "the edit dialog stays open for another go");
+    }
+
+    // ─── Generated Value Forms (#2014, mock screen 3): the Derived Mapping Type filter ───
+
+    [Test]
+    public void Table_MappingTypeFilter_OffersDerivedApartFromOrdinaryExpressions()
+    {
+        Render<MudPopoverProvider>();
+        var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, BuildRule()));
+
+        var chips = tab.FindComponent<MudChipSet<AttributeFlowMappingType>>().FindComponents<MudChip<AttributeFlowMappingType>>()
+            .ToDictionary(c => c.Instance.Value, c => c.Markup);
+
+        // Account Name reads cs[...] only; Email and User Principal Name read the Metaverse.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chips.Keys, Is.EqualTo(new[] { AttributeFlowMappingType.ExpressionMapping, AttributeFlowMappingType.Derived }));
+            Assert.That(chips[AttributeFlowMappingType.ExpressionMapping], Does.Contain("(1)"));
+            Assert.That(chips[AttributeFlowMappingType.Derived], Does.Contain("(2)"));
+        }
+    }
+
+    [Test]
+    public async Task Table_DerivedAndGeneratedSelected_ListsBothKindsAndNothingElseAsync()
+    {
+        var rule = BuildRule();
+        rule.AttributeFlowRules[0].Generation = new SyncRuleMappingGeneration { Id = 90, TokenKind = GeneratedValueTokenKind.OnlyIfTaken };
+        AddExpression(rule, 4, Department, "Upper(cs[\"firstName\"])");
+        Render<MudPopoverProvider>();
+        var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, rule));
+
+        var chipSet = tab.FindComponent<MudChipSet<AttributeFlowMappingType>>();
+        await tab.InvokeAsync(() => chipSet.Instance.SelectedValuesChanged.InvokeAsync(
+            [AttributeFlowMappingType.Derived, AttributeFlowMappingType.GeneratedMapping]));
+        var grid = tab.FindComponent<VirtualisedDataGrid<SyncRuleMapping>>().Instance;
+        var window = await grid.LoadWindow(new VirtualisedWindowRequest(0, 50, null, "target", false, true), CancellationToken.None);
+
+        Assert.That(window.Items.Select(m => m.Id), Is.EquivalentTo(new[] { 1, 2, 3 }),
+            "the generated Account Name and the derived Email and User Principal Name; not the ordinary Department expression");
     }
 
     // ─── Generated Value Forms (#2014, mock screen 1): the "Built from generated value" block ───
