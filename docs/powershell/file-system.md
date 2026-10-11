@@ -40,7 +40,7 @@ Get-JIMFileSystemItem
 ```
 
 ```powershell title="List the contents of a directory"
-Get-JIMFileSystemItem -Path "/data/imports"
+Get-JIMFileSystemItem -Path "/connector-files/imports"
 ```
 
 ```powershell title="Get the allowed root paths explicitly"
@@ -72,7 +72,7 @@ Boolean. `$true` if the path is within an allowed root, `$false` otherwise.
 ### Examples
 
 ```powershell title="Validate a path before configuring a connector"
-Test-JIMFileSystemPath -Path "/data/imports/users.csv"
+Test-JIMFileSystemPath -Path "/connector-files/imports/users.csv"
 ```
 
 ---

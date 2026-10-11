@@ -4413,6 +4413,7 @@ public class SynchronisationController(
         AttachDerivedFlowInfo(dtos, await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
         await AttachRetiredValueCountsAsync(dtos);
         await AttachGeneratedValueParticipantsAsync(dtos, mappings, syncRule.ConnectedSystemId);
+        await AttachGeneratedValueBuiltValuesAsync(dtos, mappings, syncRule);
         return Ok(dtos);
     }
 
@@ -4442,6 +4443,7 @@ public class SynchronisationController(
         AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
         await AttachRetiredValueCountsAsync([dto]);
         await AttachGeneratedValueParticipantsAsync([dto], [mapping], syncRule.ConnectedSystemId);
+        await AttachGeneratedValueBuiltValuesAsync([dto], [mapping], syncRule);
         return Ok(dto);
     }
 
@@ -4457,6 +4459,24 @@ public class SynchronisationController(
         var participants = await _application.ConnectedSystems.GetGeneratedValueParticipantsAsync(mappings, hostConnectedSystemId);
         foreach (var dto in dtos.Where(d => d.Generation != null))
             dto.Generation!.Participants = (participants.GetValueOrDefault(dto.Id) ?? []).Select(GeneratedValueParticipantDto.FromModel).ToList();
+    }
+
+    /// <summary>
+    /// Fills each Expression mapping's <see cref="SyncRuleMappingDto.BuiltFromGeneratedValue"/> and each import-mode
+    /// generated mapping's <see cref="SyncRuleMappingGenerationDto.BuiltValues"/> (Generated Value Forms, #2023).
+    /// </summary>
+    private async Task AttachGeneratedValueBuiltValuesAsync(IReadOnlyList<SyncRuleMappingDto> dtos, IReadOnlyCollection<SyncRuleMapping> mappings, SyncRule syncRule)
+    {
+        var builtFrom = await _application.ConnectedSystems.GetBuiltFromGeneratedValuesAsync(syncRule, mappings);
+        foreach (var dto in dtos)
+            dto.BuiltFromGeneratedValue = builtFrom.TryGetValue(dto.Id, out var described) ? GeneratedValueBuiltValueDto.FromModel(described) : null;
+
+        if (dtos.All(d => d.Generation == null))
+            return;
+
+        var builtValues = await _application.ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(syncRule, mappings);
+        foreach (var dto in dtos.Where(d => d.Generation != null && builtValues.ContainsKey(d.Id)))
+            dto.Generation!.BuiltValues = builtValues[dto.Id].Select(GeneratedValueBuiltValueDto.FromModel).ToList();
     }
 
     /// <summary>
@@ -4690,6 +4710,11 @@ public class SynchronisationController(
         if (request.Enabled.HasValue)
             mapping.Enabled = request.Enabled.Value;
 
+        // Keep unique (#2023) defaults to true on the entity; the application layer refuses it switched off on a
+        // mapping it cannot apply to.
+        if (request.KeepUnique.HasValue)
+            mapping.KeepUnique = request.KeepUnique.Value;
+
         // "Generated Value" (Unique Value Generation, #242, Phase 3): the presence of this row is what makes
         // GetSourceType() return GeneratedMapping. Allowed on both import and export rules; server-side
         // validation (SyncRuleMappingGenerationValidator, run inside CreateSyncRuleMappingAsync below) decides
@@ -4719,6 +4744,7 @@ public class SynchronisationController(
             // Likewise the save's non-blocking warnings (#1750), stamped on the saved instance, not the reloaded one.
             dto.Warnings = mapping.SaveWarnings.ToList();
             await AttachGeneratedValueParticipantsAsync([dto], [created!], syncRule.ConnectedSystemId);
+            await AttachGeneratedValueBuiltValuesAsync([dto], [created!], syncRule);
             // Only a mapping reading mv["..."] can be a derived flow, so nothing is looked up for any other.
             if (DerivedFlowGraph.ReadsMetaverse(mapping))
                 AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
@@ -4815,6 +4841,7 @@ public class SynchronisationController(
             _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
             var dto = SyncRuleMappingDto.FromEntity(updated);
             await AttachGeneratedValueParticipantsAsync([dto], [updated], syncRule.ConnectedSystemId);
+            await AttachGeneratedValueBuiltValuesAsync([dto], [updated], syncRule);
             if (DerivedFlowGraph.ReadsMetaverse(updated))
                 AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
             return Ok(dto);
@@ -5757,7 +5784,7 @@ public class SynchronisationController(
             MetaverseObjectType = metaverseObjectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
             TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
         // Add sources
@@ -6092,7 +6119,7 @@ public class SynchronisationController(
             SyncRule = syncRule,
             TargetMetaverseAttributeId = targetMvAttr.Id,
             TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
         // Add sources - for advanced mode, sources reference CS attributes from the Synchronisation Rule's object type

@@ -74,7 +74,7 @@ Objects that fall out of scope are **disconnected** from the rule. This is impor
 
 An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activities.md#execution-items).
 
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Criteria expressions use the JIM [expression language](../concepts/expressions.md).
+Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter; criteria do not use the [expression language](../concepts/expressions.md).
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
@@ -143,7 +143,7 @@ JIM evaluates the matching rules in order and uses the first match found. You ca
 2. If no match, try `mail` (secondary)
 3. If no match, try `firstName` + `lastName` (least reliable)
 
-Attribute comparisons in a matching rule are case-sensitive by default. Where systems disagree on casing, you can make an individual rule case-insensitive; see [Case Sensitivity](../concepts/case-sensitivity.md).
+A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on **Case sensitive** only where a system treats them as different objects; see [Case Sensitivity](../concepts/case-sensitivity.md#object-matching-rules).
 
 ### Matching outcomes
 
@@ -344,7 +344,7 @@ The third Password Settings option sets one password you choose on every Connect
 
 Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each object's share of the password; any other choice leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
 
-This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
+Apart from password changes queued for delivery (see [how long any of it is kept](../concepts/passwords.md#how-long-any-of-it-is-kept)), this is the only Connected System Object password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
 
 What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
 
@@ -499,7 +499,7 @@ When **Treat whitespace as no value** is switched off and a whitespace-only valu
 
 ### Initial Export Only (outbound)
 
-Some attributes should be set once when JIM creates an object, then left alone: an initial password or API token, a one-time setup value, or any attribute the target system should own after provisioning. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
+Some attributes should be set once when JIM creates an object, then left alone: a one-time setup value, or any attribute the target system should own after provisioning. An initial password is not one of them: JIM sets it through the rule's [Initial Password](#initial-password) tab, never through Attribute Flow. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
 
 - The attribute flows only when JIM **provisions** the object into the Connected System (the create export), and JIM retries until the initial export is confirmed.
 - Once the object is provisioned, the attribute becomes **unmanaged** on that Connected System Object: later Metaverse changes are not exported for it, and Drift Correction ([enforce state](#export-outbound)) leaves it alone, so the value can be changed freely in the Connected System.
@@ -571,7 +571,7 @@ JIM's own records of a Connected System hold only the accounts JIM imports. An a
 - **A Connector that cannot probe**<br /> JIM checks its own records of that Connected System only.
 - **An attribute that only needs to be unique within its container**<br /> The Distinguished Name and the attributes that name entries (such as `cn`). Two entries in different OUs may share them, so a directory-wide search would report clashes that are not clashes.
 - **A value that is not text**<br /> JIM checks its own records only.
-- **A value exported through an expression, or combined with other sources**<br /> For example `mv["Account Name"] + "@corp.example"`. What is written there is not the generated value, so JIM checks it neither against its own records nor by probe. If it is already in use, the target rejects the export and JIM reports an ordinary export error.
+- **A value exported through an expression, or combined with other sources**<br /> For example `mv["Account Name"] + "@corp.example"`. What is written there is not the generated value, so JIM checks it neither against its own records nor by probe. If it is already in use, the target rejects the export. When the value is built from exactly one generated value, JIM then corrects that generated value (see [Values built from a generated value](#values-built-from-a-generated-value)); otherwise it reports an ordinary export error.
 
 **The control value.** Each probe also asks for one value JIM already holds for the attribute in that system. A target that hides the attribute from JIM's account answers "not found" for everything, which would look like a free value; the control value coming back is how JIM knows the answer can be trusted, and its absence is reported as a warning rather than believed. On a first load, before JIM holds any value for the attribute, there is no control value to ask for: the probe still runs, a value it finds is trusted (the value is in use), and a value it does not find is accepted without a warning, because an empty target is normal at that point.
 
@@ -588,8 +588,8 @@ Checking JIM's records and probing make a clash rare, not impossible: an account
 JIM corrects the value when all of these hold:
 
 - The target's Connector recognises "already in use" refusals and says which value was refused. The LDAP, SCIM and SQL Connectors do; see each Connector's page.
-- The refusal is about one generated value. The target named an attribute that carries the generated value, or one built from exactly one generated value (a User Principal Name made from the Account Name, say, with [Deriving Metaverse attributes](#deriving-metaverse-attributes)), or it named nothing and the export carries exactly one generated value. JIM never guesses: a refusal it cannot tie to one generated value is an ordinary export error.
-- No other target has already accepted the value for that person (see below).
+- The refusal is about one generated value. The target named an attribute that carries the generated value, or one built from exactly one generated value whose **Keep unique** switch is on (a User Principal Name made from the Account Name, say, with [Deriving Metaverse attributes](#deriving-metaverse-attributes); see [Values built from a generated value](#values-built-from-a-generated-value)), or it named nothing and the export carries exactly one generated value. JIM never guesses: a refusal it cannot tie to one generated value is an ordinary export error.
+- No other target has already accepted the value, or a value built from it, for that person (see below).
 
 **What JIM does.** It draws the next value exactly as it would have at the start (`joe.bloggs` was refused, so `joe.bloggs1`, checked against everything JIM knows), saves it on the Metaverse Object, and leaves the refused export queued. The next synchronisation of any Connected System carries the corrected value to every target's queued export, the refusing one included, and each system's synchronisation recalculates values built from it, such as an email address or User Principal Name. The export run after that sends the corrected value. JIM does not retry inside the export run that saw the refusal, because the export would still carry the values built from the old one. A value generated on an export Synchronisation Rule is corrected on the queued export itself, since it belongs to that one Connected System Object.
 
@@ -597,11 +597,11 @@ The refused value is [retired](#retired-values) when the flow never reuses value
 
 **When JIM does not correct it.** Renaming an account that is already in use somewhere is not a decision JIM makes on its own. The value **needs a decision** when:
 
-- another target has already accepted it for this person (its account in that system holds the value), so correcting it would rename that account too;
+- another target has already accepted it for this person (its account in that system holds the value, or a value built from it such as the Email built from the Account Name), so correcting it would rename that account or change that address too;
 - JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
 - JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
 
-The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, releases the parked export for the next export run to try again under the new settings.
+The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, or switching **Keep unique** on or off for a value built from it, releases the parked export for the next export run to try again under the new settings.
 
 **Acting on a held value.** Three answers are open to you:
 
@@ -628,7 +628,27 @@ Both actions take effect at once (they release the export for the next export ru
 
 **Which systems can report a collision.** A generated mapping's participants (the "Checked for availability in" list, `participants[].reportsCollisions` on the REST API, `Generation.Participants` in PowerShell) say for each Connected System whether its Connector reports a value as already in use. Collision Remediation acts only on refusals from those that do. Switch it off per Attribute Flow with the **Collision Remediation** switch below the panel, `collisionRemediation` on the mapping's `generation` object or `-CollisionRemediation $false` in PowerShell, and a refusal is reported as an ordinary export error instead. When none of the systems the value is exported to can report a collision, the portal's switch is unavailable and says so.
 
-**When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, or an Attribute Flow with Collision Remediation switched off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
+**When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, an Attribute Flow with Collision Remediation switched off, or a refused value built from a generated value with its **Keep unique** switch off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
+
+#### Values built from a generated value
+
+A generated value rarely travels alone. With [Deriving Metaverse attributes](#deriving-metaverse-attributes), an Email can be built from the generated Account Name and a User Principal Name from that Email, and an export expression such as `mv["Account Name"] + "@corp.example"` builds a value on its way to one target. Each of these is a **value built from the generated value**: it changes whenever the generated value does.
+
+JIM works out which values are built from which generated value from the Synchronisation Rules alone, following derived flows step by step, so a User Principal Name read from Email is built from Account Name *through* Email. There is nothing to declare. A value built from more than one generated value (`mv["Account Name"] + "-" + mv["Badge Number"]`, both generated) is never corrected, because JIM cannot tell which of the two to change.
+
+**Keep unique with the generated value.** Each Attribute Flow that builds such a value has a **Keep unique with Account Name** switch (named after its generated value), on by default. With it on, a target's refusal of that value as already in use is [corrected](#when-a-target-rejects-a-value) by correcting the generated value: `joe.bloggs@corp.example` is refused, so Account Name becomes `joe.bloggs1` and the Email follows. Switch it off for a value that need not be unique, or whose clashes you would rather resolve yourself; a refusal of it is then an ordinary **Value Already in Use** export error, left for you to resolve. The switch governs that value alone: with Email switched off, a refused User Principal Name built through Email still corrects Account Name. The generated Attribute Flow's own **Collision Remediation** switch comes first: while it is off, nothing built from the generated value is corrected, whatever its **Keep unique** switch says.
+
+Switching it off never stops the value following the generated value: when Account Name is corrected because of another refusal, the Email still changes with it. Changing the switch changes no value and exports nothing. It releases any value [held for a decision](#when-a-target-rejects-a-value) on the generated value the flow is built from, so the next export run tries again under the new setting, and it is recorded in the Synchronisation Rule's change history.
+
+The switch belongs to Expression mappings, import and export. A direct mapping copies a value rather than building one, and a generated mapping is the generated value itself, so JIM refuses to switch it off on either. On an expression that reads no generated value it is kept but has no effect.
+
+**Accounts already using it.** Before correcting a generated value, JIM checks that no other target has already accepted it for that person, and that check covers the values built from it too, whatever their switch: if a mail system already holds the Email built from `joe.bloggs`, correcting Account Name would change that mailbox's address, so the value [needs a decision](#when-a-target-rejects-a-value) instead. The values that count are those written to the other target unchanged by a direct export Attribute Flow; a value written there by an export expression does not count yet.
+
+**Where you see them.**
+
+- **Portal**<br /> An Attribute Flow that builds its value from a generated value shows a **Built from generated value** block in its dialog, naming the generated value, with the **Keep unique with Account Name** switch and what it does. While the generated flow's own Collision Remediation is off, the block is marked **Not in effect**; you can still change the switch, and it takes effect when Collision Remediation is turned back on. A value built from more than one generated value shows the block without a switch. The generated Attribute Flow's dialog lists every value built from it under **Values built from Account Name**, below **Checked for availability in**: the value, its Synchronisation Rule and how it is built, where it is written unchanged, and what happens if a target refuses it. Change a value's switch on its own Attribute Flow; the list only reports it, because the value may be on another Synchronisation Rule.
+- **REST API**<br /> A mapping carries `keepUnique`, and a mapping that builds a value from a generated value also carries `builtFromGeneratedValue`: the generated attribute, the attributes it is built through (`via`), its `kind` (`Form` when it is built on the generated value's own Synchronisation Rule, `BuiltOnAnotherRule`, or `BuiltFromSeveralGeneratedValues`), the generated flow's own `collisionRemediation` switch, and every Connected System attribute it is written to unchanged (`exportedTo`). A generated mapping's `generation` object lists every value built from it as `builtValues`. Create and update requests take `keepUnique`.
+- **PowerShell**<br /> `-KeepUnique` on `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` for Expression mappings (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)); `Get-JIMSyncRuleMapping` returns `KeepUnique`, `BuiltFromGeneratedValue` and `Generation.BuiltValues`.
 
 #### Retired values
 
@@ -709,7 +729,7 @@ An expression that reads its own target (`mv["Email"]` in the flow to Email) is 
 - **Previews**<br /> An [Attribute Flow change preview](#previewing-an-attribute-flow-change) lists the same derived flows as warnings before you save, and names derived flows on other Connected Systems' rules that read what the change alters. [Sync Preview](sync-preview.md) shows derived values as ordinary Attribute Flow changes.
 - **Portal**<br /> Before it removes an Attribute Flow, applies an edit that disables or retargets one or changes its expression, or saves a Synchronisation Rule switched off or deletes one, the portal asks first, listing each derived flow that would be left without an input, its Synchronisation Rule and what it reads (`Email (via Account Name)` for one reached through another derived attribute). With nothing affected, you see the usual confirmation.
 
-**In the portal.** The Attribute Flow tab marks each derived flow with a **Derived · step N** chip beside its target; hover over it to see what it reads and when it runs. In the Attribute Flow dialog:
+**In the portal.** The Attribute Flow tab marks each derived flow with a **Derived · step N** chip beside its target; hover over it to see what it reads and when it runs. In the table view, the **Mapping Type** filter lists derived flows under **Derived**, apart from ordinary Expressions: pick it alone to see only derived flows, or with **Generated Mapping** to see the generated values and the flows derived from them together. In the Attribute Flow dialog:
 
 - **Insert attribute**<br /> Under the Expression (and a generated value's base expression), this menu puts `mv["..."]` or `cs["..."]` at the cursor. Type in its filter to narrow the list. Metaverse attributes that cannot be read are listed but greyed out, saying why: a Reference attribute (not supported yet) and the flow's own target. On an export Synchronisation Rule the menu offers every Metaverse attribute, whether or not Metaverse-Derived Attribute Flows are enabled, and no Connected System attributes, because an export expression reads the Metaverse Object alone.
 - **The Derived Attribute Flow panel**<br /> While the expression reads the Metaverse, a panel states what it reads, its step and the chain of steps leading to it, updating as you type.
@@ -798,7 +818,7 @@ A complete import rule for an HR system might look like:
 | **Name** | HR Import - Employees |
 | **Direction** | Import |
 | **Connected System** | HR Database |
-| **Scoping** | `Eq(cs["employeeType"], "FTE")` |
+| **Scoping** | `cs["employeeType"] = "FTE"` |
 | **Object Matching Rule 1** | Match `cs["employeeId"]` to `mv["Employee ID"]` |
 | **Projection** | Create MVO of type `Person` |
 | **Attribute mappings** | `cs["givenName"]` to `mv["First Name"]` (direct) |
@@ -849,7 +869,7 @@ Removing a single **Attribute Flow mapping** from the editor offers the same cho
 
 The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](#deriving-metaverse-attributes) the deletion leaves with a missing input. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
 
-For the full recall semantics (re-election, No Contributor outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
+For the full recall semantics (re-election, Value cleared outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
 
 ## Manage Synchronisation Rules
 
@@ -865,4 +885,4 @@ For the full recall semantics (re-election, No Contributor outcomes, and how dis
 - [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
 - [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
 - [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
-- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, how to make them case-insensitive, and why generated values are unique without regard to case
+- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- the four questions JIM asks when comparing text, and which features ask which

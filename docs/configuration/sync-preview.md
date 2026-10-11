@@ -34,7 +34,7 @@ The preview shows the exports synchronising this object would stage, which is na
 
 - **Queued changes the target no longer needs**<br /> Where an update is already queued for a target, but the target holds the value the Metaverse Object would now have (a value changed and changed back before an export ran, for example), synchronising withdraws the queued change instead of exporting it. The preview shows this as **Changes queued for its target Connected System would be withdrawn**, with the queued values, where the synchronisation records **Pending Export changes withdrawn**. The account keeps the value it already holds.
 
-The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips an object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
+The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips a joined object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
 
 ## The destructive cascade
 
@@ -82,7 +82,7 @@ Both require the Administrator role. Full endpoint detail is in the [interactive
 ## See also
 
 - [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) -- previewing a proposed configuration *edit*, rather than what today's stored configuration would do
-- [Sync Pipeline](../concepts/synchronisation-pipeline.md) -- what import, sync and export actually do when they run for real
+- [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- what import, sync and export actually do when they run for real
 - [Deletion behaviour](metaverse.md#deletion-behaviour) -- Deletion Rules, grace periods, and provisioned targets as connectors
 - [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) -- what happens to a downstream target object when its Metaverse Object is deleted
 - [Preview cmdlets](../powershell/previews.md) -- `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview`

@@ -13,8 +13,8 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Real-PostgreSQL cover for the Synchronisation Rule mapping properties that carry a store-level default
-/// (<see cref="SyncRuleMapping.InboundValueProcessing"/>, <see cref="SyncRuleMapping.Enabled"/> and
-/// <see cref="SyncRuleMapping.Priority"/>).
+/// (<see cref="SyncRuleMapping.InboundValueProcessing"/>, <see cref="SyncRuleMapping.Enabled"/>,
+/// <see cref="SyncRuleMapping.KeepUnique"/> and <see cref="SyncRuleMapping.Priority"/>).
 /// <para>
 /// EF Core omits a column from an INSERT when the property holds its sentinel (the CLR default unless configured
 /// otherwise), so the database default is written in its place. With a store default that differs from the CLR
@@ -121,6 +121,22 @@ public class SyncRuleMappingStoreDefaultsDatabaseTests
         var stored = await InsertAndReloadAsync(_ => { });
 
         Assert.That(stored.Enabled, Is.True);
+    }
+
+    [Test]
+    public async Task Insert_KeepUniqueFalse_IsStoredAsOffAsync()
+    {
+        var stored = await InsertAndReloadAsync(m => m.KeepUnique = false);
+
+        Assert.That(stored.KeepUnique, Is.False, "a value created with Keep unique off must not be stored with it on");
+    }
+
+    [Test]
+    public async Task Insert_KeepUniqueDefault_IsStoredAsOnAsync()
+    {
+        var stored = await InsertAndReloadAsync(_ => { });
+
+        Assert.That(stored.KeepUnique, Is.True);
     }
 
     [Test]

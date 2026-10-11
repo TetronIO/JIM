@@ -95,8 +95,15 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     {
         _logger.LogInformation("Creating new schedule: {ScheduleName}", LogSanitiser.Sanitise(request.Name));
 
+        var (cronExpression, patternError) = ResolveCronExpression(request.TriggerType, request.CronExpression, request.PatternType,
+            request.DaysOfWeek, request.RunTimes, request.IntervalValue, request.IntervalUnit, request.IntervalWindowStart, request.IntervalWindowEnd);
+        if (patternError != null)
+        {
+            return BadRequest(new ApiErrorResponse { Message = patternError });
+        }
+
         // Validate request
-        var validationError = ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);
+        var validationError = ValidateScheduleRequest(request.TriggerType, cronExpression, request.Steps);
         if (validationError != null)
         {
             return BadRequest(new ApiErrorResponse { Message = validationError });
@@ -112,7 +119,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             Name = request.Name,
             Description = request.Description,
             TriggerType = request.TriggerType,
-            CronExpression = request.CronExpression,
+            CronExpression = cronExpression,
+            PatternType = request.PatternType,
+            DaysOfWeek = request.DaysOfWeek,
+            RunTimes = request.RunTimes,
+            IntervalValue = request.IntervalValue,
+            IntervalUnit = request.IntervalUnit,
+            IntervalWindowStart = request.IntervalWindowStart,
+            IntervalWindowEnd = request.IntervalWindowEnd,
             IsEnabled = request.IsEnabled,
             OnStepFailure = request.OnStepFailure ?? ScheduleFailureBehaviour.Stop,
             Created = DateTime.UtcNow,
@@ -194,11 +208,18 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return BadRequest(new ApiErrorResponse { Message = $"The steps of the built-in schedule '{existingSchedule.Name}' cannot be changed." });
         }
 
+        var (cronExpression, patternError) = ResolveCronExpression(request.TriggerType, request.CronExpression, request.PatternType,
+            request.DaysOfWeek, request.RunTimes, request.IntervalValue, request.IntervalUnit, request.IntervalWindowStart, request.IntervalWindowEnd);
+        if (patternError != null)
+        {
+            return BadRequest(new ApiErrorResponse { Message = patternError });
+        }
+
         // Validate request. For a built-in schedule the steps are JIM-owned and immutable (guarded above), so
         // only the trigger is validated; the step validator does not recognise built-in step types.
         var validationError = existingSchedule.BuiltIn
-            ? ValidateTrigger(request.TriggerType, request.CronExpression)
-            : ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);
+            ? ValidateTrigger(request.TriggerType, cronExpression)
+            : ValidateScheduleRequest(request.TriggerType, cronExpression, request.Steps);
         if (validationError != null)
         {
             return BadRequest(new ApiErrorResponse { Message = validationError });
@@ -211,7 +232,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         existingSchedule.Name = request.Name;
         existingSchedule.Description = request.Description;
         existingSchedule.TriggerType = request.TriggerType;
-        existingSchedule.CronExpression = request.CronExpression;
+        existingSchedule.CronExpression = cronExpression;
+        existingSchedule.PatternType = request.PatternType;
+        existingSchedule.DaysOfWeek = request.DaysOfWeek;
+        existingSchedule.RunTimes = request.RunTimes;
+        existingSchedule.IntervalValue = request.IntervalValue;
+        existingSchedule.IntervalUnit = request.IntervalUnit;
+        existingSchedule.IntervalWindowStart = request.IntervalWindowStart;
+        existingSchedule.IntervalWindowEnd = request.IntervalWindowEnd;
         existingSchedule.IsEnabled = request.IsEnabled;
         if (request.OnStepFailure.HasValue)
         {
@@ -491,10 +519,37 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     {
         if (triggerType == ScheduleTriggerType.Cron && string.IsNullOrWhiteSpace(cronExpression))
         {
-            return "Cron expression is required for scheduled triggers";
+            return "Cron expression is required for scheduled triggers: give runTimes for a SpecificTimes pattern, " +
+                   "intervalValue and intervalUnit for an Interval pattern, or cronExpression for a Custom pattern";
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The cron expression a request's trigger stands for. A guided pattern (SpecificTimes or Interval) that carries its
+    /// timing is built into an expression here, exactly as the portal's Schedule editor builds it, and any expression sent
+    /// alongside is ignored: Set-JIMSchedule sends the stored Schedule back with only the changed fields replaced, so the
+    /// stored expression travels beside new run times, and the pattern is what the caller changed. A Custom pattern, or a
+    /// guided one sent without its timing (how the API was used before it read patterns), keeps the expression sent.
+    /// </summary>
+    private static (string? CronExpression, string? Error) ResolveCronExpression(
+        ScheduleTriggerType triggerType, string? cronExpression, SchedulePatternType patternType, string? daysOfWeek,
+        string? runTimes, int? intervalValue, ScheduleIntervalUnit? intervalUnit, string? intervalWindowStart, string? intervalWindowEnd)
+    {
+        if (triggerType != ScheduleTriggerType.Cron || patternType == SchedulePatternType.Custom)
+            return (cronExpression, null);
+
+        var carriesTiming = patternType == SchedulePatternType.SpecificTimes
+            ? !string.IsNullOrWhiteSpace(runTimes)
+            : intervalValue.HasValue || intervalUnit.HasValue;
+        if (!carriesTiming)
+            return (cronExpression, null);
+
+        return ScheduleCronExpression.TryFromPattern(patternType, daysOfWeek, runTimes, intervalValue, intervalUnit,
+                intervalWindowStart, intervalWindowEnd, out var built, out var error)
+            ? (built, null)
+            : (null, error);
     }
 
     /// <summary>

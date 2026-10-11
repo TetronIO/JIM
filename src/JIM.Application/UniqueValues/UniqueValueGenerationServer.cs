@@ -995,12 +995,13 @@ public sealed class UniqueValueGenerationServer
     private readonly record struct ProbeAnswer(UniquenessProbeOutcome Outcome, bool IsProbed, string ConnectedSystemName);
 
     /// <summary>
-    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each of a request's
-    /// <see cref="GenerationRequest.ProbeTargets"/>, in order, whether the target system already holds the candidate.
-    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System;
+    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each Connected System among a request's
+    /// <see cref="GenerationRequest.ProbeTargets"/>, in the order its first target was given, whether it already holds
+    /// the candidate in any of the request's attributes there, all of them in one call (Generated Value Forms, #2023).
+    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System, and no later system is asked;
     /// <see cref="UniquenessProbeOutcome.NotFound"/> and <see cref="UniquenessProbeOutcome.CouldNotDetermine"/> accept
-    /// it, the latter noted against the request so the session hears of it once the value is issued. A candidate in
-    /// <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
+    /// it, the latter noted against the request, once per system, so the session hears of it once the value is issued.
+    /// A candidate in <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
     /// </summary>
     private static async Task<List<int>> FilterProbeGateAsync(
         List<int> active,
@@ -1021,18 +1022,19 @@ public sealed class UniqueValueGenerationServer
             List<int>? undeterminedHere = null;
 
             var targets = IsProbeExempt(request, candidate) ? [] : request.ProbeTargets;
-            foreach (var target in targets)
+            foreach (var systemTargets in targets.GroupBy(t => t.ConnectedSystemId))
             {
                 // attemptsMade has already been advanced past this round's draw.
-                var answer = await GetProbeAnswerAsync(i, request, target, candidate, attemptsMade[i] - 1, session, answers);
-                if (answer.Outcome == UniquenessProbeOutcome.Found)
+                var answersHere = await GetProbeAnswersAsync(i, request, [.. systemTargets], candidate, attemptsMade[i] - 1, session, answers);
+                var found = answersHere.FindIndex(a => a.Outcome == UniquenessProbeOutcome.Found);
+                if (found >= 0)
                 {
-                    foundIn = answer.ConnectedSystemName;
+                    foundIn = answersHere[found].ConnectedSystemName;
                     break;
                 }
 
-                if (answer.Outcome == UniquenessProbeOutcome.CouldNotDetermine && answer.IsProbed)
-                    (undeterminedHere ??= []).Add(target.ConnectedSystemId);
+                if (answersHere.Exists(a => a.Outcome == UniquenessProbeOutcome.CouldNotDetermine && a.IsProbed))
+                    (undeterminedHere ??= []).Add(systemTargets.Key);
             }
 
             if (foundIn != null)
@@ -1051,37 +1053,53 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// The answer for one candidate against one target, from the request's cached window when an earlier round's
-    /// batch already covered it, otherwise from a new batch (<see cref="BuildProbeBatch"/>), whose every answer is
-    /// cached for later rounds.
+    /// The answers for one candidate against each of one Connected System's <paramref name="targets"/>, in their order:
+    /// from the request's cached window where an earlier round's batch already covered it, otherwise from one call to
+    /// the session for every target it did not (<see cref="BuildProbeBatch"/>), whose every answer is cached for later
+    /// rounds.
     /// </summary>
-    private static async Task<ProbeAnswer> GetProbeAnswerAsync(
+    private static async Task<List<ProbeAnswer>> GetProbeAnswersAsync(
         int requestIndex,
         GenerationRequest request,
-        UniquenessProbeTarget target,
+        IReadOnlyList<UniquenessProbeTarget> targets,
         string candidate,
         int attemptIndex,
         IUniquenessProbeSession session,
         Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers)
     {
-        if (!answers.TryGetValue((requestIndex, target), out var known))
-            answers[(requestIndex, target)] = known = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
-
-        if (known.TryGetValue(candidate, out var cached))
-            return cached;
-
-        var batch = BuildProbeBatch(request, candidate, attemptIndex);
-        var result = await session.ProbeAsync(target, batch);
-
-        // A session answers one outcome per candidate. Should one ever not, nothing it said can be matched to a
-        // candidate, so the whole batch is treated as unanswered rather than guessed at.
-        for (var k = 0; k < batch.Count; k++)
+        var known = new List<Dictionary<string, ProbeAnswer>>(targets.Count);
+        foreach (var target in targets)
         {
-            var outcome = result.Outcomes.Count == batch.Count ? result.Outcomes[k] : UniquenessProbeOutcome.CouldNotDetermine;
-            known[batch[k]] = new ProbeAnswer(outcome, result.IsProbed, result.ConnectedSystemName);
+            if (!answers.TryGetValue((requestIndex, target), out var forTarget))
+                answers[(requestIndex, target)] = forTarget = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
+            known.Add(forTarget);
         }
 
-        return known[candidate];
+        var unanswered = Enumerable.Range(0, targets.Count).Where(k => !known[k].ContainsKey(candidate)).ToList();
+        if (unanswered.Count > 0)
+        {
+            // Every attribute is asked about the same window: the values are the same, wherever they would go.
+            var batch = BuildProbeBatch(request, candidate, attemptIndex);
+            var connectedSystemId = targets[0].ConnectedSystemId;
+            var results = await session.ProbeAttributesAsync(connectedSystemId,
+                [.. unanswered.Select(k => new UniquenessProbeBatch(targets[k].ConnectedSystemObjectTypeAttributeId, batch))]);
+
+            // A session answers one result per attribute and one outcome per candidate. Should one ever not, nothing it
+            // said can be matched to a candidate, so the batch is treated as unanswered rather than guessed at.
+            var matched = results.Count == unanswered.Count;
+            for (var n = 0; n < unanswered.Count; n++)
+            {
+                var result = matched ? results[n] : null;
+                var name = result?.ConnectedSystemName ?? $"Connected System {connectedSystemId}";
+                for (var c = 0; c < batch.Count; c++)
+                {
+                    var outcome = result != null && result.Outcomes.Count == batch.Count ? result.Outcomes[c] : UniquenessProbeOutcome.CouldNotDetermine;
+                    known[unanswered[n]][batch[c]] = new ProbeAnswer(outcome, result?.IsProbed ?? true, name);
+                }
+            }
+        }
+
+        return [.. known.Select(k => k[candidate])];
     }
 
     /// <summary>

@@ -10,7 +10,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
-- `docs/CLAUDE.md` - MkDocs site, diagram embedding, doc style
+- `docs/CLAUDE.md` - MkDocs site mechanics and diagram embedding; the rules for every page (audience, page types, voice, maintenance, rule IDs) are `engineering/DOCUMENTATION_STANDARD.md`
 
 ## Context7 MCP
 
@@ -26,7 +26,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 
 **Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
 - Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
-- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
+- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling; `changelog-lint` builds the site strictly and checks every link on the pull request, and the site deploys on merge to `main`.
 - **Partial:** UI-only Blazor/Razor changes need `dotnet build`. UI tests exist in `test/JIM.Web.Tests/` (NUnit + bUnit) for the causality visualisation; run `dotnet test test/JIM.Web.Tests/` when changing causality components or display logic, and skip `dotnet test` for UI areas with no test coverage.
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
