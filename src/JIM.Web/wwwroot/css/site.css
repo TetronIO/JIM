@@ -6415,7 +6415,8 @@ td.jim-connection-detail-cell {
     grid-template-columns: 4rem minmax(0, 1fr) max-content max-content;
 }
 
-.jim-unresolved-fix-objects {
+/* Qualified with the cell class: .jim-unresolved-fix-cell's padding shorthand comes later in this sheet. */
+.jim-unresolved-fix-cell.jim-unresolved-fix-objects {
     padding-right: 24px;
     text-align: right;
     white-space: nowrap;
