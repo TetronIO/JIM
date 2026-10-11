@@ -58,9 +58,9 @@ internal static class LdapObjectTypeMatcher
     /// directory returns them in the order they were written, which is commonly the reverse, top last.
     /// </summary>
     /// <remarks>
-    /// False when top is listed last, absent, or between the candidates, so the first candidate stands: the rule JIM
-    /// applied before it read the order at all, which an existing deployment's Connected System Objects were staged
-    /// by.
+    /// False when top is listed last, which makes the first candidate the most specific, and also when top is absent
+    /// or between the candidates, where the order says nothing and the first candidate stands. Only Object Types
+    /// whose schema recorded no inheritance reach this; discovery records it for every class it finds.
     /// </remarks>
     private static bool TopIsListedFirst(IReadOnlyList<string> objectClasses, List<ConnectedSystemObjectType> candidates)
     {
