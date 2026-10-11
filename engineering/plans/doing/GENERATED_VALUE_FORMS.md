@@ -40,7 +40,7 @@ Result records live in `src/JIM.Models/Logic/`. One resolver feeds attribution, 
 
 ### Keep unique switch (Phase 1)
 
-`SyncRuleMapping.KeepUnique` (bool, default true), threaded the way `InitialExportOnly` is: `JimDbContext` and a migration defaulting existing mappings to true, snapshot key `keepUnique` with a `ConfigurationChangeClassifier` entry, and `SyncRuleMappingSettingsUpdate` / `ApplySyncRuleMappingSettings`, which refuse it on a mapping not built from exactly one generated value.
+`SyncRuleMapping.KeepUnique` (bool, default true), threaded the way `InitialExportOnly` is: `JimDbContext` and a migration defaulting existing mappings to true, snapshot key `keepUnique` with a `ConfigurationChangeClassifier` entry, and `SyncRuleMappingSettingsUpdate` / `ApplySyncRuleMappingSettings`. Switching it off is refused on a direct or generated mapping; it is accepted on any expression mapping and has no effect until the expression reads exactly one generated value, because whether it does depends on other mappings that may be saved in any order.
 
 Semantics are per value: switching off Email does not stop UPN-via-Email being checked; Email is still evaluated on the way, just not checked or corrected itself. Changing the switch releases any held decision for the generated value it is built from.
 
@@ -95,9 +95,9 @@ Two appended `SyncOutcomeType` members, `GeneratedValueWaiting` and `GeneratedVa
 
 1. Characterisation tests pinning today's attribution; extract the resolver with forward-view tests.
 2. Attribution honours the switch.
-3. Anchoring and the decision server's participating systems widened to every value built from the generated value.
+3. Anchoring and the decision server's participating systems widened to every value built from the generated value. Values written by an export expression are not anchored yet: they are evaluated against the Metaverse Object in Phase 3, which is when anchoring can read them.
 4. Model, migration, change history, settings path, held-decision release; `RequiresPostgres` tests.
-5. REST, PowerShell, portal (UI mock approved first), docs including provisioning scoping advice, changelog.
+5. REST, PowerShell, portal (UI mock approved first), docs, changelog. The provisioning scoping advice (D5) ships with Phase 3, where waiting first appears.
 
 ### Phase 2: One probe search per Connected System and route
 

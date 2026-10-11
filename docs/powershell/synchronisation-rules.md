@@ -424,6 +424,7 @@ Returns one or more mapping objects representing Attribute Flow Rules. Each mapp
 | `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
 | `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
 | `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
+| `Generation.BuiltValues` | `object[]` | Every [value built from](../configuration/synchronisation-rules.md#values-built-from-a-generated-value) this generated value, on any Synchronisation Rule, each shaped as `BuiltFromGeneratedValue` below. Import generated mappings only |
 
 Each entry in `Generation.Participants` has:
 
@@ -439,6 +440,24 @@ Each entry in `Generation.Participants` has:
 | `Check` | `string` | `JimRecordsAndProbe` (JIM's records of the system, and a probe of the system itself), `JimRecordsOnly` or `NotChecked` |
 | `Reason` | `string` | Why the check is less than `JimRecordsAndProbe`: `ConnectorCannotProbe`, `AttributeNotProbed`, `NotTextValue`, `ExportedThroughExpression`, `CombinedWithOtherSources` or `Excluded`; `None` when it is not |
 | `ReportsCollisions` | `bool` | Whether the Connected System's Connector reports a value as already in use, so Collision Remediation can act on a rejection there; elsewhere a collision is an ordinary export error |
+
+`KeepUnique` (`bool`) is on every mapping: the **Keep unique** switch of an Expression mapping whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value), `$true` unless switched off. `BuiltFromGeneratedValue` is present on such a mapping, and is `$null` on every other mapping:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `BuiltFromGeneratedValue.SyncRuleMappingId` | `int` | The Attribute Flow that builds the value |
+| `BuiltFromGeneratedValue.SyncRuleId` | `int` | The Synchronisation Rule holding it |
+| `BuiltFromGeneratedValue.SyncRuleName` | `string` | That Synchronisation Rule's name |
+| `BuiltFromGeneratedValue.GeneratedSyncRuleMappingId` | `int` | The generated Attribute Flow the value is built from |
+| `BuiltFromGeneratedValue.GeneratedAttributeName` | `string` | The generated Metaverse attribute the value is built from, for example `Account Name` |
+| `BuiltFromGeneratedValue.BuiltFromAttributeNames` | `string[]` | Every generated Metaverse attribute the value is built from, `GeneratedAttributeName` first |
+| `BuiltFromGeneratedValue.MetaverseAttributeName` | `string` | The Metaverse attribute the value is held in; `$null` for an export expression |
+| `BuiltFromGeneratedValue.ConnectedSystemAttributeName` | `string` | The Connected System attribute an export expression writes; `$null` for an import mapping |
+| `BuiltFromGeneratedValue.Via` | `string[]` | The Metaverse attributes the value is built through, nearest the generated value first; empty when it reads the generated value itself |
+| `BuiltFromGeneratedValue.Kind` | `string` | `Form` (built on the generated value's own Synchronisation Rule), `BuiltOnAnotherRule` or `BuiltFromSeveralGeneratedValues` (never corrected) |
+| `BuiltFromGeneratedValue.KeepUnique` | `bool` | The value's **Keep unique** switch |
+| `BuiltFromGeneratedValue.CollisionRemediation` | `bool` | The generated Attribute Flow's own Collision Remediation switch; while it is `$false`, nothing built from the generated value is corrected, whatever `KeepUnique` says |
+| `BuiltFromGeneratedValue.ExportedTo` | `object[]` | Every Connected System attribute the value is written to unchanged, each with `ConnectedSystemId`, `ConnectedSystemName`, `AttributeId` and `AttributeName` |
 
 `Warnings` and `DependentDerivedFlows` are always empty on a read; they describe a save.
 
@@ -461,6 +480,11 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
     Select-Object ConnectedSystemName, AttributeName, Check, Reason
 ```
 
+```powershell title="List the values built from a generated value, and whether each is kept unique with it"
+(Get-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12).Generation.BuiltValues |
+    Select-Object MetaverseAttributeName, ConnectedSystemAttributeName, SyncRuleName, Kind, KeepUnique
+```
+
 ---
 
 ## New-JIMSyncRuleMapping
@@ -479,6 +503,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 New-JIMSyncRuleMapping -SyncRuleId <int>
     -Expression <string>
     -TargetMetaverseAttributeId <int>
+    [-KeepUnique <bool>]
 
 # Export: direct Attribute Flow (MV -> CS)
 New-JIMSyncRuleMapping -SyncRuleId <int>
@@ -489,6 +514,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 New-JIMSyncRuleMapping -SyncRuleId <int>
     -Expression <string>
     -TargetConnectedSystemAttributeId <int>
+    [-KeepUnique <bool>]
 
 # Import: generated (Unique Value Generation, #242)
 New-JIMSyncRuleMapping -SyncRuleId <int>
@@ -525,6 +551,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets); optional (ImportGenerated, ExportGenerated sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. For a generated mapping this is the base value the uniqueness token is appended to; a Sequence or Random mapping can omit it entirely. |
 | `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 | `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
+| `KeepUnique` | `bool` | No (ImportExpression, ExportExpression sets) | `$true` | For an Expression whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value) (an Email built from a generated Account Name): whether a target's refusal of the value as already in use is corrected by correcting the generated value. Supply `$false` to have such a refusal reported as an ordinary export error instead. Has no effect on an Expression that reads no generated value. |
 | `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this a "Generated Value" mapping: the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
 | `TokenKind` | `string` | No | `OnlyIfTaken` | Which uniqueness token to append: `OnlyIfTaken` (try the base value; suffix only if taken; needs `-Expression`), `Sequence` (always append the next counter number, never reused) or `Random` (always append a cryptographic random token). |
 | `SuffixStyle` | `string` | No | `Number` | `OnlyIfTaken` only: `Number` or `Letter` for the collision suffix. |
@@ -625,6 +652,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-CaseNormalisation <string>]
     [-InitialExportOnly <bool>]
     [-Enabled <bool>]
+    [-KeepUnique <bool>]
     [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
     [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
     [-RandomFormat <string>] [-RandomLength <int>]
@@ -650,6 +678,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
 | `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
 | `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
+| `KeepUnique` | `bool` | No | | The **Keep unique** switch of an Expression whose value is [built from a generated value](../configuration/synchronisation-rules.md#values-built-from-a-generated-value): `$true` corrects the generated value when a target refuses the built value as already in use; `$false` reports that refusal as an ordinary export error. Changing it releases values of the generated value [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Expression mappings only; refused for a direct or generated mapping |
 | `TokenKind` | `string` | No | | Changes which uniqueness token a generated mapping appends: `OnlyIfTaken`, `Sequence` or `Random`. Generated mappings only |
 | `SuffixStyle` | `string` | No | | `Number` or `Letter`. `OnlyIfTaken` mappings only |
 | `SuffixStart` | `int` | No | | The first suffix value tried once the base value is taken. `OnlyIfTaken` mappings only |
@@ -717,6 +746,10 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -ExcludeConnectedSystemId @()
 
 ```powershell title="Switch Collision Remediation off, so a rejected value is reported as an export error instead"
 Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -CollisionRemediation $false
+```
+
+```powershell title="Stop correcting Account Name when a target refuses the User Principal Name built from it"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 14 -KeepUnique $false
 ```
 
 ---

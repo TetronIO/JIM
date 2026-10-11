@@ -70,6 +70,12 @@ public sealed class GeneratedValueBuiltValueDescription
     public bool KeepUnique { get; init; }
 
     /// <summary>
+    /// The generated Attribute Flow's own Collision Remediation switch. While it is off, nothing built from the generated
+    /// value is corrected, whatever <see cref="KeepUnique"/> says.
+    /// </summary>
+    public bool CollisionRemediation { get; init; } = true;
+
+    /// <summary>
     /// Every Connected System attribute the value is written to unchanged.
     /// </summary>
     public IReadOnlyList<GeneratedValueBuiltValueTarget> ExportedTo { get; init; } = [];

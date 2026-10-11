@@ -57,6 +57,12 @@ public class GeneratedValueBuiltValueDto
     /// </summary>
     public bool KeepUnique { get; set; }
 
+    /// <summary>
+    /// The generated Attribute Flow's own <c>collisionRemediation</c> switch. While it is false, nothing built from the
+    /// generated value is corrected, whatever <see cref="KeepUnique"/> says.
+    /// </summary>
+    public bool CollisionRemediation { get; set; }
+
     /// <summary>Every Connected System attribute the value is written to unchanged.</summary>
     public List<GeneratedValueBuiltValueTargetDto> ExportedTo { get; set; } = new();
 
@@ -74,6 +80,7 @@ public class GeneratedValueBuiltValueDto
         Via = model.Via.ToList(),
         Kind = model.Kind,
         KeepUnique = model.KeepUnique,
+        CollisionRemediation = model.CollisionRemediation,
         ExportedTo = model.ExportedTo.Select(GeneratedValueBuiltValueTargetDto.FromModel).ToList()
     };
 }

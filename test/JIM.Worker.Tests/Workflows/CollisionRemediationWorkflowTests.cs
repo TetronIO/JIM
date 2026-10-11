@@ -562,6 +562,38 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Export_DerivedUserPrincipalNameRejectedWithKeepUniqueOff_IsAnOrdinaryErrorAndLeavesTheAccountNameAsync()
+    {
+        // #2014: switching Keep unique off on the flow that builds the User Principal Name stops its refusal correcting
+        // the Account Name it is built from.
+        var ctx = await SetUpAsync();
+        SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == ctx.UserPrincipalName.Id).KeepUnique = false;
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        var export = DirectoryExport(ctx);
+
+        var activity = await RunExportAsync(ctx.Directory, RejectAll("userPrincipalName"));
+
+        AssertOrdinaryError(ctx, activity, export);
+    }
+
+    [Test]
+    public async Task Export_DerivedUserPrincipalNameRejectedWithTheGeneratedFlowsCollisionRemediationOff_IsAnOrdinaryErrorAsync()
+    {
+        // #2014: the generated flow's own switch wins; with it off, nothing built from the value is corrected whatever its
+        // Keep unique switch says.
+        var ctx = await SetUpAsync();
+        GeneratedMapping(ctx).Generation!.CollisionRemediation = false;
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        var export = DirectoryExport(ctx);
+
+        var activity = await RunExportAsync(ctx.Directory, RejectAll("userPrincipalName"));
+
+        AssertOrdinaryError(ctx, activity, export);
+    }
+
+    [Test]
     public async Task Export_ConnectorDoesNotClassifyRejections_IsAnOrdinaryErrorAsync()
     {
         var ctx = await SetUpAsync(connectorClassifies: false);

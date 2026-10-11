@@ -88,7 +88,7 @@ There is also an understanding problem. To know what is protected, an administra
     - Sync Preview checks every form against JIM's records, and names the Connected Systems and forms it would probe in `generatedValueProbes`.
 12. **REST API and PowerShell.**
     - A generated mapping's `generation.participants` gains the values built from it. Each entry names the value, how it is built, and whether it is checked before issuing or corrected only.
-    - Derived and export expression mappings built from a generated value expose `builtFromGeneratedValue`: the generated attribute, `checkedBeforeIssuing`, and the switch as `keepUnique`. `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` take `-KeepUnique`, and `Get-JIMSyncRuleMapping` returns `KeepUnique` and `CheckedBeforeIssuing`.
+    - Every mapping carries the switch as `keepUnique`. Derived and export expression mappings built from a generated value also expose `builtFromGeneratedValue`: the generated attribute, the attributes it is built through, how it is built, the generated flow's own `collisionRemediation`, and `checkedBeforeIssuing`; a generated mapping's `generation.builtValues` lists every value built from it. `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` take `-KeepUnique`, and `Get-JIMSyncRuleMapping` returns `KeepUnique` and `BuiltFromGeneratedValue`.
 
 ### Non-Functional Requirements
 

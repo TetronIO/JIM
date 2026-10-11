@@ -188,6 +188,23 @@ public class ConnectedSystemServerKeepUniqueTests
             Assert.That(described[upn.Id].Via, Is.EqualTo(new[] { "Email" }));
             Assert.That(described[upn.Id].Kind, Is.EqualTo(GeneratedValueBuiltValueKind.Form));
             Assert.That(described[upn.Id].KeepUnique, Is.True);
+            Assert.That(described[upn.Id].CollisionRemediation, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetBuiltFromGeneratedValuesAsync_GeneratedFlowsCollisionRemediationOff_SaysNothingIsCorrectedAsync()
+    {
+        // #2014: with the generated flow's own Collision Remediation off, nothing built from it is corrected whatever its
+        // Keep unique switch says, so the surfaces must be able to show that switch as not in effect.
+        _accountName.Generation!.CollisionRemediation = false;
+
+        var described = await Application().ConnectedSystems.GetBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(described[_email.Id].KeepUnique, Is.True);
+            Assert.That(described[_email.Id].CollisionRemediation, Is.False);
         }
     }
 

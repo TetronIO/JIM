@@ -571,6 +571,7 @@ public partial class ConnectedSystemServer
             Via = value.Via,
             Kind = value.Kind,
             KeepUnique = value.KeepUnique,
+            CollisionRemediation = value.GeneratedMapping.Generation?.CollisionRemediation ?? true,
             ExportedTo = value.ExportedTo
                 .Select(t => new GeneratedValueBuiltValueTarget
                 {

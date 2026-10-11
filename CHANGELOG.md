@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
+- ✨ Each value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it as already in use corrects Account Name; off, it's an ordinary export error. Set it in REST (`keepUnique`) or with `-KeepUnique`. (#2014)
 
 ### Changed
 
