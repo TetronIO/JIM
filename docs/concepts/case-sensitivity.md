@@ -97,4 +97,4 @@ Two different questions are asked inside an [expression](expressions.md), and ke
 Eq(Lower(mv["Status"]), "active")
 ```
 
-This is why the [Expression Language Guide](expressions.md) recommends `Eq()` (never `==`) for text, and `Lower()` when you want a case-insensitive check.
+This is why [Expressions](expressions.md) recommends `Eq()` (never `==`) for text, and `Lower()` when you want a case-insensitive check.

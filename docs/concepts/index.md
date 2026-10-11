@@ -30,7 +30,7 @@ Where a Connector supports it and you have configured it, JIM can set passwords 
 
 ## 🧮 Expressions
 
-JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See the [Expression Language Guide](expressions.md) for syntax, functions, and examples.
+JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See [Expressions](expressions.md) for syntax, functions, and examples.
 
 ## 🏷️ Object Naming
 
