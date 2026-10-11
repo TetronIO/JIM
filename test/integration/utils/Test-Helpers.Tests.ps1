@@ -900,6 +900,167 @@ Describe 'Grant-JimAdDelegation' {
     }
 }
 
+Describe 'Clear-ConnectorFilesVolume' {
+    # The reset empties the shared File Connector volume in place, because the directory containers keep it mounted
+    # across scenarios; a scenario that starts with the previous scenario's files is not a clean run (#2056).
+    BeforeAll {
+        function docker { }
+        Mock Write-Host {}
+    }
+
+    BeforeEach {
+        $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
+    }
+
+    It 'passes when the volume is empty after the wipe' {
+        Mock docker {
+            $script:dockerCalls.Add((@($args) -join ' '))
+            $global:LASTEXITCODE = 0
+            if ($args[0] -eq 'inspect') { return 'jim-worker:latest' }
+            return '0'
+        }
+
+        { Clear-ConnectorFilesVolume } | Should -Not -Throw
+        @($script:dockerCalls | Where-Object { $_ -like 'run *' -and $_ -like '*jim-connector-files-volume:/vol*' }).Count | Should -Be 1
+    }
+
+    It 'stops the run, naming the volume, when files are left after the wipe' {
+        Mock docker {
+            $global:LASTEXITCODE = 0
+            if ($args[0] -eq 'inspect') { return 'jim-worker:latest' }
+            return '3'
+        }
+
+        { Clear-ConnectorFilesVolume } | Should -Throw '*jim-connector-files-volume*3*'
+    }
+
+    It 'stops the run, naming the volume, when the wipe cannot run at all' {
+        Mock docker {
+            if ($args[0] -eq 'inspect') { $global:LASTEXITCODE = 0; return 'jim-worker:latest' }
+            $global:LASTEXITCODE = 125
+            return 'Unable to find image'
+        }
+
+        { Clear-ConnectorFilesVolume } | Should -Throw '*jim-connector-files-volume*'
+    }
+
+    It 'wipes the lane''s own volume under -Parallel' {
+        $env:JIM_INTEGRATION_LANE = 'OpenLDAP'
+        try {
+            Mock docker {
+                $script:dockerCalls.Add((@($args) -join ' '))
+                $global:LASTEXITCODE = 0
+                if ($args[0] -eq 'inspect') { return 'jim-worker:latest' }
+                return '0'
+            }
+
+            Clear-ConnectorFilesVolume
+            $lane = Get-IntegrationLane
+            @($script:dockerCalls | Where-Object { $_ -like "*$($lane.ConnectorFilesVolume):/vol*" }).Count | Should -Be 1
+            $lane.ConnectorFilesVolume | Should -Not -Be 'jim-connector-files-volume'
+        }
+        finally {
+            $env:JIM_INTEGRATION_LANE = $null
+        }
+    }
+}
+
+Describe 'Remove-ConnectorFilesVolume' {
+    # The full reset removes the volume outright and wipes it in place only when something still holds it. A
+    # volume that does not exist yet (a fresh host) has nothing to wipe, and the image the wipe runs on is not
+    # built until later, so trying would stop the run for no reason (#2056).
+    BeforeAll {
+        function docker { }
+        Mock Write-Host {}
+    }
+
+    BeforeEach {
+        $script:dockerCalls = [System.Collections.Generic.List[string]]::new()
+    }
+
+    It 'does nothing when the volume does not exist' {
+        Mock docker {
+            $script:dockerCalls.Add((@($args) -join ' '))
+            $global:LASTEXITCODE = 1
+            return 'Error response from daemon: get jim-connector-files-volume: no such volume'
+        }
+
+        { Remove-ConnectorFilesVolume } | Should -Not -Throw
+        @($script:dockerCalls | Where-Object { $_ -like 'volume rm *' -or $_ -like 'run *' }).Count | Should -Be 0
+    }
+
+    It 'removes the volume, without a wipe, when nothing holds it' {
+        Mock docker {
+            $script:dockerCalls.Add((@($args) -join ' '))
+            $global:LASTEXITCODE = 0
+        }
+
+        Remove-ConnectorFilesVolume
+        @($script:dockerCalls | Where-Object { $_ -eq 'volume rm jim-connector-files-volume' }).Count | Should -Be 1
+        @($script:dockerCalls | Where-Object { $_ -like 'run *' }).Count | Should -Be 0
+    }
+
+    It 'wipes the volume in place when it cannot be removed' {
+        Mock docker {
+            $script:dockerCalls.Add((@($args) -join ' '))
+            if ($args[0] -eq 'volume' -and $args[1] -eq 'rm') { $global:LASTEXITCODE = 1; return 'volume is in use' }
+            $global:LASTEXITCODE = 0
+            if ($args[0] -eq 'inspect') { return 'jim-worker:latest' }
+            if ($args[0] -eq 'run') { return '0' }
+        }
+
+        Remove-ConnectorFilesVolume
+        @($script:dockerCalls | Where-Object { $_ -like 'run *' -and $_ -like '*jim-connector-files-volume:/vol*' }).Count | Should -Be 1
+    }
+}
+
+Describe 'Get-UnexpectedComposeResourcesInUse' {
+    # `docker compose down -v` reports a network or volume it could not remove as "still in use". The directory
+    # containers hold the lane's network and connector files volume by design, so only anything else is worth a
+    # warning (#2056).
+    It 'returns nothing when only the expected network and volume are still in use' {
+        $output = @(
+            ' Container jim.web  Removed',
+            ' Volume jim-connector-files-volume  Resource is still in use',
+            ' Network jim-network  Resource is still in use'
+        )
+
+        Get-UnexpectedComposeResourcesInUse -DownOutput $output -ExpectedInUse @('jim-network', 'jim-connector-files-volume') | Should -BeNullOrEmpty
+    }
+
+    It 'returns the line for anything else still in use' {
+        $output = @(
+            ' Network jim-network  Resource is still in use',
+            ' Volume jim-keys-volume  Resource is still in use'
+        )
+
+        $unexpected = @(Get-UnexpectedComposeResourcesInUse -DownOutput $output -ExpectedInUse @('jim-network', 'jim-connector-files-volume'))
+
+        $unexpected.Count | Should -Be 1
+        $unexpected[0] | Should -BeLike '*jim-keys-volume*'
+    }
+
+    It 'matches the expected names exactly, so another lane''s resources still count' {
+        $output = @(' Volume jim-connector-files-volume  Resource is still in use')
+
+        @(Get-UnexpectedComposeResourcesInUse -DownOutput $output -ExpectedInUse @('jim-network-openldap', 'jim-connector-files-volume-openldap')).Count |
+            Should -Be 1
+    }
+
+    It 'keeps an in-use line it cannot read a name from' {
+        $output = @('Error response from daemon: Resource is still in use')
+
+        @(Get-UnexpectedComposeResourcesInUse -DownOutput $output -ExpectedInUse @('jim-network')).Count | Should -Be 1
+    }
+
+    It 'reads error records as well as strings, as 2>&1 output arrives' {
+        $output = @([System.Management.Automation.ErrorRecord]::new(
+            [System.Exception]::new(' Volume jim-keys-volume  Resource is still in use'), 'compose', 'NotSpecified', $null))
+
+        @(Get-UnexpectedComposeResourcesInUse -DownOutput $output -ExpectedInUse @('jim-network')).Count | Should -Be 1
+    }
+}
+
 Describe 'Test-TemplateSpansSyncPages' {
     # A run whose users all fit in one synchronisation page never crosses a page boundary, so the code the
     # worker runs between pages (tracker clear, cross-page reference fix-up, re-attaching bulk-created rows)
