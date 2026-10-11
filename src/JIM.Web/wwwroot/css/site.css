@@ -6409,6 +6409,21 @@ td.jim-connection-detail-cell {
     grid-template-columns: 4rem minmax(0, 1fr) max-content;
 }
 
+/* Across a whole Connected System ("Where they point") each step also says how many objects its values sit on, in a
+   column of its own between the step and its link, so the counts read down the page as the reference counts do. */
+.jim-unresolved-fixes-with-objects {
+    grid-template-columns: 4rem minmax(0, 1fr) max-content max-content;
+}
+
+/* Qualified with the cell class: .jim-unresolved-fix-cell's padding shorthand comes later in this sheet. */
+.jim-unresolved-fix-cell.jim-unresolved-fix-objects {
+    padding-right: 24px;
+    text-align: right;
+    white-space: nowrap;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
 .jim-unresolved-fix-group {
     grid-column: 1 / -1;
     display: flex;

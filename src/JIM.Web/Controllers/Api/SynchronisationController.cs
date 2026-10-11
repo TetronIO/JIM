@@ -1342,6 +1342,34 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Get a summary of a Connected System's unresolved references
+    /// </summary>
+    /// <remarks>
+    /// Returns how many reference values across the Connected System's Connector Space are unresolved and on how many
+    /// Connected System Objects, how they split by likely cause, every distinct next step with how many values and
+    /// objects it addresses (most values first), and the one change to JIM's configuration that would address the most
+    /// of them (null where every cause lies in the Connected System). Judged against the Connected System's current
+    /// Container Scope. This is what the portal shows as "Where they point" on the filtered Connector Space; to list the
+    /// objects themselves, filter the Connector Space with hasUnresolvedReferences=true.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The summary of the Connected System's unresolved references.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/unresolved-references/summary", Name = "GetConnectedSystemUnresolvedReferenceSummary")]
+    [ProducesResponseType(typeof(ConnectedSystemUnresolvedReferenceSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemUnresolvedReferenceSummaryAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested unresolved reference summary for Connected System {SystemId}", connectedSystemId);
+
+        var summary = await _application.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(connectedSystemId);
+        if (summary == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        return Ok(summary);
+    }
+
+    /// <summary>
     /// Get a deletion preview for a Connected System
     /// </summary>
     /// <remarks>
@@ -1419,6 +1447,9 @@ public class SynchronisationController(
     /// <param name="status">Optional Connected System Object status values to filter by. Repeat the parameter for multiple values.</param>
     /// <param name="objectTypeId">Optional Object Type IDs to filter by. Repeat the parameter for multiple values.</param>
     /// <param name="joinType">Optional join type values to filter by. Repeat the parameter for multiple values.</param>
+    /// <param name="hasUnresolvedReferences">Optional filter: true for only the objects holding a reference value that
+    /// could not be resolved to a Connected System Object, false for only those holding none. Each header's
+    /// unresolvedReferenceCount says how many it holds, whether or not this is given.</param>
     /// <returns>A paginated set of Connected System Object headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space", Name = "GetConnectedSystemObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectHeader>), StatusCodes.Status200OK)]
@@ -1433,7 +1464,8 @@ public class SynchronisationController(
         [FromQuery] bool sortDescending = true,
         [FromQuery] List<ConnectedSystemObjectStatus>? status = null,
         [FromQuery] List<int>? objectTypeId = null,
-        [FromQuery] List<ConnectedSystemObjectJoinType>? joinType = null)
+        [FromQuery] List<ConnectedSystemObjectJoinType>? joinType = null,
+        [FromQuery] bool? hasUnresolvedReferences = null)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
@@ -1444,7 +1476,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var result = await _application.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, search, sortBy, sortDescending, status, objectTypeId, joinType);
+            connectedSystemId, page, pageSize, search, sortBy, sortDescending, status, objectTypeId, joinType, hasUnresolvedReferences);
 
         return Ok(PaginatedResponse<ConnectedSystemObjectHeader>.Create(
             result.Results, result.TotalResults, result.CurrentPage, result.PageSize));

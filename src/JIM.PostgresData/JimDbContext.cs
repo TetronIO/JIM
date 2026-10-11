@@ -932,6 +932,16 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
             .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
 
+        // Partial index on the values still unresolved, by object (#959). The index above cannot answer "which objects
+        // hold unresolved references" cheaply: a value that resolves keeps its imported text, so it covers every
+        // reference that was ever deferred, which on a large directory is most group memberships. This one holds only
+        // the values whose reference is still missing, so the Connected System page's signpost, the Connector Space's
+        // filter and its per-row count read a handful of rows rather than every membership. Its cost is one entry per
+        // value an import leaves unresolved, removed again when the value resolves.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(["ConnectedSystemObjectId"], "IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved")
+            .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL AND \"ReferenceValueId\" IS NULL");
+
         // Composite index on (AttributeId, StringValue) — speeds up the target-side join in the
         // fixup query where UnresolvedReferenceValue is matched against the secondary external ID
         // attribute value (StringValue) for a known AttributeId.
