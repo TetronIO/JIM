@@ -88,7 +88,10 @@ The same work fixes three ways matching hides failure or picks arbitrarily today
   - **If any candidate fails to evaluate, the index is marked incomplete.** A later miss then cannot be trusted, so it becomes an error ("N existing accounts could not be checked") rather than a provision.
   - The per-object path (Sync Preview, which passes no cache) builds a transient index for the call.
 - **Several candidates** (prefetch, per-object query or map) are reported as `AmbiguousProvisioningMatch` and nothing is claimed.
-- **Results.** Matching failures, incomplete-index misses and ambiguities are added to a new `ExportEvaluationResult.ProvisioningMatchErrors` list for that rule, following the `ObjectTypeConflicts` pattern (2396-2401). The worker turns each into an Activity item, following `BuildObjectTypeConflictRpei` (3560-3573). The message names the Metaverse Object and every candidate. The Metaverse Object's other export rules continue, as they do for a type conflict.
+- **Results.** Matching failures, incomplete-index misses and ambiguities are added to a new `ExportEvaluationResult.ProvisioningMatchErrors` list for that rule, following the `ObjectTypeConflicts` pattern (2396-2401).
+  - The worker turns each into an Activity item, following `BuildObjectTypeConflictRpei` (3560-3573). The item links the Metaverse Object (`MetaverseObjectId`, which the type-conflict item leaves unset).
+  - Ambiguities record their candidates per section 8.
+  - The Metaverse Object's other export rules continue, as they do for a type conflict.
 - **`AttemptExportMatchingAsync` no longer has a catch-all.** Only the outcomes above leave it.
 
 **5. Error types** (append-only; `ActivityRunProfileExecutionItemErrorType` ends at 27):
@@ -127,6 +130,44 @@ The same work fixes three ways matching hides failure or picks arbitrarily today
   - it uses a non-repeatable function (`NonRepeatableFunctionDetector`).
 - **The target Metaverse attribute** must be a matchable type.
 
+**8. Ambiguous matches list and link their candidates** (PRD Phase 1 requirement 16; mock "Ambiguous match" on the canvas).
+
+- **Model:** `ActivityRunProfileExecutionItemMatchCandidate` (new, `JIM.Models/Activities`), a child of the Activity item. It follows `CausalEdge`'s storage conventions:
+  - a cascading foreign key to the item;
+  - snapshot scalars for the candidate, with no foreign key, so a candidate deleted later still reads.
+- **Fields:**
+  - `CandidateKind` (Metaverse Object or Connected System Object);
+  - `CandidateId`;
+  - `DisplayNameSnapshot` and `TypeNameSnapshot`;
+  - `ConnectedSystemId` and `ConnectedSystemNameSnapshot`, for Connected System Objects;
+  - `MatchedValue`, so a multi-valued source shows which value found which candidate;
+  - `ObjectMatchingRuleId` and `ObjectMatchingRuleDescriptionSnapshot`;
+  - `Ordinal`;
+  - `CandidateTotal`.
+- **Not `CausalEdge` itself.** Candidates are not causes, and recording them as edges would put them in the causality panel's cause-and-effect walk.
+- **Written in the same flush as the Activity items,** by raw SQL. That needs:
+  - a `MatchCandidateBulkColumns` constants class;
+  - its `BulkInsertColumnCompletenessTests` entries;
+  - a `RequiresPostgres` round-trip test.
+- **Capped at 10 candidates** per item, in ordinal display-name order so the list is the same on every run. `CandidateTotal` carries the full count.
+  - **On import,** the lookup takes 11 ids. A count query runs only when there are more than 10.
+  - **On export,** the candidate lists are already in hand (prefetch, per-object query, map).
+- **The existing import AmbiguousMatch gains this too.** Today it records only a message, although `MultipleMatchesException.Matches` already carries the ids.
+- **Read path:**
+  - It resolves each candidate's existence best-effort: a deleted one renders its snapshot name unlinked, marked "no longer exists".
+  - For import candidates, it also loads what each candidate Metaverse Object is currently joined to.
+- **Surfaces:**
+  - **Portal:** under Error Details in `ActivityRunProfileExecutionItemDetail.razor`, a candidates panel shows:
+    - the object being matched, the rule and the value;
+    - each candidate as an `<ObjectChip>` with its `Href`;
+    - the total when capped;
+    - a sentence on how to resolve.
+  - **REST:** `ActivityRunProfileExecutionItemDetailDto.MatchCandidates`.
+  - **PowerShell:** `Get-JIMActivityExecutionItem` outputs `MatchCandidates`.
+  - **Previews:**
+    - Sync Preview's ambiguity message carries the same candidate shape.
+    - Preview Impact's ambiguous rows store theirs beside the persisted preview delta, in the same snapshot shape, and its drill-down renders them as linked chips.
+
 ### Data flow
 
 ```
@@ -151,8 +192,12 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 4. Error type 28 (`ObjectMatchingRuleFailed`), with every site in section 5.
 5. `FindMatchingMvoForJoinAsync` maps the new exception. A worker test proves no projection follows it.
 6. Join provenance (section 6), with the explanation wording.
-7. `SyncPreviewServer.ProbeForJoinAsync` goes through the resolver and the guarded repository's new lookup. Its outcomes map to `SyncPreviewMessageCode`.
-8. `ObjectMatchingPreviewAdapter`:
+7. `SyncPreviewServer.ProbeForJoinAsync` goes through the resolver and the guarded repository's new lookup. Its outcomes map to `SyncPreviewMessageCode`, and its ambiguity message carries the candidates.
+8. **Match candidates** (section 8), recorded for import ambiguity.
+    - Model, migration and bulk writer, with the column-list guard tests.
+    - Read path.
+    - The Activity item candidates panel, `MatchCandidates` on the REST DTO, and the `Get-JIMActivityExecutionItem` output, landing together for surface parity. Covered by bUnit, controller and Pester tests.
+9. `ObjectMatchingPreviewAdapter`:
    - `MatchOutcome` carries the match values and a failed kind;
    - descriptions include the computed value;
    - a new transition reports a rule that would fail.
@@ -162,13 +207,14 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 **Changelog:**
 - 🐛 "A matching rule that cannot be evaluated now stops the object with an error instead of letting it project a duplicate identity."
 - 🔄 "A Connected System Object whose values match different identities is now reported as an ambiguous match."
+- ✨ "Ambiguous match errors now list and link every matching object, so you can go straight to the conflict."
 
 **Docs:** the matching outcomes in `docs/configuration/synchronisation-rules.md`.
 
 ### Layer 2: Export
 
 1. `ExportMatchingValue.Resolve` returns every value. The prefetch (`PrefetchExportMatchCandidatesForPageAsync`, `GetExportMatchCandidateIdsAsync`) and the per-object query take every value.
-2. Ambiguity is detected on all three paths, with no lowest-id claim. Error type 29 (`AmbiguousProvisioningMatch`), with every site in section 5.
+2. Ambiguity is detected on all three paths, with no lowest-id claim. Error type 29 (`AmbiguousProvisioningMatch`), with every site in section 5. Its candidates (Connected System Objects) are recorded per section 8.
 3. `ExpressionMatchValueIndex` and its lazy build:
    - a raw SQL stream (a read-side projection, so no column-list constant is needed);
    - claims removing entries;
@@ -189,6 +235,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
    - `ObjectMatchingRuleSourceDto.Expression`;
    - the four controller messages (5781, 5907, 6117, 6231);
    - the preview request accepts `Expression` and the adapter's refusal goes;
+   - Preview Impact's ambiguous rows store and render their candidates (section 8);
    - controller and DTO tests.
 3. **PowerShell:** `-SourceExpression` in an `Expression` parameter set on `New-JIMMatchingRule`, `Set-JIMMatchingRule`, `New-JIMSyncRuleMatchingRule` and `Set-JIMSyncRuleMatchingRule`, mirroring `New-JIMSyncRuleMapping` (252-290, 407-452).
    - There are no Pester files for these cmdlets today. Add them, following `SyncRuleMappings.Tests.ps1`, including parameter-set assertions.
@@ -222,7 +269,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 ## Success Criteria
 
 - Expression rules join on import and match on export in both modes, across the portal, REST API and PowerShell.
-- No matching failure or ambiguity projects, provisions or claims. Each is an Activity item naming the rule and the candidates.
+- No matching failure or ambiguity projects, provisions or claims. Each is an Activity item naming the rule. Ambiguities list and link every candidate (up to 10, with the total) in the portal, REST API, PowerShell and both previews.
 - Try it, Preview Impact, Sync Preview and connection explanations show the computed match value.
 - Scenario 005 (extended), Scenario 008 and Scenario 014 pass; Scenario 014 shows no regression.
 

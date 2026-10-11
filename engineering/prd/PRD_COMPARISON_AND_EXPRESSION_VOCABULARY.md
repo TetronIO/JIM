@@ -84,7 +84,7 @@ Recorded with the product owner on 2026-10-11.
 6. **JIM never chooses between candidates on the administrator's behalf.**<br /> Where a match, a lookup or an expression could resolve to more than one object or value, JIM:
    - does not pick one;
    - takes no action for that object;
-   - records a dedicated error that names every candidate, for the administrator to resolve.
+   - records a dedicated error for the administrator to resolve. The error **lists and links every candidate**, beside the object being matched, the rule and the value, so the administrator can go straight to the objects involved.
 
    Helping the administrator resolve the conflict is future work. The non-deterministic behaviour this replaces is listed in [Determinism](#determinism-no-arbitrary-choices).
 7. **All sub-issues are in the v1.0-ILM-COMPLETE milestone.**
@@ -169,7 +169,7 @@ Recorded with the product owner on 2026-10-11.
    - **This applies to every matching failure, not only expression ones.** Today `ObjectMatchingServer` logs a warning and tries the next rule, and `ExportEvaluationServer.AttemptExportMatchingAsync` swallows every exception and provisions.
 7. **Import.** The expression is evaluated in .NET for each Connected System Object, then the existing indexed equality lookup runs unchanged.
    - Zero and one match behave as for attribute rules: next rule, or join.
-   - Several matches are an AmbiguousMatch error naming every candidate.
+   - Several matches are an AmbiguousMatch error listing and linking every candidate (requirement 16).
    - **Several match values (from a multi-valued attribute or result) are all looked up.** Today the first value that finds exactly one Metaverse Object wins. Now, if the values together resolve to more than one distinct Metaverse Object, that is an AmbiguousMatch error. The same applies to attribute rules on multi-valued attributes.
 8. **Export.** Before provisioning, an expression rule is evaluated against a per-run match value map.
    - **Built lazily:** the first time a provisioning decision in the run needs the rule.
@@ -177,7 +177,7 @@ Recorded with the product owner on 2026-10-11.
    - **Keyed:** by computed value, case-folded when the rule ignores case.
    - **Kept current:** claiming a Connected System Object removes it from the map.
    - **Looked up by:** every value the Metaverse Object holds for the rule's Metaverse attribute. Today attribute rules read only the first value.
-   - **Several candidates are an error.** A lookup that finds more than one Connected System Object, for expression and attribute rules alike, is a dedicated **Ambiguous Provisioning Match** error that names every candidate.
+   - **Several candidates are an error.** A lookup that finds more than one Connected System Object, for expression and attribute rules alike, is a dedicated **Ambiguous Provisioning Match** error that lists and links every candidate (requirement 16).
      - The Metaverse Object is neither joined nor provisioned for that system.
      - It is retried on every synchronisation until the administrator resolves the conflict.
      - Today JIM logs a warning and claims the candidate with the lowest id.
@@ -203,6 +203,16 @@ Recorded with the product owner on 2026-10-11.
     - Switching between Simple and Advanced mode copies the expression.
     - Configuration change history records it.
     - `engineering/EXPRESSION_SECURITY.md` lists the input as reachable.
+16. **Ambiguous matches list and link their candidates.**
+    - **What is recorded:** an AmbiguousMatch (import) or Ambiguous Provisioning Match (export) Activity item records each candidate as a link:
+      - Metaverse Objects on import;
+      - Connected System Objects on export, with their Connected System.
+    - **Alongside the candidates,** the item records the object being matched, the rule, and the value each candidate matched on.
+    - **Each candidate carries a snapshot of its display name and type,** so the item still reads correctly after a candidate is deleted. A deleted candidate shows its name, unlinked, as no longer existing.
+    - **Up to 10 candidates are recorded,** in display-name order so the list is the same on every run, with the total count when there are more.
+    - **The portal shows the candidates as linked object chips,** with what each import candidate is already joined to and a sentence on how to resolve the conflict.
+    - **The REST API returns them** on the Activity item, and `Get-JIMActivityExecutionItem` outputs them.
+    - **Previews list the same candidates:** Sync Preview and Preview Impact show them wherever they report an ambiguous match.
 
 #### Phase 2: One operator catalogue and function library (#2053)
 
@@ -561,7 +571,7 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 
 **Then:**
 - JIM neither joins nor provisions;
-- it records an **Ambiguous Provisioning Match** error on the object, naming both accounts;
+- it records an **Ambiguous Provisioning Match** error on the object, listing and linking both accounts beside Priya Shah, the rule and the value `48213`;
 - the error repeats on each synchronisation until the administrator removes the duplicate or changes the rule. No account is chosen for them.
 
 ### Scenario 13: A multi-valued attribute in an expression (Phase 2)
@@ -667,7 +677,7 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 - [ ] Expression rules join on import and are matched on export, in Simple and Advanced mode.
 - [ ] Unworkable rules (including multiple sources) are refused at save on every surface, with the messages in Scenario 5.
 - [ ] Matching failures never join, project or provision. They are reported on the object, for attribute and expression rules alike.
-- [ ] An ambiguous match on import or export is a dedicated error naming every candidate. JIM never claims one, and every value of a multi-valued source is considered.
+- [ ] An ambiguous match on import or export is a dedicated error that lists and links every candidate (up to 10, with the total) across the portal, REST API, PowerShell and both previews. JIM never claims one, and every value of a multi-valued source is considered.
 - [ ] Try it, Preview Impact, Sync Preview and the join explanations show computed match values.
 - [ ] The REST API and PowerShell reach parity, with tests. Docs are updated.
 - [ ] No regression in the Scenario 014 baselines.
