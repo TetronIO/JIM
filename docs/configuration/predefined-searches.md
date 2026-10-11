@@ -119,4 +119,4 @@ Retrieve the same history with `Get-JIMConfigurationChangeHistory -Type Predefin
 
 ## See also
 
-- [Metaverse](metaverse.md) -- predefined searches return Metaverse Objects; the running endpoint lives with the Metaverse Object endpoints
+- [Metaverse](metaverse.md): predefined searches return Metaverse Objects; the running endpoint lives with the Metaverse Object endpoints

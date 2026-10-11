@@ -34,8 +34,9 @@ name: changelog-lint
 #      short-circuits unless the PR touched a docs source.
 #   7. Docs conformance: every page is checked against the mechanical rules of
 #      engineering/DOCUMENTATION_STANDARD.md (front matter, one name per page,
-#      heading structure, code languages, stubs, page shape, accessibility, and
-#      no growth on an over-budget page), with a shrink-only baseline so
+#      heading structure, code languages, stubs, page shape, accessibility,
+#      language, the product vocabulary, and no growth on an over-budget page),
+#      with a shrink-only baseline so
 #      existing debt can only fall - see Test-DocsConformance.ps1 (#1454). It
 #      reads Markdown sources only, so it is cheap enough to run on every PR.
 #

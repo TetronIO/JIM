@@ -145,6 +145,6 @@ Get-JIMFeature -IncludeInDevelopment | Disable-JIMFeature
 
 ## See also
 
-- [Preview Features](../administration/preview-features.md) -- what a Preview feature is, and where to turn one on in the portal
-- [Service Settings](service-settings.md) -- the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys
-- [Activities](activities.md) -- viewing audit activities created by flag changes
+- [Preview Features](../administration/preview-features.md): what a Preview feature is, and where to turn one on in the portal
+- [Service Settings](service-settings.md): the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys
+- [Activities](activities.md): viewing audit activities created by flag changes

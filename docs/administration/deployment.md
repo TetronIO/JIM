@@ -25,18 +25,18 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
 
-These figures are for the **host machine** (or VM) running JIM (on Docker or Podman) -- they must cover the operating system, all JIM containers, and the database.
+These figures are for the **host machine** (or VM) running JIM (on Docker or Podman); they must cover the operating system, all JIM containers, and the database.
 
 | Connected System Size       | Minimum Host RAM | Recommended Host RAM |
 |-----------------------------|------------------|----------------------|
 | Up to 10,000 objects        | 4 GB             | 8 GB                 |
-| 10,000 -- 50,000 objects    | 8 GB             | 16 GB                |
-| 50,000 -- 100,000 objects   | 20 GB            | 24 GB                |
-| 100,000 -- 250,000 objects  | 24 GB            | 32 GB                |
-| 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
+| 10,000 to 50,000 objects    | 8 GB             | 16 GB                |
+| 50,000 to 100,000 objects   | 20 GB            | 24 GB                |
+| 100,000 to 250,000 objects  | 24 GB            | 32 GB                |
+| 250,000 to 500,000 objects  | 48 GB            | 64 GB                |
 
 !!! info "Why large imports need significant memory"
-    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1--2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
+    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1 to 2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8 to 10 GB for 100K objects.
 
 !!! note
     These requirements apply to the largest single Full Import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta Imports process only changed objects and require significantly less memory.
@@ -48,7 +48,7 @@ These figures are for the **host machine** (or VM) running JIM (on Docker or Pod
 
 - **Docker Engine** 24.0+ with **Docker Compose** v2.24+, or **Podman** 4.4+ with systemd (RHEL 9 and 10 include Podman 5; see [Running on Podman](podman.md))
 - **OpenSSL**, to create or check JIM's HTTPS certificate (part of every mainstream Linux distribution's base install)
-- **An OIDC identity provider** (e.g. Entra ID, Keycloak, AD FS) -- see [SSO Setup](sso-setup.md)
+- **An OIDC identity provider** (e.g. Entra ID, Keycloak, AD FS); see [SSO Setup](sso-setup.md)
 
 ### Network Requirements
 
@@ -95,7 +95,7 @@ On Podman, the containers are named `jim-web`, `jim-worker`, `jim-scheduler` and
 
 |                    | Bundled                                       | External                                    |
 |--------------------|-----------------------------------------------|---------------------------------------------|
-| **Setup**          | Automatic -- included in the installation     | You manage PostgreSQL separately            |
+| **Setup**          | Automatic: included in the installation      | You manage PostgreSQL separately            |
 | **Started with**   | `--profile with-db` (Docker), or the `jim-database` pod (Podman) | JIM alone                |
 | **Best for**       | Evaluations, small deployments                | Production, existing DBA team               |
 | **Backup**         | Volume snapshots                              | Your existing DB backup tooling             |
@@ -733,7 +733,7 @@ Update-Module -Name JIM
 
 There are two options for installing the module in disconnected environments.
 
-#### Option 1 -- From the Release Bundle (Recommended)
+#### Option 1: From the Release Bundle (Recommended)
 
 Each release bundle (`jim-release-X.Y.Z.tar.gz`) includes the module pre-packaged in `powershell/JIM/`. After extracting the bundle, copy the module to a PSModulePath directory:
 
@@ -745,7 +745,7 @@ Copy-Item -Recurse ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modul
 Copy-Item -Recurse ./powershell/JIM "~/.local/share/powershell/Modules/"
 ```
 
-#### Option 2 -- From the PowerShell Gallery via Save-Module
+#### Option 2: From the PowerShell Gallery via Save-Module
 
 On a connected machine, use `Save-Module` to download the module to a local directory without installing it:
 

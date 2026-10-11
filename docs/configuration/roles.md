@@ -4,7 +4,7 @@ title: Roles
 
 # Roles
 
-**Roles** determine what authenticated principals (users and [API keys](api-keys.md)) can do within JIM. The current model is coarse-grained: most administrative operations require the **Administrator** role. Future releases will introduce finer-grained roles; the underlying model is forward-compatible.
+**Roles** determine what authenticated principals (users and [API keys](api-keys.md)) can do within JIM. The current model is coarse-grained: most administrative operations require the **Administrator** role.
 
 ## Built-in roles
 
@@ -29,7 +29,7 @@ If you genuinely need to transfer admin to a different identity, add the new adm
 
 Every change to a Role is recorded in [configuration change history](activities.md#configuration-change-history): a versioned snapshot captures the Role's definition and its static membership together, so each add or remove records who made the change, when, and an optional reason, alongside the resulting member list. The built-in Administrator Role's creation is recorded as System-attributed version 1 from first startup, so its history has a starting point even though nothing created it interactively.
 
-There is no Role management UI yet (Role definition editing arrives with a future release), so retrieve a Role's history with `Get-JIMConfigurationChangeHistory -Type Role`, the REST API, or the Activity list in the admin portal. Renaming a member does not appear in the Role's own history; that change belongs to the member's history instead, since only membership (who is present) is part of a Role's configuration.
+There is no Role management UI, so retrieve a Role's history with `Get-JIMConfigurationChangeHistory -Type Role`, the REST API, or the Activity list in the admin portal. Renaming a member does not appear in the Role's own history; that change belongs to the member's history instead, since only membership (who is present) is part of a Role's configuration.
 
 ## Common workflows
 
@@ -52,5 +52,5 @@ There is no Role management UI yet (Role definition editing arrives with a futur
 
 ## See also
 
-- [API Keys](api-keys.md) -- API keys carry roles directly; the same model applies
-- [API Authentication](../api/authentication.md) -- how authenticated principals are identified
+- [API Keys](api-keys.md): API keys carry roles directly; the same model applies
+- [API Authentication](../api/authentication.md): how authenticated principals are identified
