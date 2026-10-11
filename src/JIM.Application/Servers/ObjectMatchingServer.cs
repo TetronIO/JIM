@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
@@ -19,6 +20,9 @@ public class ObjectMatchingServer
 {
     #region accessors
     private JimApplication Application { get; }
+
+    /// <summary>What each rule compares for an object; shared by every matching path (#2052).</summary>
+    private readonly MatchValueResolver _matchValueResolver = new(new DynamicExpressoEvaluator());
     #endregion
 
     #region constructors
@@ -40,9 +44,21 @@ public class ObjectMatchingServer
     /// <param name="matchingRules">The matching rules to evaluate. Each rule must carry its own
     /// <see cref="ObjectMatchingRule.MetaverseObjectType"/> (simple mode) or the caller must set it
     /// from the Synchronisation Rule before passing (advanced mode).</param>
-    /// <returns>The matching MVO, or null if no match found.</returns>
-    /// <exception cref="MultipleMatchesException">Thrown if multiple MVOs match the criteria.</exception>
-    public async Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(
+    /// <returns>The match, or null if no rule found one.</returns>
+    /// <exception cref="MultipleMatchesException">A rule's values find more than one Metaverse Object.</exception>
+    /// <exception cref="ObjectMatchingRuleFailedException">A rule could not be worked out for this object.</exception>
+    public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<ObjectMatchingRule> matchingRules)
+        => FindMatchingMetaverseObjectAsync(Application.SyncRepo, connectedSystemObject, matchingRules);
+
+    /// <summary>
+    /// As <see cref="FindMatchingMetaverseObjectAsync(ConnectedSystemObject, List{ObjectMatchingRule})"/>, against the
+    /// given repository: Sync Preview passes its read-only guard, so a preview evaluates rules exactly as a
+    /// synchronisation would without being able to write.
+    /// </summary>
+    internal async Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
+        ISyncRepository repository,
         ConnectedSystemObject connectedSystemObject,
         List<ObjectMatchingRule> matchingRules)
     {
@@ -52,10 +68,14 @@ public class ObjectMatchingServer
             return null;
         }
 
-        // Evaluate rules in order until we find a match
+        // Rules are tried in order. Only a rule with nothing to look up, or one that finds nothing, lets the next rule
+        // be tried: a rule that cannot be worked out, or whose values find more than one Metaverse Object, stops the
+        // object (#2052). Trying the next rule instead would let the object join on a weaker rule, or project a
+        // duplicate, because of a fault the administrator never sees.
         foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
         {
-            // Rule must have a MetaverseObjectType to know where to search
+            // Rule must have a MetaverseObjectType to know where to search. This is a configuration state the portal
+            // already flags, and skipping it is deterministic.
             var metaverseObjectType = matchingRule.MetaverseObjectType;
             if (metaverseObjectType == null)
             {
@@ -63,29 +83,43 @@ public class ObjectMatchingServer
                 continue;
             }
 
-            try
-            {
-                var mvo = await Application.SyncRepo.FindMetaverseObjectUsingMatchingRuleAsync(
-                    connectedSystemObject,
-                    metaverseObjectType,
-                    matchingRule);
+            var resolution = _matchValueResolver.Resolve(matchingRule, connectedSystemObject.AttributeValues, connectedSystemObject.Type);
+            if (resolution.Kind == MatchValueResolutionKind.Failed)
+                throw new ObjectMatchingRuleFailedException(matchingRule, resolution);
+            if (resolution.Kind == MatchValueResolutionKind.NoValue)
+                continue;
 
-                if (mvo != null)
+            // Resolve succeeded, so the rule has a Target Metaverse Attribute.
+            var ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
+                metaverseObjectType.Id,
+                matchingRule.TargetMetaverseAttribute!.Id,
+                resolution.ValueType,
+                resolution.Values,
+                matchingRule.CaseSensitive,
+                take: 2);
+
+            if (ids.Count == 0)
+                continue;
+
+            if (ids.Count > 1)
+            {
+                throw new MultipleMatchesException("Multiple Metaverse Objects were found to match the source attribute.", [.. ids])
                 {
-                    Log.Debug("FindMatchingMetaverseObjectAsync: Found MVO {MvoId} using rule {RuleId}", mvo.Id, matchingRule.Id);
-                    return mvo;
-                }
+                    Rule = matchingRule,
+                    MatchValues = resolution.Values
+                };
             }
-            catch (MultipleMatchesException)
+
+            var mvo = await repository.GetMetaverseObjectForJoinMatchAsync(ids[0]);
+            if (mvo == null)
             {
-                // Re-throw - caller needs to handle this
-                throw;
+                // Found by the lookup and gone by the load: deleted in between. Nothing to join to.
+                Log.Warning("FindMatchingMetaverseObjectAsync: MVO {MvoId} matched by rule {RuleId} no longer exists", ids[0], matchingRule.Id);
+                continue;
             }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "FindMatchingMetaverseObjectAsync: Error evaluating matching rule {RuleId}", matchingRule.Id);
-                // Continue to next rule
-            }
+
+            Log.Debug("FindMatchingMetaverseObjectAsync: Found MVO {MvoId} using rule {RuleId}", mvo.Id, matchingRule.Id);
+            return new ImportMatch(mvo, matchingRule, resolution);
         }
 
         return null;

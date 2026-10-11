@@ -1348,67 +1348,50 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<MetaverseObject?>(null);
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int take)
+    {
+        // Mirrors the PostgreSQL lookup: equality per data type, case folded for Text when asked, distinct ids in id
+        // order. Decimal equality is numeric, so values differing only in scale (12.5 and 12.50) are equal.
+        var comparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+        bool Holds(MetaverseObjectAttributeValue av) => valueType switch
+        {
+            AttributeDataType.Text => av.StringValue != null && values.Any(v => comparer.Equals((string)v, av.StringValue)),
+            AttributeDataType.Number => av.IntValue.HasValue && values.Any(v => (int)v == av.IntValue.Value),
+            AttributeDataType.LongNumber => av.LongValue.HasValue && values.Any(v => (long)v == av.LongValue.Value),
+            AttributeDataType.Decimal => av.DecimalValue.HasValue && values.Any(v => (decimal)v == av.DecimalValue.Value),
+            AttributeDataType.Guid => av.GuidValue.HasValue && values.Any(v => (Guid)v == av.GuidValue.Value),
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
+        };
+
+        IReadOnlyList<Guid> ids = _mvos.Values
+            .Where(mvo => mvo.Type?.Id == metaverseObjectTypeId
+                          && mvo.AttributeValues.Any(av => av.AttributeId == metaverseAttributeId && Holds(av)))
+            .Select(mvo => mvo.Id)
+            .Order()
+            .Take(take)
+            .ToList();
+
+        return Task.FromResult(ids);
+    }
+
     // Virtual so tests can simulate the identity split a real EF load produces (the SamePageJoinConflict
-    // page-flush regression coverage): production's matching query and an already-loaded CSO's own
+    // page-flush regression coverage): production's matching load and an already-loaded CSO's own
     // MetaverseObject navigation are separate database round trips, so a CSO obsoleted earlier in the same
     // page and a CSO joining via matching can end up with two distinct CLR instances of the same MVO row.
     // This dictionary-backed store returns the one stored reference for every lookup, so it cannot
     // reproduce that split on its own; a spy overriding this method can clone the match to reproduce it
     // deterministically. Matches the virtual precedent on the update/delete methods above.
-    public virtual Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject,
-        MetaverseObjectType metaverseObjectType,
-        ObjectMatchingRule rule)
-    {
-        if (rule.TargetMetaverseAttributeId == null)
-            return Task.FromResult<MetaverseObject?>(null);
-
-        // Get the source value from the CSO
-        string? sourceValue = null;
-        foreach (var source in rule.Sources.OrderBy(s => s.Order))
-        {
-            if (source.ConnectedSystemAttributeId.HasValue || source.ConnectedSystemAttribute != null)
-            {
-                var attrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId!.Value;
-                var av = connectedSystemObject.AttributeValues
-                    .FirstOrDefault(a => a.AttributeId == attrId);
-                sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
-                              (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
-                if (sourceValue != null) break;
-            }
-        }
-
-        if (sourceValue == null)
-            return Task.FromResult<MetaverseObject?>(null);
-
-        var comparison = rule.CaseSensitive
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
-
-        var targetAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId!.Value;
-        var matches = _mvos.Values
-            .Where(mvo =>
-            {
-                if (mvo.Type?.Id != metaverseObjectType.Id)
-                    return false;
-                return mvo.AttributeValues.Any(a =>
-                    a.AttributeId == targetAttrId &&
-                    string.Equals(
-                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
-                            (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
-                        sourceValue,
-                        comparison));
-            })
-            .ToList();
-
-        if (matches.Count > 1)
-            throw new MultipleMatchesException(
-                $"Multiple Metaverse Objects matched for rule {rule.Id}",
-                matches.Select(m => m.Id).ToList());
-
-        return Task.FromResult(matches.Count == 1 ? matches[0] : null);
-    }
+    /// <inheritdoc />
+    public virtual Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId) =>
+        Task.FromResult(_mvos.GetValueOrDefault(metaverseObjectId));
 
     public virtual Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
         MetaverseObject metaverseObject,

@@ -126,8 +126,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
         => _inner.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-        => _inner.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
+        => _inner.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
+
+    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+        => _inner.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
 
     public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(MetaverseObject metaverseObject, ConnectedSystem connectedSystem, ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
         => _inner.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);

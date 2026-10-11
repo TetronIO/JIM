@@ -6046,11 +6046,11 @@ public abstract class SyncTaskProcessorBase
                     rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
             }
 
-            var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-            if (mvo == null)
+            var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+            if (match == null)
                 continue;
 
-            return await EstablishJoinAsync(connectedSystemObject, mvo, importSyncRule);
+            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule);
         }
 
         // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
@@ -6060,10 +6060,10 @@ public abstract class SyncTaskProcessorBase
             var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
             if (matchingRules.Count > 0)
             {
-                var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+                var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
                 // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
-                if (mvo != null)
-                    return await EstablishJoinAsync(connectedSystemObject, mvo, joiningSyncRule: null);
+                if (match != null)
+                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null);
             }
         }
 
@@ -6096,12 +6096,19 @@ public abstract class SyncTaskProcessorBase
     /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
     /// tracking state on, regardless of how it was loaded.
     /// </summary>
-    private async Task<MetaverseObject?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
+    private async Task<ImportMatch?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
     {
         try
         {
             var match = await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
-            return match == null ? null : _mvoIdentityMap.Resolve(match);
+            return match == null ? null : match with { MetaverseObject = _mvoIdentityMap.Resolve(match.MetaverseObject) };
+        }
+        catch (JIM.Models.Exceptions.ObjectMatchingRuleFailedException ex)
+        {
+            // A rule that cannot be worked out stops the object (#2052). The SyncJoinException leaves
+            // ProcessMetaverseObjectChangesAsync before projection is considered, so a broken rule cannot project a
+            // duplicate identity; the object is retried on the next synchronisation.
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed, ex.Message);
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {

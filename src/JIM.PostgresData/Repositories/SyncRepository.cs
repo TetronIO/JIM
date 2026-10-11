@@ -198,9 +198,12 @@ public partial class SyncRepository : ISyncRepository
 
     #region Object Matching — Data Access
 
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-        => _repo.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
+        => _repo.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
+
+    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+        => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
 
     public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
         MetaverseObject metaverseObject, ConnectedSystem connectedSystem,

@@ -5980,7 +5980,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
-    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// This is the export-side counterpart of the import join lookup (FindMetaverseObjectIdsByMatchValuesAsync): it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     public async Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(

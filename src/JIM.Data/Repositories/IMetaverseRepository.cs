@@ -353,18 +353,15 @@ public interface IMetaverseRepository
         string? filterAttributeValue = null);
 
     /// <summary>
-    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
-    /// This is to help the process of joining a CSO to an MVO.
+    /// Finds the distinct Metaverse Objects of a type that hold any of <paramref name="values"/> for an attribute: the
+    /// lookup behind an Object Matching Rule's import join (#2052). One query covers every value, so several values
+    /// that all belong to one Metaverse Object are one match, and values belonging to different ones are several.
     /// </summary>
-    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
-    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
-    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
-    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule);
+    /// <param name="valueType">The attribute's data type. The values are typed accordingly: <see cref="string"/>,
+    /// <see cref="int"/>, <see cref="long"/>, <see cref="decimal"/> or <see cref="Guid"/>.</param>
+    /// <param name="caseSensitive">For Text, whether a value must match case exactly.</param>
+    /// <param name="take">The most ids to return, in id order.</param>
+    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take);
 
     /// <summary>
     /// Deletes a Metaverse Object from the database.

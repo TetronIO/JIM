@@ -1747,26 +1747,6 @@ public partial class MetaverseServer
     }
 
     /// <summary>
-    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
-    /// This is to help the process of joining a CSO to an MVO.
-    /// </summary>
-    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
-    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
-    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
-    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
-    {
-        if (objectMatchingRule.Sources == null || objectMatchingRule.Sources.Count == 0)
-            throw new ArgumentOutOfRangeException($"{nameof(objectMatchingRule)}.Sources is null or empty. Cannot continue.");
-
-        return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
-    }
-
-    /// <summary>
     /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
     /// Supports server-side search and pagination for large multi-valued attributes.
     /// </summary>
