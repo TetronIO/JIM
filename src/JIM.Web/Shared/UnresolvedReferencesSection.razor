@@ -378,9 +378,11 @@
     private string RunSentence()
     {
         var typeName = _context?.ObjectTypeName ?? ObjectTypeName ?? "object";
+        // "On this groupOfNames" rather than "the groupOfNames's": Object Type names are often a directory's class names,
+        // which take a possessive badly.
         var references = RunCount is { } count
-            ? $"{count:N0} of the {typeName}'s reference {(count == 1 ? "value" : "values")}"
-            : $"some of the {typeName}'s reference values";
+            ? $"{count:N0} reference {(count == 1 ? "value" : "values")} on this {typeName}"
+            : $"some reference values on this {typeName}";
 
         if (Tone == UnresolvedReferenceTone.Error)
             return $"This run could not link {references} to Connected System Objects, so they cannot flow to the Metaverse until they resolve.";
