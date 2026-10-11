@@ -70,7 +70,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** An attribute refers to another object (a manager, a group member) that JIM does not hold for this Connected System, usually because it sits outside the containers JIM manages. The rest of the object is imported.
 
-**How to fix.** [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) explains how to see where each one points and what would resolve it.
+**How to fix.** [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) explains how to see where each one points and what would resolve it.
 
 **Check.** The Connected System's count of unresolved references falls after the next import.
 
