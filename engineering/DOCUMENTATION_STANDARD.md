@@ -231,16 +231,16 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 ## Coverage
 
-"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2, COV-4 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-5 and the connector settings of COV-6 are planned for Phase 2.
+"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2, COV-4 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`. COV-3 and the Connector settings of COV-6 take their inventories from the compiled product, so NUnit tests in `test/JIM.Worker.Tests/Docs/` check them (`ServiceSettingDocsCoverageTests`, `ConnectorSettingDocsCoverageTests`), and `ServiceSettingSeedingCoverageTests` holds that every Service Setting key is seeded. All of these block; COV-5 is planned for Phase 2.
 
 | ID | Inventory | Documented means |
 |----|-----------|------------------|
 | **COV-1** | Exported cmdlets (module manifest) | A heading, or a row in the first column of a table, on a `docs/powershell/` page |
 | **COV-2** | Environment variables the product and installer read: `Constants.Config` and `GetEnvironmentVariable` reads, the PowerShell module's `$env:` reads, the compose files, `.env.example`, and the variables the installer's header documents | A row in a settings table |
-| **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings reference |
+| **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings table of the Configuration Reference (`docs/administration/configuration.md`) |
 | **COV-4** | REST resource groups (OpenAPI tags) | A row in the Resource groups table on the API overview page (`docs/api/index.md`) |
 | **COV-5** | Portal pages (routable components) | The docs page each declares through `PageInfo` exists |
-| **COV-6** | Connector settings and expression functions | A row in the connector's or the function reference's table |
+| **COV-6** | Connector settings (each built-in Connector's `GetSettings()`) and expression functions | A row in a Setting table on the Connector's page (the page `docs/connectors/index.md` links under its name), naming the setting exactly as the settings form shows it; a row in the function reference's table |
 | **TERM-1** | Product nouns: the glossary's entries, and `docs/.conformance/vocabulary.psd1` (see "The product vocabulary" under Language) | A glossary entry with an anchor, a vocabulary entry, and a home page that exists (HOME-1) |
 
 "Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list (`docs/.conformance/coverage.psd1`) with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
@@ -293,7 +293,8 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
 | TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
 | COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |
-| COV-6 | Expression functions are documented (connector settings: planned, Phase 2) | Block | `Test-DocsCoverage.ps1` |
-| COV-3, COV-5 | Service Settings and portal pages are documented | Planned (Phase 2) | |
+| COV-3 | Service Settings are documented, and seeded | Block | `ServiceSettingDocsCoverageTests`, `ServiceSettingSeedingCoverageTests` |
+| COV-6 | Connector settings and expression functions are documented | Block | `ConnectorSettingDocsCoverageTests`; `Test-DocsCoverage.ps1` |
+| COV-5 | Portal pages are documented | Planned (Phase 2) | |
 | TERM-1 | The vocabulary and the glossary agree; every product noun has a home page | Block | `Test-DocsConformance.ps1` |
 | EXC-1 | Exception markers are well formed and in use | Block | `Test-DocsConformance.ps1` |

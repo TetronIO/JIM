@@ -142,11 +142,14 @@ When a synchronisation generates a value that is exported unchanged to an attrib
 |---|---|---|
 | Authentication Method | Yes | OAuth 2.0 Client Credentials, HTTP Basic, Static Bearer Token, or Custom Header. |
 | Token Endpoint URL | With OAuth 2.0 | The token endpoint used to acquire access tokens. |
-| Client ID / Client Secret | With OAuth 2.0 | The client credentials. Tokens are cached until shortly before they expire and refreshed automatically. |
+| Client ID | With OAuth 2.0 | The client identifier issued by the provider. |
+| Client Secret | With OAuth 2.0 | The client secret issued with it. Tokens are cached until shortly before they expire and refreshed automatically. |
 | OAuth Scope | No | Optional space-separated scopes to request. |
-| Username / Password | With HTTP Basic | The credentials to authenticate with. |
+| Username | With HTTP Basic | The user to authenticate as. |
+| Password | With HTTP Basic | That user's password. |
 | Bearer Token | With Static Bearer Token | A long-lived token issued by the provider. |
-| Authentication Header Name / Value | With Custom Header | For providers using a non-standard header, for example `X-Api-Key`. |
+| Authentication Header Name | With Custom Header | For providers using a non-standard header, the header's name, for example `X-Api-Key`. |
+| Authentication Header Value | With Custom Header | The value to send in that header. |
 
 Every secret is encrypted at rest and is never written to a log.
 
