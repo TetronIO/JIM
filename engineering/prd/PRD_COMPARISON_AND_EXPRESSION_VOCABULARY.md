@@ -654,7 +654,7 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 1. **Ambiguous matches on export.** Resolved by Decision 6: a dedicated error, with no join and no provisioning.
 2. **Multi-valued attributes in expressions.** Resolved by Decision 8. Until Phase 2, a matching rule on a multi-valued Connected System attribute should use an attribute source, which considers every value.
 3. **Phase 3 "compare as".** Should the type be chosen explicitly (proposed), or inferred from a test evaluation? Inference fails for expressions that return null for the sample.
-4. **Should a failing test case ever block a save outright?** For example, a Service Setting that removes **Save anyway** for environments that want it enforced. The proposal ships the save gate with Save anyway, recorded in Configuration History, and leaves enforcement to a later decision.
+4. **Should a failing test case ever block a save outright?** Decided 2026-10-11: no. The save gate always offers **Save anyway**, recorded in Configuration History. A blocking setting can be reconsidered if customers ask for enforced environments.
 5. **Moving test cases between environments.** Should test cases travel with configuration when JIM gains configuration export and import, so a pipeline can run them in the target environment before promoting?
 
 ## Acceptance Criteria
