@@ -799,6 +799,23 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// The Attribute Flow tab's Mapping Type filter chip colour: a source type's own colour, and the Derived chip's
+    /// colour for a Derived Attribute Flow (#2014), so the filter matches the chip on each derived row.
+    /// </summary>
+    public static Color GetMappingTypeChipColour(AttributeFlowMappingType mappingType)
+    {
+        return mappingType switch
+        {
+            AttributeFlowMappingType.AttributeMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.AttributeMapping),
+            AttributeFlowMappingType.ExpressionMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.ExpressionMapping),
+            AttributeFlowMappingType.Derived => Color.Secondary,
+            AttributeFlowMappingType.GeneratedMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.GeneratedMapping),
+            AttributeFlowMappingType.AdvancedMapping => GetMappingTypeChipColour(SyncRuleMappingSourcesType.AdvancedMapping),
+            _ => Color.Default
+        };
+    }
+
     #endregion
 
     #region Initiator Icon Helpers

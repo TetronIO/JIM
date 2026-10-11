@@ -55,6 +55,13 @@ function Set-JIMSyncRuleMapping {
         directions until it is re-enabled; re-enabling clears any recorded disabled reason. Applies
         to import and export mappings alike.
 
+    .PARAMETER KeepUnique
+        The "Keep unique with ..." switch on an Expression mapping whose value is built from a generated value
+        (an Email built from a generated Account Name). $true (the default): a target's refusal of the value as
+        already in use is corrected by correcting the generated value. $false: the refusal is reported as an
+        ordinary export error and the generated value is left alone. Refused for an attribute mapping and for a
+        generated mapping. Changing it releases any decision the generated value is waiting on.
+
     .PARAMETER TokenKind
         Changes which uniqueness token a generated mapping appends: OnlyIfTaken, Sequence or Random.
         Generated mappings only. Converting an ordinary mapping to or from a generated one is not
@@ -148,6 +155,12 @@ function Set-JIMSyncRuleMapping {
         skipped by synchronisation until it is re-enabled with -Enabled $true.
 
     .EXAMPLE
+        Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -KeepUnique $false
+
+        Stops correcting a generated Account Name when a target refuses the User Principal Name built
+        from it (mapping 12): such a refusal is then reported as an ordinary export error.
+
+    .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1 |
             Where-Object { $_.sourceType -eq 'ExpressionMapping' } |
             Set-JIMSyncRuleMapping -SyncRuleId 1 -MissingInputBehaviour FailMapping
@@ -212,6 +225,9 @@ function Set-JIMSyncRuleMapping {
 
         [bool]$Enabled,
 
+        # Keep unique (Generated Value Forms, #2023), Expression mappings only.
+        [bool]$KeepUnique,
+
         # Unique Value Generation (#242): a generated mapping's uniqueness token settings. Refused by the
         # server for a mapping that is not currently a generated mapping.
         [ValidateSet('OnlyIfTaken', 'Sequence', 'Random')]
@@ -269,6 +285,7 @@ function Set-JIMSyncRuleMapping {
         if ($PSBoundParameters.ContainsKey('CaseNormalisation')) { $body.caseNormalisation = $CaseNormalisation }
         if ($PSBoundParameters.ContainsKey('InitialExportOnly')) { $body.initialExportOnly = $InitialExportOnly }
         if ($PSBoundParameters.ContainsKey('Enabled')) { $body.enabled = $Enabled }
+        if ($PSBoundParameters.ContainsKey('KeepUnique')) { $body.keepUnique = $KeepUnique }
 
         # Unique Value Generation (#242): only settings the caller named are sent, nested under `generation`
         # (matching UpdateSyncRuleMappingGenerationRequest). -FixedWidth 0 clears the padding; omitting it
@@ -293,7 +310,7 @@ function Set-JIMSyncRuleMapping {
         if ($generation.Count -gt 0) { $body.generation = $generation }
 
         if ($body.Count -eq 0) {
-            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse, -CollisionRemediation)."
+            Write-Error "No settings were supplied to change. Supply at least one of -Expression, -MissingInputBehaviour, -NullIsValue, -InboundValueProcessing, -CaseNormalisation, -InitialExportOnly, -Enabled, -KeepUnique, or a generated mapping's uniqueness token settings (-TokenKind, -SuffixStyle, -SuffixStart, -SequenceStart, -SequenceIncrement, -FixedWidth, -OnWidthExceeded, -RandomFormat, -RandomLength, -Separator, -AttemptLimit, -NeverReuse, -CollisionRemediation)."
             return
         }
 

@@ -6073,6 +6073,18 @@ html[lang] .jim-password-timeline.mud-timeline {
     white-space: nowrap;
 }
 
+/* "Built from generated value" (Attribute Flow dialog, #2014): an accent edge ties the block to the generated value it
+   names; it steps back to the ordinary outline while the switch is not in effect, or when there is no switch. The
+   outlined-paper rules above set every border with !important (html[lang] .mud-paper-outlined, and the nested-paper
+   border colour), so these need it too; they win on source order at equal specificity. */
+html[lang] .jim-built-from-generated-value.mud-paper-outlined {
+    border-left: 3px solid var(--mud-palette-primary) !important;
+}
+
+html[lang] .jim-built-from-generated-value-inactive.mud-paper-outlined {
+    border-left-color: var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default))) !important;
+}
+
 /* ─── Connection explanations (#348): the Connections tab's row expansions and Not connected section ───
    Every colour is a theme token, so the explanations follow the active theme. Outcomes are carried by icon and words
    as well as colour (each criterion's icon has an accessible label, and the server's text says "is", "has no value",

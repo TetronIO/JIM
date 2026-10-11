@@ -66,6 +66,20 @@ public class SyncRuleMappingDto
     /// </summary>
     public string? DisabledReason { get; set; }
 
+    /// <summary>
+    /// The "Keep unique with ..." switch (Generated Value Forms, #2023): for an Expression mapping whose value is built from
+    /// a generated value, whether a target's refusal of that value is corrected by correcting the generated value. Defaults
+    /// to true; has no effect on a mapping not built from exactly one generated value (see
+    /// <see cref="BuiltFromGeneratedValue"/>).
+    /// </summary>
+    public bool KeepUnique { get; set; }
+
+    /// <summary>
+    /// Present when this Expression mapping's value is built from a generated value (Generated Value Forms, #2023): which
+    /// one, through which attributes, and how JIM treats it. Null for every other mapping.
+    /// </summary>
+    public GeneratedValueBuiltValueDto? BuiltFromGeneratedValue { get; set; }
+
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     /// <summary>
@@ -114,6 +128,7 @@ public class SyncRuleMappingDto
             InitialExportOnly = entity.InitialExportOnly,
             Enabled = entity.Enabled,
             DisabledReason = entity.DisabledReason,
+            KeepUnique = entity.KeepUnique,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList(),
             Generation = entity.Generation == null ? null : SyncRuleMappingGenerationDto.FromEntity(entity.Generation),
             Warnings = entity.SaveWarnings.ToList(),
@@ -177,6 +192,13 @@ public class SyncRuleMappingGenerationDto
     /// responses.
     /// </summary>
     public List<GeneratedValueParticipantDto>? Participants { get; set; }
+
+    /// <summary>
+    /// Every value built from this generated value (Generated Value Forms, #2023): the Derived Attribute Flows and export
+    /// expressions that read it, on any Synchronisation Rule. Each changes when the generated value does. Present on the
+    /// list, get, create and update responses of an import-mode generated mapping.
+    /// </summary>
+    public List<GeneratedValueBuiltValueDto>? BuiltValues { get; set; }
 
     public static SyncRuleMappingGenerationDto FromEntity(SyncRuleMappingGeneration entity) => new()
     {
@@ -390,6 +412,13 @@ public class UpdateSyncRuleMappingRequest
     public bool? Enabled { get; set; }
 
     /// <summary>
+    /// The "Keep unique with ..." switch (Generated Value Forms, #2023): whether a target's refusal of a value built from a
+    /// generated value is corrected by correcting the generated value. Expression mappings only; refused for an attribute
+    /// mapping and for a generated mapping. Changing it releases any decision the generated value is waiting on.
+    /// </summary>
+    public bool? KeepUnique { get; set; }
+
+    /// <summary>
     /// Changes to a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3).
     /// Refused for a mapping that is not currently a generated mapping.
     /// </summary>
@@ -409,6 +438,7 @@ public class UpdateSyncRuleMappingRequest
             CaseNormalisation = CaseNormalisation,
             InitialExportOnly = InitialExportOnly,
             Enabled = Enabled,
+            KeepUnique = KeepUnique,
             Generation = Generation?.ToSettingsUpdate()
         };
     }
@@ -508,6 +538,14 @@ public class CreateSyncRuleMappingRequest
     /// enabled. Applies to import and export rules alike.
     /// </summary>
     public bool? Enabled { get; set; }
+
+    /// <summary>
+    /// The "Keep unique with ..." switch (Generated Value Forms, #2023) for an Expression mapping whose value is built from
+    /// a generated value. When omitted, defaults to true. Supply false so a target's refusal of the value is reported as
+    /// an ordinary export error rather than corrected by correcting the generated value. Refused for an attribute mapping
+    /// and for a generated mapping.
+    /// </summary>
+    public bool? KeepUnique { get; set; }
 
     /// <summary>
     /// The sources for this mapping (attribute mappings or expressions).
