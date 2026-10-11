@@ -562,7 +562,7 @@
                     }
                 case "Expression":
                     <ExpressionEditor @ref="_expressionEditor" @bind-Value="_attributeFlowMappingSource.Expression"
-                        @bind-Value:after="ScheduleDerivedFlowAnalysisAsync" Id="attribute-flow-expression"
+                        @bind-Value:after="ScheduleFlowAnalysisAsync" Id="attribute-flow-expression"
                         Label="Expression" Placeholder="@(SyncRule.Direction == SyncRuleDirection.Export
                             ? "e.g. IIF(mv[\"Active\"] == true, Upper(mv[\"Display Name\"]), null)"
                             : "e.g. IIF(mv[\"Active\"] == true, Upper(cs[\"Name\"]), null)")"
@@ -586,6 +586,9 @@
 
                     @* ─── Derived Attribute Flow (#1750, mockups B and C): the live analysis of this flow ─── *@
                     <DerivedFlowPanel Analysis="_derivedFlowAnalysis" ConnectedSystemName="@SyncRule.ConnectedSystem?.Name" />
+
+                    @* ─── Built from generated value (#2014, mock screen 1): which generated value, and the Keep unique switch ─── *@
+                    <BuiltFromGeneratedValueBlock Description="_builtFromGeneratedValue" Mapping="_attributeFlowMapping" />
 
                     @* Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it
                        produces a structurally broken value. Whether that matters is the administrator's call. *@
@@ -702,7 +705,8 @@
                             Direction="SyncRule.Direction" SyncRuleId="SyncRule.Id" ConnectedSystemId="SyncRule.ConnectedSystemId"
                             MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                             TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
-                            OnChanged="ScheduleDerivedFlowAnalysisAsync">
+                            StagedSyncRule="SyncRule"
+                            OnChanged="ScheduleFlowAnalysisAsync">
                             <BaseExpressionTools Context="insertIntoBaseExpression">
                                 @* A generated mapping's base expression can read mv["..."] too (#1750, #242). *@
                                 <div class="mt-1">
@@ -719,7 +723,7 @@
 
                         @* ─── Enabled (#1485): applies to a generated mapping the same as any other ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5" @bind-Value="_attributeFlowMapping.Enabled"
-                            @bind-Value:after="ScheduleDerivedFlowAnalysisAsync" Label="Enabled" />
+                            @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Enabled" />
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
                             A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
                         </MudText>
@@ -773,7 +777,7 @@
                 if (SyncRule.Direction == SyncRuleDirection.Import)
                 {
                     <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
-                        @bind-Value:after="ScheduleDerivedFlowAnalysisAsync"
+                        @bind-Value:after="ScheduleFlowAnalysisAsync"
                         Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
                         Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                         @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
@@ -877,7 +881,7 @@
                 else if (SyncRule.Direction == SyncRuleDirection.Export)
                 {
                     <MudSelect T="ConnectedSystemObjectTypeAttribute"
-                        @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
+                        @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Connected System Attribute"
                         Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                         Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                         @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
@@ -910,7 +914,7 @@
                 @* ─── Enabled (#1485): applies to both directions, so it sits outside the import/export branches ─── *@
                 <MudCheckBox T="bool" Dense="true" Class="mt-5"
                     @bind-Value="_attributeFlowMapping.Enabled"
-                    @bind-Value:after="ScheduleDerivedFlowAnalysisAsync"
+                    @bind-Value:after="ScheduleFlowAnalysisAsync"
                     Label="Enabled" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
@@ -1082,6 +1086,15 @@
     private readonly LatestRequestGate _derivedFlowAnalysisGate = new(TimeSpan.FromMilliseconds(300));
 
     /// <summary>
+    /// What the flow open in the dialog is built from (Generated Value Forms, #2014); null for a flow built from no
+    /// generated value, and until the first answer.
+    /// </summary>
+    private GeneratedValueBuiltValueDescription? _builtFromGeneratedValue;
+
+    /// <summary>Debounces <see cref="ScheduleBuiltFromGeneratedValueAsync"/> as <see cref="_derivedFlowAnalysisGate"/> does the analysis.</summary>
+    private readonly LatestRequestGate _builtFromGeneratedValueGate = new(TimeSpan.FromMilliseconds(300));
+
+    /// <summary>
     /// The flow as the edit dialog opened it (the dialog edits in place), for the dependants check on Update. Null
     /// while adding a flow: adding only ever contributes.
     /// </summary>
@@ -1250,7 +1263,49 @@
         }, analysis => _derivedFlowAnalysis = analysis);
     }
 
-    public void Dispose() => _derivedFlowAnalysisGate.Dispose();
+    /// <summary>
+    /// Re-analyses the flow open in the dialog after anything it depends on changes: the derived flow analysis (#1750)
+    /// and what the flow is built from (Generated Value Forms, #2014).
+    /// </summary>
+    private Task ScheduleFlowAnalysisAsync() =>
+        Task.WhenAll(ScheduleDerivedFlowAnalysisAsync(), ScheduleBuiltFromGeneratedValueAsync());
+
+    /// <summary>
+    /// Whether the flow open in the dialog can be built from a generated value: an Expression flow, import or export,
+    /// with an expression and a target.
+    /// </summary>
+    private bool CanDescribeBuiltFromGeneratedValue() =>
+        _addAttributeFlowRuleDialogVisible &&
+        _attributeFlowMappingSourceType == "Expression" &&
+        !string.IsNullOrWhiteSpace(_attributeFlowMappingSource?.Expression) &&
+        (_attributeFlowMapping?.ResolveTargetMetaverseAttributeId() != null || _attributeFlowMapping?.ResolveTargetConnectedSystemAttributeId() != null);
+
+    /// <summary>
+    /// Works out which generated value, if any, the flow open in the dialog builds its value from (#2014), against the
+    /// Synchronisation Rule as it is being edited and every other rule as saved, for the "Built from generated value"
+    /// block. Debounced like the derived flow analysis, and sent a detached snapshot for the same reason.
+    /// </summary>
+    private async Task ScheduleBuiltFromGeneratedValueAsync()
+    {
+        if (!CanDescribeBuiltFromGeneratedValue())
+        {
+            _builtFromGeneratedValue = null;
+            return;
+        }
+
+        var proposal = AttributeFlowEditBaseline.Snapshot(_attributeFlowMapping!);
+        await _builtFromGeneratedValueGate.RunAsync(async _ =>
+        {
+            using var jim = JimFactory.Create();
+            return await jim.ConnectedSystems.DescribeBuiltFromGeneratedValueAsync(SyncRule, proposal);
+        }, described => _builtFromGeneratedValue = described);
+    }
+
+    public void Dispose()
+    {
+        _derivedFlowAnalysisGate.Dispose();
+        _builtFromGeneratedValueGate.Dispose();
+    }
 
     private async Task ToggleAttributeFlowViewAsync(bool tableView)
     {
@@ -1279,6 +1334,7 @@
         _originalTargetMetaverseAttributeId = null;
         _editBaseline = null;
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         await LoadStandardMappingHintsAsync();
         await LoadAttributeContributorCountsAsync();
         _addAttributeFlowRuleDialogVisible = true;
@@ -1290,8 +1346,9 @@
         await LoadAttributeContributorCountsAsync();
         _editBaseline = AttributeFlowEditBaseline.Capture(mapping);
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         HandleEditAttributeFlowRule(mapping);
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
@@ -1356,7 +1413,7 @@
             _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         }
 
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>
@@ -1372,7 +1429,7 @@
 
         _attributeFlowMapping.TargetMetaverseAttribute = target;
         CorrectTokenKindForTargetType(target?.Type);
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>The Connected System sibling of <see cref="OnGeneratedMetaverseTargetChanged"/> (export direction).</summary>
@@ -1626,7 +1683,7 @@
         else
             _attributeFlowMapping.TargetConnectedSystemAttribute = suggestion.ConnectedSystemAttribute;
 
-        await ScheduleDerivedFlowAnalysisAsync();
+        await ScheduleFlowAnalysisAsync();
     }
 
     /// <summary>
@@ -1879,6 +1936,7 @@
         _isEditingAttributeFlow = false;
         _editBaseline = null;
         _derivedFlowAnalysis = null;
+        _builtFromGeneratedValue = null;
         await LoadDerivedFlowStepsAsync();
         await RefreshFlowGridAsync();
         await OnChanged.InvokeAsync();
