@@ -1,0 +1,26 @@
+employeeId,firstName,lastName,displayName,email,department,jobTitle
+HR-1001,Amara,Okafor,Amara Okafor,amara.okafor@example.com,Human Resources,HR Director
+HR-1002,Ben,Hughes,Ben Hughes,ben.hughes@example.com,Human Resources,HR Adviser
+HR-1003,Chloe,Martin,Chloe Martin,chloe.martin@example.com,Finance,Finance Director
+HR-1004,Daniel,Price,Daniel Price,daniel.price@example.com,Finance,Accountant
+HR-1005,Elif,Yilmaz,Elif Yilmaz,elif.yilmaz@example.com,Finance,Payroll Officer
+HR-1006,Fergus,Campbell,Fergus Campbell,fergus.campbell@example.com,Engineering,Head of Engineering
+HR-1007,Grace,Wong,Grace Wong,grace.wong@example.com,Engineering,Senior Engineer
+HR-1008,Harry,Patel,Harry Patel,harry.patel@example.com,Engineering,Engineer
+HR-1009,Isla,Murray,Isla Murray,isla.murray@example.com,Engineering,Engineer
+HR-1010,Jamal,Ahmed,Jamal Ahmed,jamal.ahmed@example.com,Engineering,Test Engineer
+HR-1011,Kate,Evans,Kate Evans,kate.evans@example.com,Sales,Sales Director
+HR-1012,Liam,Brennan,Liam Brennan,liam.brennan@example.com,Sales,Account Manager
+HR-1013,Maya,Singh,Maya Singh,maya.singh@example.com,Sales,Account Manager
+HR-1014,Noah,Taylor,Noah Taylor,noah.taylor@example.com,Sales,Sales Adviser
+HR-1015,Olivia,Brown,Olivia Brown,olivia.brown@example.com,Marketing,Head of Marketing
+HR-1016,Priya,Shah,Priya Shah,priya.shah@example.com,Marketing,Content Designer
+HR-1017,Quentin,Lewis,Quentin Lewis,quentin.lewis@example.com,Marketing,Marketing Analyst
+HR-1018,Rosa,Fernandes,Rosa Fernandes,rosa.fernandes@example.com,Operations,Operations Director
+HR-1019,Sam,Robinson,Sam Robinson,sam.robinson@example.com,Operations,Facilities Manager
+HR-1020,Tomasz,Nowak,Tomasz Nowak,tomasz.nowak@example.com,Operations,Logistics Coordinator
+HR-1021,Una,Kelly,Una Kelly,una.kelly@example.com,IT,IT Manager
+HR-1022,Victor,Mensah,Victor Mensah,victor.mensah@example.com,IT,Service Desk Analyst
+HR-1023,Wren,Jones,Wren Jones,wren.jones@example.com,IT,Systems Administrator
+HR-1024,Yusuf,Ali,Yusuf Ali,yusuf.ali@example.com,Legal,General Counsel
+HR-1025,Zoe,Clarke,Zoe Clarke,zoe.clarke@example.com,Legal,Paralegal

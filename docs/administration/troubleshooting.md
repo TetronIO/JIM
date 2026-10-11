@@ -4,10 +4,7 @@ title: Troubleshooting
 
 # Troubleshooting
 
-!!! info "Documentation In Progress"
-    This page is under active development. Content will be added in a future update.
-
-<!-- TODO: Common issues and resolutions for deployment, authentication, synchronisation, and connectivity problems -->
+This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
 ## Start-up
 

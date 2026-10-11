@@ -161,6 +161,10 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 16 | Should -Be $true
     }
 
+    It 'is true for Scenario 027 (the tested tutorial, File Connector only)' {
+        Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 27 | Should -Be $true
+    }
+
     It 'is false for a scenario that does use a directory' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 1 | Should -Be $false
     }
