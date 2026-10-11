@@ -54,7 +54,7 @@ function Get-JIMConnectedSystemPasswordPolicy {
         Shows what the Connected System with ID 3 demands of a password.
 
     .EXAMPLE
-        Get-JIMConnectedSystem -All | ForEach-Object {
+        Get-JIMConnectedSystem | ForEach-Object {
             $p = Get-JIMConnectedSystemPasswordPolicy -Id $_.Id
             [PSCustomObject]@{ System = $_.Name; MinimumLength = $p.minimumLength; Known = $p.hasAnyDiscoveredConstraint }
         }

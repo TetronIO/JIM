@@ -6,7 +6,7 @@ title: Metaverse
 
 The **metaverse** is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the Metaverse Objects themselves. All synchronisation flows through the metaverse: import rules bring data in from [Connected Systems](connected-systems.md), and export rules push data out.
 
-The metaverse schema is administrator-defined. JIM does not impose a fixed schema, so you can model any identity domain that fits your organisation, from the conventional `person` and `group` types through to bespoke types like `serviceAccount`, `mailbox`, or `device`.
+The metaverse schema is administrator-defined. JIM does not impose a fixed schema, so you can model any identity domain that fits your organisation, from the built-in `User` and `Group` types through to bespoke types like `serviceAccount`, `mailbox`, or `device`.
 
 --8<-- "assets/diagrams/metaverse-anatomy.svg"
 
@@ -14,7 +14,7 @@ The metaverse schema is administrator-defined. JIM does not impose a fixed schem
 
 ## Object types
 
-**Object types** define the schema categories in the metaverse. Typical examples are `person` and `group`, but you can define any types your organisation needs. Each object type has its own attribute set and configurable deletion behaviour.
+**Object types** define the schema categories in the metaverse. Typical examples are the built-in `User` and `Group`, but you can define any types your organisation needs. Each object type has its own attribute set and configurable deletion behaviour.
 
 ### Deletion behaviour
 
@@ -132,7 +132,7 @@ When no values exist, the action is allowed even if configuration still referenc
 
 ## Objects
 
-**Objects** are Metaverse Objects: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
+**Objects** are Metaverse Objects: a single `User`, `Group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
 ### Where a value comes from
 
