@@ -89,11 +89,11 @@ public static class UnresolvedReferenceDisplay
             UnresolvedReferenceCause.ContainerNotInScope
                 or UnresolvedReferenceCause.ContainerExcluded
                 or UnresolvedReferenceCause.PartitionNotSelected => new("Review Container Scope", $"{connectedSystemHref}?t=scope"),
-            UnresolvedReferenceCause.AmbiguousObjectType => new("Open Schema", string.IsNullOrEmpty(objectTypeName)
+            UnresolvedReferenceCause.AmbiguousObjectType => new("View Schema", string.IsNullOrEmpty(objectTypeName)
                 ? $"{connectedSystemHref}?t=schema"
                 : $"{connectedSystemHref}?t=schema&ot={Uri.EscapeDataString(objectTypeName)}"),
-            UnresolvedReferenceCause.OutsideConnectedSystem => new("Open Settings", $"{connectedSystemHref}?t=settings"),
-            _ => new("Open Run Profiles", $"{connectedSystemHref}?t=run-profiles")
+            UnresolvedReferenceCause.OutsideConnectedSystem => new("View Settings", $"{connectedSystemHref}?t=settings"),
+            _ => new("View Run Profiles", $"{connectedSystemHref}?t=run-profiles")
         };
     }
 }
