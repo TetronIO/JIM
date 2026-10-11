@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (Phases 1 and 2 complete for the 21 portal and API tour images; an unattended `-PrepareData` run needs #2073; terminal mock-up awaiting approval)
+- **Status:** Doing (Phases 1 and 2 complete for the 21 portal and API tour images, with `-PrepareData` proven unattended; terminal mock-up awaiting approval)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -45,7 +45,7 @@ Because a refresh is this expensive, screenshots fall behind the product, which 
 
 1. A declarative manifest (`scripts/screenshots/manifest.json`) lists every screenshot: its name, kind (`portal`, `api-reference`, `terminal`), the steps that reach it, which themes it is captured in, its geometry profile, and where it is published.
 2. `scripts/Capture-Screenshots.ps1` signs in through the bundled Keycloak realm, captures every manifest entry (or those named by `-Name`), and writes `<OutputPath>/<Version>/<name>-<theme>.png` (`<name>.png` for single-theme images). The default output path is `artifacts/screenshots`, which is gitignored.
-3. The manifest is validated before the browser starts: unknown kinds, profiles or themes, duplicate names, and steps of an unknown shape are rejected with the entry named.
+3. The manifest is validated before the browser starts: unknown kinds, profiles or themes, duplicate names, and steps of an unknown shape are rejected with the entry named. So is sign-in: when nothing answers at the address the portal sends browsers to (on the development stack, the Keycloak bridge on port 8181, which the integration runner starts only where `socat` is installed), the run stops and names it, rather than failing every image with the same refused connection.
 4. After capture, every image's pixel dimensions are checked against its profile; any mismatch fails the run and names the image.
 5. Each capture waits until the page is ready: network idle, web fonts loaded, no progress indicator or Blazor reconnect overlay showing, plus any element the entry names. Animations and the text caret are disabled and the pointer is parked where it hovers nothing.
 6. Theme and navigation state are set the way a user would leave them, through the portal's own preferences (`jim_darkMode`, `jim_navGroup_*` in browser storage), before the first page loads.
@@ -140,9 +140,9 @@ The integration runner resets the environment at the start of a run and leaves i
 
 ## Acceptance Criteria
 
-- [ ] `Capture-Screenshots.ps1` captures every tour entry in both themes at exactly the published geometry, and fails on any mismatch.
-- [ ] The portal is captured in Production mode, with every service running and navigation groups expanded.
-- [ ] `-PrepareData` reproduces the Scenario 8 dataset unattended.
+- [x] `Capture-Screenshots.ps1` captures every tour entry in both themes at exactly the published geometry, and fails on any mismatch.
+- [x] The portal is captured in Production mode, with every service running and navigation groups expanded.
+- [x] `-PrepareData` reproduces the Scenario 8 dataset unattended.
 - [ ] The three terminal images are generated from a live session.
 - [ ] One end-to-end flow is proven: manifest entry, capture, published to junctional.io.
 - [ ] Refreshing every screenshot for a release is one command plus a review.

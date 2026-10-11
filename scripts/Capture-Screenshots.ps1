@@ -78,6 +78,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'screenshots' 'ScreenshotManifest.ps1')
+. (Join-Path $PSScriptRoot 'screenshots' 'CapturePreflight.ps1')
 . (Join-Path $PSScriptRoot 'JimPlaywright.ps1')
 
 if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'screenshots' 'manifest.json' }
@@ -148,6 +149,10 @@ $jobs = foreach ($screenshot in @($screenshots | Where-Object kind -eq 'portal')
 }
 $jobs = @($jobs)
 if ($jobs.Count -eq 0) { throw 'Nothing to capture.' }
+
+# Every capture signs in first, so an identity provider that is not answering fails every image the same way.
+$signInProblem = Get-ScreenshotSignInProblem -BaseUrl $BaseUrl
+if ($signInProblem) { throw $signInProblem }
 
 $versionPath = Join-Path $OutputPath $Version
 New-Item -ItemType Directory -Path $versionPath -Force | Out-Null
