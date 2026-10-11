@@ -2327,7 +2327,7 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(
         Guid activityId)
     {
         var activityRpeis = _rpeis.Values.Where(r => r.ActivityId == activityId).ToList();
@@ -2336,7 +2336,9 @@ public class SyncRepository : ISyncRepository
             r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
         var totalUnhandledErrors = activityRpeis.Count(r =>
             r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError);
-        return Task.FromResult((totalWithErrors, totalRpeis, totalUnhandledErrors));
+        var totalObjectTypeChangeRefusals = activityRpeis.Count(r =>
+            r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged);
+        return Task.FromResult(new ActivityRpeiErrorCounts(totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals));
     }
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)

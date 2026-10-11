@@ -409,7 +409,7 @@ public partial class SyncRepository : ISyncRepository
             entry => entry.Value));
     }
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 
     // Bulk RPEI operations (BulkInsertRpeisAsync, BulkUpdateRpeiOutcomesAsync,

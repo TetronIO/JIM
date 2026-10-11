@@ -92,10 +92,11 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync((Guid activityId) =>
             {
                 var rpeis = _persistedRpeis.Where(r => r.ActivityId == activityId).ToList();
-                return (
+                return new ActivityRpeiErrorCounts(
                     rpeis.Count(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
                     rpeis.Count,
-                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError));
+                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+                    rpeis.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged));
             });
 
         // No settings rows exist, so every Service Setting read falls back to its default

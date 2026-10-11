@@ -115,6 +115,111 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullImport_AllowObjectTypeChangesUnderADeletionLimit_StillRetiresTheHeldObjectAsync()
+    {
+        // The retirement is half of a change the administrator asked for, not a missing object: a deletion limit
+        // that withheld it would leave both objects in place for one directory object, the new one unable to join.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)],
+            configure: runProfile => runProfile.MaxDetectedDeletions = 0);
+
+        Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(2));
+        Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+    }
+
+    [Test]
+    public async Task FullImport_AllowObjectTypeChangesUnderADeletionLimit_StillWithholdsGenuineDeletionsAsync()
+    {
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+        var missing = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)],
+            configure: runProfile => runProfile.MaxDetectedDeletions = 0);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "The type change is carried out");
+            Assert.That(missing.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), "A genuinely missing object is still held back by the limit");
+            Assert.That(context.Activity.DetectedDeletionsWithheld, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_AllowObjectTypeChangesWhenTheHeldObjectCannotBeRetired_DoesNotCreateTheReplacementAsync()
+    {
+        // A deselected Object Type with an enabled Synchronisation Rule still bound to it is left out of deletion
+        // detection, so the held object would stay beside its replacement. The replacement is withdrawn instead.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        context.UserType.Selected = false;
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(context.ConnectedSystem.Id, context.UserType, mvType, "Users In");
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)]);
+
+        Assert.That(SingleErroredRpei(context).ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged));
+        Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(1));
+        Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+    }
+
+    [Test]
+    public async Task FullImport_AllowObjectTypeChangesWhenTheReplacementCannotBeCreated_KeepsTheHeldObjectAsync()
+    {
+        // An attribute the new Object Type does not define stops the replacement being created; retiring the held
+        // object anyway would remove the directory object from JIM altogether.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+        var importObject = ImportObject(context.ComputerType, held.ExternalId);
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "NotInTheSchema", Type = AttributeDataType.Text, StringValues = ["x"] });
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [importObject]);
+
+        Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(1));
+        Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+    }
+
+    [Test]
+    public async Task FullImport_AllowObjectTypeChangesWithTheObjectReturnedTwice_CarriesOutOneChangeAsync()
+    {
+        // A Connector reading by calls reports a repeated External ID as a duplicate of the first copy, which is
+        // imported as usual; the change is carried out once, never as two replacements for one held object.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport,
+            [ImportObject(context.ComputerType, held.ExternalId), ImportObject(context.ComputerType, held.ExternalId)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SingleErroredRpei(context).ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DuplicateObject));
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(2), "One replacement beside the retired held object");
+            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ObjectHeldUnderTwoOtherObjectTypes_IsRefusedAndBothHeldObjectsKeptAsync()
+    {
+        var context = await ArrangeAsync();
+        var groupType = await CreateCsoTypeAsync(context.ConnectedSystem.Id, "group");
+        var externalId = Guid.NewGuid();
+        var heldAsUser = SeedCso(context, context.UserType, externalId);
+        var heldAsGroup = SeedCso(context, groupType, externalId);
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, externalId)]);
+
+        Assert.That(SingleErroredRpei(context).ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(heldAsUser.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+            Assert.That(heldAsGroup.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+        }
+    }
+
+    [Test]
     public async Task FullImport_ConnectorWithoutGloballyUniqueExternalIds_TreatsTheValueAsADifferentObjectAsync()
     {
         // A SQL view shares its table's keys (#1285): the same value under two Object Types is two objects there.
@@ -221,10 +326,11 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     private async Task RunImportAsync(ImportContext context, ConnectedSystemRunType runType, List<ConnectedSystemImportObject> importObjects,
-        bool forceAllowObjectTypeChanges = false)
+        bool forceAllowObjectTypeChanges = false, Action<ConnectedSystemRunProfile>? configure = null)
     {
         var runProfile = await CreateRunProfileAsync(context.ConnectedSystem.Id, runType.ToString(), runType);
         runProfile.AllowObjectTypeChanges = forceAllowObjectTypeChanges || (context.AllowObjectTypeChanges && runType == ConnectedSystemRunType.FullImport);
+        configure?.Invoke(runProfile);
         context.Activity = await CreateActivityAsync(context.ConnectedSystem.Id, runProfile, runType);
 
         var workerTask = new SynchronisationWorkerTask(context.ConnectedSystem.Id, runProfile.Id)

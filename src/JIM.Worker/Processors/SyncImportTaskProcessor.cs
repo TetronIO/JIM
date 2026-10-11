@@ -123,6 +123,14 @@ public class SyncImportTaskProcessor
     private int _objectTypeChangesAllowedCount;
 
     /// <summary>
+    /// #2049: Object Type changes this run is carrying out because its Run Profile allows them. Each replacement is
+    /// kept only if deletion detection retires every object it replaces; see
+    /// <see cref="ReconcileCarriedOutObjectTypeChanges"/>.
+    /// </summary>
+    private readonly List<CarriedOutObjectTypeChange> _objectTypeChangesCarriedOut = new();
+    private bool _objectTypeChangesReconciled;
+
+    /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
     /// Loaded once at import start from service settings.
     /// </summary>
@@ -593,7 +601,7 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -610,6 +618,13 @@ public class SyncImportTaskProcessor
             retrySw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
         }
+
+        // An Object Type change is only carried out where deletion detection retired what it replaces (#2049). It
+        // always runs on a Full Import that read anything, which is the only kind of run that can carry one out, so
+        // this only matters if that ever stops being true: a replacement nothing retired its predecessor for is
+        // withdrawn rather than left beside it.
+        if (!_objectTypeChangesReconciled)
+            ReconcileCarriedOutObjectTypeChanges(new HashSet<Guid>(), connectedSystemObjectsToBeCreated);
 
         importPhaseSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Import + processing: {ImportPhaseSeconds:F1}s",
@@ -1243,14 +1258,20 @@ public class SyncImportTaskProcessor
     /// How many Connected System Objects were in the run's scope at the start of the run: the base the
     /// percentage limit is measured against.
     /// </param>
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
 
+        var typeChangeRetirements = PrepareObjectTypeChangeRetirements();
+
         var objectTypesToCheck = await ResolveDeletionDetectionObjectTypesAsync();
         var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId, objectTypesToCheck);
-        var newlyMarkedCount = candidates.NewlyMarked.Count;
+
+        // The limits guard against objects the import did not find, which may mean the import itself is wrong. An
+        // object retired by an Object Type change the Run Profile allows is not one of those: the import returned it,
+        // under its new type, and its replacement exists only on condition it is retired (#2049).
+        var newlyMarkedCount = candidates.NewlyMarked.Count(cso => !typeChangeRetirements.Contains(cso.Id));
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
@@ -1273,6 +1294,15 @@ public class SyncImportTaskProcessor
 
             Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection refused. {NewlyMarkedCount} of {ExistingCsoCount} Connected System Objects in scope would have been newly marked as deleted, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked; {AlreadyObsoleteCount} already-Obsolete candidate(s) also left untouched.",
                 newlyMarkedCount, existingCsoCount, maxCount, maxPercent, candidates.AlreadyObsolete.Count);
+
+            var retiredByTypeChange = new HashSet<Guid>();
+            foreach (var cso in candidates.AlreadyObsolete.Concat(candidates.NewlyMarked).Where(cso => typeChangeRetirements.Contains(cso.Id)))
+            {
+                await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+                retiredByTypeChange.Add(cso.Id);
+            }
+
+            ReconcileCarriedOutObjectTypeChanges(retiredByTypeChange, connectedSystemObjectsToBeCreated);
             return;
         }
 
@@ -1287,11 +1317,89 @@ public class SyncImportTaskProcessor
         foreach (var cso in candidates.NewlyMarked)
             await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
 
-        if (newlyMarkedCount > 0 || candidates.AlreadyObsolete.Count > 0)
+        if (candidates.NewlyMarked.Count > 0 || candidates.AlreadyObsolete.Count > 0)
         {
             Log.Information("ProcessConnectedSystemObjectDeletionsAsync: deletion detection applied. {NewlyMarkedCount} Connected System Object(s) newly marked as deleted, {AlreadyObsoleteCount} already-Obsolete candidate(s) re-checked for stale Pending Exports.",
-                newlyMarkedCount, candidates.AlreadyObsolete.Count);
+                candidates.NewlyMarked.Count, candidates.AlreadyObsolete.Count);
         }
+
+        ReconcileCarriedOutObjectTypeChanges(
+            candidates.NewlyMarked.Concat(candidates.AlreadyObsolete).Select(cso => cso.Id).ToHashSet(),
+            connectedSystemObjectsToBeCreated);
+    }
+
+    /// <summary>
+    /// #2049: the held objects deletion detection retires for the Object Type changes this run carried out. A change
+    /// whose replacement did not survive processing (rejected as a duplicate of another object in the same import)
+    /// has nothing to hand over to, so its held objects are protected instead.
+    /// </summary>
+    private HashSet<Guid> PrepareObjectTypeChangeRetirements()
+    {
+        var retirements = new HashSet<Guid>();
+        foreach (var change in _objectTypeChangesCarriedOut)
+        {
+            if (IsStillCarriedOut(change))
+                retirements.UnionWith(change.Held.CsoIds);
+            else
+                _csoIdsHeldUnderAnotherObjectType.UnionWith(change.Held.CsoIds);
+        }
+
+        return retirements;
+    }
+
+    /// <summary>
+    /// Whether a carried-out Object Type change's replacement is still to be created: duplicate handling clears the
+    /// item's object and records an error when it takes a created object back out of the create list.
+    /// </summary>
+    private static bool IsStillCarriedOut(CarriedOutObjectTypeChange change) =>
+        ReferenceEquals(change.ExecutionItem.ConnectedSystemObject, change.Replacement)
+        && change.ExecutionItem.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet;
+
+    /// <summary>
+    /// #2049: keeps each carried-out Object Type change whose held objects were all retired, and withdraws the
+    /// replacement of any other before it is created, so one directory object never ends up as two Connected System
+    /// Objects. A held object outside deletion detection's reach (another partition, or a deselected Object Type an
+    /// enabled Synchronisation Rule still manages) is the case this exists for.
+    /// </summary>
+    private void ReconcileCarriedOutObjectTypeChanges(HashSet<Guid> retiredCsoIds, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
+    {
+        _objectTypeChangesReconciled = true;
+
+        var stillCarriedOut = _objectTypeChangesCarriedOut.Where(IsStillCarriedOut).ToList();
+        _objectTypeChangesAllowedCount += stillCarriedOut.Count(change => change.Held.CsoIds.All(retiredCsoIds.Contains));
+
+        foreach (var change in stillCarriedOut.Where(change => !change.Held.CsoIds.All(retiredCsoIds.Contains)))
+            WithdrawObjectTypeChange(change, connectedSystemObjectsToBeCreated);
+    }
+
+    /// <summary>
+    /// #2049: takes back an Object Type change deletion detection could not complete: the replacement is not created,
+    /// the item reports why, and the held object stays as it is.
+    /// </summary>
+    private void WithdrawObjectTypeChange(CarriedOutObjectTypeChange change, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
+    {
+        connectedSystemObjectsToBeCreated.Remove(change.Replacement);
+        _csoIdsHeldUnderAnotherObjectType.UnionWith(change.Held.CsoIds);
+        _objectTypeChangesRefusedCount++;
+
+        var heldTypeName = change.Held.Primary.ObjectType.Name;
+        var arrivingTypeName = change.ArrivingObjectType.Name;
+        var item = change.ExecutionItem;
+        item.ConnectedSystemObject = null;
+        item.ConnectedSystemObjectId = null;
+        item.ObjectChangeType = ObjectChangeType.NotSet;
+        item.SyncOutcomes.Clear();
+        item.ObjectTypeSnapshot = arrivingTypeName;
+        item.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
+        item.ErrorMessage =
+            $"JIM holds this object as a '{heldTypeName}', and this Full Import allows Object Type changes, but it could not retire the '{heldTypeName}' object: " +
+            "it is outside what the Full Import's deletion detection covers (a partition this Run Profile does not import, or a deselected Object Type that an enabled Synchronisation Rule still manages). " +
+            $"The new '{arrivingTypeName}' object has not been created, and the '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
+            $"Bring the '{heldTypeName}' object into the Full Import's scope, or disable the Synchronisation Rules bound to its Object Type, then run the Full Import again.";
+
+        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: Object Type change for External ID '{ExternalId}' withdrawn: held CSO {CsoId} of type '{HeldObjectType}' was not retired by deletion detection, so the replacement of type '{ObjectType}' is not created.",
+            LogSanitiser.Sanitise(item.ExternalIdSnapshot), change.Held.Primary.Entry.CsoId,
+            LogSanitiser.Sanitise(heldTypeName), LogSanitiser.Sanitise(arrivingTypeName));
     }
 
     /// <summary>
@@ -1887,12 +1995,35 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// #2049: a Connected System Object JIM holds under one Object Type, matched by External ID to an import object
-    /// arriving under another.
+    /// #2049: the Connected System Objects JIM holds under other Object Types, matched by External ID to an import
+    /// object arriving under another. Usually one; more only where an earlier type change has not been synchronised
+    /// away yet, which is why every one of them is protected or retired, never just the first found.
     /// </summary>
+    /// <param name="Matches">Each held object, with the Object Type JIM holds it under.</param>
+    private sealed record HeldUnderAnotherObjectType(IReadOnlyList<HeldObject> Matches)
+    {
+        /// <summary>
+        /// The held object that stands for the directory object: one still in use where there is one, since an
+        /// obsolete object is already on its way out.
+        /// </summary>
+        public HeldObject Primary => Matches.FirstOrDefault(match => match.Entry.Status != ConnectedSystemObjectStatus.Obsolete) ?? Matches[0];
+
+        public IEnumerable<Guid> CsoIds => Matches.Select(match => match.Entry.CsoId);
+    }
+
     /// <param name="Entry">The held object's lookup entry.</param>
     /// <param name="ObjectType">The Object Type JIM holds it under.</param>
-    private sealed record HeldUnderAnotherObjectType(CsoImportStateLookupEntry Entry, ConnectedSystemObjectType ObjectType);
+    private sealed record HeldObject(CsoImportStateLookupEntry Entry, ConnectedSystemObjectType ObjectType);
+
+    /// <summary>
+    /// #2049: an Object Type change a Full Import that allows them carried out: the replacement it created, the item
+    /// reporting it, and the held objects deletion detection must retire for the change to be complete.
+    /// </summary>
+    private sealed record CarriedOutObjectTypeChange(
+        ActivityRunProfileExecutionItem ExecutionItem,
+        ConnectedSystemObject Replacement,
+        ConnectedSystemObjectType ArrivingObjectType,
+        HeldUnderAnotherObjectType Held);
 
     /// <summary>
     /// SPEC-1082 D5: returns the schema fingerprint for an object type, computing and caching it on
@@ -1998,7 +2129,7 @@ public class SyncImportTaskProcessor
                     // A delete is applied to the object JIM holds, so it needs that object's full graph; refusing
                     // a change of Object Type needs only its identity.
                     if (importObject.ChangeType == ObjectChangeType.Deleted)
-                        csoIdsToHydrate.Add(heldElsewhere.Entry.CsoId);
+                        csoIdsToHydrate.Add(heldElsewhere.Primary.Entry.CsoId);
                 }
 
                 CollectSecondaryLookupCandidate(importObject, csObjectType!, secondaryLookupCandidates);
@@ -2425,10 +2556,10 @@ public class SyncImportTaskProcessor
                     // left that object in place until a Full Import noticed it was gone.
                     if (connectedSystemObject == null
                         && hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var deletedHeldElsewhere)
-                        && hydratedCsoPage.TryGetValue(deletedHeldElsewhere.Entry.CsoId, out var deletedCso))
+                        && hydratedCsoPage.TryGetValue(deletedHeldElsewhere.Primary.Entry.CsoId, out var deletedCso))
                     {
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for an object of type '{ObjectType}', which JIM holds as CSO {CsoId} of type '{HeldObjectType}'. Applying the delete to it.",
-                            LogSanitiser.Sanitise(importObject.ObjectType), deletedCso.Id, LogSanitiser.Sanitise(deletedHeldElsewhere.ObjectType.Name));
+                            LogSanitiser.Sanitise(importObject.ObjectType), deletedCso.Id, LogSanitiser.Sanitise(deletedHeldElsewhere.Primary.ObjectType.Name));
                         connectedSystemObject = deletedCso;
                     }
 
@@ -2483,7 +2614,8 @@ public class SyncImportTaskProcessor
                     // object would leave the held one missing from its own type, so deletion detection would retire
                     // it and its Metaverse Object could be deleted and deprovisioned everywhere. Refuse unless the
                     // administrator has asked for the change, and keep the held object as it is.
-                    if (hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var heldElsewhere))
+                    var heldElsewhere = hydrationResult.CrossTypeMatches.GetValueOrDefault(importObject);
+                    if (heldElsewhere != null)
                     {
                         if (!ObjectTypeChangesAllowed)
                         {
@@ -2491,10 +2623,9 @@ public class SyncImportTaskProcessor
                             continue;
                         }
 
-                        _objectTypeChangesAllowedCount++;
                         Log.Information("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' and now arrives as type '{ObjectType}'. The Run Profile allows Object Type changes, so it is imported as a new object and the held one is left to deletion detection.",
-                            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), heldElsewhere.Entry.CsoId,
-                            LogSanitiser.Sanitise(heldElsewhere.ObjectType.Name), LogSanitiser.Sanitise(csObjectType.Name));
+                            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), heldElsewhere.Primary.Entry.CsoId,
+                            LogSanitiser.Sanitise(heldElsewhere.Primary.ObjectType.Name), LogSanitiser.Sanitise(csObjectType.Name));
                     }
 
                     // Connector said Update but no CSO exists — this is expected behaviour
@@ -2516,12 +2647,20 @@ public class SyncImportTaskProcessor
 
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
+                    // An allowed Object Type change whose replacement could not be built must not retire the held
+                    // object, or the directory object would vanish from JIM altogether (#2049).
+                    if (connectedSystemObject == null && heldElsewhere != null)
+                        _csoIdsHeldUnderAnotherObjectType.UnionWith(heldElsewhere.CsoIds);
+
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        if (heldElsewhere != null)
+                            _objectTypeChangesCarriedOut.Add(new CarriedOutObjectTypeChange(activityRunProfileExecutionItem, connectedSystemObject, csObjectType, heldElsewhere));
 
                         // SPEC-1082 D7: Full Import created objects request a stamp with the incoming
                         // hash + current type fingerprint, written after this create batch commits
@@ -2959,11 +3098,14 @@ public class SyncImportTaskProcessor
         var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
         var externalIdValue = GetExternalIdLookupValue(importObject, externalIdAttribute);
 
-        return GetCrossTypeProbeTargets(objectType, externalIdAttribute)
+        var matches = GetCrossTypeProbeTargets(objectType, externalIdAttribute)
             .Select(target => lookup.TryGetValue($"cso:{_connectedSystem.Id}:{target.ExternalIdAttribute.Id}:{externalIdValue}", out var entry)
-                ? new HeldUnderAnotherObjectType(entry, target.ObjectType)
+                ? new HeldObject(entry, target.ObjectType)
                 : null)
-            .FirstOrDefault(held => held != null);
+            .OfType<HeldObject>()
+            .ToList();
+
+        return matches.Count > 0 ? new HeldUnderAnotherObjectType(matches) : null;
     }
 
     /// <summary>
@@ -2979,15 +3121,16 @@ public class SyncImportTaskProcessor
     /// </summary>
     private void RefuseObjectTypeChange(ActivityRunProfileExecutionItem activityRunProfileExecutionItem, HeldUnderAnotherObjectType held, ConnectedSystemObjectType arrivingObjectType)
     {
-        _csoIdsHeldUnderAnotherObjectType.Add(held.Entry.CsoId);
+        _csoIdsHeldUnderAnotherObjectType.UnionWith(held.CsoIds);
         _objectTypeChangesRefusedCount++;
 
-        var heldTypeName = held.ObjectType.Name;
+        var primary = held.Primary;
+        var heldTypeName = primary.ObjectType.Name;
         var arrivingTypeName = arrivingObjectType.Name;
 
         // An object an earlier import already marked obsolete is disconnected by the next synchronisation whatever this
         // run does, so saying nothing is deprovisioned would be untrue for it.
-        var keptClause = held.Entry.Status == ConnectedSystemObjectStatus.Obsolete
+        var keptClause = primary.Entry.Status == ConnectedSystemObjectStatus.Obsolete
             ? $"the existing '{heldTypeName}' object, which an earlier import marked obsolete, has been left as it is"
             : $"the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned";
 
@@ -3000,7 +3143,7 @@ public class SyncImportTaskProcessor
             "If it has not, review the Object Types selected on the Connected System.";
 
         Log.Warning("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' but arrived as type '{ObjectType}'. Refusing the Object Type change and keeping the held object.",
-            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), held.Entry.CsoId,
+            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), primary.Entry.CsoId,
             LogSanitiser.Sanitise(heldTypeName), LogSanitiser.Sanitise(arrivingTypeName));
     }
 

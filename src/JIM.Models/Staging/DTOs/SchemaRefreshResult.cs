@@ -72,6 +72,15 @@ public class SchemaRefreshResult
     public Dictionary<string, List<SchemaObjectTypeClassificationChange>> ChangedObjectTypeClassifications { get; set; } = new();
 
     /// <summary>
+    /// Existing Object Types whose classification the Connected System now reports differently in a way that cannot
+    /// change which Object Type an entry resolves to: an unselected type, inheritance naming no other selected type,
+    /// or a class kind change that does not make a class auxiliary or stop it being one. Applying records it, which is
+    /// what keeps the classification the selection preview relies on current; an Object Type already listed in
+    /// <see cref="ChangedObjectTypeClassifications"/> is not repeated here.
+    /// </summary>
+    public List<string> ObjectTypesWithClassificationUpdates { get; set; } = new();
+
+    /// <summary>
     /// Attributes that could not be removed because they are referenced by Synchronisation Rules.
     /// Key is the attribute name, value is the list of Synchronisation Rule names that reference it.
     /// </summary>
@@ -118,15 +127,16 @@ public class SchemaRefreshResult
     public bool ActionRequired => AttributesInUse.Count > 0;
 
     /// <summary>
-    /// Whether there were any changes to the schema. Includes Object Type classification changes, so a refresh
-    /// carrying only those is offered for applying rather than reported as up to date and discarded.
+    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, so a
+    /// refresh carrying only those is offered for applying rather than reported as up to date and discarded.
     /// </summary>
     public bool HasChanges => AddedObjectTypes.Count > 0 ||
                               RemovedObjectTypes.Count > 0 ||
                               AddedAttributes.Values.Sum(v => v.Count) > 0 ||
                               RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
                               ChangedAttributes.Values.Sum(v => v.Count) > 0 ||
-                              HasObjectTypeClassificationChanges;
+                              HasObjectTypeClassificationChanges ||
+                              ObjectTypesWithClassificationUpdates.Count > 0;
 
     /// <summary>
     /// Whether the refresh found changes that can invalidate existing configuration or leave stale data behind:

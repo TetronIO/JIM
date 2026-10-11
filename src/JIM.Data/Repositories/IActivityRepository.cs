@@ -481,7 +481,7 @@ public interface IActivityRepository
     /// Used to determine activity completion status (success/warning/failure) without loading
     /// RPEIs into memory.
     /// </summary>
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Atomically increments <c>AttemptCount</c> and advances <c>LastSeen</c> on the aggregated failed-authentication

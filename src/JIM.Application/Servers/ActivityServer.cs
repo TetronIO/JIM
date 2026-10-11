@@ -682,7 +682,7 @@ public class ActivityServer
     /// RPEIs with errors, the total number of RPEIs, and the number of UnhandledError RPEIs,
     /// enabling precise activity completion status determination without loading RPEIs into memory.
     /// </summary>
-    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }

@@ -1130,10 +1130,10 @@ public interface ISyncRepository
 
     /// <summary>
     /// Queries the database for RPEI error counts without loading RPEIs into memory.
-    /// Returns total RPEIs with errors, total RPEIs, and total UnhandledError RPEIs.
+    /// Returns total RPEIs with errors, total RPEIs, total UnhandledError RPEIs and total refused Object Type changes.
     /// UnhandledError RPEIs indicate code/logic bugs and escalate activity status.
     /// </summary>
-    Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records attached to RPEIs.

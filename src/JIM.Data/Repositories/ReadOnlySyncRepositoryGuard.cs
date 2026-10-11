@@ -241,7 +241,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
         => _inner.DetachRpeisFromChangeTracker(rpeis);
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _inner.GetActivityRpeiErrorCountsAsync(activityId);
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
