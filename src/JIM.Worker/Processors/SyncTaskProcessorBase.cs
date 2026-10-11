@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
@@ -523,6 +524,57 @@ public abstract class SyncTaskProcessorBase
         var returned = await _uniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync(_uniqueValueResolveOptions);
         if (returned > 0)
             Log.Information("ReturnUnusedSequenceNumbersAsync: Handed {Count} unused sequence numbers back to their counters for Activity {ActivityId}", returned, _activity.Id);
+    }
+
+    /// <summary>
+    /// The most candidates passed over for one generated value that are reported one by one on the object's item; any
+    /// beyond are counted in one more line.
+    /// </summary>
+    private const int MaximumSkippedCandidatesReported = 10;
+
+    /// <summary>
+    /// Generated values the run held back because values built from them could not be worked out yet (Generated Value
+    /// Forms, #2023), by generated attribute, with each distinct reason, for the run's warning.
+    /// </summary>
+    private readonly Dictionary<string, (int Count, HashSet<string> Reasons)> _generatedValuesWaiting = new(StringComparer.Ordinal);
+
+    private static IEnumerable<string> DescribeSkippedCandidates(IReadOnlyList<string> skipped)
+    {
+        foreach (var candidate in skipped.Take(MaximumSkippedCandidatesReported))
+            yield return candidate;
+
+        if (skipped.Count > MaximumSkippedCandidatesReported)
+            yield return string.Create(CultureInfo.InvariantCulture, $"and {skipped.Count - MaximumSkippedCandidatesReported} more candidates passed over for the same reasons");
+    }
+
+    private void RecordGeneratedValueWaiting(string attributeName, string waitingFor)
+    {
+        if (!_generatedValuesWaiting.TryGetValue(attributeName, out var waiting))
+            waiting = (0, new HashSet<string>(StringComparer.Ordinal));
+
+        waiting.Reasons.Add(waitingFor);
+        _generatedValuesWaiting[attributeName] = (waiting.Count + 1, waiting.Reasons);
+    }
+
+    /// <summary>
+    /// Appends one Activity warning per generated attribute the run held back because values built from it could not be
+    /// worked out yet (Generated Value Forms, #2023), naming what they wait for, and logs the same. Call from the
+    /// <c>finally</c> of <c>PerformFullSyncAsync</c> and <c>PerformDeltaSyncAsync</c>: an object that waits may have no
+    /// other change, and so no item of its own, to say it on.
+    /// </summary>
+    protected void ReportGeneratedValuesWaiting()
+    {
+        foreach (var (attributeName, (count, reasons)) in _generatedValuesWaiting)
+        {
+            var warning = string.Create(CultureInfo.InvariantCulture,
+                $"JIM held back {count} {attributeName} {(count == 1 ? "value" : "values")} until the values built from {(count == 1 ? "it" : "them")} can be worked out. " +
+                $"{(count == 1 ? "It waits" : "They wait")} for {string.Join("; ", reasons.Take(5))}{(reasons.Count > 5 ? "; and more" : string.Empty)}.");
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            Log.Information("ReportGeneratedValuesWaiting: {Count} {Attribute} value(s) held back for Activity {ActivityId} until values built from them can be worked out.",
+                count, LogSanitiser.Sanitise(attributeName), _activity.Id);
+        }
+
+        _generatedValuesWaiting.Clear();
     }
 
     /// <summary>
@@ -2635,6 +2687,12 @@ public abstract class SyncTaskProcessorBase
             {
                 var outcome = outcomes[i];
                 var pending = pendingValues[i];
+                var attributeName = pending.Mapping.TargetMetaverseAttribute!.Name;
+
+                // Generated Value Forms (#2023): candidates passed over because a value built from them was already
+                // held, whatever came of the request, a bounded number of them per object.
+                forRpei.AddRange(DescribeSkippedCandidates(outcome.SkippedCandidates)
+                    .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
                 {
@@ -2653,7 +2711,15 @@ public abstract class SyncTaskProcessorBase
                         break;
 
                     case GenerationOutcomeKind.Waiting:
-                        // Nothing to do: any existing value stays, and there is nothing new to apply.
+                        // Nothing to apply: any existing value stays. A value held back because a value built from it
+                        // cannot be worked out yet is reported, on the object's item and on the run, since the object
+                        // may have nothing else to record (Generated Value Forms, #2023).
+                        if (outcome.FormWaits.Count > 0)
+                        {
+                            var waitingFor = string.Join("; ", outcome.FormWaits.Select(w => $"{w.InputName} (needed by {w.NeededBy})"));
+                            forRpei.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
+                            RecordGeneratedValueWaiting(attributeName, waitingFor);
+                        }
                         break;
 
                     case GenerationOutcomeKind.Exhausted:

@@ -308,10 +308,16 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         var activity = await RunFullSyncAsync(ctx.Hr);
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single(m => Text(m, ctx.AccountName) != null);
+        var skipped = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped)
+            .Select(o => o.DetailMessage)
+            .ToList();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
             Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e11"), "e1 is passed over: the Email built from it is already held");
+            Assert.That(skipped, Is.EqualTo(new[] { "Account Name: e1: Email (built from Account Name) is already held by another Metaverse Object" }),
+                "the object's item says which candidate was passed over, and why");
             Assert.That(Text(mvo, ctx.Email), Is.EqualTo("e11@corp.local"));
             Assert.That(Text(mvo, ctx.Upn), Is.EqualTo("e11@corp.local"));
         }
@@ -342,9 +348,16 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         var activity = await RunFullSyncAsync(ctx.Hr);
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var waiting = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting)
+            .Select(o => o.DetailMessage)
+            .ToList();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(mvo, ctx.AccountName), Is.Null, "no Account Name until the Email built from it can be worked out");
+            Assert.That(waiting, Is.EqualTo(new[] { "Account Name: Region (needed by Email)" }), "the object's item says what it waits for");
+            Assert.That(activity.WarningMessage, Does.Contain("1 Account Name value").And.Contain("Region (needed by Email)"),
+                "the run says so too, for an object with no other change to record");
             Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty,
                 "waiting is not an error");
         }
