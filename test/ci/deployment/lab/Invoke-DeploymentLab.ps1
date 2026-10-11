@@ -16,7 +16,13 @@
     them. Or give -Commit instead.
 
 .PARAMETER Commit
-    Build the bundle from this commit first, with Build-LabBundle.ps1, and test that.
+    Build the bundle from this commit first, with Build-LabBundle.ps1, and test that. When upgrade cells run and the
+    commit's VERSION is not newer than the release they upgrade from, the build reports the next patch version, so that
+    the installer takes it as an upgrade.
+
+.PARAMETER PreviousBundlePath
+    For upgrade cells: the archive of the release to upgrade from, with its .sha256 beside it. Default: the latest
+    release's, downloaded from GitHub once into the lab's cache.
 
 .PARAMETER Name
     Run only the cells with these names; wildcards allowed.
@@ -53,6 +59,8 @@ param(
 
     [Parameter(Mandatory, ParameterSetName = 'Commit')]
     [string]$Commit,
+
+    [string]$PreviousBundlePath,
 
     [string[]]$Name,
 
@@ -101,8 +109,25 @@ New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
 $OutputPath = (Resolve-Path $OutputPath).Path
 $cachePath = $lab.CachePath -replace '^~', $HOME
 
+$upgrades = @($cells | Where-Object { $_.Scenario -eq 'Upgrade' }).Count -gt 0
+if ($upgrades) {
+    if (-not $PreviousBundlePath) {
+        $PreviousBundlePath = Get-LabReleaseBundle -CachePath $cachePath
+    }
+    $PreviousBundlePath = (Resolve-Path $PreviousBundlePath).Path
+}
 if ($Commit) {
-    $BundlePath = & (Join-Path $PSScriptRoot 'Build-LabBundle.ps1') -Commit $Commit -OutputPath (Join-Path $OutputPath 'bundle')
+    $build = @{ Commit = $Commit; OutputPath = (Join-Path $OutputPath 'bundle') }
+    if ($upgrades) {
+        $previousVersion = (Split-Path $PreviousBundlePath -Leaf) -replace '^jim-release-', '' -replace '\.tar\.gz$', ''
+        $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+        $commitVersion = (& git -C $repositoryRoot show "${Commit}:VERSION").Trim()
+        if (Test-LabVersionAtMost -Version $commitVersion -Limit $previousVersion) {
+            $build.ReportVersion = Get-LabNextVersion -Version $previousVersion
+            Write-Host "$Commit's VERSION ($commitVersion) is not newer than $previousVersion, so the build reports $($build.ReportVersion)"
+        }
+    }
+    $BundlePath = & (Join-Path $PSScriptRoot 'Build-LabBundle.ps1') @build | Select-Object -Last 1
 }
 $BundlePath = (Resolve-Path $BundlePath).Path
 
@@ -119,7 +144,7 @@ if ($BudgetGiB -lt 0) {
     $BudgetGiB = Get-LabMemoryBudget -MemInfo (Get-Content /proc/meminfo) -ReserveGiB $lab.ReserveGiB
 }
 $runStarted = Get-Date
-Write-Host "Deployment lab: $($cells.Count) cells, bundle $(Split-Path $BundlePath -Leaf), $BudgetGiB GiB for VMs$(if ($MaxParallel) { ", at most $MaxParallel at once" }), results in $OutputPath"
+Write-Host "Deployment lab: $($cells.Count) cells, bundle $(Split-Path $BundlePath -Leaf)$(if ($upgrades) { ", upgrading from $(Split-Path $PreviousBundlePath -Leaf)" }), $BudgetGiB GiB for VMs$(if ($MaxParallel) { ", at most $MaxParallel at once" }), results in $OutputPath"
 
 $pwshPath = (Get-Process -Id $PID).Path
 $cellScript = Join-Path $PSScriptRoot 'Invoke-LabCell.ps1'
@@ -137,7 +162,8 @@ function Start-Cell {
     $start = [System.Diagnostics.ProcessStartInfo]::new('bash')
     foreach ($argument in @('-c', 'exec "$@" < /dev/null > "$0" 2>&1', (Join-Path $cellPath 'runner.log'), $pwshPath,
             '-NoProfile', '-File', $cellScript, '-CellName', $Cell.Name, '-BundlePath', $BundlePath,
-            '-PayloadPath', $payloadPath, '-PowerShellPath', $powerShellPath, '-OutputPath', $cellPath, '-KeepVm', $KeepVm)) {
+            '-PayloadPath', $payloadPath, '-PowerShellPath', $powerShellPath, '-OutputPath', $cellPath, '-KeepVm', $KeepVm) +
+        $(if ($Cell.Scenario -eq 'Upgrade') { @('-PreviousBundlePath', $PreviousBundlePath) } else { @() })) {
         $start.ArgumentList.Add($argument)
     }
     $start.UseShellExecute = $false
@@ -197,7 +223,7 @@ finally {
 }
 
 $ordered = foreach ($cell in $cells) { $results | Where-Object { $_.Cell.Name -eq $cell.Name } }
-$title = "Deployment lab: $(Split-Path $BundlePath -Leaf), $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($([math]::Round(((Get-Date) - $runStarted).TotalMinutes)) min)"
+$title = "Deployment lab: $(Split-Path $BundlePath -Leaf)$(if ($upgrades) { " (upgrades from $(Split-Path $PreviousBundlePath -Leaf))" }), $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($([math]::Round(((Get-Date) - $runStarted).TotalMinutes)) min)"
 $report = Format-LabReport -Result @($ordered) -Title $title
 $report | Set-Content (Join-Path $OutputPath 'report.md')
 $ordered | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $OutputPath 'results.json')

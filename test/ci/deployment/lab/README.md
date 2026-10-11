@@ -16,6 +16,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 |------|---------|--------------|
 | `Invoke-DeploymentLab.ps1` | Lab host | Runs the matrix, or part of it, against one bundle, as many cells at once as the host's memory holds, and writes `report.md` |
 | `Invoke-LabCell.ps1` | Lab host | Runs one cell on its own VM; the runner starts one per cell |
+| `scenarios/Install.ps1`, `scenarios/Upgrade.ps1` | Lab host | What an Install and an Upgrade cell do, once its VM is up |
+| `Invoke-LabUpgradeData.ps1` | Lab host | Gives an upgrade cell's JIM real data, and checks it is all there afterwards |
 | `Build-LabBundle.ps1` | Lab host | Builds a bundle from a commit, as the release workflow does, on a throwaway online VM |
 | `Cells.psd1` | | The matrix: each cell's image, runtime, network, scenario and memory |
 | `Lab.psd1` | | The lab host's fixed parts: LXD profiles, network gateways, identity provider, memory reserve |
@@ -26,16 +28,16 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 ## The matrix
 
 All cells are air-gapped: their VMs sit on a bridge with no route out, and each cell proves it cannot reach
-`github.com` before installing anything.
+`github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`).
 
-| Cell | Operating system | Runtime |
-|------|------------------|---------|
-| `u24-docker-ctrd-ag` | Ubuntu 24.04 | Docker, containerd image store |
-| `u24-docker-classic-ag` | Ubuntu 24.04 | Docker, classic overlay2 image store |
-| `u24-podrf-ag` | Ubuntu 24.04 | Podman, rootful |
-| `u24-podrl-ag` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
-| `alma9-podrl-ag` | AlmaLinux 9 | Podman, rootless |
+| Cells | Operating system | Runtime |
+|-------|------------------|---------|
+| `u24-docker-ctrd-ag`, `-up` | Ubuntu 24.04 | Docker, containerd image store |
+| `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
+| `u24-podrf-ag`, `-up` | Ubuntu 24.04 | Podman, rootful |
+| `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
+| `alma9-podrf-ag`, `-up` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrl-ag`, `-up` | AlmaLinux 9 | Podman, rootless |
 
 AlmaLinux stands in for Red Hat Enterprise Linux 9. The images are each distribution's cloud image with only the
 container runtime added, so they are as bare as a customer's new host.
@@ -61,6 +63,32 @@ container runtime added, so they are as bare as a customer's new host.
    container since the reboot. A crashing service is restarted and soon looks healthy again, so readiness alone
    cannot show it (#1953).
 
+## What an Upgrade cell checks
+
+An Upgrade cell starts as an Install cell does (a fresh VM, the air gap, the bundle's checksums), then follows the
+[Upgrading guide](../../../../docs/administration/upgrading.md). Wherever the guide gives a command, the cell runs that
+command, read from the page (`Get-DocumentedCommand.ps1`), so a guide that goes wrong fails the cell; for a rootless
+JIM, rewritten with `jim-systemctl` and `jim-podman` as Running on Podman says.
+
+1. **The previous release**, installed with its own installer, with an administrator's own `docker-compose.local.yml`
+   beside the installer's on Docker, and **real data**: a Connected System on the LDAP Connector against the lab's test
+   directory, with its bind password stored encrypted, a Synchronisation Rule, and Full Import and Full
+   Synchronisation run, giving five people in the Metaverse (`Invoke-LabUpgradeData.ps1`, with the JIM PowerShell
+   module from that release's bundle).
+2. **Before upgrading**: JIM stopped, and the database and encryption keys backed up, by Backup & Disaster Recovery.
+3. **The upgrade**: on Docker, the bundle's `setup.sh --upgrade`; on Podman, the guide's steps, with the notes that
+   apply when upgrading from v0.16.0 or earlier (PostgreSQL's memory in `jim-config.yaml`; on AlmaLinux, firewalld's
+   reload service and NetworkManager; on Ubuntu's rootful Podman, the AppArmor rule and a server restart).
+4. **Verified, then again after a reboot**: ready from another machine, the new version reported, the data all there
+   and the stored credential still decrypting (a Full Import binds with it), the administrator signing in, the own
+   compose file still in use, and PostgreSQL's memory sized to the host.
+5. **Rolled back by the guide**: the backup restored into an empty database, the previous files put back, and JIM
+   started; then the previous version reported, its data and credential, a sign-in, and nothing written after the
+   upgrade left behind.
+
+The release upgraded from is the latest published one, fetched from GitHub once, or `-PreviousBundlePath`. A build from
+a commit whose `VERSION` is not newer reports the next patch version, so that the installer takes it as an upgrade.
+
 ## Running it
 
 On the lab host, from a clone of this repository, with PowerShell 7 (the runner fetches the same version of PowerShell
@@ -75,6 +103,9 @@ pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD
 
 # Some of the cells: by name (wildcards) or by tag; keep a failed cell's VM to look at
 pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag rhel -KeepVm OnFailure
+
+# The upgrades only, from a particular release
+pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag upgrade -PreviousBundlePath ~/bundles/jim-release-0.16.0.tar.gz
 
 # What would run
 pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -List

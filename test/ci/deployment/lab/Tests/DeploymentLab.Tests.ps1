@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -81,6 +81,16 @@ Describe 'Test-LabMatrix' {
         $matrix.Cells[0].MemoryGiB = 2
 
         Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: MemoryGiB must be at least 4')
+    }
+}
+
+Describe 'Test-LabMatrix for upgrade cells' {
+    It 'accepts an upgrade cell' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Scenario = 'Upgrade'
+        $matrix.Cells[0].MemoryGiB = 12
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
     }
 }
 
@@ -270,5 +280,81 @@ Describe 'The matrix in Cells.psd1' {
         $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
 
         Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-LabPostgresMemory' {
+    It 'sizes the bundled PostgreSQL as the installer does, matching the documentation''s 8 GB example' {
+        $sized = Get-LabPostgresMemory -MemoryMB 8192
+
+        $sized.JIM_DB_SHARED_BUFFERS | Should -Be '2048MB'
+        $sized.JIM_DB_EFFECTIVE_CACHE_SIZE | Should -Be '4096MB'
+        $sized.JIM_DB_MAINTENANCE_WORK_MEM | Should -Be '512MB'
+        $sized.JIM_DB_WORK_MEM | Should -Be '10MB'
+        $sized.JIM_DB_SHM_SIZE | Should -Be '2560mb'
+    }
+
+    It 'caps shared_buffers at 8 GB and maintenance_work_mem at 2 GB on a large host' {
+        $sized = Get-LabPostgresMemory -MemoryMB 65536
+
+        $sized.JIM_DB_SHARED_BUFFERS | Should -Be '8192MB'
+        $sized.JIM_DB_MAINTENANCE_WORK_MEM | Should -Be '2048MB'
+        $sized.JIM_DB_WORK_MEM | Should -Be '95MB'
+    }
+
+    It 'keeps work_mem at PostgreSQL''s own default of 4 MB at least, on a small host' {
+        (Get-LabPostgresMemory -MemoryMB 2048).JIM_DB_WORK_MEM | Should -Be '4MB'
+    }
+}
+
+Describe 'Test-LabVersionAtMost' {
+    It 'compares release numbers numerically, not as text' {
+        Test-LabVersionAtMost -Version '0.9.0' -Limit '0.16.0' | Should -BeTrue
+        Test-LabVersionAtMost -Version '0.16.0' -Limit '0.16.0' | Should -BeTrue
+        Test-LabVersionAtMost -Version '0.16.1' -Limit '0.16.0' | Should -BeFalse
+        Test-LabVersionAtMost -Version '1.0.0' -Limit '0.16.0' | Should -BeFalse
+    }
+
+    It 'reads a lab build''s version by its release number, and a leading v' {
+        Test-LabVersionAtMost -Version '0.16.1-lab.f9ad79b' -Limit '0.16.0' | Should -BeFalse
+        Test-LabVersionAtMost -Version 'v0.16.0' -Limit '0.16.0' | Should -BeTrue
+    }
+}
+
+Describe 'Get-LabNextVersion' {
+    It 'is the next patch release' {
+        Get-LabNextVersion -Version '0.16.0' | Should -Be '0.16.1'
+        Get-LabNextVersion -Version 'v0.9.9' | Should -Be '0.9.10'
+    }
+}
+
+Describe 'ConvertTo-LabRootlessCommand' {
+    It 'runs systemctl and podman as the rootless helpers do, as Running on Podman says' {
+        ConvertTo-LabRootlessCommand -Command 'systemctl stop jim.service' | Should -Be 'jim-systemctl stop jim.service'
+        ConvertTo-LabRootlessCommand -Command "systemctl restart jim-database.service`nsystemctl start jim.service" |
+            Should -Be "jim-systemctl restart jim-database.service`njim-systemctl start jim.service"
+        ConvertTo-LabRootlessCommand -Command 'for f in docker-images/*.tar; do podman load < "$f"; done' |
+            Should -Be 'for f in docker-images/*.tar; do jim-podman load < "$f"; done'
+        ConvertTo-LabRootlessCommand -Command 'sudo podman exec jim-database-postgres pg_dump' |
+            Should -Be 'jim-podman exec jim-database-postgres pg_dump'
+    }
+
+    It 'leaves alone a podman that is not a command, such as the bundle''s podman folder' {
+        ConvertTo-LabRootlessCommand -Command 'cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/' |
+            Should -Be 'cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/'
+        ConvertTo-LabRootlessCommand -Command 'jim-systemctl start jim.service' | Should -Be 'jim-systemctl start jim.service'
+    }
+}
+
+Describe 'ConvertTo-LabMegabytes' {
+    It 'reads PostgreSQL''s sizes in any of its units, as SHOW prints them' {
+        ConvertTo-LabMegabytes '2995MB' | Should -Be 2995
+        ConvertTo-LabMegabytes '3GB' | Should -Be 3072
+        ConvertTo-LabMegabytes '131072kB' | Should -Be 128
+        ConvertTo-LabMegabytes '1TB' | Should -Be 1048576
+    }
+
+    It 'fails on a size it cannot read' {
+        { ConvertTo-LabMegabytes '8gb' } | Should -Throw '*8gb*'
     }
 }
