@@ -191,6 +191,74 @@ public class ConnectedSystemSchemaPreviewApplyTests
     }
 
     [Test]
+    public async Task PreviewConnectedSystemSchemaRefreshAsync_WithOnlyAClassificationChange_IsAChangeButNotADestructiveOneAsync()
+    {
+        // The persisted type was classified structural; the File Connector classifies nothing, so the refresh
+        // restates the selected type as unclassified and changes nothing else (#2049). That must be offered for
+        // applying, but it does not warrant the destructive decision: cancelling it keeps things as they are.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text }
+                ]
+            }
+        ];
+
+        var result = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ChangedAttributes, Is.Empty, "The scenario must change the classification and nothing else.");
+            Assert.That(result.ChangedObjectTypeClassifications, Does.ContainKey("user"));
+            Assert.That(result.HasChanges, Is.True, "A classification change alone is a change; 'no changes detected' would discard it.");
+            Assert.That(result.HasRemovalsOrDefinitionChanges, Is.False,
+                "A classification change must not drive the destructive three-way decision or the discard confirmation.");
+        }
+    }
+
+    [Test]
+    public async Task ApplyConnectedSystemSchemaRefreshAsync_WhenThePreviewCarriedAClassificationChange_CompletesTheActivityWithAWarningAsync()
+    {
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number }]
+            }
+        ];
+
+        var previewResult = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+        Activity? createdActivity = null;
+        _activityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => createdActivity = a)
+            .Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, NewInitiator());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(createdActivity, Is.Not.Null);
+            Assert.That(createdActivity!.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning),
+                "The applied refresh's Activity must record that a selected Object Type was reclassified.");
+            Assert.That(createdActivity!.WarningMessage, Does.Contain("'user'"));
+        }
+    }
+
+    [Test]
     public async Task ApplyConnectedSystemSchemaRefreshAsync_PersistsThePreviewedSchemaUnderAnImportSchemaActivityAsync()
     {
         var connectedSystem = CreateFileConnectorConnectedSystem();

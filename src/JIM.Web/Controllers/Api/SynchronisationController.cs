@@ -2461,6 +2461,7 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Connects to the external system and retrieves its Object Types and Attributes. This is required before creating Synchronisation Rules. Existing schema configuration will be replaced; Synchronisation Rules referencing removed Object Types or Attributes will need to be updated.
+    /// When the import changes how the Connected System classifies a selected Object Type (its class kind, or inheritance involving another selected Object Type), the ImportSchema Activity completes with a warning naming each change: it can change which Object Type existing entries resolve to at the next import. Preview first to see such changes before they are applied.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">Optional. Set <c>disableDependents</c> to apply the refresh with its dependents disabled (#1485).</param>
@@ -2560,8 +2561,13 @@ public class SynchronisationController(
     /// <remarks>
     /// Connects to the external system, retrieves its schema and reports what a refresh would change, without
     /// persisting anything or recording an Activity. Removals and attribute definition changes are flagged via
-    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. To commit, call the
-    /// import-schema endpoint after reviewing this result.
+    /// <c>hasRemovalsOrDefinitionChanges</c>; a refresh never deletes retained entries. Changes to how the Connected
+    /// System classifies a selected Object Type are listed in <c>changedObjectTypeClassifications</c> and flagged via
+    /// <c>hasObjectTypeClassificationChanges</c>: applying one can change which Object Type existing entries resolve
+    /// to, and by default each object that would change Object Type is refused at the next import and reported as an
+    /// Object Type Changed error, unless a Full Import Run Profile with <c>allowObjectTypeChanges</c> enabled carries
+    /// the change out. Such a change is not destructive and names no dependents. To commit, call the import-schema
+    /// endpoint after reviewing this result.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A result object describing what a schema refresh would change.</returns>

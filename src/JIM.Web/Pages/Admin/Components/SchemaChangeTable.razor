@@ -59,6 +59,16 @@
                 </tr>
             }
         }
+        @if (ShowReclassified)
+        {
+            @foreach (var kvp in Result.ChangedObjectTypeClassifications)
+            {
+                <tr>
+                    <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Color="Color.Warning" Class="me-1" /><span>Object Type Classification Changed (@kvp.Key)</span></div></td>
+                    <td class="jim-text-code">@string.Join("; ", kvp.Value.Select(DescribeClassification))</td>
+                </tr>
+            }
+        }
     </tbody>
 </MudSimpleTable>
 
@@ -71,8 +81,9 @@
     public SchemaRefreshResult Result { get; set; } = null!;
 
     /// <summary>
-    /// Which changes to list: everything (the applied summary), the safe additions alone, or the destructive
-    /// changes alone (the refresh review renders the two as separate groups, #1485).
+    /// Which changes to list: everything (the applied summary), the safe additions alone, the destructive changes
+    /// alone (the refresh review renders the two as separate groups, #1485), or the Object Type classification
+    /// changes alone (their own group, since they are neither safe nor destructive, #2049).
     /// </summary>
     [Parameter]
     public SchemaChangeSection Section { get; set; } = SchemaChangeSection.All;
@@ -81,11 +92,21 @@
 
     private bool ShowDestructive => Section is SchemaChangeSection.All or SchemaChangeSection.Destructive;
 
+    private bool ShowReclassified => Section is SchemaChangeSection.All or SchemaChangeSection.Reclassified;
+
     private static string Describe(SchemaAttributeDefinitionChange change)
     {
         var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
         return $"{change.AttributeName}: {aspect} {change.OldValue} → {change.NewValue}";
     }
+
+    private static string DescribeClassification(SchemaObjectTypeClassificationChange change)
+    {
+        var aspect = change.Aspect == SchemaObjectTypeClassificationAspect.ClassKind ? "class kind" : "inherited classes";
+        return $"{aspect} {DescribeValues(change.OldValues)} → {DescribeValues(change.NewValues)}";
+    }
+
+    private static string DescribeValues(List<string> values) => values.Count == 0 ? "none" : string.Join(", ", values);
 
     /// <summary>
     /// The slice of a refresh's changes a <see cref="SchemaChangeTable"/> renders.
@@ -94,6 +115,7 @@
     {
         All = 0,
         Additions = 1,
-        Destructive = 2
+        Destructive = 2,
+        Reclassified = 3
     }
 }

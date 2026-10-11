@@ -172,6 +172,49 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
     }
 
     [Test]
+    public async Task PreviewSchemaImport_WithOnlyAClassificationChange_ReportsItWithoutDependentsAsync()
+    {
+        // A selected Object Type the Connected System reclassifies (#2049): the caller must see the change and the
+        // flag, and since cancelling keeps things as they are, it is not a destructive diff and carries no
+        // dependents or removal impact.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text }
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)?.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.ChangedObjectTypeClassifications, Does.ContainKey("user"));
+        var change = dto!.ChangedObjectTypeClassifications["user"].Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Aspect, Is.EqualTo("ClassKind"));
+            Assert.That(change.OldValues, Is.EqualTo(new[] { ObjectTypeTags.Values.ClassKindStructural }));
+            Assert.That(change.NewValues, Is.Empty);
+            Assert.That(dto!.HasObjectTypeClassificationChanges, Is.True);
+            Assert.That(dto!.HasChanges, Is.True);
+            Assert.That(dto!.HasRemovalsOrDefinitionChanges, Is.False);
+            Assert.That(dto!.Dependents, Is.Null, "A classification change is not destructive, so it names no dependents.");
+            Assert.That(dto!.RemovalImpact, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task PreviewSchemaImport_WithDestructiveChanges_NamesTheDependentsAsync()
     {
         // The decision needs the dependents on the wire (#1485): a REST caller reviewing the diff must see

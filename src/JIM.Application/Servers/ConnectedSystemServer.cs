@@ -2643,13 +2643,20 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
-    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
+    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success,
+    /// or when the import changed how a selected Object Type is classified (#2049). The one-step import returns the
+    /// Connected System rather than the refresh result, so the Activity is how either reaches the REST API and
+    /// PowerShell.
     /// </summary>
     private async Task CompleteSchemaImportActivityAsync(Activity activity, SchemaRefreshResult result)
     {
-        if (result.DiscoveryWarnings.Count > 0)
+        var warnings = result.DiscoveryWarnings
+            .Concat(DescribeObjectTypeClassificationChanges(result))
+            .ToList();
+
+        if (warnings.Count > 0)
         {
-            activity.WarningMessage = string.Join(Environment.NewLine, result.DiscoveryWarnings);
+            activity.WarningMessage = string.Join(Environment.NewLine, warnings);
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
         }
         else
@@ -2702,6 +2709,12 @@ public partial class ConnectedSystemServer
         var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
         var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
         var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        // The Object Types JIM imports entries of: a classification change can only move entries between these (#2049).
+        var selectedObjectTypeNames = existingObjectTypes
+            .Where(ot => ot.Selected)
+            .Select(ot => ot.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
 
@@ -2873,7 +2886,17 @@ public partial class ConnectedSystemServer
                     declaredReferenceTargets.Add((mergedAttribute, schemaAttribute.ReferencesObjectTypeName.Trim()));
             }
 
+            // A selected Object Type's classification decides which Object Type an entry carrying more than one
+            // resolves to, so a change to it is recorded before the tags are replaced (#2049). Unselected and new
+            // types hold no imported entries, so nothing can move.
+            (List<string> ClassKinds, List<string> SuperiorClasses)? classificationBefore = existingObjectType is { Selected: true }
+                ? (TagValues(existingObjectType, ObjectTypeTags.Keys.ClassKind), TagValues(existingObjectType, ObjectTypeTags.Keys.SuperiorClass))
+                : null;
+
             MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+
+            if (classificationBefore is { } before)
+                RecordObjectTypeClassificationChanges(result, connectedSystemObjectType, before.ClassKinds, before.SuperiorClasses, selectedObjectTypeNames);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
@@ -3020,6 +3043,95 @@ public partial class ConnectedSystemServer
                 : new ConnectedSystemObjectTypeTag { Key = classification.Key, Value = classification.Value })
             .ToList();
     }
+
+    /// <summary>
+    /// The distinct values an Object Type carries under one classification key, sorted so that a comparison and a
+    /// report do not depend on the order the Connector listed them in.
+    /// </summary>
+    private static List<string> TagValues(ConnectedSystemObjectType objectType, string key)
+    {
+        return objectType.Tags
+            .Where(tag => tag.Key == key)
+            .Select(tag => tag.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Records what a refresh changed about how the Connected System classifies a selected Object Type, where that
+    /// can change which Object Type existing entries resolve to at the next import (#2049): a structural class takes
+    /// entries from an auxiliary one, and the more specific of two structural classes takes the entries carrying
+    /// both.
+    /// </summary>
+    /// <remarks>
+    /// A class kind change is always recorded. An inheritance change is recorded only when a class gained or lost
+    /// names another selected Object Type, because only then can it move entries between two types JIM imports. That
+    /// restriction also stops the first refresh after JIM began recording inheritance from flagging every type at
+    /// once, since each type gains its whole chain then (see <see cref="ObjectTypeTags.Keys.SuperiorClass"/>).
+    /// </remarks>
+    private static void RecordObjectTypeClassificationChanges(
+        SchemaRefreshResult result,
+        ConnectedSystemObjectType objectType,
+        List<string> classKindsBefore,
+        List<string> superiorClassesBefore,
+        HashSet<string> selectedObjectTypeNames)
+    {
+        var classKindsAfter = TagValues(objectType, ObjectTypeTags.Keys.ClassKind);
+        if (!classKindsAfter.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(classKindsBefore))
+        {
+            result.AddChangedClassification(objectType.Name, new SchemaObjectTypeClassificationChange
+            {
+                Aspect = SchemaObjectTypeClassificationAspect.ClassKind,
+                OldValues = classKindsBefore,
+                NewValues = classKindsAfter
+            });
+        }
+
+        var superiorClassesAfter = TagValues(objectType, ObjectTypeTags.Keys.SuperiorClass);
+        var gainedOrLost = superiorClassesBefore.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        gainedOrLost.SymmetricExceptWith(superiorClassesAfter);
+        var namesAnotherSelectedType = gainedOrLost.Any(className =>
+            selectedObjectTypeNames.Contains(className) &&
+            !string.Equals(className, objectType.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (namesAnotherSelectedType)
+        {
+            result.AddChangedClassification(objectType.Name, new SchemaObjectTypeClassificationChange
+            {
+                Aspect = SchemaObjectTypeClassificationAspect.Inheritance,
+                OldValues = superiorClassesBefore,
+                NewValues = superiorClassesAfter
+            });
+        }
+    }
+
+    /// <summary>
+    /// The lines a schema import's Activity carries for the Object Type classification changes it applied: one per
+    /// change, then what that means for the next import. Empty when there were none.
+    /// </summary>
+    private static List<string> DescribeObjectTypeClassificationChanges(SchemaRefreshResult result)
+    {
+        if (!result.HasObjectTypeClassificationChanges)
+            return [];
+
+        var lines = result.ChangedObjectTypeClassifications
+            .SelectMany(entry => entry.Value.Select(change => DescribeObjectTypeClassificationChange(entry.Key, change)))
+            .ToList();
+
+        lines.Add("These classification changes can change which Object Type existing entries resolve to. " +
+                  "By default, each object that would change Object Type is refused at the next import, reported as an Object Type Changed error and kept as it is; " +
+                  "to carry the change out, run a Full Import Run Profile with Allow Object Type Changes enabled.");
+        return lines;
+    }
+
+    private static string DescribeObjectTypeClassificationChange(string objectTypeName, SchemaObjectTypeClassificationChange change)
+    {
+        var aspect = change.Aspect == SchemaObjectTypeClassificationAspect.ClassKind ? "class kind" : "inherited classes";
+        return $"Object Type '{objectTypeName}': {aspect} changed from {DescribeClassificationValues(change.OldValues)} to {DescribeClassificationValues(change.NewValues)}.";
+    }
+
+    private static string DescribeClassificationValues(List<string> values) => values.Count == 0 ? "none" : string.Join(", ", values);
 
     /// <summary>
     /// Strips credential attributes out of an incoming Connected System schema so they can never be added to JIM

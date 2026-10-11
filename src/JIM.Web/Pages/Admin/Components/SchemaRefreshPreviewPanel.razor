@@ -60,6 +60,20 @@
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Additions" />
         }
 
+        @if (Result.HasObjectTypeClassificationChanges)
+        {
+            @* Neither safe nor destructive (#2049): applying can move entries between selected Object Types at the next
+               import, while cancelling keeps the classification matching reads, so it needs a warning but not the
+               three-way decision. *@
+            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Warning">Object Type classification: review before applying</MudText>
+            <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Reclassified" />
+
+            <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-schema-refresh-reclassified-warning">
+                Applying this refresh can change <strong>which Object Type existing entries resolve to</strong>. By default, each object that would change Object Type is refused at the next import and reported as an <strong>Object Type Changed</strong> error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with <strong>Allow Object Type Changes</strong> enabled to carry it out. Cancelling keeps the current classification.
+                <MudLink Href="https://docs.junctional.io/configuration/connected-systems/#when-an-object-changes-object-type" Target="_blank">Learn more</MudLink>
+            </MudAlert>
+        }
+
         @if (Result.HasRemovalsOrDefinitionChanges)
         {
             <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Error">Destructive: review before proceeding</MudText>
@@ -334,7 +348,9 @@
     [Parameter]
     public bool Busy { get; set; }
 
-    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges ? Severity.Warning : Severity.Info;
+    private Severity PanelSeverity => Result.HasRemovalsOrDefinitionChanges || Result.HasObjectTypeClassificationChanges
+        ? Severity.Warning
+        : Severity.Info;
 
     private bool HasAdditions =>
         Result.AddedObjectTypes.Count > 0 ||
@@ -356,9 +372,10 @@
     }
 
     /// <summary>
-    /// Additions discard for free (the next refresh finds them again). Removals and definition changes do not:
-    /// cancelling does not preserve the status quo, so the administrator confirms with the concrete
-    /// consequences in front of them.
+    /// Additions discard for free (the next refresh finds them again), and so do Object Type classification changes
+    /// (matching reads the classification JIM has stored, so cancelling keeps things as they are). Removals and
+    /// definition changes do not: cancelling does not preserve the status quo, so the administrator confirms with
+    /// the concrete consequences in front of them.
     /// </summary>
     private async Task HandleDiscardAsync()
     {

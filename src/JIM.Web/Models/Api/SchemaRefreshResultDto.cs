@@ -64,6 +64,13 @@ public class SchemaRefreshResultDto
     public Dictionary<string, List<SchemaAttributeDefinitionChangeDto>> ChangedAttributes { get; set; } = new();
 
     /// <summary>
+    /// Changes to how the Connected System classifies a selected Object Type (its class kind, or inheritance
+    /// involving another selected Object Type), grouped by Object Type name. They can change which Object Type
+    /// existing entries resolve to at the next import; see <see cref="HasObjectTypeClassificationChanges"/>.
+    /// </summary>
+    public Dictionary<string, List<SchemaObjectTypeClassificationChangeDto>> ChangedObjectTypeClassifications { get; set; } = new();
+
+    /// <summary>
     /// Attributes no longer reported that are still referenced by Synchronisation Rules. Key is the attribute
     /// name, value is the list of Synchronisation Rule names that reference it.
     /// </summary>
@@ -95,6 +102,15 @@ public class SchemaRefreshResultDto
     /// removals and attribute definition changes. Additions never set this.
     /// </summary>
     public bool HasRemovalsOrDefinitionChanges { get; set; }
+
+    /// <summary>
+    /// Whether the refresh changes how the Connected System classifies a selected Object Type, which can change which
+    /// Object Type existing entries resolve to. By default each object that would change Object Type is refused at
+    /// the next import, reported as an Object Type Changed error and kept as it is; a Full Import Run Profile with
+    /// <c>allowObjectTypeChanges</c> enabled carries the change out. Not a destructive change: cancelling keeps
+    /// things as they are, so it never sets <see cref="HasRemovalsOrDefinitionChanges"/>.
+    /// </summary>
+    public bool HasObjectTypeClassificationChanges { get; set; }
 
     /// <summary>
     /// What the destructive changes invalidate (#1485): the Synchronisation Rules and Attribute Flow mappings
@@ -130,12 +146,16 @@ public class SchemaRefreshResultDto
             ChangedAttributes = result.ChangedAttributes.ToDictionary(
                 kvp => kvp.Key,
                 kvp => kvp.Value.Select(SchemaAttributeDefinitionChangeDto.FromModel).ToList()),
+            ChangedObjectTypeClassifications = result.ChangedObjectTypeClassifications.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(SchemaObjectTypeClassificationChangeDto.FromModel).ToList()),
             AttributesInUse = result.AttributesInUse,
             BlockedCredentialAttributes = result.BlockedCredentialAttributes,
             DiscoveryWarnings = result.DiscoveryWarnings,
             PasswordPolicyDiscovered = result.PasswordPolicyDiscovered,
             HasChanges = result.HasChanges,
-            HasRemovalsOrDefinitionChanges = result.HasRemovalsOrDefinitionChanges
+            HasRemovalsOrDefinitionChanges = result.HasRemovalsOrDefinitionChanges,
+            HasObjectTypeClassificationChanges = result.HasObjectTypeClassificationChanges
         };
     }
 }
