@@ -4,7 +4,7 @@ title: Service Settings
 
 # Service Settings
 
-**Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, maintenance mode, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
+**Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, recovering work from a crashed Worker, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
 
 ## Default vs override
 
@@ -26,9 +26,9 @@ Settings are grouped by concern:
 - **Instance**<br /> Service identity (name, ID) for distinguishing JIM deployments.
 - **SSO**<br /> Single sign-on and authentication settings.
 - **Synchronisation**<br /> Sync pipeline and change tracking settings.
-- **Maintenance**<br /> Maintenance mode and system health settings.
+- **Maintenance**<br /> Recovering the work of a Worker that has crashed.
 - **History**<br /> Audit history retention and cleanup settings.
-- **Security**<br /> Credential encryption and [API rate limiting](../api/rate-limiting.md) settings.
+- **Security**<br /> Where encryption keys are kept, and [API rate limiting](../api/rate-limiting.md).
 - **UI**<br /> How often progress is reported while JIM generates Example Data.
 - **Preview Features**<br /> Feature flags: features JIM is rolling out gradually. See below.
 
