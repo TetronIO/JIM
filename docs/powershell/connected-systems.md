@@ -135,24 +135,24 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordSynchronisation
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `configured` | `bool` | Whether Password Synchronisation has been configured here at all |
-| `connectorSupportsPasswordSet` | `bool` | Whether this Connector can set passwords; `$false` means it cannot be configured |
-| `enabled` | `bool` | Whether queued password changes are delivered |
-| `targetObjectTypeId` | `int` | The Connected System Object Type that receives passwords |
-| `targetObjectTypeName` | `string` | Its name |
-| `maxRetries` | `int` | Attempts before a change is parked; `0` means use JIM's default |
-| `effectiveMaxRetries` | `int` | The retry count actually applied |
-| `retryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
-| `effectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
-| `requireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused. Reported here, set on the Connected System with `Set-JIMConnectedSystem` |
-| `effectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
+| `Configured` | `bool` | Whether Password Synchronisation has been configured here at all |
+| `ConnectorSupportsPasswordSet` | `bool` | Whether this Connector can set passwords; `$false` means it cannot be configured |
+| `Enabled` | `bool` | Whether queued password changes are delivered |
+| `TargetObjectTypeId` | `int` | The Connected System Object Type that receives passwords |
+| `TargetObjectTypeName` | `string` | Its name |
+| `MaxRetries` | `int` | Attempts before a change is parked; `0` means use JIM's default |
+| `EffectiveMaxRetries` | `int` | The retry count actually applied |
+| `RetryBackoffBase` | `timespan` | The first retry interval; `0` means use JIM's default |
+| `EffectiveRetryBackoffBase` | `timespan` | The backoff base actually applied |
+| `RequireSecureTransport` | `bool` | Whether an unconfirmed-encryption connection is refused. Reported here, set on the Connected System with `Set-JIMConnectedSystem` |
+| `EffectiveTimeToLive` | `timespan` | How long a queued change waits before JIM expires it |
 
 Auditing which systems are switched on:
 
 ```powershell
-Get-JIMConnectedSystem -All | ForEach-Object {
+Get-JIMConnectedSystem | ForEach-Object {
     $p = Get-JIMConnectedSystemPasswordSynchronisation -Id $_.Id
-    [PSCustomObject]@{ System = $_.Name; Configured = $p.configured; Enabled = $p.enabled }
+    [PSCustomObject]@{ System = $_.Name; Configured = $p.Configured; Enabled = $p.Enabled }
 }
 ```
 
@@ -683,7 +683,7 @@ Get-JIMConnectorDefinition
 ```
 
 ```powershell title="Get a connector definition by name"
-Get-JIMConnectorDefinition -Name "CSV File"
+Get-JIMConnectorDefinition -Name "JIM File Connector"
 ```
 
 ```powershell title="Get a specific connector definition by ID"
@@ -1211,7 +1211,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 | `Ascending` | `switch` | No | `$false` | Sort the object list ascending instead of the default descending |
 | `Page` | `int` | No | `1` | Page number for paginated results |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, auto-paginating. Fetches at most 1000 pages (~100,000 items at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, auto-paginating. Fetches at most 1000 pages (~50,000 items at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 
 ### Output
@@ -1240,7 +1240,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
 ```
 
 ```powershell title="Get every object in a very large connector space, overriding the -All safety cap"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# -All stops after 1000 pages (~50,000 objects) by default; -Force fetches everything up to the
 # API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All -Force
 ```

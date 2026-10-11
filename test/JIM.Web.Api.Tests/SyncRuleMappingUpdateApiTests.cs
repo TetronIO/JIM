@@ -255,6 +255,27 @@ public class SyncRuleMappingUpdateApiTests
     }
 
     [Test]
+    public async Task UpdateSyncRuleMappingAsync_KeepUniqueOnAnExpressionMapping_IsAppliedAsync()
+    {
+        // Keep unique (#2023) applies to an Expression mapping in either direction.
+        var result = await _controller.UpdateSyncRuleMappingAsync(ExportRuleId, ExportMappingId,
+            new UpdateSyncRuleMappingRequest { KeepUnique = false });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(_exportMapping.KeepUnique, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_KeepUniqueOnAnAttributeMapping_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, AttributeMappingId,
+            new UpdateSyncRuleMappingRequest { KeepUnique = false });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(_attributeMapping.KeepUnique, Is.True);
+    }
+
+    [Test]
     public async Task UpdateSyncRuleMappingAsync_EnabledFalse_DisablesAnImportMappingAsync()
     {
         // Enabled applies to both directions (#1485), unlike every other per-mapping setting, so no

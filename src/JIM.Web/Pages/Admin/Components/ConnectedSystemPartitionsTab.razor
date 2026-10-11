@@ -82,7 +82,7 @@ else
                 changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve
                 the hierarchy.
             </InfoPopover>
-            <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
                        OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto">
                 @if (_hierarchyBeingRetrieved)
                 {
@@ -121,7 +121,7 @@ else
                 <div class="pa-4">
                     <div class="d-flex justify-end mb-3">
                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
-                                   Variant="Variant.Filled" Color="Color.Secondary"
+                                   Variant="Variant.Outlined" Color="Color.Primary"
 
                                    OnClick="CopyHierarchyChangesToClipboardAsync">
                             Copy Changes
@@ -313,13 +313,8 @@ else
 @if (ConnectedSystem.Partitions is { Count: > 0 } && ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
 {
     <div class="jim-scope-mode mt-6">
-        <MudToggleGroup T="bool" Value="@_advancedMode" ValueChanged="SetAdvancedMode" Outlined="true"
-                        Delimiters="true" Color="Color.Primary" CheckMark="true" FixedContent="true"
-                        Size="Size.Small"
-                        data-testid="jim-scope-mode">
-            <MudToggleItem Value="false" Text="Simple" />
-            <MudToggleItem Value="true" Text="Advanced" />
-        </MudToggleGroup>
+        <SegmentedToggle TValue="bool" Options="@ScopeModes" Value="@_advancedMode" ValueChanged="SetAdvancedMode"
+                         AriaLabel="Container Scope editor" TestId="jim-scope-mode" />
         <TermHint Term="Term.ContainerScope" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
             @(_advancedMode
@@ -353,7 +348,7 @@ else
         }
 
         <div class="d-flex align-center gap-4 mt-4">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                        OnClick="ApplyAdvancedTextWithFeedback" data-testid="jim-scope-text-apply">
                 Apply
             </MudButton>
@@ -407,7 +402,7 @@ else
         @* Preview (#1251): deselecting a container takes everything beneath it out of import scope, which obsoletes *@
         @* those objects, disconnects whatever they were joined to, and can leave Metaverse Objects with no          *@
         @* connectors at all. This is the count an administrator needs before saving, not afterwards.                *@
-        <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Filled" Color="Color.Secondary"
+        <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Outlined" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewScopeSelectionAsync"
                    Disabled="@_startingPreview" DropShadow="false">
             Preview Changes
@@ -511,6 +506,12 @@ else
     /// does not happen and the errors stand; the two modes express exactly the same scopes, so there is nothing an
     /// administrator can write here that the tree cannot then show them.
     /// </remarks>
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> ScopeModes =
+    [
+        new(false, "Simple", "jim-scope-mode-simple"),
+        new(true, "Advanced", "jim-scope-mode-advanced")
+    ];
+
     private void SetAdvancedMode(bool advanced)
     {
         if (advanced == _advancedMode)

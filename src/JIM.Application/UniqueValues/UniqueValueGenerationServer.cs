@@ -621,6 +621,11 @@ public sealed class UniqueValueGenerationServer
         var lastCandidate = new string?[requests.Count];
         var lastRejectionGate = new string?[requests.Count];
 
+        // A Sequence request's last drawn number, and the floor it resumes drawing from once a skip over a run of
+        // held numbers has found where that run ends (#2031).
+        var sequenceNumbers = new long?[requests.Count];
+        var sequenceFloors = new long?[requests.Count];
+
         // The ProbeGate's run of this call (release 3): never under a dry run, since Sync Preview checks the local
         // gates only, and not at all without a session. Answers are cached per (request, target) so an only-if-taken
         // window answers later rounds without another search; the systems that could not answer for each request's
@@ -659,13 +664,14 @@ public sealed class UniqueValueGenerationServer
                 var attemptIndex = attemptsMade[i];
                 attemptsMade[i]++;
 
-                var (candidate, terminal) = await ComputeCandidateAsync(request, attemptIndex, options);
+                var (candidate, sequenceNumber, terminal) = await ComputeCandidateAsync(request, attemptIndex, options, sequenceFloors[i]);
                 if (terminal != null)
                 {
                     outcomes[i] = terminal;
                     continue;
                 }
 
+                sequenceNumbers[i] = sequenceNumber;
                 lastCandidate[i] = candidate!.Value.Text;
                 candidates[i] = candidate.Value;
                 undeterminedSystems.Remove(i);
@@ -677,6 +683,7 @@ public sealed class UniqueValueGenerationServer
             // never passed to a later gate this round (the short-circuit the test suite proves), and is instead
             // retried with a fresh candidate next round.
             var survivors = FilterReservationGate(drawn, requests, candidates, options, ownerId, claimedThisCall, lastRejectionGate);
+            var reachedRecordGates = survivors;
 
             if (survivors.Count > 0)
                 survivors = await FilterRetiredGateAsync(survivors, requests, candidates, lastRejectionGate);
@@ -689,6 +696,15 @@ public sealed class UniqueValueGenerationServer
 
             if (survivors.Count > 0)
                 survivors = await FilterOtherAssignmentsGateAsync(survivors, requests, candidates, lastRejectionGate);
+
+            // A Sequence number held in JIM's own records (gates b to e) is usually the start of a run of them, for
+            // example after Start again over a population that still holds its numbers: find where the run ends in
+            // one lookup, rather than spending an attempt on every number in it (#2031).
+            var heldInRecords = reachedRecordGates.Except(survivors)
+                .Where(i => requests[i].Generation.TokenKind == GeneratedValueTokenKind.Sequence && sequenceNumbers[i].HasValue)
+                .ToList();
+            if (heldInRecords.Count > 0)
+                await SkipHeldSequenceRunsAsync(heldInRecords, requests, sequenceNumbers, sequenceFloors);
 
             // The ProbeGate is last, after every local gate, so a candidate JIM already knows is taken never costs a
             // search of a target system (plan Phase 7 item 4).
@@ -924,13 +940,16 @@ public sealed class UniqueValueGenerationServer
     /// Whether <paramref name="holder"/> is the requesting object's own account for the connector-space gate:
     /// joined to it in memory this pass, or by a saved join, and not leaving it this pass.
     /// </summary>
-    private static bool IsOwnAccount(GenerationRequest request, ConnectorSpaceValueHolder holder)
+    private static bool IsOwnAccount(GenerationRequest request, ConnectorSpaceValueHolder holder) =>
+        IsOwnAccount(request, holder.ConnectedSystemObjectId, holder.MetaverseObjectId);
+
+    private static bool IsOwnAccount(GenerationRequest request, Guid connectedSystemObjectId, Guid? joinedMetaverseObjectId)
     {
-        if (holder.ConnectedSystemObjectId == request.DisconnectingConnectedSystemObjectId)
+        if (connectedSystemObjectId == request.DisconnectingConnectedSystemObjectId)
             return false;
 
-        return request.OwnConnectedSystemObjectIds.Contains(holder.ConnectedSystemObjectId)
-            || (request.MetaverseObjectId.HasValue && holder.MetaverseObjectId == request.MetaverseObjectId);
+        return request.OwnConnectedSystemObjectIds.Contains(connectedSystemObjectId)
+            || (request.MetaverseObjectId.HasValue && joinedMetaverseObjectId == request.MetaverseObjectId);
     }
 
     /// <summary>
@@ -976,12 +995,13 @@ public sealed class UniqueValueGenerationServer
     private readonly record struct ProbeAnswer(UniquenessProbeOutcome Outcome, bool IsProbed, string ConnectedSystemName);
 
     /// <summary>
-    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each of a request's
-    /// <see cref="GenerationRequest.ProbeTargets"/>, in order, whether the target system already holds the candidate.
-    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System;
+    /// Gate (f), the ProbeGate (release 3, plan Phase 7 item 4): asks each Connected System among a request's
+    /// <see cref="GenerationRequest.ProbeTargets"/>, in the order its first target was given, whether it already holds
+    /// the candidate in any of the request's attributes there, all of them in one call (Generated Value Forms, #2023).
+    /// <see cref="UniquenessProbeOutcome.Found"/> rejects it, naming the Connected System, and no later system is asked;
     /// <see cref="UniquenessProbeOutcome.NotFound"/> and <see cref="UniquenessProbeOutcome.CouldNotDetermine"/> accept
-    /// it, the latter noted against the request so the session hears of it once the value is issued. A candidate in
-    /// <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
+    /// it, the latter noted against the request, once per system, so the session hears of it once the value is issued.
+    /// A candidate in <see cref="GenerationRequest.ProbeExemptValues"/> is accepted without a probe.
     /// </summary>
     private static async Task<List<int>> FilterProbeGateAsync(
         List<int> active,
@@ -1002,18 +1022,19 @@ public sealed class UniqueValueGenerationServer
             List<int>? undeterminedHere = null;
 
             var targets = IsProbeExempt(request, candidate) ? [] : request.ProbeTargets;
-            foreach (var target in targets)
+            foreach (var systemTargets in targets.GroupBy(t => t.ConnectedSystemId))
             {
                 // attemptsMade has already been advanced past this round's draw.
-                var answer = await GetProbeAnswerAsync(i, request, target, candidate, attemptsMade[i] - 1, session, answers);
-                if (answer.Outcome == UniquenessProbeOutcome.Found)
+                var answersHere = await GetProbeAnswersAsync(i, request, [.. systemTargets], candidate, attemptsMade[i] - 1, session, answers);
+                var found = answersHere.FindIndex(a => a.Outcome == UniquenessProbeOutcome.Found);
+                if (found >= 0)
                 {
-                    foundIn = answer.ConnectedSystemName;
+                    foundIn = answersHere[found].ConnectedSystemName;
                     break;
                 }
 
-                if (answer.Outcome == UniquenessProbeOutcome.CouldNotDetermine && answer.IsProbed)
-                    (undeterminedHere ??= []).Add(target.ConnectedSystemId);
+                if (answersHere.Exists(a => a.Outcome == UniquenessProbeOutcome.CouldNotDetermine && a.IsProbed))
+                    (undeterminedHere ??= []).Add(systemTargets.Key);
             }
 
             if (foundIn != null)
@@ -1032,37 +1053,53 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// The answer for one candidate against one target, from the request's cached window when an earlier round's
-    /// batch already covered it, otherwise from a new batch (<see cref="BuildProbeBatch"/>), whose every answer is
-    /// cached for later rounds.
+    /// The answers for one candidate against each of one Connected System's <paramref name="targets"/>, in their order:
+    /// from the request's cached window where an earlier round's batch already covered it, otherwise from one call to
+    /// the session for every target it did not (<see cref="BuildProbeBatch"/>), whose every answer is cached for later
+    /// rounds.
     /// </summary>
-    private static async Task<ProbeAnswer> GetProbeAnswerAsync(
+    private static async Task<List<ProbeAnswer>> GetProbeAnswersAsync(
         int requestIndex,
         GenerationRequest request,
-        UniquenessProbeTarget target,
+        IReadOnlyList<UniquenessProbeTarget> targets,
         string candidate,
         int attemptIndex,
         IUniquenessProbeSession session,
         Dictionary<(int Request, UniquenessProbeTarget Target), Dictionary<string, ProbeAnswer>> answers)
     {
-        if (!answers.TryGetValue((requestIndex, target), out var known))
-            answers[(requestIndex, target)] = known = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
-
-        if (known.TryGetValue(candidate, out var cached))
-            return cached;
-
-        var batch = BuildProbeBatch(request, candidate, attemptIndex);
-        var result = await session.ProbeAsync(target, batch);
-
-        // A session answers one outcome per candidate. Should one ever not, nothing it said can be matched to a
-        // candidate, so the whole batch is treated as unanswered rather than guessed at.
-        for (var k = 0; k < batch.Count; k++)
+        var known = new List<Dictionary<string, ProbeAnswer>>(targets.Count);
+        foreach (var target in targets)
         {
-            var outcome = result.Outcomes.Count == batch.Count ? result.Outcomes[k] : UniquenessProbeOutcome.CouldNotDetermine;
-            known[batch[k]] = new ProbeAnswer(outcome, result.IsProbed, result.ConnectedSystemName);
+            if (!answers.TryGetValue((requestIndex, target), out var forTarget))
+                answers[(requestIndex, target)] = forTarget = new Dictionary<string, ProbeAnswer>(StringComparer.OrdinalIgnoreCase);
+            known.Add(forTarget);
         }
 
-        return known[candidate];
+        var unanswered = Enumerable.Range(0, targets.Count).Where(k => !known[k].ContainsKey(candidate)).ToList();
+        if (unanswered.Count > 0)
+        {
+            // Every attribute is asked about the same window: the values are the same, wherever they would go.
+            var batch = BuildProbeBatch(request, candidate, attemptIndex);
+            var connectedSystemId = targets[0].ConnectedSystemId;
+            var results = await session.ProbeAttributesAsync(connectedSystemId,
+                [.. unanswered.Select(k => new UniquenessProbeBatch(targets[k].ConnectedSystemObjectTypeAttributeId, batch))]);
+
+            // A session answers one result per attribute and one outcome per candidate. Should one ever not, nothing it
+            // said can be matched to a candidate, so the batch is treated as unanswered rather than guessed at.
+            var matched = results.Count == unanswered.Count;
+            for (var n = 0; n < unanswered.Count; n++)
+            {
+                var result = matched ? results[n] : null;
+                var name = result?.ConnectedSystemName ?? $"Connected System {connectedSystemId}";
+                for (var c = 0; c < batch.Count; c++)
+                {
+                    var outcome = result != null && result.Outcomes.Count == batch.Count ? result.Outcomes[c] : UniquenessProbeOutcome.CouldNotDetermine;
+                    known[unanswered[n]][batch[c]] = new ProbeAnswer(outcome, result?.IsProbed ?? true, name);
+                }
+            }
+        }
+
+        return [.. known.Select(k => k[candidate])];
     }
 
     /// <summary>
@@ -1093,10 +1130,139 @@ public sealed class UniqueValueGenerationServer
     private static bool IsProbeExempt(GenerationRequest request, string candidate) =>
         request.ProbeExemptValues.Contains(candidate, StringComparer.OrdinalIgnoreCase);
 
+    // ---- Held sequence runs (#2031) ----
+
+    /// <summary>
+    /// For each Sequence request whose number was held in JIM's own records this round, sets the floor it resumes
+    /// drawing from: the first number above the one it drew that nothing holds against it. One lookup per group of
+    /// requests that read the same run (same attribute, placement and step) serves the whole group, whatever the
+    /// run's length; each request then applies the gates' own-value rules in memory, so a number held only by its own
+    /// value, assignment or account stops the skip there, exactly as the gates would have let it through. The floor is
+    /// where drawing resumes, never a value to issue: the gates still check whatever the sequence draws next.
+    /// </summary>
+    private async Task SkipHeldSequenceRunsAsync(
+        List<int> heldInRecords,
+        IReadOnlyList<GenerationRequest> requests,
+        long?[] sequenceNumbers,
+        long?[] sequenceFloors)
+    {
+        foreach (var group in heldInRecords.GroupBy(i => HeldRunKey(requests[i], sequenceNumbers[i]!.Value)))
+        {
+            var from = group.Min(i => NextAfter(requests[i], sequenceNumbers[i]!.Value));
+            var run = await _repository.GetSequenceHeldRunAsync(BuildSequenceSkipQuery(requests[group.First()], from));
+
+            var holdersByNumber = run.Holders.ToLookup(h => h.Number);
+            var holdersByObject = run.Holders.Where(h => h.ObjectId.HasValue).ToLookup(h => h.ObjectId!.Value);
+            var holdersByJoinedObject = run.Holders.Where(h => h.MetaverseObjectId.HasValue).ToLookup(h => h.MetaverseObjectId!.Value);
+
+            foreach (var i in group)
+            {
+                var floor = FirstNumberFreeFor(requests[i], NextAfter(requests[i], sequenceNumbers[i]!.Value), run, holdersByNumber, holdersByObject, holdersByJoinedObject);
+                sequenceFloors[i] = Math.Max(sequenceFloors[i] ?? floor, floor);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The first number at or above <paramref name="from"/> that is free for <paramref name="request"/>: a number in
+    /// the run whose every holding is the request's own (its own value or assignment, or one of its own accounts),
+    /// or else the first number above the run. Only the request's own holdings are examined, through the lookups, so
+    /// the cost per request does not grow with the run's length.
+    /// </summary>
+    private static long FirstNumberFreeFor(
+        GenerationRequest request,
+        long from,
+        SequenceHeldRun run,
+        ILookup<long, SequenceNumberHolder> holdersByNumber,
+        ILookup<Guid, SequenceNumberHolder> holdersByObject,
+        ILookup<Guid, SequenceNumberHolder> holdersByJoinedObject)
+    {
+        // Above the run this lookup describes (it began lower, for another request in the group): nothing is known
+        // about this request's next number beyond that it is the next one to try.
+        if (from >= run.FirstFreeNumber)
+            return from;
+
+        var ownObjectIds = new List<Guid>(request.OwnConnectedSystemObjectIds);
+        if (ExcludingObjectId(request) is { } excludingObjectId)
+            ownObjectIds.Add(excludingObjectId);
+
+        var ownHoldings = ownObjectIds.SelectMany(id => holdersByObject[id]);
+        if (request.Mode == GeneratedValueMode.Import && request.MetaverseObjectId.HasValue)
+            ownHoldings = ownHoldings.Concat(holdersByJoinedObject[request.MetaverseObjectId.Value]);
+
+        var increment = request.Generation.SequenceIncrement;
+        var heldOnlyByItself = ownHoldings
+            .Where(h => h.Number >= from && (h.Number - from) % increment == 0 && IsOwnHolding(request, h))
+            .Select(h => h.Number)
+            .Distinct()
+            .Order()
+            .Where(n => holdersByNumber[n].All(h => IsOwnHolding(request, h)))
+            .Select(n => (long?)n)
+            .FirstOrDefault();
+
+        return heldOnlyByItself ?? run.FirstFreeNumber;
+    }
+
+    /// <summary>
+    /// Whether a holding of a sequence number is <paramref name="request"/>'s own, by the same rules the gates apply:
+    /// the value and assignment gates exclude the requesting object, the connector-space gate its own accounts, and
+    /// the retired gate nobody.
+    /// </summary>
+    private static bool IsOwnHolding(GenerationRequest request, SequenceNumberHolder holder) => holder.Kind switch
+    {
+        SequenceNumberHolderKind.AttributeValue or SequenceNumberHolderKind.Assignment =>
+            holder.ObjectId.HasValue && holder.ObjectId == ExcludingObjectId(request),
+        SequenceNumberHolderKind.ConnectorSpace =>
+            holder.ObjectId.HasValue && IsOwnAccount(request, holder.ObjectId.Value, holder.MetaverseObjectId),
+        _ => false
+    };
+
+    private static long NextAfter(GenerationRequest request, long number) => number + request.Generation.SequenceIncrement;
+
+    /// <summary>
+    /// Requests sharing this key read the same run: the same attribute and mode, the same placement around the
+    /// number, the same step and the same position within it (so the run's numbers are numbers each would draw), and
+    /// the same participating target attributes.
+    /// </summary>
+    private static string HeldRunKey(GenerationRequest request, long number)
+    {
+        var query = BuildSequenceSkipQuery(request, number);
+        var increment = request.Generation.SequenceIncrement;
+        var position = ((number % increment) + increment) % increment;
+        return string.Join('|',
+            request.Mode, AttributeAndScope(request).AttributeId, query.Prefix, query.Suffix, query.FixedWidth, query.NumericTarget,
+            increment, position, string.Join(',', query.ConnectorSpaceAttributeIds.Order()));
+    }
+
+    private static SequenceSkipQuery BuildSequenceSkipQuery(GenerationRequest request, long from)
+    {
+        var generation = request.Generation;
+        var (prefix, suffix) = UniqueValueCandidates.SplitPlacement(request.BaseValue, generation.Separator);
+        var importMode = request.Mode == GeneratedValueMode.Import;
+
+        return new SequenceSkipQuery
+        {
+            MetaverseAttributeId = importMode ? request.MetaverseAttributeId : null,
+            ConnectedSystemObjectTypeAttributeId = importMode ? null : request.ConnectedSystemObjectTypeAttributeId,
+            From = from,
+            Increment = generation.SequenceIncrement,
+            NumericTarget = request.TargetType is AttributeDataType.Number or AttributeDataType.LongNumber,
+            Prefix = prefix.ToLowerInvariant(),
+            Suffix = suffix.ToLowerInvariant(),
+            FixedWidth = generation.FixedWidth,
+            ConnectorSpaceAttributeIds = importMode ? request.ConnectorSpaceAttributeIds : []
+        };
+    }
+
     // ---- Candidate generation ----
 
-    private async Task<((string Text, long? Numeric)? Candidate, GenerationOutcome? Terminal)> ComputeCandidateAsync(
-        GenerationRequest request, int attemptIndex, UniqueValueResolveOptions options)
+    /// <summary>
+    /// Draws the candidate for <paramref name="request"/>'s attempt <paramref name="attemptIndex"/>, or the terminal
+    /// outcome that ends it. A Sequence also returns the number it drew, and draws at or above
+    /// <paramref name="sequenceFloor"/> once a skip over held numbers has set one (#2031).
+    /// </summary>
+    private async Task<((string Text, long? Numeric)? Candidate, long? SequenceNumber, GenerationOutcome? Terminal)> ComputeCandidateAsync(
+        GenerationRequest request, int attemptIndex, UniqueValueResolveOptions options, long? sequenceFloor)
     {
         var generation = request.Generation;
         var isNumberTarget = request.TargetType is AttributeDataType.Number or AttributeDataType.LongNumber;
@@ -1106,27 +1272,28 @@ public sealed class UniqueValueGenerationServer
             case GeneratedValueTokenKind.OnlyIfTaken:
             {
                 if (string.IsNullOrWhiteSpace(request.BaseValue))
-                    return (null, NoBaseValue(request));
+                    return (null, null, NoBaseValue(request));
 
                 var text = UniqueValueCandidates.OnlyIfTakenCandidate(
                     request.BaseValue, attemptIndex, generation.SuffixStyle, generation.SuffixStart, generation.Separator);
-                return ((text, null), null);
+                return ((text, null), null, null);
             }
 
             case GeneratedValueTokenKind.Sequence:
             {
+                var floor = sequenceFloor.HasValue ? Math.Max(generation.SequenceStart, sequenceFloor.Value) : generation.SequenceStart;
                 var number = await SequenceAllocator.NextNumberAsync(
                     _repository, options, options.DryRun,
                     request.MetaverseAttributeId, request.ConnectedSystemObjectTypeAttributeId,
-                    generation.SequenceStart, generation.SequenceIncrement);
+                    floor, generation.SequenceIncrement);
 
                 var (rendered, widthExceeded) = UniqueValueCandidates.RenderSequenceNumber(number, generation.FixedWidth, generation.OnWidthExceeded);
                 if (widthExceeded)
-                    return (null, WidthExceeded(request, rendered, generation.FixedWidth!.Value));
+                    return (null, null, WidthExceeded(request, rendered, generation.FixedWidth!.Value));
 
                 var text = UniqueValueCandidates.Place(request.BaseValue, rendered, generation.Separator);
                 var numeric = isNumberTarget ? number : (long?)null;
-                return ((text, numeric), null);
+                return ((text, numeric), number, null);
             }
 
             case GeneratedValueTokenKind.Random:
@@ -1137,7 +1304,7 @@ public sealed class UniqueValueGenerationServer
                 var numeric = isNumberTarget && generation.RandomFormat == GeneratedValueRandomFormat.Digits
                     ? long.Parse(token, CultureInfo.InvariantCulture)
                     : (long?)null;
-                return ((text, numeric), null);
+                return ((text, numeric), null, null);
             }
 
             default:
@@ -1304,6 +1471,46 @@ public sealed class UniqueValueGenerationServer
             mapping.TargetMetaverseAttributeId, mapping.TargetConnectedSystemAttributeId, generation.SequenceStart, mapping.Id);
 
         return previous.HasValue ? new SequenceSkippedAhead(previous.Value, generation.SequenceStart) : null;
+    }
+
+    /// <summary>
+    /// Hands back the sequence numbers the run reserved and never drew (#2044): for each attribute's latest block, moves
+    /// the counter back to the first undrawn number, so the next run carries on from there instead of from the end of
+    /// the block. Call once, when the run has finished drawing; the undrawn numbers are discarded from
+    /// <paramref name="options"/> first, so nothing can be drawn from them afterwards. Each hand-back is a
+    /// compare-and-swap that only applies while nothing else has moved the counter since the reservation (another
+    /// run's reservation, a raised start, Start again); otherwise the tail simply stays a gap. Numbers drawn and not
+    /// issued (a gate rejected them, or the object failed) are never handed back. A no-op under
+    /// <see cref="UniqueValueResolveOptions.DryRun"/>, which reserves nothing.
+    /// </summary>
+    /// <returns>How many numbers were handed back.</returns>
+    public async Task<long> ReturnUnusedSequenceNumbersAsync(UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.DryRun)
+            return 0;
+
+        // Only the latest block can have an undrawn tail: a queue is refilled only once it is empty.
+        var tails = options.SequenceReservations
+            .Select(reservation => (reservation.Key, Block: reservation.Value, Queue: options.SequenceBlocks.GetValueOrDefault(reservation.Key)))
+            .Where(tail => tail.Queue is { IsEmpty: false })
+            .ToList();
+
+        long returned = 0;
+        foreach (var (key, block, queue) in tails)
+        {
+            // A snapshot in queue order, so its first number is the first undrawn one; cleared at once so nothing is
+            // drawn from numbers that are about to belong to the counter again.
+            var undrawn = queue!.ToArray();
+            queue.Clear();
+
+            if (await _repository.ReturnUnusedGeneratedValueSequenceNumbersAsync(key.MetaverseAttributeId, key.ConnectedSystemObjectTypeAttributeId, block, undrawn[0]))
+                returned += undrawn.Length;
+        }
+
+        options.SequenceReservations.Clear();
+        return returned;
     }
 
     /// <summary>

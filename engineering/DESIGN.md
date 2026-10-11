@@ -308,9 +308,12 @@ Primary buttons use `primary` background with `on-primary` text, 4px corners (th
 - A panel's own action on a page that already has a main action is outlined: the Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's filled **Save Changes**.
 - In a dialog, the filled button is the recommended way out, which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** outlined and **Cancel** as text.
 - Lower emphasis by variant, never by recolouring. A filled `secondary` button is just as heavy as a filled `primary` one (and `secondary` means the Connected System side in JIM's chips), and a filled default grey reads as disabled.
-- Outside the rule: buttons inside alerts, which follow the paragraph below, and the small filled icon buttons in a table row's actions column, which act on that row rather than on the view.
+- A destructive action on a page (**Delete Connected System**, **Delete All Objects**, **Cancel Execution**) is outlined in `error`. It is filled in `error` only as the confirming button of its own dialog, where it is that dialog's one filled button.
+- An action repeated on every row of a table (**View**, **Preview Sync**) is a text button, so a long list does not become a column of blocks.
+- Choosing between views or sibling pages (Connected Systems and Connectors, the Metaverse Object's Form, Tabs and Inspect) is a segmented control, not a button group with the chosen option filled: the choice is a state, not an action.
+- Outside the rule: buttons inside alerts, which follow the paragraph below, and the small filled icon buttons that act on one item in a list or table.
 
-Pages that predate this rule are brought into line as they are next changed.
+In the portal a build check (`ButtonEmphasisConventionTests`) holds every component to what one file can show: no filled button lowered by colour, no filled destructive button outside a dialog's actions, no more than one filled button showing in a dialog's actions, no filled button on a table row, and no filled button group. "One filled button per page" spans several components, so that half is for review.
 
 A button inside an alert is filled in the alert's severity colour (`warning` on a warning, `error` on an error, and so on), never `primary`, so the action reads as part of the message it answers. A lesser action beside it is a text button in the alert's colour. In the portal this is the `<AlertButton>` component, enforced by a build check; see `src/JIM.Web/CLAUDE.md` > Alerts.
 

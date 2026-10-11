@@ -6988,6 +6988,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToDictionaryAsync(g => g.Id);
     }
 
+    public async Task<Dictionary<int, bool>> GetSyncRuleMappingKeepUniqueAsync(IReadOnlyCollection<int> mappingIds)
+    {
+        if (mappingIds.Count == 0)
+            return [];
+
+        // Read-only comparison input, so no tracking: a caller holding the mapping tracked has already changed it.
+        var ids = mappingIds.ToList();
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => ids.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id, m => m.KeepUnique);
+    }
+
     public async Task<SyncRuleScopeState?> GetSyncRuleScopeStateAsync(int syncRuleId)
     {
         var row = await Repository.Database.SyncRules

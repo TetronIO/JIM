@@ -87,7 +87,7 @@
 
         <MudSpacer />
 
-        <MudButton Variant="Variant.Filled"
+        <MudButton Variant="Variant.Outlined"
                    Color="Color.Error"
                    StartIcon="@Icons.Material.Filled.Delete"
                    DropShadow="false"
@@ -116,7 +116,7 @@
         <ToolBarExtras>
             @* The menu's own button, not an ActivatorContent one: MudMenu wraps a custom activator in a focusable
                role="button" div, which would give keyboard users two tab stops for one control. *@
-            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Filled" Color="Color.Default"
+            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Outlined" Color="Color.Primary"
                      Size="Size.Small" DropShadow="false" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                 <ChildContent>
                     <div class="jim-column-menu">
@@ -143,9 +143,9 @@
                        reader who clicks View gets two identical navigations. The button is what offers middle-click
                        and open-in-new-tab, which a row-click handler cannot. *@
                     <span @onclick:stopPropagation="true">
-                        <MudButton Variant="Variant.Filled"
+                        <MudButton Variant="Variant.Text"
                                    Size="Size.Small"
-                                   Color="Color.Secondary"
+                                   Color="Color.Primary"
                                    Href="@(Utilities.GetConnectedSystemObjectHref(context.Item))">
                             View
                         </MudButton>

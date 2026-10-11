@@ -117,7 +117,7 @@ New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (UK)" -RunType FullImp
 
 ```powershell title="Create a Run Profile for a file-based connector"
 Get-JIMConnectedSystem -Name "CSV*" | ForEach-Object {
-    New-JIMRunProfile -ConnectedSystemId $_.Id -Name "Full Import" -RunType FullImport -FilePath "C:\Data\import.csv"
+    New-JIMRunProfile -ConnectedSystemId $_.Id -Name "Full Import" -RunType FullImport -FilePath "/connector-files/import.csv"
 }
 ```
 
@@ -204,7 +204,7 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -PartitionId 5
 ```
 
 ```powershell title="Update a file-based connector's Run Profile"
-Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -FilePath "C:\Data\import-v2.csv"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -FilePath "/connector-files/import-v2.csv"
 ```
 
 ```powershell title="Enable Verification Mode temporarily"

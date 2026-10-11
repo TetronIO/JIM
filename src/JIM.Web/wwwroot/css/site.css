@@ -5241,7 +5241,11 @@ body.jim-dark-mode .jim-seg {
     --jim-seg-option-radius: 5px;
 }
 
-.jim-seg > button {
+.jim-seg button,
+.jim-seg a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     border: none;
     background: transparent;
     color: var(--jim-seg-text);
@@ -5253,26 +5257,44 @@ body.jim-dark-mode .jim-seg {
     line-height: 1.3;
     border-radius: var(--jim-seg-option-radius);
     white-space: nowrap;
+    text-decoration: none;
     transition: background 0.15s, color 0.15s;
 }
 
-.jim-seg > button:hover {
+/* An option's icon follows the label's size rather than MudIcon's own, so a dense toggle's icons shrink with its
+   text. Qualified with html[lang] because MudBlazor's icon size classes load after this sheet and would otherwise win. */
+html[lang] .jim-seg .jim-seg-icon {
+    font-size: 1.15em;
+    flex-shrink: 0;
+}
+
+/* An option with a tooltip sits inside MudTooltip's wrapper, so the options are matched as descendants rather than
+   children, and the wrapper is made a flex item of the track like a bare option. */
+.jim-seg > .mud-tooltip-root {
+    display: inline-flex;
+}
+
+.jim-seg button:hover,
+.jim-seg a:hover {
     color: var(--jim-seg-text-on);
 }
 
-.jim-seg > button.on {
+.jim-seg button.on,
+.jim-seg a.on {
     background: var(--jim-seg-on);
     color: var(--jim-seg-text-on);
     box-shadow: var(--jim-seg-on-shadow);
 }
 
-.jim-seg > button:focus-visible {
+.jim-seg button:focus-visible,
+.jim-seg a:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-seg > button {
+    .jim-seg button,
+    .jim-seg a {
         transition: none;
     }
 }
@@ -6049,6 +6071,18 @@ html[lang] .jim-password-timeline.mud-timeline {
 .jim-availability-table .jim-availability-include {
     width: 1%;
     white-space: nowrap;
+}
+
+/* "Built from generated value" (Attribute Flow dialog, #2014): an accent edge ties the block to the generated value it
+   names; it steps back to the ordinary outline while the switch is not in effect, or when there is no switch. The
+   outlined-paper rules above set every border with !important (html[lang] .mud-paper-outlined, and the nested-paper
+   border colour), so these need it too; they win on source order at equal specificity. */
+html[lang] .jim-built-from-generated-value.mud-paper-outlined {
+    border-left: 3px solid var(--mud-palette-primary) !important;
+}
+
+html[lang] .jim-built-from-generated-value-inactive.mud-paper-outlined {
+    border-left-color: var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default))) !important;
 }
 
 /* ─── Connection explanations (#348): the Connections tab's row expansions and Not connected section ───

@@ -156,6 +156,38 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_CapturesExpressionMappingKeepUnique()
+    {
+        // Keep unique (#2023) decides whether a value built from a generated value is corrected with it, so a toggle
+        // must appear in the configuration change history.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5, KeepUnique = false };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" });
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "keepUnique")!.Value, Is.EqualTo("false"));
+        Assert.That(Child(flow, "keepUnique")!.Label, Is.EqualTo("Keep unique"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_OmitsKeepUniqueWhereItCannotApply()
+    {
+        // A direct flow can never build a value from a generated value, so the switch is not recorded for it.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5 };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttributeId = 9 });
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "keepUnique"), Is.Null);
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_CapturesRuleDisabledReason()
     {
         // A rule disabled by the schema refresh decision (#1485) records why; the reason is configuration and

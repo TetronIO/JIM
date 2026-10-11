@@ -654,6 +654,12 @@ public class JimDbContext : DbContext
             .Property(srm => srm.Enabled)
             .HasDefaultValue(true);
 
+        // Keep unique (Generated Value Forms, #2023 / #2014). Defaults to true so every value built from a generated
+        // value before the switch existed keeps being corrected with it; the store-level default backfills existing rows.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.KeepUnique)
+            .HasDefaultValue(true);
+
         // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
         // existing Run Profiles); the store-level default backfills existing rows on migration.
         modelBuilder.Entity<ConnectedSystemRunProfile>()

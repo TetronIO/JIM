@@ -30,10 +30,10 @@
                      SingularName="Trusted Certificate"
                      PluralName="Trusted Certificates">
     <ToolBarExtras>
-        <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
-            <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload" DropShadow="false">Upload Certificate</MudButton>
-            <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder" DropShadow="false">Reference File Path</MudButton>
-        </MudButtonGroup>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload"
+                   DropShadow="false" Class="me-2">Upload Certificate</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
+                   DropShadow="false">Reference File Path</MudButton>
     </ToolBarExtras>
     <Columns>
         <TemplateColumn Title="Actions" Sortable="false">
@@ -152,7 +152,7 @@
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                     StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
                     OnClick="@context.OpenFilePickerAsync">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")

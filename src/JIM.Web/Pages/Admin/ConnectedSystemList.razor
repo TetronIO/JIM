@@ -24,10 +24,8 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <div class="d-flex align-center mt-3">
-    <MudButtonGroup OverrideStyles="false">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary">Connected Systems</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems/connectors">Connectors</MudButton>
-    </MudButtonGroup>
+    <SegmentedToggle TValue="string" Options="@SiblingPages.ConnectedSystems" Value="@("systems")"
+                     AriaLabel="Connected Systems or Connectors" />
     <MudSpacer />
     <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
 </div>

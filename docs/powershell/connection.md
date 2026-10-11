@@ -9,7 +9,7 @@ The connection cmdlets manage authentication and session state with a JIM instan
 !!! info "Running a cmdlet before connecting"
     If you run any JIM cmdlet before `Connect-JIM`, it produces no output and reports a clear, non-terminating error telling you to connect first, for example:
 
-    ```
+    ```text
     Get-JIMConnectedSystem: You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again.
     ```
 
@@ -52,7 +52,7 @@ Returns a `PSCustomObject` with the following properties:
 | `Connected` | `bool` | Whether the connection was established successfully |
 | `ServerVersion` | `string` | Version of the connected JIM server |
 | `ExpiresAt` | `DateTime?` | Token expiry time (OAuth only; `$null` for API key connections) |
-| `Authorised` | `bool` | Whether the authenticated identity has administrative access |
+| `Authorised` | `bool` | Whether the signed-in user has a JIM identity (a Metaverse Object) and can access the system; always `$true` for API key connections |
 | `Status` | `string` | Human-readable connection status message |
 | `ApiKey` | `string?` | Redacted preview of the API key (ApiKey method only; `$null` for OAuth connections) |
 

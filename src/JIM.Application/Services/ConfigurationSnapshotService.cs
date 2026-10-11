@@ -245,6 +245,12 @@ public class ConfigurationSnapshotService
             Add(children, "enabled", Render(mapping.Enabled), "Enabled");
             Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
 
+            // Keep unique (Generated Value Forms, #2023) decides whether a value built from a generated value is
+            // corrected with it after a refusal, so a toggle is configuration. Recorded only where it can apply (an
+            // expression mapping), so the many mappings it can never affect do not each gain a line.
+            if (mapping.Generation == null && mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression)))
+                Add(children, "keepUnique", Render(mapping.KeepUnique), "Keep unique");
+
             if (mapping.Generation != null)
                 children.Add(BuildGeneration(mapping.Generation, connectedSystemNames));
 

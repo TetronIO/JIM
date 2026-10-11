@@ -377,6 +377,86 @@ public class CausalityModelBuilderSpeculativeTests
         Assert.That(node.AttributeRows[0].Name, Is.EqualTo("distinguishedName"));
     }
 
+    /// <summary>
+    /// A deletion's deprovision node names the rule whose Deprovisioning Action queued it (#1811), but its attribute
+    /// rows are still the deletion's own Delete, drawn from the cascade pool: the same rule's outbound entry describes
+    /// a different export, and borrowing its changes would show a Delete carrying an unrelated update.
+    /// </summary>
+    [Test]
+    public void BuildSpeculative_CascadeDeprovisionNodeNamingARule_StillTakesTheDeletionsOwnRows()
+    {
+        var dn = new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var mail = new ConnectedSystemObjectTypeAttribute { Id = 7, Name = "mail", Type = AttributeDataType.Text };
+        var preview = new SyncPreviewResult
+        {
+            OutboundDecisions = new OutboundPreviewResult
+            {
+                Entries =
+                [
+                    new OutboundPreviewEntry
+                    {
+                        Kind = OutboundPreviewEntryKind.Staging,
+                        SyncRuleId = 42,
+                        SyncRuleName = "Export to Directory EU",
+                        ConnectedSystemId = 3,
+                        EffectiveChangeType = PendingExportChangeType.Update,
+                        AttributeChanges =
+                        [
+                            new PendingExportAttributeValueChange
+                            {
+                                Attribute = mail, AttributeId = mail.Id, StringValue = "liam@example.com",
+                                ChangeType = PendingExportAttributeChangeType.Update
+                            }
+                        ]
+                    }
+                ]
+            },
+            Outbound = new ExportEvaluationPreviewResult
+            {
+                ProposedExports =
+                [
+                    new PendingExport
+                    {
+                        ChangeType = PendingExportChangeType.Delete,
+                        ConnectedSystemId = 3,
+                        AttributeValueChanges =
+                        [
+                            new PendingExportAttributeValueChange
+                            {
+                                Attribute = dn, AttributeId = dn.Id, StringValue = "cn=liam,dc=example",
+                                ChangeType = PendingExportAttributeChangeType.Update
+                            }
+                        ]
+                    }
+                ]
+            },
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
+                            TargetEntityDescription = "Directory EU",
+                            SyncRuleId = 42,
+                            SyncRuleName = "Export to Directory EU",
+                            DetailMessage = "3",
+                            StagedChangeType = PendingExportChangeType.Delete
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+
+        var deprovision = model.Roots[0].Children[0];
+        Assert.That(deprovision.AttributeRows.Select(r => r.Name), Is.EqualTo(new[] { "distinguishedName" }));
+    }
+
     [Test]
     public void BuildSpeculative_EmptyOutcomeTree_ProducesNoRoots()
     {

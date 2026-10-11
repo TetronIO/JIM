@@ -202,6 +202,11 @@ public class ExportExecutionServer
             // Execute exports using the connector with batch-loading
             await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options, changeLimitLedger,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
+
+            // Every batch has finished, so no corrected value will draw another sequence number: hand back the rest
+            // of any block a correction reserved (#2044).
+            if (_collisionRemediation != null)
+                await _collisionRemediation.ReturnUnusedSequenceNumbersAsync(SyncRepo);
         }
         finally
         {

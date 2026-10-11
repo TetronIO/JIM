@@ -81,6 +81,13 @@ internal sealed class CollisionRemediationRun
     public void Complete() => Options.Reservations.ReleaseAll(Options.ReservationOwnerId);
 
     /// <summary>
+    /// Hands back the sequence numbers this run reserved for corrected values and never drew (#2044). Call once the
+    /// export run has finished, before <see cref="Complete"/>.
+    /// </summary>
+    public Task<long> ReturnUnusedSequenceNumbersAsync(ISyncRepository repository) =>
+        new UniqueValueGenerationServer(repository).ReturnUnusedSequenceNumbersAsync(Options);
+
+    /// <summary>
     /// Decides what a "value already in use" rejection of <paramref name="export"/> means (see the type summary), and
     /// carries the decision out through <paramref name="repository"/>. Returns null when the rejection is to be reported
     /// as an ordinary export error, in which case nothing has been changed.
@@ -148,13 +155,21 @@ internal sealed class CollisionRemediationRun
         var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, context.AllExportRules);
         var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId.Value, rejectedValue, TryParseNumeric(attribute.Type, rejectedValue),
             participatingTargets, _connectedSystem.Id, context.ConnectedSystems);
+        string? anchoringBuiltValue = null;
+        if (verdict.Anchoring != GeneratedValueAnchoring.Anchored && !assignment.RenameAuthorised)
+        {
+            var (builtVerdict, builtValueName) = await IsAnchoredThroughBuiltValuesAsync(generationServer, metaverseObjectId.Value, mapping, _connectedSystem.Id, context, repository);
+            if (builtVerdict.Anchoring == GeneratedValueAnchoring.Anchored || verdict.Anchoring == GeneratedValueAnchoring.Unanchored)
+                (verdict, anchoringBuiltValue) = (builtVerdict, builtValueName);
+        }
 
         if (verdict.Anchoring != GeneratedValueAnchoring.Unanchored && !assignment.RenameAuthorised)
         {
             var anchoringName = SystemName(context, verdict.ConnectedSystemId!.Value);
+            var what = anchoringBuiltValue == null ? "it" : $"the {anchoringBuiltValue} built from it";
             var why = verdict.Anchoring == GeneratedValueAnchoring.Anchored
-                ? $"{anchoringName} has already accepted it for this object, so changing it would rename an account already in use"
-                : $"JIM cannot tell whether {anchoringName} already holds it, because {anchoringName} has not completed a Full Import since its connector space was cleared";
+                ? $"{anchoringName} has already accepted {what} for this object, so changing it would rename an account already in use"
+                : $"JIM cannot tell whether {anchoringName} already holds {what}, because {anchoringName} has not completed a Full Import since its connector space was cleared";
             var reason = verdict.Anchoring == GeneratedValueAnchoring.Anchored
                 ? GeneratedValueNeedsDecisionReason.AnchoredElsewhere
                 : GeneratedValueNeedsDecisionReason.CannotTell;
@@ -396,6 +411,43 @@ internal sealed class CollisionRemediationRun
     };
 
     /// <summary>
+    /// Whether another system has already accepted a value built from the generated value for this object (Generated
+    /// Value Forms, #2023): correcting the generated value moves every value built from it, whatever its "Keep unique"
+    /// switch, so a system holding one of them is an account the correction would rename. Each value built by a Derived
+    /// Attribute Flow is checked where it is exported unchanged, against the object's current value of it, exactly as the
+    /// generated value itself is. A value written only by an export expression has no stored value to compare and is not
+    /// checked yet.
+    /// </summary>
+    private static async Task<(GeneratedValueAnchoringVerdict Verdict, string? BuiltValueName)> IsAnchoredThroughBuiltValuesAsync(
+        UniqueValueGenerationServer generationServer, Guid metaverseObjectId, SyncRuleMapping generatedMapping, int rejectingConnectedSystemId, Context context, ISyncRepository repository)
+    {
+        var builtValues = context.BuiltValues.BuiltFrom(generatedMapping)
+            .Where(value => value.MetaverseAttributeId.HasValue && value.ExportedTo.Count > 0)
+            .ToList();
+        if (builtValues.Count == 0)
+            return (GeneratedValueAnchoringVerdict.Unanchored, null);
+
+        var metaverseObject = (await repository.GetMetaverseObjectsByIdsNoTrackingAsync([metaverseObjectId])).SingleOrDefault();
+        if (metaverseObject == null)
+            return (GeneratedValueAnchoringVerdict.Unanchored, null);
+
+        (GeneratedValueAnchoringVerdict Verdict, string? Name) cannotTell = (GeneratedValueAnchoringVerdict.Unanchored, null);
+        var heldValues = builtValues
+            .Select(value => (Value: value, Current: metaverseObject.AttributeValues.FirstOrDefault(av => av.AttributeId == value.MetaverseAttributeId)?.StringValue))
+            .Where(held => !string.IsNullOrEmpty(held.Current));
+        foreach (var (value, current) in heldValues)
+        {
+            var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId, current!, null, value.ExportedTo, rejectingConnectedSystemId, context.ConnectedSystems);
+            if (verdict.Anchoring == GeneratedValueAnchoring.Anchored)
+                return (verdict, value.MetaverseAttributeName);
+            if (verdict.Anchoring == GeneratedValueAnchoring.CannotTell && cannotTell.Verdict.Anchoring == GeneratedValueAnchoring.Unanchored)
+                cannotTell = (verdict, value.MetaverseAttributeName);
+        }
+
+        return cannotTell;
+    }
+
+    /// <summary>
     /// The base the next candidate is drawn from. An assignment made before the base was recorded falls back to its own
     /// value for an only-if-taken token, which is exact for a value issued without a suffix (the common case) and still
     /// yields a unique value otherwise.
@@ -474,7 +526,8 @@ internal sealed class CollisionRemediationRun
             ImportRules: allRules.Where(rule => rule.Direction == SyncRuleDirection.Import).ToList(),
             DerivedFlowGraph: graph,
             ConnectedSystems: connectedSystems,
-            GeneratedMappings: generatedMappings);
+            GeneratedMappings: generatedMappings,
+            BuiltValues: GeneratedValueBuiltValues.Create(allRules, graph));
     }
 
     /// <summary>
@@ -486,7 +539,8 @@ internal sealed class CollisionRemediationRun
         List<SyncRule> ImportRules,
         DerivedFlowGraph? DerivedFlowGraph,
         Dictionary<int, ConnectedSystem> ConnectedSystems,
-        Dictionary<int, SyncRuleMapping> GeneratedMappings)
+        Dictionary<int, SyncRuleMapping> GeneratedMappings,
+        GeneratedValueBuiltValues BuiltValues)
     {
         /// <summary>
         /// The attribute names the rejecting system can mean for this export: its object type's attributes, from the

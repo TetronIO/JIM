@@ -8,7 +8,7 @@ Every identity follows a predictable lifecycle:
 
 --8<-- "assets/diagrams/jml-lifecycle.svg"
 
-<p class="jim-diagram-caption">One identity's journey through JIM: events recorded in the source system flow through the Metaverse to every target system. Accounts are provisioned for joiners, updated for movers, and deprovisioned (disabled or deleted) for leavers; the systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace the import and export flows.</span></p>
+<p class="jim-diagram-caption">One identity's journey through JIM: events recorded in the source system flow through the Metaverse to every target system. Accounts are provisioned for joiners, updated for movers, and deprovisioned (disconnected or deleted) for leavers; the systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace the import and export flows.</span></p>
 
 JIM handles each phase through its [Synchronisation Rules](../configuration/synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
 
@@ -166,6 +166,6 @@ Alex resigns and HR marks the record as terminated.
 - HR import detects the status change to "Terminated"
 - Inbound sync disconnects Alex's HR CSO from the MVO
 - The deletion rule triggers with a 30-day grace period
-- Outbound sync disables Alex's AD account and email
-- Export sends the disable operations to the target systems
+- Outbound sync re-evaluates Attribute Flows: expressions keyed on the terminated status disable Alex's AD account (`userAccountControl = 514`) and email
+- Export sends those attribute changes to the target systems
 - After 30 days (if Alex is not rehired), the MVO and remaining CSOs are deleted

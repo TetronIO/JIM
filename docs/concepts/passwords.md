@@ -61,7 +61,7 @@ Parked, withdrawn and expired records are kept so you can see what became of a C
 A generated password nobody can be told is the right answer for getting a Connected System Object working and the wrong one for the day a new starter arrives. **One password for every Connected System Object** is the third option under Password Settings: you choose it, JIM sets that same password on every Connected System Object the rule provisions, and you can put it on an onboarding sheet or read it out.
 
 !!! warning "This option is not recommended"
-    Every Connected System Object the rule provisions shares this password until each person changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again, and it is the only password JIM stores anywhere.
+    Every Connected System Object the rule provisions shares this password until each person changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again. Apart from password changes queued for delivery, which JIM holds encrypted until they are delivered or [retention](#how-long-any-of-it-is-kept) removes them, it is the only Connected System Object password JIM stores.
 
     Leave **Require a change at the next sign-in** switched on: it is what ends each object's share of the password. Any other setting leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
 

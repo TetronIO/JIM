@@ -15,10 +15,8 @@
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudButtonGroup Class="mt-3" OverrideStyles="false">
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems">Connected Systems</MudButton>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary">Connectors</MudButton>
-</MudButtonGroup>
+<SegmentedToggle TValue="string" Options="@SiblingPages.ConnectedSystems" Value="@("connectors")"
+                 AriaLabel="Connected Systems or Connectors" Class="mt-3" />
 
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the search box)
    lives in the shared grid; this page loads the small configuration list once and windows it in memory. *@

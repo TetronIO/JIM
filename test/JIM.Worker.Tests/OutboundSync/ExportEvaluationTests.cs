@@ -708,6 +708,61 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// A scope exit records which rule's Deprovisioning Action decided the account's fate, whichever way it went,
+    /// so the run can name it on the Deprovision Queued or Target Disconnected outcome it reports (#1811).
+    /// </summary>
+    [TestCase(OutboundDeprovisionAction.Delete)]
+    [TestCase(OutboundDeprovisionAction.Disconnect)]
+    public async Task EvaluateOutOfScopeExportsAsync_ScopeExit_RecordsTheRuleThatDecidedAsync(OutboundDeprovisionAction action)
+    {
+        // Arrange - scope the rule so the Metaverse Object fails it
+        var (mvo, _, exportRule, _, cso, cache) = ArrangeWritebackToSourceFixture(csoStoredEmployeeId: "EMP001");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        exportRule.OutboundDeprovisionAction = action;
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    MetaverseAttributeId = employeeIdAttr.Id,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "SOMEBODY_ELSE",
+                    CaseSensitive = true
+                }
+            }
+        });
+        var workingSet = new ExportEvaluationWorkingSet();
+
+        // Act
+        await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo, cache, workingSet);
+
+        // Assert
+        if (action == OutboundDeprovisionAction.Delete)
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(workingSet.TryGetDeprovisioningRule(cso.Id, out var decidingRule), Is.True);
+                Assert.That(decidingRule.Id, Is.EqualTo(exportRule.Id));
+                Assert.That(decidingRule.Name, Is.EqualTo(exportRule.Name));
+            }
+        }
+        else
+        {
+            Assert.That(workingSet.Disconnections, Has.Count.EqualTo(1));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(workingSet.Disconnections[0].SyncRuleId, Is.EqualTo(exportRule.Id));
+                Assert.That(workingSet.Disconnections[0].SyncRuleName, Is.EqualTo(exportRule.Name));
+            }
+        }
+    }
+
+    /// <summary>
     /// Repoints the seeded user export Synchronisation Rule at the Dummy Target System and its
     /// TARGET_USER object type, with the given deprovisioning action. The seeded export rules all
     /// point at the source system, so without this the MVO-deletion cascade finds no rule matching
@@ -955,6 +1010,82 @@ public class ExportEvaluationTests
         Assert.That(result.Count, Is.EqualTo(0), "Expected no delete PendingExport when the rule's action is Disconnect");
         Assert.That(provisionedCso.MetaverseObjectId, Is.Null, "The CSO must still be disconnected from its MVO");
         Assert.That(provisionedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+    }
+
+    /// <summary>
+    /// A Disconnect leaves the account in place, unmanaged, and queues nothing, so the working set is the only
+    /// record that the deletion did anything to it. It names the rule whose Deprovisioning Action decided that,
+    /// so the run can report the account left behind rather than recording nothing at all (#1811).
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_DisconnectActionRule_RecordsTheDisconnectionNamingTheRuleAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var exportRule = ArrangeDeletionExportRule(OutboundDeprovisionAction.Disconnect);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+        var workingSet = new ExportEvaluationWorkingSet();
+
+        // Act
+        await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, workingSet: workingSet);
+
+        // Assert
+        Assert.That(workingSet.Disconnections, Has.Count.EqualTo(1));
+        var disconnection = workingSet.Disconnections[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disconnection.ConnectedSystemObjectId, Is.EqualTo(provisionedCso.Id));
+            Assert.That(disconnection.ConnectedSystemId, Is.EqualTo(provisionedCso.ConnectedSystemId));
+            Assert.That(disconnection.MetaverseObjectId, Is.EqualTo(mvo.Id));
+            Assert.That(disconnection.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(disconnection.SyncRuleName, Is.EqualTo(exportRule.Name));
+        }
+    }
+
+    /// <summary>
+    /// The Delete side of the same question: which rule's Deprovisioning Action queued the delete. Several rules
+    /// can cover one account and Delete wins, so it is captured from the decision rather than guessed later (#1811).
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_DeleteActionRule_RecordsTheRuleThatQueuedTheDeleteAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var exportRule = ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+        var workingSet = new ExportEvaluationWorkingSet();
+
+        // Act
+        await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, workingSet: workingSet);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(workingSet.TryGetDeprovisioningRule(provisionedCso.Id, out var decidingRule), Is.True);
+            Assert.That(decidingRule.Id, Is.EqualTo(exportRule.Id));
+            Assert.That(decidingRule.Name, Is.EqualTo(exportRule.Name));
+            Assert.That(workingSet.Disconnections, Is.Empty, "A queued delete is reported as a delete, not also as a disconnection");
+        }
+    }
+
+    /// <summary>
+    /// A joined object no export rule covers (a source system's record, or one whose rule has gone) is still
+    /// disconnected, but no Deprovisioning Action decided anything about it, so it is not reported as an account
+    /// left in place in a target system.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_NoMatchingExportRule_RecordsNoDisconnectionAsync()
+    {
+        // Arrange: deliberately no ArrangeDeletionExportRule call
+        var mvo = MetaverseObjectsData[0];
+        ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+        var workingSet = new ExportEvaluationWorkingSet();
+
+        // Act
+        await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, workingSet: workingSet);
+
+        // Assert
+        Assert.That(workingSet.Disconnections, Is.Empty);
     }
 
     /// <summary>

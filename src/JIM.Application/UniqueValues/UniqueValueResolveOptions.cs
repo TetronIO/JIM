@@ -53,10 +53,10 @@ public sealed class UniqueValueResolveOptions
     /// <summary>
     /// How many numbers <see cref="SequenceAllocator"/> reserves in one block when an attribute's cached block
     /// runs out (plan "The service": "reserves a block per page with an atomic increment"). A higher value
-    /// means fewer <c>ReserveGeneratedValueSequenceBlockAsync</c> round trips across a run at the cost of a
-    /// larger gap left behind by numbers the run never issues (plan decision 3: expected and undocumented
-    /// nowhere else because it is already covered there). Defaults to 100, which comfortably covers a typical
-    /// worker page without over-reserving on a small run.
+    /// means fewer <c>ReserveGeneratedValueSequenceBlockAsync</c> round trips across a run. The undrawn tail is
+    /// handed back when the run ends (<see cref="UniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync"/>,
+    /// #2044), so the size leaves no gap unless another run reserves from the same counter in the meantime.
+    /// Defaults to 100, which comfortably covers a typical worker page.
     /// </summary>
     public int SequenceBlockSize { get; init; } = 100;
 
@@ -76,6 +76,14 @@ public sealed class UniqueValueResolveOptions
     /// by <see cref="SequenceAllocator"/> only.
     /// </summary>
     internal ConcurrentDictionary<(int? MetaverseAttributeId, int? ConnectedSystemObjectTypeAttributeId), ConcurrentQueue<long>> SequenceBlocks { get; } = new();
+
+    /// <summary>
+    /// Per attribute (keyed as <see cref="SequenceBlocks"/>), the latest block the run reserved for real, with what the
+    /// counter looked like straight afterwards: what <see cref="UniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync"/>
+    /// needs to hand the block's undrawn tail back at the end of the run (#2044). Never written under
+    /// <see cref="DryRun"/>, which reserves nothing.
+    /// </summary>
+    internal ConcurrentDictionary<(int? MetaverseAttributeId, int? ConnectedSystemObjectTypeAttributeId), GeneratedValueSequenceBlock> SequenceReservations { get; } = new();
 
     /// <summary>
     /// One refill at a time per attribute: guards <see cref="SequenceBlocks"/> so two concurrent callers

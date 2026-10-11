@@ -728,7 +728,7 @@ public class ExportEvaluationServer
 
                 // Update the CSO in the database
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-                workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id));
+                workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id, exportRule.Id, exportRule.Name));
 
                 // Was that the last connector? (Asked after the removal above, per the engine's contract.)
                 if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
@@ -747,7 +747,11 @@ public class ExportEvaluationServer
                 Log.Information("HandleOutboundDeprovisioningAsync: Ensuring delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
                     cso.Id);
 
-                return await EnsureDeletePendingExportAsync(cso, mvo.Id, exportRule, workingSet);
+                var deletePendingExport = await EnsureDeletePendingExportAsync(cso, mvo.Id, exportRule, workingSet);
+                // Recorded once the Delete is persisted, so the scope exit's report can name the rule that queued it (#1811).
+                if (deletePendingExport != null)
+                    workingSet.RecordDeprovisioningRule(cso.Id, exportRule);
+                return deletePendingExport;
 
             default:
                 Log.Warning("HandleOutboundDeprovisioningAsync: Unknown OutboundDeprovisionAction {Action} for rule {RuleName}",
@@ -944,6 +948,9 @@ public class ExportEvaluationServer
         // call costs nothing and keeps one implementation of the semantics.
         var csoIdsToDisconnect = new List<Guid>();
         var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        // Accounts a Disconnect action leaves in place. Recorded on the working set only once the broken joins are
+        // persisted below, so the run can report each one, naming the rule that decided it (#1811).
+        var disconnectionsByRule = new List<OutboundDisconnection>();
         var disconnectedByRuleCount = 0;
         var noMatchingRuleCount = 0;
 
@@ -981,6 +988,8 @@ public class ExportEvaluationServer
                     case MvoDeletionExportReason.MatchingRulesDeclineDeletion:
                         disconnectedByRuleCount++;
                         workingSet.RecordDeleteDecision(cso.Id, verdict);
+                        disconnectionsByRule.Add(new OutboundDisconnection(
+                            cso.Id, cso.ConnectedSystemId, mvoId, verdict.WinningRule!.Id, verdict.WinningRule.Name));
                         Log.Debug("EvaluateMvoDeletionsAsync: CSO {CsoId} matches export Synchronisation Rule(s) whose action is Disconnect; disconnecting only",
                             cso.Id);
                         continue;
@@ -1027,6 +1036,7 @@ public class ExportEvaluationServer
                     Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
                         reusedPe.Id, cso.Id, reusedPe.Status);
                     workingSet.RecordStagedDeleteExport(cso.Id, reusedPe);
+                    workingSet.RecordDeprovisioningRule(cso.Id, decision.WinningRule!);
                     pendingExports.Add(reusedPe);
                     continue;
                 }
@@ -1096,7 +1106,12 @@ public class ExportEvaluationServer
                 // claiming Pending Exports that were never persisted (the per-MVO fallback re-evaluates with
                 // this same working set and must not reuse a phantom).
                 foreach (var newPendingExport in newPendingExports)
-                    workingSet.RecordStagedDeleteExport(newPendingExport.ConnectedSystemObjectId!.Value, newPendingExport);
+                {
+                    var newPendingExportCsoId = newPendingExport.ConnectedSystemObjectId!.Value;
+                    workingSet.RecordStagedDeleteExport(newPendingExportCsoId, newPendingExport);
+                    if (workingSet.TryGetDeleteDecision(newPendingExportCsoId, out var stagingDecision) && stagingDecision.WinningRule != null)
+                        workingSet.RecordDeprovisioningRule(newPendingExportCsoId, stagingDecision.WinningRule);
+                }
             }
         }
 
@@ -1108,6 +1123,10 @@ public class ExportEvaluationServer
             await SyncRepo.DisconnectConnectedSystemObjectsAsync(csoIdsToDisconnect);
             Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured, {ByRuleCount} disconnect-only by rule action, {NoRuleCount} with no matching export Synchronisation Rule",
                 csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count, disconnectedByRuleCount, noMatchingRuleCount);
+
+            // Only now that the broken joins are persisted: the accounts a Disconnect action left in place.
+            foreach (var disconnection in disconnectionsByRule)
+                workingSet.RecordDisconnection(disconnection);
         }
 
         return pendingExports;

@@ -2044,9 +2044,25 @@ public class SyncPreviewServer
 
             if (!exportDecision.ShouldStageDeleteExport)
             {
-                // No node in the real tree either (SyncEngine.ExportEvaluation.DecideMvoDeletionExport's
-                // disconnect-only verdicts get no outcome; ExportEvaluationServer.EvaluateMvoDeletionsAsync
-                // just disconnects). Surfaced as a warning instead, so the surfaces can still show it.
+                // Where a matching rule's Disconnect action decided it, the real run records the account left in
+                // place as a Target Disconnected outcome under the deletion, naming that rule (#1811), so the preview
+                // proposes the same node. With no matching rule there is no node in the real tree either.
+                if (exportDecision.Reason == MvoDeletionExportReason.MatchingRulesDeclineDeletion)
+                {
+                    deletionNode.Children.Add(new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                        TargetEntityId = downstreamCso.Id,
+                        TargetEntityDescription = targetSystemName,
+                        SyncRuleId = exportDecision.WinningRule?.Id,
+                        SyncRuleName = exportDecision.WinningRule?.Name,
+                        DetailMessage = downstreamCso.ConnectedSystemId.ToString(),
+                        Ordinal = deletionNode.Children.Count
+                    });
+                }
+
+                // Either way the object is disconnected without being deprovisioned, which the surfaces (and the
+                // Full Synchronisation preview's counts) read from this warning.
                 result.Warnings.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.DownstreamDisconnectOnly,
@@ -2089,6 +2105,8 @@ public class SyncPreviewServer
             {
                 OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
                 TargetEntityDescription = targetSystemName,
+                SyncRuleId = exportDecision.WinningRule?.Id,
+                SyncRuleName = exportDecision.WinningRule?.Name,
                 DetailCount = attributeChanges.Count,
                 DetailMessage = downstreamCso.ConnectedSystemId.ToString(),
                 StagedChangeType = PendingExportChangeType.Delete,

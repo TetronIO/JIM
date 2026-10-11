@@ -118,7 +118,7 @@
             </MudSelect>
         </DialogContent>
         <DialogActions>
-            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default" OnClick="@(() => _addGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            <MudButton DropShadow="false" OnClick="@(() => _addGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrEmpty(_newGroupType)" OnClick="HandleAddGroupAsync" DropShadow="false">Add Group</MudButton>
         </DialogActions>
     </MudDialog>
@@ -166,7 +166,7 @@
             }
         </DialogContent>
         <DialogActions>
-            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            <MudButton DropShadow="false" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleSaveCriterionAsync">@(_editingCriterionId.HasValue ? "Save" : "Add Criteria")</MudButton>
         </DialogActions>
     </MudDialog>
@@ -220,11 +220,11 @@
 
         <div class="mt-4">
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Color="Color.Primary" Class="me-3"
                            OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria</MudButton>
             </MudTooltip>
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
+                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined" Color="Color.Primary"
                            OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria Group</MudButton>
             </MudTooltip>
         </div>

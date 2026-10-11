@@ -22,7 +22,10 @@
     following, including when the refused value is the derived one); anchored by the Cross-Domain
     Export CSV target, the export is parked as Needs Decision; with the flow's Collision Remediation
     switch off (set in the database until PR 9 gives it a surface), the refusal is an ordinary export
-    error. Steps that provoke an Error line on purpose declare it (Add-JimExpectedError).
+    error; and (Generated Value Forms, #2014) with the derived User Principal Name flow's Keep unique
+    switch off (set with Set-JIMSyncRuleMapping -KeepUnique), a refusal of the User Principal Name is an
+    ordinary export error and the Account Name stays. Steps that provoke an Error line on purpose declare
+    it (Add-JimExpectedError).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
     Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName, so Email and User Principal Name
@@ -70,7 +73,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -767,7 +770,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -972,6 +975,12 @@ try {
         $afterLowerNumber = [int]($afterLower.attributes.'Staff Number' -replace '^EMP-0*', '')
         Add-TestResult -Name "After lowering Sequence Start, the next joiner still continues forward (no reset to 1)" -Passed ($afterLowerNumber -gt $afterRaiseNumber) `
             -Detail "Expected greater than $afterRaiseNumber, got $afterLowerNumber"
+
+        # Each synchronisation reserves Staff Numbers in blocks and hands back what it did not draw when it ends
+        # (#2044), so a joiner in the next synchronisation gets the next number rather than one a block further on.
+        Add-TestResult -Name "Consecutive synchronisations issue consecutive Staff Numbers (each run hands back the rest of its block)" `
+            -Passed ($afterLowerNumber -eq $afterRaiseNumber + 1) `
+            -Detail "Expected $($afterRaiseNumber + 1), got $afterLowerNumber"
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
@@ -1177,23 +1186,47 @@ try {
         Assert-NotNull -Value $survivorBefore -Message "Survivor (Quillan Ashby, from the Sequence test) exists before Start again"
         $survivorNumberBefore = $survivorBefore.attributes.'Staff Number'
 
-        $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        # The flow's configured Start as it stands now (the Sequence step raised it above the counter and then
-        # lowered it to 1; lowering never moves the counter, but it is the value Start again returns to).
-        $configuredStart = (@(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }).generation.sequenceStart
+        # Start again over numbers the population still holds, which is what rebuilding a solution does (#2031):
+        # point the flow's Start at the lowest Staff Number in use, so Start again puts the counter at the bottom of a
+        # run of held numbers. The initial population holds consecutive numbers from there (3 of them even at Nano),
+        # so an attempt limit of 3 is shorter than the run: walking it one number per attempt, as JIM did before,
+        # fails the joiner with GeneratedValueExhausted, while skipping it costs one rejected number and one more
+        # draw, with one attempt to spare for a genuine collision above the run.
+        $heldStaffNumbers = [System.Collections.Generic.HashSet[long]]::new()
+        foreach ($staffNumber in @((Get-Population) | ForEach-Object { "$($_.attributes.'Staff Number')" } | Where-Object { $_ -match '^EMP-\d+$' })) {
+            [void]$heldStaffNumbers.Add([long]($staffNumber -replace '^EMP-', ''))
+        }
+        $lowestStaffNumber = ($heldStaffNumbers | Measure-Object -Minimum).Minimum
+        $firstFreeAboveLowest = $lowestStaffNumber
+        while ($heldStaffNumbers.Contains($firstFreeAboveLowest)) { $firstFreeAboveLowest++ }
+        $mappingBefore = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }
+        $attemptLimitBefore = $mappingBefore.generation.attemptLimit
+        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart $lowestStaffNumber -AttemptLimit 3 | Out-Null
 
+        $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
         $restartResult = Restart-JIMGeneratedValues -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -Confirm:$false
-        Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $configuredStart) `
-            -Detail "Expected CounterTo=$configuredStart, got $($restartResult.counterTo) (CounterFrom was $($restartResult.counterFrom); counter stood at $($sequenceBefore.nextNumber) beforehand)"
+        Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $lowestStaffNumber) `
+            -Detail "Expected CounterTo=$lowestStaffNumber, got $($restartResult.counterTo) (CounterFrom was $($restartResult.counterFrom); counter stood at $($sequenceBefore.nextNumber) beforehand)"
+
+        # Surface parity: exercise the raw REST restart route once too (a second, harmless restart; Start again only
+        # ever moves the counter to its already-configured Start, which is exactly where it now stands).
+        $rawRestartResult = Invoke-RawJimApi -Method POST -Endpoint "/api/v1/synchronisation/sync-rules/$($config.ImportRuleId)/mappings/$($config.EmployeeNumberMappingId)/generation/restart"
+        Add-TestResult -Name "The REST restart route answers directly (surface parity)" -Passed ($null -ne $rawRestartResult) `
+            -Detail "Raw response: $($rawRestartResult | ConvertTo-Json -Compress)"
 
         $survivorNumberAfter = Get-MvoAttributeValue -MvoId $survivorBefore.id -AttributeName "Staff Number"
         Add-TestResult -Name "The surviving object keeps its Staff Number after Start again" -Passed ($survivorNumberAfter -eq $survivorNumberBefore) `
             -Detail "Expected unchanged '$survivorNumberBefore', got '$survivorNumberAfter'"
 
+        # Invoke-Cycle asserts every run succeeded, so a joiner failed with GeneratedValueExhausted stops the test here.
         Add-HrCsvJoiner -EmployeeId "EMP900030" -FirstName "Beatrix" -LastName "Nightingale"
         Invoke-Cycle -Config $config | Out-Null
 
         $newJoiner = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Beatrix' -and $_.attributes.'Last Name' -eq 'Nightingale' }) | Select-Object -First 1
+        $newJoinerStaffNumber = "$($newJoiner.attributes.'Staff Number')"
+        Add-TestResult -Name "A joiner after Start again skips the numbers still held, past an attempt limit shorter than the run" `
+            -Passed ($newJoinerStaffNumber -match '^EMP-\d+$' -and [long]($newJoinerStaffNumber -replace '^EMP-', '') -ge $firstFreeAboveLowest) `
+            -Detail "Staff Numbers $lowestStaffNumber to $($firstFreeAboveLowest - 1) are held; the joiner got '$($newJoiner.attributes.'Staff Number')'"
         Add-TestResult -Name "A joiner after Start again does not collide with the surviving object's number" -Passed ($newJoiner.attributes.'Staff Number' -ne $survivorNumberBefore) `
             -Detail "Both got '$($newJoiner.attributes.'Staff Number')'"
 
@@ -1202,26 +1235,7 @@ try {
         Add-TestResult -Name "No duplicate Staff Number exists after Start again" -Passed ($dupesAfterRestart.Count -eq 0) `
             -Detail "Duplicates: $(($dupesAfterRestart | ForEach-Object { $_.Name }) -join ', ')"
 
-        # Surface parity: exercise the raw REST restart route once too (a second, harmless restart;
-        # release 1's Start again is idempotent by design - it only ever moves the counter to its
-        # already-configured Start, which is exactly where it now stands).
-        $rawRestartResult = Invoke-RawJimApi -Method POST -Endpoint "/api/v1/synchronisation/sync-rules/$($config.ImportRuleId)/mappings/$($config.EmployeeNumberMappingId)/generation/restart"
-        Add-TestResult -Name "The REST restart route answers directly (surface parity)" -Passed ($null -ne $rawRestartResult) `
-            -Detail "Raw response: $($rawRestartResult | ConvertTo-Json -Compress)"
-
-        # Put the counter back above the population before any later step draws a Staff Number. Start again left it
-        # at 1, below the block the initial population holds (EMP-001000 upwards, one number per person), and every
-        # synchronisation that draws reserves a block of 100, so each later joiner moves it 100 closer. Ten joiners
-        # on (the Samba AD order: Tests 13 and 16 add the two OpenLDAP skips), a joiner's sync reached the block and
-        # had to skip every number in it, more than the attempt limit at Medium, so Test 18 failed Pre-Release
-        # with GeneratedValueExhausted for Staff Number, nothing to do with what it tests.
-        $highestStaffNumber = (@((Get-Population) | ForEach-Object { [int]("$($_.attributes.'Staff Number')" -replace '^EMP-0*', '') }) |
-            Measure-Object -Maximum).Maximum
-        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart ($highestStaffNumber + 1) | Out-Null
-        $sequenceAfterRaise = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        Add-TestResult -Name "Raising Sequence Start after Start again moves the counter past every Staff Number in use" `
-            -Passed ($sequenceAfterRaise.nextNumber -gt $highestStaffNumber) `
-            -Detail "Highest Staff Number in use: $highestStaffNumber; NextNumber: $($sequenceAfterRaise.nextNumber)"
+        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -AttemptLimit $attemptLimitBefore | Out-Null
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
@@ -1766,6 +1780,73 @@ try {
         $assignmentState = Invoke-JimDatabaseScalar -Sql "SELECT ""State""::text || ':' || ""RemediationCount""::text FROM ""GeneratedValueAssignments"" WHERE ""MetaverseObjectId"" = '$($person.id)' AND ""MetaverseAttributeId"" = $($config.AccountNameMvAttributeId);"
         Add-TestResult -Name "[Remediation off] The assignment is left unchanged (never remediated)" `
             -Passed ($assignmentState -match ':0$') -Detail "State:RemediationCount '$assignmentState'"
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Keep unique switched off on the derived User Principal Name (Generated Value Forms, #2014):
+    # the directory refuses the User Principal Name, but its flow's switch is off, so the refusal is
+    # an ordinary export error and the Account Name it is built from stays. Set through PowerShell,
+    # so the surface is exercised end to end; restored afterwards.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionKeepUniqueOff")) {
+        Write-TestSection "Test 19: With Keep unique off on the User Principal Name, its refusal is an ordinary export error"
+
+        if ($isRfcDirectory) {
+            Write-Host "  Skipped: OpenLDAP has no userPrincipalName" -ForegroundColor Yellow
+        }
+        else {
+            $upnMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId | Where-Object { $_.TargetMetaverseAttributeName -eq 'User Principal Name' })
+            Assert-Condition -Condition ($upnMapping.Count -eq 1) -Message "The HR import rule holds one User Principal Name Attribute Flow (found $($upnMapping.Count))"
+            $upnMapping = $upnMapping[0]
+
+            $builtFrom = $upnMapping.BuiltFromGeneratedValue
+            Add-TestResult -Name "[Keep unique] The User Principal Name flow reports it is built from Account Name, via Email" `
+                -Passed ($null -ne $builtFrom -and $builtFrom.GeneratedAttributeName -eq 'Account Name' -and @($builtFrom.Via) -contains 'Email' -and $builtFrom.KeepUnique -eq $true) `
+                -Detail "BuiltFromGeneratedValue: $(if ($builtFrom) { "$($builtFrom.GeneratedAttributeName) via '$(@($builtFrom.Via) -join ',')', Kind $($builtFrom.Kind), KeepUnique $($builtFrom.KeepUnique)" } else { 'none' })"
+            $accountNameMapping = Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.AccountNameMappingId
+            $builtValueNames = @($accountNameMapping.Generation.BuiltValues | ForEach-Object { $_.MetaverseAttributeName })
+            Add-TestResult -Name "[Keep unique] The generated Account Name flow lists Email and User Principal Name as built from it" `
+                -Passed ($builtValueNames -contains 'Email' -and $builtValueNames -contains 'User Principal Name') -Detail "BuiltValues: $($builtValueNames -join ', ')"
+
+            $person = Add-CollisionJoiner -EmployeeId "EMP900084" -FirstName "Thaddeus" -LastName "Merrow" -Department "Estates" -Context "Keep unique off"
+            $rejected = $person.attributes.'Account Name'
+            $clashDn = New-CollidingDirectoryAccount -Collide UserPrincipalName -Value $rejected -Tag "ku"
+            Write-Host "  JIM staged '$rejected'; created $clashDn holding userPrincipalName '$rejected@panoply.local' outside JIM" -ForegroundColor Gray
+
+            $stepName = "CollisionKeepUniqueOff"
+            Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $false
+            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse|nerys\.vandal|GeneratedValueCollisionUnresolved" | Out-Null
+            try {
+                $export = Start-DirectoryExportForCollision -Context "Keep unique off"
+            }
+            finally {
+                Complete-JimExpectedError -Step $stepName
+                Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $true
+            }
+
+            $itemsDetail = "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
+            $ownItems = @($export.Items | Where-Object { $_.displayName -eq 'Thaddeus Merrow' })
+            Add-TestResult -Name "[Keep unique] The refused User Principal Name is an ordinary UniqueValueAlreadyInUse error" `
+                -Passed ($ownItems.Count -eq 1 -and $ownItems[0].errorType -eq 'UniqueValueAlreadyInUse') -Detail $itemsDetail
+            Add-TestResult -Name "[Keep unique] Nothing is remediated" `
+                -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0) -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+
+            # Changing a value's Keep unique switch releases every decision held on the generated value it is built
+            # from, as changing the generated flow's own settings does: Test 17's parked export is sent again, and,
+            # still anchored by the Cross-Domain Export, is held again rather than renamed.
+            $reheld = @($export.Items | Where-Object { $_.displayName -eq 'Nerys Vandal' -and $_.errorType -eq 'GeneratedValueCollisionUnresolved' })
+            Add-TestResult -Name "[Keep unique] Switching it released Test 17's held decision, which is held again" `
+                -Passed ($reheld.Count -eq 1 -and $export.Stats.totalGeneratedValuesNeedingDecision -eq 1) `
+                -Detail "needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision); $itemsDetail"
+            Add-TestResult -Name "[Keep unique] The Metaverse Account Name is unchanged ('$rejected')" `
+                -Passed ((Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name") -eq $rejected) `
+                -Detail "Got '$(Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name")'"
+            $assignmentState = Invoke-JimDatabaseScalar -Sql "SELECT ""State""::text || ':' || ""RemediationCount""::text FROM ""GeneratedValueAssignments"" WHERE ""MetaverseObjectId"" = '$($person.id)' AND ""MetaverseAttributeId"" = $($config.AccountNameMvAttributeId);"
+            Add-TestResult -Name "[Keep unique] The assignment is left unchanged (never remediated)" `
+                -Passed ($assignmentState -match ':0$') -Detail "State:RemediationCount '$assignmentState'"
+            $restored = Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id
+            Add-TestResult -Name "[Keep unique] The switch is back on afterwards" -Passed ($restored.KeepUnique -eq $true) -Detail "KeepUnique: $($restored.KeepUnique)"
+        }
     }
 
     Assert-NoWorkerErrors -Since $startTime

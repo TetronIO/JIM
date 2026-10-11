@@ -15,7 +15,7 @@ title: Troubleshooting
 
 At start-up, `jim.worker`, `jim.web` and `jim.scheduler` each wait for PostgreSQL before doing anything else, and log every attempt with the time spent so far and the reason:
 
-```
+```text
 The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: Name or service not known. Retrying in 15s.
 ```
 
@@ -173,7 +173,7 @@ proxy_buffers 8 16k;
 
 You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. (Earlier versions of JIM sent the browser back to the identity provider again and again instead, and the portal never loaded.) The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
 
-```
+```text
 '.AspNetCore.Correlation.<random characters>' cookie not found.
 ```
 
@@ -217,7 +217,7 @@ Some messages in the container logs look alarming but are expected and harmless.
 
 During startup you may see:
 
-```
+```text
 jim.scheduler  | Cannot load library libgssapi_krb5.so.2
 jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
 ```
@@ -230,7 +230,7 @@ jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No 
 
 **How to confirm the scheduler is healthy despite the message.** Immediately after the probe lines you should see:
 
-```
+```text
 jim.scheduler  | info: Microsoft.Hosting.Lifetime[0]
 jim.scheduler  |       Application started. Press Ctrl+C to shut down.
 ```

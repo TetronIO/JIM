@@ -122,6 +122,7 @@ New-JIMSchedule [-Name] <String>
     [-CronExpression <String>]
     [-Enabled]
     [-OnStepFailure <String>]
+    [-ChangeReason <String>]
     [-PassThru]
     [-WhatIf] [-Confirm]
 ```
@@ -135,14 +136,15 @@ New-JIMSchedule [-Name] <String>
 | `TriggerType` | `String` | Yes | | The trigger mechanism: `Cron` or `Manual`. |
 | `PatternType` | `String` | No | `SpecificTimes` | The scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
 | `DaysOfWeek` | `Int32[]` | No | | Days the schedule runs. Values 0 (Sunday) through 6 (Saturday). |
-| `RunTimes` | `String[]` | No | | Specific times to run, in 24-hour format (e.g. `"06:00"`, `"12:00"`). Used with `SpecificTimes` pattern. |
-| `IntervalValue` | `Int32` | No | | The interval frequency, from 1 to 59. Used with `Interval` pattern. |
+| `RunTimes` | `String[]` | No | | Specific times to run, in 24-hour format (e.g. `"06:00"`, `"12:00"`). Used with `SpecificTimes` pattern. Every time must be at the same minute past the hour (`"06:30"` and `"18:30"`, not `"06:00"` and `"18:30"`), because a Schedule holds one cron expression; use a `Custom` pattern for times that differ. |
+| `IntervalValue` | `Int32` | No | | The interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. Used with `Interval` pattern. |
 | `IntervalUnit` | `String` | No | `Hours` | The interval unit: `Hours` or `Minutes`. |
-| `IntervalWindowStart` | `String` | No | | Start of the interval window in 24-hour format (e.g. `"08:00"`). |
+| `IntervalWindowStart` | `String` | No | | Start of the interval window in 24-hour format (e.g. `"08:00"`). Applies to an hourly interval; give `IntervalWindowEnd` with it. |
 | `IntervalWindowEnd` | `String` | No | | End of the interval window in 24-hour format (e.g. `"18:00"`). |
-| `CronExpression` | `String` | No | | A cron expression for `Custom` pattern or `Cron` trigger type (e.g. `"0 6 * * 1-5"`). |
+| `CronExpression` | `String` | No | | The cron expression for a `Custom` pattern (e.g. `"0 6 * * 1-5"`). For `SpecificTimes` and `Interval`, JIM builds the expression from the pattern, exactly as the Schedule editor in the portal does. |
 | `Enabled` | `Switch` | No | | Enables the schedule immediately upon creation. |
 | `OnStepFailure` | `String` | No | `Stop` | What the Schedule does when a step fails: `Stop` or `Continue`. Steps follow it unless they have a setting of their own. See [When a step fails](#when-a-step-fails). |
+| `ChangeReason` | `String` | No | | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | | Returns the created schedule object. |
 
 #### Output
@@ -220,6 +222,7 @@ Set-JIMSchedule -Id <Guid>
     [-CronExpression <String>]
     [-OnStepFailure <String>]
     [-Steps <Object[]>]
+    [-ChangeReason <String>]
     [-PassThru]
     [-WhatIf] [-Confirm]
 ```
@@ -235,13 +238,14 @@ Set-JIMSchedule -Id <Guid>
 | `PatternType` | `String` | No | No | Updated scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
 | `DaysOfWeek` | `Int32[]` | No | No | Updated days of the week (0-6). |
 | `RunTimes` | `String[]` | No | No | Updated run times in 24-hour format. |
-| `IntervalValue` | `Int32` | No | No | Updated interval frequency (1-59). |
+| `IntervalValue` | `Int32` | No | No | Updated interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. |
 | `IntervalUnit` | `String` | No | No | Updated interval unit: `Hours` or `Minutes`. |
 | `IntervalWindowStart` | `String` | No | No | Updated interval window start time. |
 | `IntervalWindowEnd` | `String` | No | No | Updated interval window end time. |
-| `CronExpression` | `String` | No | No | Updated cron expression. |
+| `CronExpression` | `String` | No | No | Updated cron expression, for a `Custom` pattern. For `SpecificTimes` and `Interval`, JIM rebuilds the expression from the pattern, so changing `RunTimes` or the interval retimes the Schedule. |
 | `OnStepFailure` | `String` | No | No | What the Schedule does when a step fails: `Stop` or `Continue`. Omit to leave it unchanged. A built-in Schedule, such as Temporal Scope Reconciliation, always stops; JIM refuses a change to it. See [When a step fails](#when-a-step-fails). |
 | `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. Give each step its failure setting as `OnFailure`: a step object that carries `OnFailure` ignores its `ContinueOnFailure`, so to change one step's setting, use [`Set-JIMScheduleStep`](#set-jimschedulestep) or change the step's `OnFailure`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -285,7 +289,7 @@ Supports `ShouldProcess` with high impact; prompts for confirmation by default. 
 #### Syntax
 
 ```powershell
-Remove-JIMSchedule -Id <Guid> [-Force] [-WhatIf] [-Confirm]
+Remove-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-Force] [-WhatIf] [-Confirm]
 ```
 
 #### Parameters
@@ -293,6 +297,7 @@ Remove-JIMSchedule -Id <Guid> [-Force] [-WhatIf] [-Confirm]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to delete. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the deletion, recorded in the Schedule's change history. |
 | `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
 
 #### Output
@@ -324,7 +329,7 @@ Enables a schedule so it will execute according to its configured trigger.
 #### Syntax
 
 ```powershell
-Enable-JIMSchedule -Id <Guid> [-PassThru]
+Enable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
 ```
 
 #### Parameters
@@ -332,6 +337,7 @@ Enable-JIMSchedule -Id <Guid> [-PassThru]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to enable. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -358,7 +364,7 @@ Disables a schedule, preventing it from executing on its configured trigger. The
 #### Syntax
 
 ```powershell
-Disable-JIMSchedule -Id <Guid> [-PassThru]
+Disable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
 ```
 
 #### Parameters
@@ -366,6 +372,7 @@ Disable-JIMSchedule -Id <Guid> [-PassThru]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to disable. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -448,6 +455,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -RunProfileId <Int32>
     [-Parallel]
     [-OnFailure <String> | -ContinueOnFailure]
+    [-ChangeReason <String>]
     [-PassThru]
 
 # ByName
@@ -457,6 +465,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -RunProfileName <String>
     [-Parallel]
     [-OnFailure <String> | -ContinueOnFailure]
+    [-ChangeReason <String>]
     [-PassThru]
 ```
 
@@ -473,6 +482,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
 | `Parallel` | `Switch` | No | Both | Runs this step in parallel with the previous step. |
 | `OnFailure` | `String` | No | Both | What the step does when it fails: `FollowSchedule` (the default; the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. See [When a step fails](#when-a-step-fails). |
 | `ContinueOnFailure` | `Switch` | No | Both | Shorthand for `-OnFailure Continue`. Supplying both `-OnFailure` and `-ContinueOnFailure` is an error, and nothing is changed. |
+| `ChangeReason` | `String` | No | Both | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | Both | Returns the updated schedule object. |
 
 #### Output
@@ -597,7 +607,7 @@ Supports `ShouldProcess` with high impact. Use `-Force` to suppress the confirma
 #### Syntax
 
 ```powershell
-Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-Force] [-PassThru]
+Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-ChangeReason <String>] [-Force] [-PassThru]
 ```
 
 #### Parameters
@@ -606,6 +616,7 @@ Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-Force] [-PassThru
 |---|---|---|---|---|
 | `ScheduleId` | `Guid` | Yes | ByValue, ByPropertyName | The schedule to remove the step from. Alias: `Id`. |
 | `StepIndex` | `Int32` | Yes | No | The zero-based index of the step to remove. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 

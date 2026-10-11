@@ -25,7 +25,7 @@
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">
-            <MudButton Variant="Variant.Filled"
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Storage"
                        DropShadow="false"
                        Size="Size.Small"
@@ -33,7 +33,7 @@
                 Connector Space
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
-            <MudButton Variant="Variant.Filled"
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Outbox"
                        DropShadow="false"
                        Size="Size.Small"

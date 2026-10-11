@@ -39,7 +39,7 @@
             </div>
             @if (CanCancel(_detail.Execution.Status))
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false"
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Cancel" OnClick="HandleCancelExecutionAsync">
                     Cancel Execution
                 </MudButton>
@@ -304,7 +304,7 @@
 else if (_notFound)
 {
     <MudAlert Severity="Severity.Warning" Class="mt-2">Schedule Execution not found.</MudAlert>
-    <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ArrowBack"
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="/admin/operations?t=schedules" Class="mt-4">
         Back to Operations
     </MudButton>

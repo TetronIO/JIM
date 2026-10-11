@@ -3,6 +3,7 @@
 
 using Bunit;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -67,6 +68,118 @@ public class SegmentedToggleTests : JimComponentTestContext
         cut.FindAll(".jim-seg > button")[0].Click();
 
         Assert.That(raised, Is.False);
+    }
+
+    [Test]
+    public void SegmentedToggle_OptionsWithAnHref_AreLinksMarkingTheCurrentPage()
+    {
+        // Sibling list pages chosen from one control: links, so each can be opened in a new tab like any other.
+        IReadOnlyList<SegmentedToggleOption<string>> pages =
+        [
+            new("systems", "Connected Systems", Href: "/admin/connected-systems"),
+            new("connectors", "Connectors", Href: "/admin/connected-systems/connectors")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, pages)
+            .Add(c => c.Value, "connectors")
+            .Add(c => c.AriaLabel, "Connected Systems or Connectors"));
+
+        var links = cut.FindAll(".jim-seg > a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".jim-seg > button"), Is.Empty);
+            Assert.That(links.Select(a => a.GetAttribute("href")),
+                Is.EqualTo(new[] { "/admin/connected-systems", "/admin/connected-systems/connectors" }));
+            Assert.That(links.Select(a => a.GetAttribute("aria-current")), Is.EqualTo(new[] { null, "page" }));
+            Assert.That(links[1].ClassList, Does.Contain("on"));
+        }
+    }
+
+    [Test]
+    public void SegmentedToggle_AnOptionWithATooltip_IsExplainedByIt_AndTheOthersAreNot()
+    {
+        // A label alone can be too terse to say what a view is ("Inspect"); the tooltip says it on hover.
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form"),
+            new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view"));
+
+        var tooltips = cut.FindComponents<MudTooltip>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tooltips.Select(t => t.Instance.Text), Is.EqualTo(new[] { "Attributes with their sources and history" }));
+            Assert.That(tooltips.Single().Find("button").TextContent.Trim(), Is.EqualTo("Inspect"));
+            Assert.That(cut.FindAll(".jim-seg button").Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Form", "Inspect" }));
+        }
+    }
+
+    [Test]
+    public void SegmentedToggle_ClickingAnOptionWithATooltip_StillRaisesValueChanged()
+    {
+        string? raised = null;
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form"),
+            new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view")
+            .Add(c => c.ValueChanged, (string v) => raised = v));
+
+        cut.FindAll(".jim-seg button")[1].Click();
+
+        Assert.That(raised, Is.EqualTo("table"));
+    }
+
+    [Test]
+    public void SegmentedToggle_AnOptionWithAnIcon_ShowsItBesideItsLabel_AndTheOthersShowNone()
+    {
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form", Icon: Icons.Material.Filled.ViewModule),
+            new("tabs", "Tabs")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view"));
+
+        var buttons = cut.FindAll(".jim-seg button");
+        var icons = cut.FindComponents<MudIcon>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(icons.Select(i => i.Instance.Icon), Is.EqualTo(new[] { Icons.Material.Filled.ViewModule }));
+            Assert.That(buttons[0].QuerySelector("svg"), Is.Not.Null, "The icon renders inside its own option.");
+            Assert.That(buttons[1].QuerySelector("svg"), Is.Null);
+            Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Form", "Tabs" }));
+        }
+    }
+
+    [Test]
+    public void SegmentedToggle_ALinkOptionWithAnIcon_ShowsItInsideTheLink()
+    {
+        IReadOnlyList<SegmentedToggleOption<string>> pages =
+        [
+            new("systems", "Connected Systems", Href: "/admin/connected-systems", Icon: Icons.Material.Filled.Cable)
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, pages)
+            .Add(c => c.Value, "systems")
+            .Add(c => c.AriaLabel, "Connected Systems or Connectors"));
+
+        Assert.That(cut.Find(".jim-seg a").QuerySelector("svg"), Is.Not.Null);
     }
 
     [Test]

@@ -143,6 +143,7 @@ Whether JIM gives a newly provisioned account its first password, and what that 
 | `priority` | B | Changes which contributing rule wins an attribute. |
 | `nullIsValue` | B | Decides whether a null clears the target or is ignored. |
 | `initialExportOnly` | B | Decides whether the value flows once or on every run. |
+| `keepUnique` | B | Decides whether a value built from a generated value is corrected with it after a refusal. |
 | `order` | B | Ordering of mapping sources changes the computed value. |
 | `metaverseAttributeId` | B | Changes the source attribute. |
 | `connectedSystemAttributeId` | B | Changes the source attribute. |

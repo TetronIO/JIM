@@ -1,4 +1,4 @@
-# Expression Language Guide
+# Expressions
 
 When a Synchronisation Rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
 

@@ -260,6 +260,13 @@
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
     <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" />
 
+    @* ─── Values built from it (Generated Value Forms, #2014, mock screen 2): only a value held in the Metaverse has any ─── *@
+    @if (Mapping.ResolveTargetMetaverseAttributeId().HasValue && StagedSyncRule != null)
+    {
+        <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? "this value")"
+                                        CollisionRemediation="generation.CollisionRemediation" />
+    }
+
     @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
     <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" />
 
@@ -333,6 +340,14 @@
     public EventCallback OnChanged { get; set; }
 
     /// <summary>
+    /// The Synchronisation Rule as it is being edited, against which the "Values built from ..." table is worked out
+    /// (Generated Value Forms, #2014): a value built from this one can be on this rule, not yet saved. Null leaves the
+    /// table out.
+    /// </summary>
+    [Parameter]
+    public SyncRule? StagedSyncRule { get; set; }
+
+    /// <summary>
     /// Rendered directly under the base expression (not for a Number target, which has none), given a function that
     /// inserts text at the base expression's caret: the host's Insert attribute menu and derived flow analysis.
     /// </summary>
@@ -350,6 +365,12 @@
     /// <summary>Discards a load overtaken by a newer one.</summary>
     private int _participantsLoad;
 
+    /// <summary>The "Values built from ..." rows, for the target as it now stands; null while loading.</summary>
+    private IReadOnlyList<GeneratedValueBuiltValueDescription>? _builtValues;
+
+    /// <summary>Discards a built values load overtaken by a newer one.</summary>
+    private int _builtValuesLoad;
+
     protected override async Task OnParametersSetAsync()
     {
         var target = (Mapping.ResolveTargetMetaverseAttributeId(), Mapping.ResolveTargetConnectedSystemAttributeId());
@@ -357,7 +378,33 @@
             return;
 
         _participantsTarget = target;
-        await LoadParticipantsAsync();
+        await Task.WhenAll(LoadParticipantsAsync(), LoadBuiltValuesAsync());
+    }
+
+    /// <summary>
+    /// Reads every value built from this generated value (#2014), against <see cref="StagedSyncRule"/> as it is being
+    /// edited and every other rule as saved. Nothing is read for an export generated value, which is held on its own
+    /// Connected System Object and so has nothing built from it.
+    /// </summary>
+    private async Task LoadBuiltValuesAsync()
+    {
+        var load = ++_builtValuesLoad;
+        if (StagedSyncRule == null || !Mapping.ResolveTargetMetaverseAttributeId().HasValue)
+        {
+            _builtValues = [];
+            return;
+        }
+
+        _builtValues = null;
+        List<GeneratedValueBuiltValueDescription> builtValues;
+        using (var jim = JimFactory.Create())
+            builtValues = await jim.ConnectedSystems.DescribeValuesBuiltFromGeneratedValueAsync(StagedSyncRule, Mapping);
+
+        if (load != _builtValuesLoad)
+            return;
+
+        _builtValues = builtValues;
+        StateHasChanged();
     }
 
     /// <summary>

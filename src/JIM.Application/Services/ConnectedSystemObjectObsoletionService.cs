@@ -196,6 +196,10 @@ public static class ConnectedSystemObjectObsoletionService
         if (mvoDeletionPolicySnapshotJson != null)
             deletionExecutionItem.DeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson;
 
+        // This item is the one that scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+        if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
+            MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(mvo, deletionExecutionItem);
+
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
         // surviving contributor where one exists. An attribute with another contributor is always handed to the
         // survivor (a safe change-of-value, not a clear); the question the freeze answers is what happens to the

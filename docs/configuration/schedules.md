@@ -184,7 +184,7 @@ When changing a schedule from automation you can record a reason alongside the c
 ## Manage Schedules
 
 - **JIM portal**<br /> Schedules area of the admin UI
-- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Invoke-JIMSchedule`, etc.)
+- **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Start-JIMSchedule`, etc.)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also

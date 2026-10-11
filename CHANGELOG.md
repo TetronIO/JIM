@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
 - ✨ A Full Import Run Profile can now **Allow Object Type Changes**, carrying out an intended change of Object Type: the object imports under its new type and the old one is retired. Portal, REST (`allowObjectTypeChanges`) or `-AllowObjectTypeChanges`. (#2049)
 - ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. (#2049)
+- ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
+- ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
+- ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
+- ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 
 ### Changed
 
@@ -43,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
 - 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
+- 🔄 Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged. (#2051)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 - 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
@@ -54,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` now create and retime Schedules from the Specific Times and Interval patterns, which the API used to refuse or ignore; a Sunday-only `New-JIMSchedule` no longer runs every day.
+- 🐛 A Schedule's next run now reads as a time to come ("in 14 hours") on the Home page and on Operations > Schedules, instead of "just now".
 - 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
 - 🐛 Deleting a Synchronisation Rule, deleting a Connected System through synchronisation, and the stranded value sweep now record queued export changes they withdraw on their Activity too, and the Connected System deletion preview shows them beforehand. (#2011)
 - 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)
@@ -112,10 +119,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Declining `setup.sh`'s **Start JIM now?** now prints commands that work: on Podman with systemd they no longer fail to find JIM's unit, and a JIM already running is restarted on the new settings and certificate instead of left as it was. (#1984)
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 - 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
+- 🐛 Deleting a Metaverse Object now reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**; previously the deletion recorded nothing about those accounts, so one JIM no longer manages looked untouched. (#1811)
+- 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
 
 ### Performance
 
 - ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
+- ⚡ JIM now checks an LDAP directory for a generated value already in use with one search covering every attribute the value is bound for there (plus one of the Global Catalog for forest-wide attributes), rather than one search per attribute. (#2023)
 
 ## [0.16.0] - 2026-09-29
 

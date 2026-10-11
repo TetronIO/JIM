@@ -60,8 +60,8 @@
             </MudText>
         }
 
-        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
-            OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Default" Class="mt-5" DropShadow="false"
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
+            OnClick="HandleOpenAddMatchingRuleMappingDialog" Color="Color.Primary" Class="mt-5" DropShadow="false"
             Disabled="@(SyncRule.MetaverseObjectType == null || SyncRule.ConnectedSystemObjectType == null)">Add Matching
             Rule</MudButton>
 
@@ -191,7 +191,7 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+        <MudButton DropShadow="false"
             OnClick="@(() => _addMatchingRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
         <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled"
             Color="Color.Primary" OnClick="HandleAddMappingButtonClick">Add Matching Rule</MudButton>

@@ -98,7 +98,7 @@ function Get-JIMConnectedSystemObject {
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -Force
 
         Gets every Connected System Object header for Connected System 1, overriding the
-        1000-page safety cap for very large connector spaces (over ~100,000 objects).
+        1000-page safety cap for very large connector spaces (over about 50,000 objects at the default page size of 50).
 
     .LINK
         Get-JIMConnectedSystem

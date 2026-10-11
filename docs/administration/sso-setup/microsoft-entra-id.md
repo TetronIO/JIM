@@ -1,5 +1,5 @@
 ---
-title: SSO Setup - Microsoft Entra ID
+title: "SSO Setup: Microsoft Entra ID"
 ---
 
 # SSO Setup: Microsoft Entra ID

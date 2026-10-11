@@ -154,7 +154,7 @@
                 @if (GeneratedValueDecisionDisplay.OffersActions(context.Item))
                 {
                     <span class="jim-one-line-list" style="gap: 8px;">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="@_busy"
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="@_busy"
                                    OnClick="@(() => AllowRenameAsync(context.Item))" data-testid="generated-value-allow-rename">
                             Allow the rename…
                         </MudButton>

@@ -255,7 +255,7 @@
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
-                                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
+                                    <MudButton Color="Color.Primary" Variant="Variant.Outlined" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
                                 </MudStack>
                             </MudStack>
                         </MudPaper>
@@ -284,7 +284,7 @@
                             @if (!_schedule.BuiltIn)
                             {
                                 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                                                StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
                                         Add Step
                                     </MudButton>
@@ -642,52 +642,24 @@
             return _customCronExpression;
         }
 
-        var days = _selectedDays.Count == 7 ? "*" : string.Join(",", _selectedDays.OrderBy(d => d));
-
+        // The expression itself is built by ScheduleCronExpression, which the REST API uses too, so a Schedule means
+        // the same whichever surface created it.
         if (_patternType == SchedulePatternType.SpecificTimes)
         {
             if (_runTimes.Count == 0)
                 return "0 6 * * *"; // Fallback
 
-            // Group times by minute to create efficient cron expressions
-            // For simplicity, use minute from first time and list all hours
-            var minute = _runTimes.First().Minutes;
-            var hours = string.Join(",", _runTimes.Select(t => t.Hours).Distinct().OrderBy(h => h));
-            return $"{minute} {hours} * * {days}";
+            return ScheduleCronExpression.BuildSpecificTimes(_selectedDays, _runTimes);
         }
 
         if (_patternType == SchedulePatternType.Interval)
         {
-            if (_intervalUnit == ScheduleIntervalUnit.Hours)
-            {
-                if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
-                {
-                    // Generate specific hours within the window
-                    var hours = GenerateIntervalHours(_intervalValue, _intervalWindowStart.Value.Hours, _intervalWindowEnd.Value.Hours);
-                    return $"0 {string.Join(",", hours)} * * {days}";
-                }
-                else
-                {
-                    // Every N hours all day - use step syntax
-                    return $"0 */{_intervalValue} * * {days}";
-                }
-            }
-            else
-            {
-                // Every N minutes
-                return $"*/{_intervalValue} * * * {days}";
-            }
+            var windowed = _restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue;
+            return ScheduleCronExpression.BuildInterval(_selectedDays, _intervalValue, _intervalUnit,
+                windowed ? _intervalWindowStart : null, windowed ? _intervalWindowEnd : null);
         }
 
         return "0 6 * * *"; // Fallback
-    }
-
-    private List<int> GenerateIntervalHours(int interval, int startHour, int endHour)
-    {
-        var hours = new List<int>();
-        for (var h = startHour; h <= endHour; h += interval)
-            hours.Add(h);
-        return hours;
     }
 
     private string GetSchedulePreview()

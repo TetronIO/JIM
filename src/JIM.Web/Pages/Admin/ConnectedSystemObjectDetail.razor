@@ -116,7 +116,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -340,8 +340,8 @@
                 @if (_changeHistoryRows.Count < _changeHistoryTotal)
                 {
                     <div class="d-flex justify-center mt-3">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Secondary"
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)

@@ -510,6 +510,22 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Hands the sequence numbers this run reserved and never drew back to their counters (#2044), so consecutive runs
+    /// that each issue a few numbers issue consecutive numbers. Call once the run has drawn every number it will; a run
+    /// that never generated a value has nothing to hand back. Each hand-back only applies when nothing else has moved
+    /// the counter since this run reserved from it, so it can never return a number another run may issue.
+    /// </summary>
+    protected async Task ReturnUnusedSequenceNumbersAsync()
+    {
+        if (_uniqueValueGenerationServer == null || _uniqueValueResolveOptions == null)
+            return;
+
+        var returned = await _uniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync(_uniqueValueResolveOptions);
+        if (returned > 0)
+            Log.Information("ReturnUnusedSequenceNumbersAsync: Handed {Count} unused sequence numbers back to their counters for Activity {ActivityId}", returned, _activity.Id);
+    }
+
+    /// <summary>
     /// Ends the run's probe session (release 3): call from the <c>finally</c> of <c>PerformFullSyncAsync</c> and
     /// <c>PerformDeltaSyncAsync</c>. Appends one Activity warning per Connected System that could not be probed for a
     /// value the run went on to issue, so the Activity completes with a warning rather than in silence, then closes
@@ -1004,6 +1020,10 @@ public abstract class SyncTaskProcessorBase
                         existingRpei.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
 
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1091,6 +1111,10 @@ public abstract class SyncTaskProcessorBase
                     {
                         runProfileExecutionItem.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
+
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -1727,8 +1751,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Clears every deletion marker from an MVO whose scheduled or queued deletion has been cancelled by a
     /// rejoin (#119): the disconnection date, the deletion initiator audit fields, the triggering system
-    /// fields and the decision-time policy snapshot. The markers travel together; clearing a subset would
-    /// leave a cancelled deletion half-described.
+    /// fields, the decision-time policy snapshot and the scheduling item (#1811). The markers travel together;
+    /// clearing a subset would leave a cancelled deletion half-described.
     /// </summary>
     private static void ClearMvoDeletionMarkers(MetaverseObject mvo)
     {
@@ -1739,6 +1763,7 @@ public abstract class SyncTaskProcessorBase
         mvo.DeletionTriggeredBySystemId = null;
         mvo.DeletionTriggeredBySystemName = null;
         mvo.DeletionPolicySnapshotJson = null;
+        mvo.DeletionScheduledByRunProfileExecutionItemId = null;
     }
 
     /// <summary>
@@ -1826,6 +1851,7 @@ public abstract class SyncTaskProcessorBase
         to.DeletionTriggeredBySystemId = from.DeletionTriggeredBySystemId;
         to.DeletionTriggeredBySystemName = from.DeletionTriggeredBySystemName;
         to.DeletionPolicySnapshotJson = from.DeletionPolicySnapshotJson;
+        to.DeletionScheduledByRunProfileExecutionItemId = from.DeletionScheduledByRunProfileExecutionItemId;
     }
 
     /// <summary>
@@ -3324,7 +3350,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             if ((deprovisionPendingExports.Count > 0 || outOfScopeWorkingSet.Disconnections.Count > 0) && objectItem != null)
-                await ReportScopeExitDeprovisioningAsync(objectItem, exportOutcomeParent, deprovisionPendingExports, outOfScopeWorkingSet.Disconnections);
+                await ReportScopeExitDeprovisioningAsync(objectItem, exportOutcomeParent, deprovisionPendingExports, outOfScopeWorkingSet);
 
             // Provisioning cancellations: a never-exported Pending Provisioning CSO this
             // object fell out of scope for. There is no deletion outcome to nest under here (the Metaverse
@@ -3385,13 +3411,16 @@ public abstract class SyncTaskProcessorBase
     /// <param name="detailedParent">The outcome to nest under in Detailed mode, read before the object's evaluation
     /// added outcomes of its own; null records the outcomes at root level.</param>
     /// <param name="deletes">The Delete Pending Exports the scope exit staged or reused, already persisted.</param>
-    /// <param name="disconnections">The objects the scope exit disconnected, the broken joins already persisted.</param>
+    /// <param name="workingSet">The scope exit's working set: the objects it disconnected (the broken joins already
+    /// persisted), and the export Synchronisation Rule whose Deprovisioning Action decided each Delete or disconnection,
+    /// which every outcome names so the Activity says why the account is going or staying (#1811).</param>
     private async Task ReportScopeExitDeprovisioningAsync(
         ActivityRunProfileExecutionItem item,
         ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
         List<PendingExport> deletes,
-        IReadOnlyList<OutboundDisconnection> disconnections)
+        ExportEvaluationWorkingSet workingSet)
     {
+        var disconnections = workingSet.Disconnections;
         // Why an export exists is not a level of detail an administrator can turn off (#1223), so the queueing item
         // is recorded whatever the tracking level. The rows are already persisted, so the page flush writes the stamp.
         if (item.Id == Guid.Empty)
@@ -3416,6 +3445,8 @@ public abstract class SyncTaskProcessorBase
             exportRuleBySystem.TryGetValue(delete.ConnectedSystemId, out var exportRule);
             var targetSystemName = exportRule?.ConnectedSystem?.Name;
             var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+            // The rule whose Deprovisioning Action queued the Delete, which the system-naming rule above need not be.
+            workingSet.TryGetDeprovisioningRule(delete.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
 
             var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
                 ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, SyncOutcomeTypes.ForPendingExport(delete),
@@ -3423,12 +3454,16 @@ public abstract class SyncTaskProcessorBase
                     targetEntityDescription: targetSystemName,
                     detailCount: delete.AttributeValueChanges.Count,
                     detailMessage: detailMessage,
+                    syncRuleId: deprovisioningRule?.Id,
+                    syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: delete.ChangeType)
                 : SyncOutcomeBuilder.AddRootOutcome(item, SyncOutcomeTypes.ForPendingExport(delete),
                     targetEntityId: delete.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: delete.AttributeValueChanges.Count,
                     detailMessage: detailMessage,
+                    syncRuleId: deprovisioningRule?.Id,
+                    syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: delete.ChangeType);
 
             await SnapshotPendingExportChangesAsync(outcome, delete);
@@ -3445,14 +3480,18 @@ public abstract class SyncTaskProcessorBase
                 SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                     targetEntityId: disconnection.ConnectedSystemObjectId,
                     targetEntityDescription: targetSystemName,
-                    detailMessage: detailMessage);
+                    detailMessage: detailMessage,
+                    syncRuleId: disconnection.SyncRuleId,
+                    syncRuleName: disconnection.SyncRuleName);
             }
             else
             {
                 SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                     targetEntityId: disconnection.ConnectedSystemObjectId,
                     targetEntityDescription: targetSystemName,
-                    detailMessage: detailMessage);
+                    detailMessage: detailMessage,
+                    syncRuleId: disconnection.SyncRuleId,
+                    syncRuleName: disconnection.SyncRuleName);
             }
         }
     }
@@ -5188,13 +5227,18 @@ public abstract class SyncTaskProcessorBase
         // visible only in the service log. Emitted per flush (not deferred like the recall RPEIs): a target
         // Connected System Object belongs to exactly one Metaverse Object, which is deleted exactly once, so
         // the same Pending Export cannot be re-staged on a later page.
-        await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId);
+        await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId,
+            exportEvaluationWorkingSet);
 
         // Provisioning cancellations: every never-exported Pending Provisioning CSO this
         // flush's evaluation withdrew, reported as a child of the Metaverse Object deletion that caused it.
         // Runs unconditionally, unlike the delete-export reporting above: a page can cancel provisioning for
         // objects with zero delete exports staged.
         ReportCancelledProvisionings(exportEvaluationWorkingSet);
+
+        // Accounts left in place: a Disconnect Deprovisioning Action broke the join and exported nothing, so this is
+        // the only record that the deletion did anything to them (#1811).
+        ReportDeletionDisconnections(exportEvaluationWorkingSet);
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
@@ -5295,10 +5339,13 @@ public abstract class SyncTaskProcessorBase
     /// joined to, captured before deletion broke the join.</param>
     /// <param name="deletionCandidatesByMvoId">Deleted Metaverse Objects by id, the fallback lookup for a Pending
     /// Export whose target Connected System Object was not in the in-memory join collection.</param>
+    /// <param name="workingSet">The flush's working set, naming the export Synchronisation Rule whose Deprovisioning
+    /// Action queued each Delete, so its outcome can say why the account is being removed (#1811).</param>
     private async Task ReportDeletionCascadeExportsAsync(
         Dictionary<Guid, PendingExport> deletePendingExports,
         Dictionary<Guid, MetaverseObject> deletionCandidatesByCsoId,
-        Dictionary<Guid, MetaverseObject> deletionCandidatesByMvoId)
+        Dictionary<Guid, MetaverseObject> deletionCandidatesByMvoId,
+        ExportEvaluationWorkingSet workingSet)
     {
         // Pair each reportable Pending Export with its target Connected System Object id up front, so the
         // nullable id is dereferenced exactly once (null-state does not flow through Where).
@@ -5360,6 +5407,7 @@ public abstract class SyncTaskProcessorBase
 
             csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
             csoTypeNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var cascadeCsoTypeName);
+            workingSet.TryGetDeprovisioningRule(csoId, out var deprovisioningRule);
 
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
@@ -5369,6 +5417,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, cascadeCsoTypeName),
+                    syncRuleId: deprovisioningRule?.Id,
+                    syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
@@ -5406,6 +5456,8 @@ public abstract class SyncTaskProcessorBase
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
                         pendingExport.ConnectedSystemId, snapshot?.TypeName ?? cascadeCsoTypeName),
+                    syncRuleId: deprovisioningRule?.Id,
+                    syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
                 cascadeEffectOutcome = cascadeOutcome;
@@ -5500,6 +5552,70 @@ public abstract class SyncTaskProcessorBase
 
         Log.Information(
             "FlushPendingMvoDeletionsAsync: Reported {Count} provisioning cancellation(s) on the Activity, nested under their MVO deletion",
+            reportedCount);
+    }
+
+    /// <summary>
+    /// Reports the accounts <see cref="FlushPendingMvoDeletionsAsync"/>'s evaluation left in place: a deleted Metaverse
+    /// Object's Connected System Object in a target system whose export Synchronisation Rule's Deprovisioning Action is
+    /// Disconnect had its join broken and nothing exported (#1811). Each is reported as a TargetDisconnected child of
+    /// the MvoDeleted outcome, naming the rule that decided it, exactly as a scope exit reports one (#1966). Without it
+    /// a deletion's tree said nothing at all about these accounts, so one now unmanaged read as untouched.
+    /// </summary>
+    /// <param name="workingSet">The flush's working set, carrying every disconnection the bulk evaluation and (where
+    /// it ran) the per-MVO fallback made.</param>
+    private void ReportDeletionDisconnections(ExportEvaluationWorkingSet workingSet)
+    {
+        if (workingSet.Disconnections.Count == 0)
+            return;
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+        // Connected System id to name, matching how ReportDeletionCascadeExportsAsync resolves the same thing.
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
+            ?? new Dictionary<int, string>();
+        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystemObjectType != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+            ?? new Dictionary<int, string>();
+
+        var reportedCount = 0;
+        foreach (var disconnection in workingSet.Disconnections)
+        {
+            if (!mvoDeletedNodes.TryGetValue(disconnection.MetaverseObjectId, out var mvoDeletedNode))
+            {
+                // As for a cancelled provisioning: nothing is queued, so there is nothing that must be visible
+                // standalone, and an item of its own would only announce that an account was not removed.
+                Log.Warning(
+                    "ReportDeletionDisconnections: No MvoDeleted outcome node found for MVO {MvoId}; CSO {CsoId} in system " +
+                    "{SystemId}, left in place by export Synchronisation Rule {SyncRuleId}, will not be reported on the Activity",
+                    disconnection.MetaverseObjectId, disconnection.ConnectedSystemObjectId, disconnection.ConnectedSystemId,
+                    disconnection.SyncRuleId);
+                continue;
+            }
+
+            csNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var targetSystemName);
+            csoTypeNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var disconnectedCsoTypeName);
+            SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                targetEntityId: disconnection.ConnectedSystemObjectId,
+                targetEntityDescription: targetSystemName,
+                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, disconnectedCsoTypeName),
+                syncRuleId: disconnection.SyncRuleId,
+                syncRuleName: disconnection.SyncRuleName);
+            reportedCount++;
+        }
+
+        Log.Information(
+            "FlushPendingMvoDeletionsAsync: Reported {Count} account(s) left in place by a Disconnect Deprovisioning Action on the Activity, nested under their MVO deletion",
             reportedCount);
     }
 
@@ -6745,6 +6861,7 @@ public abstract class SyncTaskProcessorBase
                     // The MVO has been marked by this point, so its computed due date is the
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
+                    mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }

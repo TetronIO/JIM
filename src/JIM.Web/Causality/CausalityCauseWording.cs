@@ -102,6 +102,13 @@ public static class CausalityCauseWording
                     $"{Subject(cohort)} {(plural ? "were" : "was")} deleted, so this deprovisioning was queued"));
                 break;
 
+            case CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion:
+                // A grace-period deletion (#1811): the cause is the run that scheduled it, often days earlier, and
+                // the Deletion Rule that decided it is attributed by the reason phrase, as on the cascade edges.
+                parts.Add(new CausalityCauseSentencePart(
+                    $"{Subject(cohort)} {(plural ? "were" : "was")} scheduled for deletion, and this run deleted {(plural ? "them" : "it")} once the grace period ended"));
+                break;
+
             case CausalEdgeType.ExportRejectionCausedGeneratedValueRevision:
                 // Unique Value Generation (#242): the system that rejected the value is the sentence's own
                 // subject, exactly as the queueing seam above names its system inline rather than as a chip
