@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011135604_AddPendingExportAttributeChangeAwaitsInitialPassword")]
-    partial class AddPendingExportAttributeChangeAwaitsInitialPassword
+    [Migration("20261011155313_AddObjectTypeChangeSafeguards")]
+    partial class AddObjectTypeChangeSafeguards
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -722,6 +722,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("DeletionPolicySnapshotJson")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("DeletionScheduledByRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("DeletionTriggeredBySystemId")
                         .HasColumnType("integer");
@@ -1806,6 +1809,11 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("KeepUnique")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
@@ -4432,9 +4440,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("AwaitsInitialPassword")
-                        .HasColumnType("boolean");
-
                     b.Property<bool?>("BoolValue")
                         .HasColumnType("boolean");
 
@@ -4495,9 +4500,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PendingExportId")
                         .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
-
-                    b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
-                        .HasFilter("\"AwaitsInitialPassword\"");
 
                     b.ToTable("PendingExportAttributeValueChanges");
                 });
