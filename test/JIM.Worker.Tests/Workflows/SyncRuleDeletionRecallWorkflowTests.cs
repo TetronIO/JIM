@@ -276,6 +276,15 @@ public class SyncRuleDeletionRecallWorkflowTests : WorkflowTestBase
             Assert.That(rpei.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
                 Is.True, "the deprovisioning must be recorded on the object's execution item");
         }
+
+        // It names the rule whose Deprovisioning Action decided the account's removal (#1811).
+        var exportRule = DbContext.SyncRules.Single(rule => rule.ConnectedSystemId == ctx.Target.Id && rule.Direction == SyncRuleDirection.Export);
+        var deprovisionOutcome = rpei.SyncOutcomes.Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deprovisionOutcome.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(deprovisionOutcome.SyncRuleName, Is.EqualTo(exportRule.Name));
+        }
     }
 
     [Test]

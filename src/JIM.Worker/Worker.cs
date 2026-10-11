@@ -1158,10 +1158,13 @@ public class Worker : BackgroundService
                         // on the Activity, not just in the service log.
                         foreach (var deletePendingExport in reportableDeleteExports)
                         {
+                            // Named so the outcome says why the account is being removed rather than left in place (#1811).
+                            mvoWorkingSet.TryGetDeprovisioningRule(deletePendingExport.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId));
+                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
+                                deprovisioningRule?.Id, deprovisioningRule?.Name);
                             deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
@@ -1176,6 +1179,20 @@ public class Worker : BackgroundService
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
                                     cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
+                        }
+
+                        // Accounts left in place: a Disconnect Deprovisioning Action broke the join and queued
+                        // nothing, so this is the only record that the deletion did anything to them (#1811).
+                        foreach (var disconnection in mvoWorkingSet.Disconnections)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(deletionItem, mvoDeletedOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
+                                targetEntityId: disconnection.ConnectedSystemObjectId,
+                                targetEntityDescription: csNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId),
+                                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
+                                    disconnection.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId)),
+                                syncRuleId: disconnection.SyncRuleId,
+                                syncRuleName: disconnection.SyncRuleName);
                         }
                     }
                     else
@@ -1407,7 +1424,9 @@ public class Worker : BackgroundService
         string? displayNameSnapshot,
         Activity activity,
         bool csoChangeTrackingEnabled,
-        string? csoTypeName = null)
+        string? csoTypeName = null,
+        int? syncRuleId = null,
+        string? syncRuleName = null)
     {
         var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, csoTypeName);
         var outcome = parent == null
@@ -1417,6 +1436,8 @@ public class Worker : BackgroundService
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
                 detailMessage: detailMessage,
+                syncRuleId: syncRuleId,
+                syncRuleName: syncRuleName,
                 stagedChangeType: pendingExport.ChangeType)
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
@@ -1424,6 +1445,8 @@ public class Worker : BackgroundService
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
                 detailMessage: detailMessage,
+                syncRuleId: syncRuleId,
+                syncRuleName: syncRuleName,
                 stagedChangeType: pendingExport.ChangeType);
 
         if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)
