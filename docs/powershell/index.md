@@ -90,7 +90,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |
 | [File System](file-system.md) | 2 | Browse and validate server-side paths when configuring file-based connectors |
 | [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
-| [Data Flow](../configuration/data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
+| [Data Flow](data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
 
 ## Quick Start
 
