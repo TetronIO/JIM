@@ -18,7 +18,7 @@ namespace JIM.Web.Middleware.Api;
 
 /// <summary>
 /// Authentication handler for API key authentication.
-/// Validates API keys provided in the X-API-Key header.
+/// Validates API keys presented as bearer tokens: <c>Authorization: Bearer jim_ak_...</c>.
 /// </summary>
 public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthenticationOptions>
 {
@@ -26,11 +26,6 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// The name of the authentication scheme.
     /// </summary>
     public const string SchemeName = "ApiKey";
-
-    /// <summary>
-    /// The header name for the API key.
-    /// </summary>
-    public const string ApiKeyHeaderName = "X-API-Key";
 
     /// <summary>
     /// The prefix for API keys (e.g., jim_ak_).
@@ -56,29 +51,18 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        Log.Debug("ApiKeyAuthenticationHandler: Checking for X-API-Key header on path {Path}", Request.Path);
-
-        // Check if the X-API-Key header is present
-        if (!Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader))
+        // An API key arrives as a bearer token (RFC 6750), exactly as an SSO access token does; the key prefix is what
+        // tells the two apart. Anything else (no Authorization header, another scheme, a JWT) is not this handler's to
+        // judge, so it returns NoResult and leaves the request to the other schemes.
+        if (!BearerToken.TryRead(Request, out var providedKey) || !BearerToken.IsApiKey(providedKey))
         {
-            Log.Debug("ApiKeyAuthenticationHandler: No X-API-Key header found");
-            // No API key header - let other authentication schemes handle it
+            Log.Debug("ApiKeyAuthenticationHandler: No API key bearer token on path {Path}", Request.Path);
             return AuthenticateResult.NoResult();
         }
-
-        var providedKey = apiKeyHeader.ToString();
 
         // ForwardedHeaders middleware (when configured) rewrites RemoteIpAddress to the real client address even
         // behind a reverse proxy, so this is proxy-truthful for free; see docs/administration/security-headers.md.
         var clientIp = Context.Connection.RemoteIpAddress.ToNormalisedString();
-
-        // Validate the key format
-        if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix))
-        {
-            Log.Warning("ApiKeyAuthenticationHandler: Invalid API key format provided");
-            RecordFailedAuthenticationEvent("Invalid API key format", apiKeyPrefix: null, clientIp);
-            return AuthenticateResult.Fail("Invalid API key format");
-        }
 
         try
         {

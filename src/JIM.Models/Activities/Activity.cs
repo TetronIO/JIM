@@ -294,9 +294,9 @@ public class Activity
     public string? ApiKeyPrefix { get; set; }
 
     /// <summary>
-    /// The reason an authentication attempt failed (e.g. "Invalid API key format", "API key not found", "API key is
-    /// disabled", "API key has expired", "Authentication error", or a short sanitised OIDC failure category). Null
-    /// for successful sign-in events.
+    /// The reason an authentication attempt failed (e.g. "API key not found", "API key is disabled", "API key has
+    /// expired", "Authentication error", or a short sanitised OIDC failure category). Null for successful sign-in
+    /// events.
     /// </summary>
     [MaxLength(200)]
     public string? SecurityEventReason { get; set; }

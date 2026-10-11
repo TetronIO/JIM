@@ -269,7 +269,7 @@ None.
 ### Examples
 
 ```powershell title="Get current user info"
-Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 Get-JIMUserInfo
 ```
 

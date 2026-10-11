@@ -44,7 +44,7 @@ public class SecurityAuditServer
     /// <param name="targetName">A short label describing the event class (e.g. "API key authentication failed" or
     /// "Interactive sign-in failed"), used as the created Activity's TargetName. Ignored when the attempt
     /// aggregates onto an existing row.</param>
-    /// <param name="reason">The failure reason (e.g. "Invalid API key format", "API key not found").</param>
+    /// <param name="reason">The failure reason (e.g. "API key not found", "API key has expired").</param>
     /// <param name="apiKeyPrefix">The <c>jim_ak_XXXX</c> prefix of the API key involved, or null when not
     /// applicable (interactive sign-in, or the API key's format was invalid before a prefix could be read).</param>
     /// <param name="clientIp">The client's IP address, or null when unavailable.</param>

@@ -23,7 +23,7 @@ Failed authentication is the only event class written on behalf of an unauthenti
 
 This bounds the worst case to a handful of rows regardless of attack volume, while preserving the count: a 500-attempt spray against one key from one IP in a 15-minute window produces a single Activity with an attempt count of 500, not 500 rows. [Rate limiting](../api/rate-limiting.md) sits in front of these writes as the primary throttle; aggregation is the backstop for whatever gets through.
 
-A failure's reason is one of: `Invalid API key format`, `API key not found`, `API key is disabled`, `API key has expired`, `Authentication error` (API key path), or a short, sanitised category of the interactive sign-in failure (for example `OIDC correlation failed`, `OIDC token expired`). The raw exception or provider error text is never stored: it can be attacker-influenced and is unbounded in length, neither of which belongs in an audit record.
+A failure's reason is one of: `API key not found`, `API key is disabled`, `API key has expired`, `Authentication error` (API key path), or a short, sanitised category of the interactive sign-in failure (for example `OIDC correlation failed`, `OIDC token expired`). The raw exception or provider error text is never stored: it can be attacker-influenced and is unbounded in length, neither of which belongs in an audit record.
 
 ## Retention
 

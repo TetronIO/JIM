@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 2.1
+> **Document Version**: 2.2
 >
-> **Last Updated**: 2026-09-29
+> **Last Updated**: 2026-10-11
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -279,6 +279,8 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | **JWT Bearer** | Interactive applications, SSO |
 | **API Key** | Automation, CI/CD, scripts |
 
+Both are sent as a bearer token in the `Authorization` header (`Authorization: Bearer <credential>`); an API key is recognised by its `jim_ak_` prefix.
+
 ### Key Endpoints (v1)
 
 22 API controllers. Key examples:
@@ -313,7 +315,7 @@ Full interactive Scalar API reference available at `/api/reference` in all envir
 Connect-JIM -Url "http://localhost:5200"
 
 # Connect with API key (for automation/scripts)
-Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_xxx"
+Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_ak_xxx"
 
 # Query
 Get-JIMMetaverseObject -ObjectType Person

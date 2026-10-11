@@ -92,7 +92,7 @@ title: [Action] a [Resource]
 === "PowerShell"
 
     \```powershell
-    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 
     [PowerShell cmdlet example(s)]
     \```
@@ -121,7 +121,7 @@ object hasn't been documented on the index page.]
 - **Two example tabs only**: "curl" and "PowerShell" (the JIM PowerShell module, NOT raw Invoke-RestMethod)
 - **curl is always the first tab** (making it the default)
 - **Example base URL**: `https://jim.example.com`
-- **Example API key**: `jim_xxxxxxxxxxxx`
+- **Example API key**: `jim_ak_xxxxxxxxxxxx`
 - **Example GUIDs**: use the pattern `a1b2c3d4-e5f6-7890-abcd-ef1234567890` (increment letters for multiple)
 - **Admonitions**: use `!!! note`, `!!! tip`, `!!! warning` sparingly for contextual guidance
 - **Error codes**: use the standard set from `ApiErrorResponse` (VALIDATION_ERROR, NOT_FOUND, UNAUTHORISED, FORBIDDEN, CONFLICT, BAD_REQUEST, INTERNAL_ERROR, SERVICE_UNAVAILABLE)

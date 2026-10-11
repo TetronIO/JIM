@@ -387,6 +387,52 @@ Describe 'Export-JIMCertificate' {
         }
     }
 
+    Context 'Authentication' {
+
+        AfterEach {
+            InModuleScope JIM { $script:JIMConnection = $null }
+        }
+
+        It 'Should send an API key connection as a Bearer token, never as X-API-Key' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url        = 'https://jim.example.com'
+                    AuthMethod = 'ApiKey'
+                    ApiKey     = 'jim_ak_certificate_export_key'
+                    Connected  = $true
+                }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer jim_ak_certificate_export_key' -and
+                    -not $Headers.ContainsKey('X-API-Key')
+                }
+            }
+        }
+
+        It 'Should send an SSO connection access token as a Bearer token' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url            = 'https://jim.example.com'
+                    AuthMethod     = 'OAuth'
+                    ApiKey         = $null
+                    AccessToken    = 'eyJhbGciOiJSUzI1NiJ9.access.token'
+                    TokenExpiresAt = (Get-Date).AddHours(1)
+                    Connected      = $true
+                }
+                Mock Invoke-WebRequest { [PSCustomObject]@{ Content = [byte[]](1, 2, 3) } }
+
+                Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru | Out-Null
+
+                Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
+                    $Headers['Authorization'] -eq 'Bearer eyJhbGciOiJSUzI1NiJ9.access.token'
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

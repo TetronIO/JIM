@@ -198,7 +198,9 @@ Describe 'Connect-JIM with an API key' {
             $connection.Connected | Should -BeTrue
             $connection.Authorised | Should -BeTrue
             Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
-                $Uri -like '*/api/v1/userinfo' -and $Headers['X-API-Key'] -eq 'jim_ak_a_key_jim_knows_0123456789ab'
+                $Uri -like '*/api/v1/userinfo' -and
+                $Headers['Authorization'] -eq 'Bearer jim_ak_a_key_jim_knows_0123456789ab' -and
+                -not $Headers.ContainsKey('X-API-Key')
             }
         }
     }

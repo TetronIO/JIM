@@ -75,12 +75,16 @@ function Export-JIMCertificate {
         try {
             $uri = "$($script:JIMConnection.Url)/api/v1/certificates/$Id/download"
 
-            $headers = @{
-                'X-API-Key' = $script:JIMConnection.ApiKey
+            # Refresh an expiring SSO access token first, as Invoke-JIMApi does
+            if ($script:JIMConnection.AuthMethod -eq 'OAuth' -and $script:JIMConnection.TokenExpiresAt -and
+                $script:JIMConnection.TokenExpiresAt -lt (Get-Date).AddMinutes(2)) {
+                Invoke-TokenRefresh -Reason "Access token expired or expiring soon"
             }
 
+            $headers = Get-JIMCredentialHeader
+
             # Use Invoke-WebRequest to get binary data
-            # -Debug:$false: the debug record would print the X-API-Key header verbatim.
+            # -Debug:$false: the debug record would print the Authorization header verbatim.
             # See the same guard in Invoke-JIMApi.
             $response = Invoke-WebRequest -Uri $uri -Headers $headers -Method Get -Debug:$false
 

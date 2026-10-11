@@ -331,7 +331,7 @@ function Invoke-RawJimApi {
         Uri = "$($JIMUrl.TrimEnd('/'))$Endpoint"
         Method = $Method
         ContentType = 'application/json'
-        Headers = @{ 'Accept' = 'application/json'; 'X-API-Key' = $ApiKey }
+        Headers = @{ 'Accept' = 'application/json'; 'Authorization' = "Bearer $ApiKey" }
         SkipHttpErrorCheck = $true
         StatusCodeVariable = 'statusCode'
     }
