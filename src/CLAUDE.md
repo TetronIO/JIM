@@ -327,6 +327,7 @@ Two invariants here are enforced only by remembering them, and both have been mi
 2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for OpenAPI documentation
 4. Test via the Scalar API reference at `/api/reference`
+5. A new controller is a new resource group: give it a row in the Resource groups table on `docs/api/index.md` (COV-4). Renaming or removing a route breaks any page that gives it (ACC-3). `build-and-test` checks both against the OpenAPI document; run them locally with `pwsh ./scripts/Generate-OpenApiDoc.ps1 -OutputPath <file>` then `pwsh ./scripts/Test-DocsCoverage.ps1 -OpenApiPath <file> -Rule ACC-3,COV-4`
 
 **Route templates are validated at runtime, not by the compiler (boot the app to catch route bugs):**
 - Route parameter names must be unique across the *combined* template (the controller-level `[Route]` plus the action's `[HttpGet]`/`[HttpPost]` template). Every controller route is `api/v{version:apiVersion}/[controller]`, so **`version` is already a route parameter on every action** - never reuse it. An action template like `change-history/{version:int}` yields two `version` parameters in the merged route, which ASP.NET rejects at **startup** with an `ArgumentException` ("An item with the same key has already been added"), crashing the app (and the `openapi-gen` Docker build stage) before the route table is built. Use a distinct name such as `{changeVersion:int}`. Likewise avoid colliding with `[controller]` or other ambient tokens.
