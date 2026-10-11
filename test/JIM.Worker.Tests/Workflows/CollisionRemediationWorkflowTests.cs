@@ -305,6 +305,66 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Export_ValueBuiltFromItAlreadyAcceptedElsewhere_EntersNeedsDecisionRatherThanRenamingAsync()
+    {
+        // Generated Value Forms (#2023): the mail system already holds the User Principal Name built from Account Name, so
+        // correcting Account Name would rename that account too.
+        var ctx = await SetUpAsync();
+        var (mail, mailAddress, mailTypeId) = await AddMailSystemReceivingUserPrincipalNameAsync(ctx);
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedAccount(mail, mailTypeId, mailAddress, Mvo().Id, "joe.bloggs@corp.local");
+        var export = DirectoryExport(ctx);
+
+        var activity = await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+
+        var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs"), "a value whose built value is in use elsewhere is never revised automatically");
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+            Assert.That(assignment.AnchoredByConnectedSystemId, Is.EqualTo(mail.Id));
+            Assert.That(assignment.NeedsDecisionReason, Is.EqualTo(GeneratedValueNeedsDecisionReason.AnchoredElsewhere));
+            Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked));
+            Assert.That(ExecutionItems(activity).Single().ErrorMessage, Does.Contain("Mail").And.Contain("User Principal Name"),
+                "the error names the system holding the built value, and which value it is");
+        }
+    }
+
+    [Test]
+    public async Task Export_ValueBuiltFromItAcceptedElsewhereWithKeepUniqueOff_StillEntersNeedsDecisionAsync()
+    {
+        // The switch decides whether the built value's own refusals are corrected, not whether it moves when the generated
+        // value is corrected: it always does, so it anchors whatever its switch.
+        var ctx = await SetUpAsync();
+        SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == ctx.UserPrincipalName.Id).KeepUnique = false;
+        var (mail, mailAddress, mailTypeId) = await AddMailSystemReceivingUserPrincipalNameAsync(ctx);
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedAccount(mail, mailTypeId, mailAddress, Mvo().Id, "joe.bloggs@corp.local");
+
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+
+        Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+    }
+
+    [Test]
+    public async Task Export_ValueBuiltFromItHeldElsewhereWithAnotherValue_IsNotAnchoredAsync()
+    {
+        // Anchoring means another system has accepted this object's current value; an account holding something else is
+        // not one in use under the value being corrected.
+        var ctx = await SetUpAsync();
+        var (mail, mailAddress, mailTypeId) = await AddMailSystemReceivingUserPrincipalNameAsync(ctx);
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        SeedAccount(mail, mailTypeId, mailAddress, Mvo().Id, "someone.else@corp.local");
+
+        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
+
+        Assert.That(AccountName(ctx), Is.EqualTo("joe.bloggs1"));
+    }
+
+    [Test]
     public async Task Export_ParticipatingSystemClearedAndNotReimported_CannotTellSoEntersNeedsDecisionAsync()
     {
         var ctx = await SetUpAsync();
@@ -705,6 +765,41 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
         return (ticketing, loginName);
+    }
+
+    /// <summary>
+    /// A mail system receiving the User Principal Name built from Account Name, unchanged, and provisioning nothing itself:
+    /// the anchoring cases seed its account directly.
+    /// </summary>
+    private async Task<(ConnectedSystem Mail, ConnectedSystemObjectTypeAttribute MailAddress, int MailTypeId)> AddMailSystemReceivingUserPrincipalNameAsync(Context ctx)
+    {
+        var mail = await CreateConnectedSystemAsync("Mail");
+        var mailType = await CreateCsoTypeAsync(mail.Id, "Mailbox", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "id", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "primarySmtpAddress", Type = AttributeDataType.Text, Selected = true }
+        });
+        var mailAddress = mailType.Attributes.Single(a => a.Name == "primarySmtpAddress");
+        var mailExport = await CreateExportSyncRuleAsync(mail.Id, mailType, ctx.MvType, "Mail Export", enableProvisioning: false);
+        AddDirectFlow(mailExport, mailAddress, ctx.UserPrincipalName);
+        await DbContext.SaveChangesAsync();
+        return (mail, mailAddress, mailType.Id);
+    }
+
+    private void SeedAccount(ConnectedSystem system, int typeId, ConnectedSystemObjectTypeAttribute attribute, Guid metaverseObjectId, string value)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            ConnectedSystem = SyncRepo.ConnectedSystems[system.Id],
+            TypeId = typeId,
+            MetaverseObjectId = metaverseObjectId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, StringValue = value });
+        SyncRepo.SeedConnectedSystemObject(cso);
     }
 
     private async Task<MetaverseAttribute> AddMetaverseAttributeAsync(MetaverseObjectType mvType, string name)

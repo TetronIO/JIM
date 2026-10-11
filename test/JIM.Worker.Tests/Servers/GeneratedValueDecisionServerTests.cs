@@ -222,6 +222,31 @@ public class GeneratedValueDecisionServerTests
     }
 
     [Test]
+    public async Task GetDecisionsAsync_ConnectedSystemReceivingAValueBuiltFromIt_MatchesAsync()
+    {
+        // Generated Value Forms (#2023): Mail receives an Email built from Account Name, so a decision about Account Name
+        // changes what Mail gets too.
+        var hrImport = _syncRepo.SyncRules[HrImportRuleId];
+        var userType = hrImport.MetaverseObjectType!;
+        var email = new MetaverseAttribute { Id = 41, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        userType.Attributes.Add(email);
+        hrImport.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 101, SyncRule = hrImport, SyncRuleId = hrImport.Id, Enabled = true,
+            TargetMetaverseAttribute = email, TargetMetaverseAttributeId = email.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" } }
+        });
+        var mail = new ConnectedSystem { Id = 5, Name = "Mail" };
+        _syncRepo.SeedConnectedSystem(mail);
+        _syncRepo.SeedSyncRule(ExportRule(50, "Mail Export", mail, userType,
+            Direct(email, new ConnectedSystemObjectTypeAttribute { Id = 500, Name = "primarySmtpAddress", Type = AttributeDataType.Text })));
+
+        var results = await _jim.GeneratedValueDecisions.GetDecisionsAsync(new GeneratedValueDecisionFilter { ConnectedSystemId = mail.Id }, 0, 50, true);
+
+        Assert.That(results.Results.Select(r => r.AssignmentId), Is.EquivalentTo(new[] { _ritaValue.Id, _samValue.Id, _leeValue.Id, _anaValue.Id }));
+    }
+
+    [Test]
     public async Task GetDecisionsAsync_UnknownSyncRuleOrConnectedSystem_ReturnsNothingAsync()
     {
         var rule = await _jim.GeneratedValueDecisions.GetDecisionsAsync(new GeneratedValueDecisionFilter { SyncRuleId = 9999 }, 0, 50, true);
