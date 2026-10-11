@@ -67,6 +67,7 @@
         'Get-JIMConnectedSystemObjectUnresolvedReference',
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
+        'Get-JIMConnectedSystemUnresolvedReferenceSummary',
         'Get-JIMConnectedSystemCapability',
         'Get-JIMConnectedSystemPasswordPolicy',
         'Get-JIMConnectedSystemPasswordSynchronisation',

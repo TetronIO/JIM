@@ -206,6 +206,7 @@ public class UnresolvedReferenceDiagnosisServerTests
             }), "Every distinct next step is listed, most values first, wherever its fix lies.");
             Assert.That(summary.Fixes.Select(f => f.Finding), Has.All.Not.Empty);
             Assert.That(summary.Fixes.Select(f => f.Remedy), Has.All.Not.Empty);
+            Assert.That(summary.Fixes.Select(f => f.ObjectCount), Has.All.Null, "One object's steps are all about that object.");
         }
     }
 
@@ -300,6 +301,157 @@ public class UnresolvedReferenceDiagnosisServerTests
         }
     }
 
+    [Test]
+    public async Task GetUnresolvedReferenceTotalsAsync_ConnectedSystem_ReturnsItsValuesAndObjectsAsync()
+    {
+        UseDirectory();
+        Totals(412, 127);
+
+        var totals = await _jim.ConnectedSystems.GetUnresolvedReferenceTotalsAsync(1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(totals.ReferenceCount, Is.EqualTo(412));
+            Assert.That(totals.ObjectCount, Is.EqualTo(127));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_UnknownConnectedSystem_ReturnsNullAsync()
+    {
+        UseDirectory();
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(99);
+
+        Assert.That(summary, Is.Null);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_NothingUnresolved_SaysSoWithoutReadingAnyValuesAsync()
+    {
+        UseDirectory(UnresolvedReferenceHandling.Ignore);
+        Totals(0, 0);
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(1);
+
+        Assert.That(summary, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary!.TotalCount, Is.Zero);
+            Assert.That(summary!.ObjectCount, Is.Zero);
+            Assert.That(summary!.Fixes, Is.Empty);
+            Assert.That(summary!.UnresolvedReferenceHandling, Is.EqualTo(UnresolvedReferenceHandling.Ignore));
+        }
+
+        _connectedSystems.Verify(r => r.GetConnectedSystemUnresolvedReferenceValueGroupsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_Directory_GroupsEveryObjectsValuesWithTheObjectsBehindEachStepAsync()
+    {
+        UseDirectory(UnresolvedReferenceHandling.Warn);
+        Totals(412, 127);
+        _connectedSystems.Setup(r => r.GetConnectedSystemUnresolvedReferenceValueGroupsAsync(1)).ReturnsAsync(
+        [
+            Group($"ou=contractors,{Corp.ToLowerInvariant()}", $"CN=Ana Silva,OU=Contractors,{Corp}", 398, 120),
+            Group($"ou=users,{Lab.ToLowerInvariant()}", $"CN=Test,OU=Users,{Lab}", 12, 5),
+            Group($"ou=staff,{Corp.ToLowerInvariant()}", $"CN=Lee Grant,OU=Staff,{Corp}", 2, 2)
+        ]);
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(1);
+
+        Assert.That(summary, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary!.ConnectedSystemId, Is.EqualTo(1));
+            Assert.That(summary!.UnresolvedReferenceHandling, Is.EqualTo(UnresolvedReferenceHandling.Warn));
+            Assert.That(summary!.TotalCount, Is.EqualTo(412));
+            Assert.That(summary!.ObjectCount, Is.EqualTo(127));
+            Assert.That(summary!.Fixes.Select(f => (f.Cause, f.ContainerExternalId, f.PartitionExternalId, f.Count, f.ObjectCount)), Is.EqualTo(new[]
+            {
+                (UnresolvedReferenceCause.ContainerNotInScope, (string?)$"OU=Contractors,{Corp}", (string?)null, 398, (int?)120),
+                (UnresolvedReferenceCause.PartitionNotSelected, null, Lab, 12, 5),
+                (UnresolvedReferenceCause.NotFoundInScope, $"OU=Staff,{Corp}", null, 2, 2)
+            }));
+            Assert.That(summary!.LargestFix?.ContainerExternalId, Is.EqualTo($"OU=Contractors,{Corp}"));
+            Assert.That(summary!.Causes.Select(c => (c.Cause, c.Count)), Is.EqualTo(new[]
+            {
+                (UnresolvedReferenceCause.ContainerNotInScope, 398),
+                (UnresolvedReferenceCause.PartitionNotSelected, 12),
+                (UnresolvedReferenceCause.NotFoundInScope, 2)
+            }));
+        }
+
+        // Each step stands for one group, whose own count of objects is exact, so nothing more is read.
+        _connectedSystems.Verify(r => r.GetUnresolvedReferenceObjectCountAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_GroupsNeedingTheSameChange_CountEachObjectOnceAsync()
+    {
+        UseDirectory();
+        Totals(7, 4);
+        var contractors = $"ou=contractors,{Corp.ToLowerInvariant()}";
+        var temps = $"ou=temps,ou=contractors,{Corp.ToLowerInvariant()}";
+        _connectedSystems.Setup(r => r.GetConnectedSystemUnresolvedReferenceValueGroupsAsync(1)).ReturnsAsync(
+        [
+            Group(temps, $"CN=Ben Ortiz,OU=Temps,OU=Contractors,{Corp}", 4, 3),
+            Group(contractors, $"CN=Ana Silva,OU=Contractors,{Corp}", 3, 2)
+        ]);
+        _connectedSystems.Setup(r => r.GetUnresolvedReferenceObjectCountAsync(1, It.Is<IReadOnlyCollection<string>>(keys => keys.Count == 2 && keys.Contains(contractors) && keys.Contains(temps))))
+            .ReturnsAsync(4);
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(1);
+
+        Assert.That(summary!.Fixes.Select(f => (f.Cause, f.Count, f.ObjectCount)), Is.EqualTo(new[]
+        {
+            (UnresolvedReferenceCause.ContainerNotInScope, 7, (int?)4)
+        }), "An object with values under both parents is counted once, not once per parent.");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_AnchoredSystem_SeparatesAmbiguousFromNotFoundWithTheirObjectsAsync()
+    {
+        UseAnchoredSystem();
+        Totals(3, 2);
+        _connectedSystems.Setup(r => r.GetDistinctUnresolvedReferenceValuesAsync(1, It.Is<IReadOnlyCollection<int>>(ids => ids.Contains(ManagerAttributeId) && !ids.Contains(SecretaryAttributeId))))
+            .ReturnsAsync(["42", "77"]);
+        AnchorMatches(PersonAnchorId, "42");
+        AnchorMatches(ContactAnchorId, "42");
+        _connectedSystems.Setup(r => r.GetUnresolvedReferenceValueSplitAsync(1, It.Is<IReadOnlyCollection<int>>(ids => ids.Contains(ManagerAttributeId)), It.Is<IReadOnlyCollection<string>>(values => values.SequenceEqual(new[] { "42" }))))
+            .ReturnsAsync(new UnresolvedReferenceValueSplit { MatchingReferenceCount = 1, MatchingObjectCount = 1, OtherReferenceCount = 2, OtherObjectCount = 2 });
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary!.Fixes.Select(f => (f.Cause, f.Count, f.ObjectCount)), Is.EqualTo(new[]
+            {
+                (UnresolvedReferenceCause.NotFound, 2, (int?)2),
+                (UnresolvedReferenceCause.AmbiguousObjectType, 1, (int?)1)
+            }));
+            Assert.That(summary!.Fixes[1].Finding, Does.Not.Contain("''"),
+                "The ambiguous step speaks of the attributes as a group, not of an attribute with no name.");
+            Assert.That(summary!.LargestFix?.Cause, Is.EqualTo(UnresolvedReferenceCause.AmbiguousObjectType));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_AnchoredSystemWithNothingAmbiguous_IsOneStepCoveringEveryObjectAsync()
+    {
+        UseAnchoredSystem();
+        Totals(5, 4);
+        _connectedSystems.Setup(r => r.GetDistinctUnresolvedReferenceValuesAsync(1, It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(["77"]);
+
+        var summary = await _jim.ConnectedSystems.GetConnectedSystemUnresolvedReferenceSummaryAsync(1);
+
+        Assert.That(summary!.Fixes.Select(f => (f.Cause, f.Count, f.ObjectCount)), Is.EqualTo(new[]
+        {
+            (UnresolvedReferenceCause.NotFound, 5, (int?)4)
+        }));
+        _connectedSystems.Verify(r => r.GetUnresolvedReferenceValueSplitAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<string>>()), Times.Never);
+    }
+
     #region fixtures
 
     private const int PersonAnchorId = 101;
@@ -375,6 +527,15 @@ public class UnresolvedReferenceDiagnosisServerTests
                 TotalResults = values.Length
             });
     }
+
+    private void Totals(int references, int objects)
+    {
+        _connectedSystems.Setup(r => r.GetUnresolvedReferenceTotalsAsync(1))
+            .ReturnsAsync(new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = references, ObjectCount = objects });
+    }
+
+    private static ConnectedSystemUnresolvedReferenceValueGroup Group(string parentKey, string sampleValue, int count, int objectCount) =>
+        new() { ParentKey = parentKey, SampleValue = sampleValue, Count = count, ObjectCount = objectCount };
 
     private void AnchorMatches(int anchorAttributeId, string value)
     {

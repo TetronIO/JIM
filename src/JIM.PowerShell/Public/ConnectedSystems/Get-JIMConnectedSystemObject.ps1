@@ -41,6 +41,12 @@ function Get-JIMConnectedSystemObject {
         Override the -All page ceiling (1000 pages) and fetch every page regardless of
         how large the result set is. Only valid with -All.
 
+    .PARAMETER HasUnresolvedReference
+        List only the objects holding a reference value that could not be linked to another Connected System
+        Object. Each listed object's UnresolvedReferenceCount says how many it holds; to see why, use
+        Get-JIMConnectedSystemObjectUnresolvedReference for one object, or
+        Get-JIMConnectedSystemUnresolvedReferenceSummary for the whole Connected System.
+
     .OUTPUTS
         PSCustomObject representing the Connected System Object or attribute values.
 
@@ -88,6 +94,13 @@ function Get-JIMConnectedSystemObject {
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Search "smith" -Status Obsolete
 
         Gets Obsolete objects matching "smith" in Connected System 1.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -HasUnresolvedReference -All |
+            Sort-Object UnresolvedReferenceCount -Descending |
+            Select-Object DisplayName, TypeName, UnresolvedReferenceCount -First 10
+
+        Lists the ten objects in Connected System 1 holding the most unresolved references.
 
     .EXAMPLE
         Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All
@@ -178,7 +191,11 @@ function Get-JIMConnectedSystemObject {
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
-        [switch]$Ascending
+        [switch]$Ascending,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [switch]$HasUnresolvedReference
     )
 
     process {
@@ -250,7 +267,7 @@ function Get-JIMConnectedSystemObject {
             'List' {
                 Write-Verbose "Getting Connected System Objects for Connected System $ConnectedSystemId (Page: $Page, PageSize: $PageSize)"
                 $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $Page -PageSize $PageSize `
-                    -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
+                    -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending -HasUnresolvedReference:$HasUnresolvedReference
 
                 $response = Invoke-JIMApi -Endpoint $endpoint
                 foreach ($item in $response.items) {
@@ -263,7 +280,7 @@ function Get-JIMConnectedSystemObject {
                 $pageRequest = {
                     param($p)
                     $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $p -PageSize $PageSize `
-                        -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
+                        -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending -HasUnresolvedReference:$HasUnresolvedReference
                     Invoke-JIMApi -Endpoint $endpoint
                 }
 

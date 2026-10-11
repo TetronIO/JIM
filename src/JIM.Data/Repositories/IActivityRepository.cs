@@ -409,6 +409,12 @@ public interface IActivityRepository
     public Task<bool> HasAnyRunProfileExecutionAsync();
 
     /// <summary>
+    /// Whether any of an Activity's Run Profile Execution Items left reference values unresolved (#959), under any
+    /// Unresolved Reference Handling: what decides whether the Activity's page offers View Affected Objects.
+    /// </summary>
+    public Task<bool> HasUnresolvedReferencesAsync(Guid activityId);
+
+    /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
     /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SynchronisationRule"/>) and
     /// database id, or 0 if none exist yet. Used to assign the next per-object version when capturing a configuration
