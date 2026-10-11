@@ -1,6 +1,6 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 merged as #2071; Phases 2a, 2b and 2d complete; Phase 2c under way)
+- **Status:** Doing (Phase 2-0 merged as #2071; Phases 2a, 2b, 2c and 2d complete; Phase 2e next)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
@@ -69,7 +69,7 @@ Every branch ends in one of these, resolved in the same pass. The same set is re
 | Waiting for a confirming import | Exported, no confirmation edge yet | Waiting card naming the system |
 | Deletion scheduled | MvoDeletionScheduled with no housekeeping deletion yet | Waiting card with the due date |
 | Further than shown | Depth bound reached | Foot of the canvas: "Some consequences go further than shown" |
-| No further consequences | The item's type causes nothing, or nothing it could cause was recorded | No After this run rule at all |
+| No further consequences | The item's type causes nothing (an import that only confirmed an export included), or nothing it could cause was recorded | No After this run rule at all |
 
 Live Pending Export status comes from the ids already on the outcomes (`TargetEntityId`), read by primary key, extending `GetExistingPendingExportIdsAsync` to return status and `NextRetryAt`. No index on `QueuedByRunProfileExecutionItemId` is needed.
 
@@ -107,7 +107,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 - Ending resolution as tabled above; live Pending Export status read once per walk.
 - Unit tests beside `CausalChainWalkTests`, from the PRD's example: import with no Synchronisation yet, nothing followed, mid-cascade (exports queued), complete, 4,218-member cohort with a failed-export split, depth bound, confirming import (no consequences), grace-period deletion via the 2-0 edge, retention purge mid-chain. One round trip per level asserted, as Phase 1 does.
 
-### Phase 2c: Lineage UI
+### Phase 2c: Lineage UI ✅
 
 - `CausalityLineageModelBuilder` takes a `CausalConsequences` alongside the `CausalChain`. Consequence objects are keyed by object (or cohort), not by system, so the account and the Groups are separate objects; the upward placement is unchanged.
 - New card shapes beside `CausalityLineageChainCard`: the consequence card (operation chip, sentence, why line, run chip and time, activity link, members toggle with paging and a find box), the waiting card, the settled note and the folded confirmation.
