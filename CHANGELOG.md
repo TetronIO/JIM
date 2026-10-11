@@ -66,8 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 
+### Removed
+
+- 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
+
 ### Fixed
 
+- 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 

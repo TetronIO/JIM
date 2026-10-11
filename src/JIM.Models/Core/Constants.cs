@@ -234,16 +234,10 @@ public static class Constants
         public const string SsoApiScope = "SSO.ApiScope";
         public const string SsoClaimType = "SSO.ClaimType";
         public const string SsoMvAttribute = "SSO.MvAttribute";
-        public const string SsoUniqueIdentifierClaimType = "SSO.UniqueIdentifierClaimType";
         public const string SsoEnableLogOut = "SSO.EnableLogOut";
 
         // Synchronisation Settings
         public const string PartitionValidationMode = "Sync.PartitionValidationMode";
-        /// <summary>
-        /// When enabled, creates detailed Activity execution items for exports where CSO already has current values.
-        /// Default: disabled for performance.
-        /// </summary>
-        public const string VerboseNoChangeRecording = "Sync.VerboseNoChangeRecording";
         /// <summary>
         /// The number of Connected System Objects to process per database page during sync operations.
         /// Larger values improve throughput by reducing database round trips.
@@ -346,11 +340,7 @@ public static class Constants
         /// </summary>
         public const string ChangeTrackingConfigurationChangesEnabled = "ChangeTracking.ConfigurationChanges.Enabled";
 
-        // Maintenance Settings
-        public const string MaintenanceMode = "Maintenance.IsEnabled";
-
         // Security Settings
-        public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
         public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
 
         /// <summary>
@@ -394,9 +384,8 @@ public static class Constants
 
         // UI Settings
         /// <summary>
-        /// The interval at which progress updates are reported and polled for in the UI.
-        /// Used by both the Operations page polling and background task progress reporting.
-        /// Default: 1 second.
+        /// How often JIM reports progress while it generates Example Data from a template; nothing else reads it
+        /// (#2101). Default: 1 second.
         /// </summary>
         public const string ProgressUpdateInterval = "UI.ProgressUpdateInterval";
 
