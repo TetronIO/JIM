@@ -396,9 +396,10 @@ public class PendingExportMergeSemanticsTests
         var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
         employeeIdValue.StringValue = "E999";
 
-        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+        await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
 
-        var changesForAttribute = result.PendingExports
+        var changesForAttribute = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == targetCso.Id)
             .SelectMany(pe => pe.AttributeValueChanges)
             .Where(c => c.AttributeId == targetEmployeeIdAttr.Id)
             .ToList();
@@ -410,6 +411,75 @@ public class PendingExportMergeSemanticsTests
             Assert.That(changesForAttribute[0].AwaitsInitialPassword, Is.True);
             Assert.That(changesForAttribute[0].ExportAttemptCount, Is.EqualTo(held.ExportAttemptCount));
         }
+    }
+
+    /// <summary>
+    /// When every newly evaluated change merely restates a held change and nothing queued is withdrawn, the evaluation
+    /// changes nothing, so it leaves the persisted Pending Export exactly as it is, as the no-change path does. Deleting
+    /// and recreating it would re-stamp the item that queued it over the provisioning that did, and report a staged
+    /// export on every synchronisation until the Initial Password arrives.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_OnlyRestatementsOfAHeldChange_LeavesThePersistedPendingExportUntouchedAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+        var held = HeldChange(targetEmployeeIdAttr, "E999");
+        var persisted = SeedExportedPendingExport(targetCso, held);
+        var provisioningItemId = Guid.NewGuid();
+        persisted.QueuedByRunProfileExecutionItemId = provisioningItemId;
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "E999";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+
+        var forObject = SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == targetCso.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports, Is.Empty, "nothing is staged: the evaluation changed nothing");
+            Assert.That(forObject.Select(pe => pe.Id), Is.EqualTo(new[] { persisted.Id }), "the persisted Pending Export is kept, not rebuilt");
+            Assert.That(forObject.Single().QueuedByRunProfileExecutionItemId, Is.EqualTo(provisioningItemId),
+                "the item that queued it still names its cause");
+            Assert.That(forObject.Single().AttributeValueChanges, Is.EquivalentTo(new[] { held }));
+        }
+    }
+
+    /// <summary>
+    /// The leaver during the hold (#2039): the held change still asserts the enabled value, but the person has left, so
+    /// the Synchronisation Rule now yields the disabled value, which the target already holds because the account was
+    /// created disabled. The held change no longer reflects the Metaverse, so it is withdrawn like any queued change the
+    /// target makes unnecessary. Kept, it would be released once the password is delivered or expires, and the next
+    /// export would enable the leaver's account.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_LeaverDuringTheHoldWhenTheTargetHoldsTheInterimValue_WithdrawsTheHeldChangeAsync()
+    {
+        var (exportRule, mvo, targetCso, targetEmployeeIdAttr, _) = ArrangeSingleValuedScenario();
+        var interim = new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = targetCso, Attribute = targetEmployeeIdAttr, AttributeId = targetEmployeeIdAttr.Id,
+            StringValue = "DISABLED"
+        };
+        targetCso.AttributeValues.Add(interim);
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvo.Type!.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, targetCso.ConnectedSystemId), targetCso } },
+            new[] { interim }.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetCso.ConnectedSystemId });
+        SeedExportedPendingExport(targetCso, HeldChange(targetEmployeeIdAttr, "ENABLED"));
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "DISABLED";
+
+        await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+
+        var changesForAttribute = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == targetCso.Id)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => c.AttributeId == targetEmployeeIdAttr.Id);
+        Assert.That(changesForAttribute, Is.Empty, "nothing remains that would enable the leaver's account");
     }
 
     /// <summary>

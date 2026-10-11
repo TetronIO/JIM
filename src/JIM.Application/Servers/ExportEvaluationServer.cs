@@ -2773,12 +2773,27 @@ public class ExportEvaluationServer
                 // A change restating exactly what a held change asserts (written with an interim value until an Initial
                 // Password is delivered, #2039) is dropped, so the held change survives below rather than being
                 // superseded and re-sent to an account the target will not enable without a password.
+                var evaluatedChangeCount = attributeChanges.Count;
                 attributeChanges = DropChangesRestatingAHeldChange(attributeChanges, dbPendingExport, csoId.Value);
 
                 // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
                 // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
-                RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id,
-                    SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges));
+                var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+                    attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges);
+
+                // Every incoming change restated a held change and nothing queued is withdrawn: the evaluation changes
+                // nothing, so the persisted Pending Export is left exactly as it is, as the no-change path above leaves
+                // it. Rebuilding it would re-stamp the item that queued it over the provisioning that did, and report a
+                // staged export on every synchronisation until the Initial Password arrives (#2039).
+                if (evaluatedChangeCount > 0 && attributeChanges.Count == 0 && withdrawnFromPersisted.Count == 0)
+                {
+                    Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Nothing to stage for CSO {CsoId}; Pending Export {PendingExportId} " +
+                        "already holds what the Metaverse Object wants until an Initial Password is delivered. Source: MVO {MvoId}",
+                        csoId.Value, dbPendingExport.Id, mvo.Id);
+                    return (null, null, provisioningCso, csoAlreadyCurrentCount);
+                }
+
+                RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id, withdrawnFromPersisted);
 
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see

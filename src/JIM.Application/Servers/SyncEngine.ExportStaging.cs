@@ -298,7 +298,8 @@ public partial class SyncEngine
     /// cn=alice again. It is the same supersede rule <see cref="MergeAttributeChangesIntoPendingExport"/> applies to
     /// a newly evaluated change (merge keys, and #1199's whole-attribute rule), applied when the evaluation's answer
     /// for the attribute is "no change". A change already sent and awaiting its confirming import is kept: it is
-    /// the confirmation of what the target now holds. Mutates in place; returns the staged changes withdrawn.
+    /// the confirmation of what the target now holds; one held until an Initial Password is delivered is not exempt
+    /// (#2039, see <see cref="SelectSurvivingDriftChanges"/>). Mutates in place; returns the staged changes withdrawn.
     /// </summary>
     public List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
@@ -319,7 +320,8 @@ public partial class SyncEngine
     /// wants (#2001): the changes on <paramref name="existingChanges"/> that would survive a merge with
     /// <paramref name="incomingChanges"/> but not the evaluation's <paramref name="alreadyCurrentChanges"/>. A queued
     /// change the evaluation's own new change supersedes is replaced, not withdrawn, so it is not among them; neither
-    /// is one already sent and awaiting confirmation. The same rules as <see cref="SelectSurvivingDriftChanges"/>,
+    /// is one already sent and awaiting confirmation, unless it is held until an Initial Password is delivered (#2039).
+    /// The same rules as <see cref="SelectSurvivingDriftChanges"/>,
     /// which is what the run applies, so the run and the previews agree on what is withdrawn.
     /// </summary>
     /// <param name="incomingChanges">The changes the evaluation stages.</param>
@@ -1289,7 +1291,8 @@ public partial class SyncEngine
     /// <param name="existingChanges">The changes already staged on the Pending Export being merged into.</param>
     /// <param name="alreadyCurrentChanges">The changes the same evaluation skipped because the target already holds
     /// what they would set (no-net-change detection). They supersede a staged change exactly as an incoming change
-    /// does, except one already sent and awaiting confirmation: the Metaverse and the target already agree, so a
+    /// does, except one already sent and awaiting confirmation (but not one held until an Initial Password is
+    /// delivered; see <see cref="IsKeptAgainstAlreadyCurrent"/>): the Metaverse and the target already agree, so a
     /// queued change for the same attribute (or value) is stale. See <see cref="WithdrawChangesAlreadyCurrent"/>.</param>
     /// <returns>The existing changes that are not superseded, in their original order.</returns>
     internal static List<PendingExportAttributeValueChange> SelectSurvivingDriftChanges(
@@ -1309,17 +1312,44 @@ public partial class SyncEngine
 
         if (alreadyCurrentChanges is { Count: > 0 })
         {
-            // A change already sent and awaiting its confirming import is left alone: it is what the target has
-            // just been told to hold (and, applied optimistically, what JIM already records it as holding), so
-            // it is the confirmation of that change, not a stale instruction.
             var currentKeys = alreadyCurrentChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
             var wholeAttributeCurrentIds = GetWholeAttributeReplacementAttributeIds(alreadyCurrentChanges);
+            var currentAssertions = alreadyCurrentChanges.Select(HeldChangeAssertion).ToHashSet();
             survivors = survivors.Where(existing =>
-                existing.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                IsKeptAgainstAlreadyCurrent(existing, currentAssertions) ||
                 (!currentKeys.Contains(GetAttributeChangeMergeKey(existing)) && !wholeAttributeCurrentIds.Contains(existing.AttributeId)));
         }
 
         return survivors.ToList();
+    }
+
+    /// <summary>
+    /// Whether a queued change stands even though the evaluation found its attribute (or value) already current on the
+    /// target, for <see cref="SelectSurvivingDriftChanges"/>.
+    /// <list type="bullet">
+    /// <item>A change already sent and awaiting its confirming import stands: it is what the target has just been told
+    /// to hold (and, applied optimistically, what JIM already records it as holding), so it is the confirmation of that
+    /// change, not a stale instruction.</item>
+    /// <item>Except one held until an Initial Password is delivered (<see cref="IsAwaitingInitialPassword"/>, #2039).
+    /// The target was given an interim value instead of the one it asserts, so "already current" says nothing about
+    /// whether it was confirmed; when the Metaverse now wants what the target already holds, the held change no longer
+    /// reflects the Metaverse and is withdrawn like any queued change. The leaver during the hold is the case that
+    /// matters: the held change asserts the enabled value, the person leaves, the rule now yields the disabled value
+    /// the account was created with, and the held change, kept, would be released and enable the leaver's account.
+    /// It stands only when the evaluation's already-current answer restates exactly what it asserts, the same
+    /// restatement <see cref="WithoutChangesRestatingAHeldChange"/> drops from the incoming side: then it does reflect
+    /// the Metaverse, and withdrawing it on a record of the target its confirming import has yet to judge could leave
+    /// the account disabled with nothing to enable it.</item>
+    /// </list>
+    /// </summary>
+    private static bool IsKeptAgainstAlreadyCurrent(
+        PendingExportAttributeValueChange existing,
+        HashSet<(string MergeKey, string ValueKey, PendingExportAttributeChangeType ChangeType)> currentAssertions)
+    {
+        if (IsAwaitingInitialPassword(existing))
+            return currentAssertions.Contains(HeldChangeAssertion(existing));
+
+        return existing.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
     }
 
     /// <summary>
