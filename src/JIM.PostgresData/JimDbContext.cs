@@ -841,7 +841,8 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
         // The changes held until an Initial Password is delivered (#2039), found by Drift Detection's per-page skip
-        // (ISyncRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync). Partial, because a held change
+        // (ISyncRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync) and by every import's sweep of the
+        // holds it did not reconcile (ISyncRepository.GetInitialPasswordHoldSummariesAsync). Partial, because a held change
         // exists only between an Active Directory Create and its password's delivery, so the index is all but empty and
         // the per-page lookup costs nothing, while every other directory and every other change, which never carry the
         // flag, add nothing to it. Named, so it is a second index beside the foreign key's own on PendingExportId

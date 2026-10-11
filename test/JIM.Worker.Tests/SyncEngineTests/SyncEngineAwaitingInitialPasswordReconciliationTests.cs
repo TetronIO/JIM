@@ -215,6 +215,92 @@ public class SyncEngineAwaitingInitialPasswordReconciliationTests
         Assert.That(result.HasChanges, Is.False);
     }
 
+    // ---- A hold the import did not reconcile (the account was not returned) ----
+
+    [Test]
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled_NoPasswordOwed_ReleasesTheHeldChangeAndNothingElse()
+    {
+        var (cso, pendingExport, held) = Arrange(importedValue: Disabled);
+        var unjudged = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 99, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "Jane",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation, ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(unjudged);
+        var result = new PendingExportReconciliationResult();
+
+        _engine.JudgeChangesAwaitingInitialPasswordNotReconciled(cso.Id, cso.MetaverseObjectId, pendingExport, result, new HashSet<Guid>());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ReleasedChanges, Is.EqualTo(new[] { held }));
+            Assert.That(held.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
+            Assert.That(held.AwaitsInitialPassword, Is.False);
+            Assert.That(unjudged.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                "the import did not read the account, so nothing else is confirmed or retried");
+            Assert.That(result.ConfirmedChanges.Concat(result.RetryChanges).Concat(result.FailedChanges), Is.Empty);
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "the released change goes out on the next export");
+            Assert.That(result.PendingExportToUpdate, Is.SameAs(pendingExport));
+        }
+    }
+
+    [Test]
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled_PasswordOwed_HoldsItWithNothingToPersist()
+    {
+        var (cso, pendingExport, held) = Arrange(importedValue: Disabled);
+        var result = new PendingExportReconciliationResult();
+
+        _engine.JudgeChangesAwaitingInitialPasswordNotReconciled(cso.Id, cso.MetaverseObjectId, pendingExport, result, OwedTo(cso));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HeldChanges, Is.EqualTo(new[] { held }));
+            Assert.That(held.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(held.AwaitsInitialPassword, Is.True);
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(result.PendingExportToUpdate, Is.Null);
+        }
+    }
+
+    [Test]
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled_CreateNoImportHasConfirmed_ReleasesTheChangeButKeepsTheCreateUnsent()
+    {
+        // Confirming a Create is what turns it into an Update. With no import to prove the object exists, a Pending
+        // Create would be sent again; it keeps its status, and the released change goes out once an import confirms it.
+        var (cso, pendingExport, held) = Arrange(importedValue: Disabled);
+        pendingExport.ChangeType = PendingExportChangeType.Create;
+        var result = new PendingExportReconciliationResult();
+
+        _engine.JudgeChangesAwaitingInitialPasswordNotReconciled(cso.Id, cso.MetaverseObjectId, pendingExport, result, new HashSet<Guid>());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(held.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
+            Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(result.PendingExportToUpdate, Is.SameAs(pendingExport), "the release itself is persisted");
+        }
+    }
+
+    [TestCase(PendingExportStatus.Parked)]
+    [TestCase(PendingExportStatus.Executing)]
+    [TestCase(PendingExportStatus.Failed)]
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled_ExportReconciliationLeavesAlone_IsLeftAlone(PendingExportStatus status)
+    {
+        var (cso, pendingExport, held) = Arrange(importedValue: Disabled);
+        pendingExport.Status = status;
+        var result = new PendingExportReconciliationResult();
+
+        _engine.JudgeChangesAwaitingInitialPasswordNotReconciled(cso.Id, cso.MetaverseObjectId, pendingExport, result, new HashSet<Guid>());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(held.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(held.AwaitsInitialPassword, Is.True);
+            Assert.That(result.PendingExportToUpdate, Is.Null);
+        }
+    }
+
     private static HashSet<Guid> OwedTo(ConnectedSystemObject cso) => [cso.MetaverseObjectId!.Value];
 
     /// <summary>

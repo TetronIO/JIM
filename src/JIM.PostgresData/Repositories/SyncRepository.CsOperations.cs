@@ -1127,6 +1127,50 @@ public partial class SyncRepository
             new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
     }
 
+    public async Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+    {
+        // Raw SQL, asked once per import after reconciliation (#2039), so a held change is judged even when the import
+        // did not return its account. Led by the same partial index on the flag as the lookup above, which holds only
+        // the changes awaiting an Initial Password: where none exists the probe reads an empty index and returns
+        // nothing. Each hit joins to its Pending Export and Connected System Object by primary key. A read-side
+        // projection, so exempt from the bulk column list rule.
+        const string sql = """
+            SELECT avc."Id", pe."Id", pe."ConnectedSystemObjectId", cso."MetaverseObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            WHERE avc."AwaitsInitialPassword"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer)
+        {
+            Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+
+        var held = new List<InitialPasswordHoldSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            held.Add(new InitialPasswordHoldSummary
+            {
+                AttributeValueChangeId = reader.GetGuid(0),
+                PendingExportId = reader.GetGuid(1),
+                ConnectedSystemObjectId = reader.GetGuid(2),
+                MetaverseObjectId = await reader.IsDBNullAsync(3) ? null : reader.GetGuid(3)
+            });
+        }
+
+        return held;
+    }
+
     /// <summary>
     /// Runs a single-column uuid SELECT on the context's own connection and transaction and returns its rows as a set.
     /// </summary>

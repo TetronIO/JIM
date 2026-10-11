@@ -211,6 +211,65 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
         Assert.That(found, Is.EquivalentTo(new[] { s.CsoIds[0] }));
     }
 
+    /// <summary>
+    /// The import's sweep of the holds it did not reconcile: every held change on the Connected System, one row each,
+    /// with its Pending Export, its object, and the Metaverse Object that object is joined to (null when it is joined
+    /// to none). Not an unflagged change, not a flagged one that has left ExportedPendingConfirmation, and nothing on
+    /// another Connected System.
+    /// </summary>
+    [Test]
+    public async Task GetInitialPasswordHoldSummariesAsync_MixedChangesAcrossSystems_ReturnsEveryHeldChangeOnTheSystemAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 3, metaverseObjectCount: 1);
+        var other = await SeedAsync(systemName: "Other Directory");
+        await JoinAsync(s.CsoIds[0], s.MvoIds[0]);
+
+        var joined = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        var joinedHeld = HeldChange(s.AttributeId);
+        joined.AttributeValueChanges.Add(joinedHeld);
+        var unjoined = NewPendingExport(s.SystemId, s.CsoIds[1], s.AttributeId);
+        var unjoinedHeld = HeldChange(s.AttributeId);
+        unjoined.AttributeValueChanges.Add(unjoinedHeld);
+        var noLongerAwaitingConfirmation = NewPendingExport(s.SystemId, s.CsoIds[2], s.AttributeId);
+        noLongerAwaitingConfirmation.AttributeValueChanges[0].AwaitsInitialPassword = true;
+        noLongerAwaitingConfirmation.AttributeValueChanges[0].Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+        var onAnotherSystem = NewPendingExport(other.SystemId, other.CsoIds[0], other.AttributeId);
+        onAnotherSystem.AttributeValueChanges.Add(HeldChange(other.AttributeId));
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([joined, unjoined, noLongerAwaitingConfirmation, onAnotherSystem]);
+
+        List<JIM.Models.Transactional.DTOs.InitialPasswordHoldSummary> holds;
+        await using (var read = NewContext())
+            holds = await new PostgresDataRepository(read).Sync.GetInitialPasswordHoldSummariesAsync(s.SystemId);
+
+        Assert.That(holds.Select(h => (h.AttributeValueChangeId, h.PendingExportId, h.ConnectedSystemObjectId, h.MetaverseObjectId)),
+            Is.EquivalentTo(new (Guid, Guid, Guid, Guid?)[]
+            {
+                (joinedHeld.Id, joined.Id, s.CsoIds[0], s.MvoIds[0]),
+                (unjoinedHeld.Id, unjoined.Id, s.CsoIds[1], null)
+            }));
+    }
+
+    [Test]
+    public async Task GetInitialPasswordHoldSummariesAsync_NothingHeld_ReturnsNothingAsync()
+    {
+        var s = await SeedAsync();
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId)]);
+
+        await using var read = NewContext();
+        var holds = await new PostgresDataRepository(read).Sync.GetInitialPasswordHoldSummariesAsync(s.SystemId);
+
+        Assert.That(holds, Is.Empty);
+    }
+
+    private async Task JoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId)
+    {
+        await using var join = NewContext();
+        await join.Database.ExecuteSqlInterpolatedAsync(
+            $"""UPDATE "ConnectedSystemObjects" SET "MetaverseObjectId" = {metaverseObjectId} WHERE "Id" = {connectedSystemObjectId}""");
+    }
+
     private static PendingExportAttributeValueChange HeldChange(int attributeId)
     {
         var change = NewChange(attributeId, awaitsInitialPassword: true);
@@ -262,12 +321,12 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
 
     private sealed record Seeded(int SystemId, int AttributeId, List<Guid> CsoIds, List<Guid> MvoIds);
 
-    private async Task<Seeded> SeedAsync(int connectedSystemObjectCount = 1, int metaverseObjectCount = 1)
+    private async Task<Seeded> SeedAsync(int connectedSystemObjectCount = 1, int metaverseObjectCount = 1, string systemName = "Panoply AD")
     {
         await using var seed = NewContext();
 
-        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
-        var system = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition };
+        var connectorDefinition = new ConnectorDefinition { Name = $"{systemName} Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = systemName, ConnectorDefinition = connectorDefinition };
         var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
         var attribute = new ConnectedSystemObjectTypeAttribute
         {
@@ -275,7 +334,7 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
             AttributePlurality = AttributePlurality.SingleValued, Selected = true
         };
         csType.Attributes.Add(attribute);
-        var mvType = new MetaverseObjectType { Name = "Person", PluralName = "People" };
+        var mvType = new MetaverseObjectType { Name = $"Person ({systemName})", PluralName = $"People ({systemName})" };
         var csos = Enumerable.Range(0, connectedSystemObjectCount)
             .Select(_ => new ConnectedSystemObject { Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal })
             .ToList();

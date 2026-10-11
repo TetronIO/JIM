@@ -268,6 +268,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, connectedSystemObjectIds);
 
+    public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+        => _inner.GetInitialPasswordHoldSummariesAsync(connectedSystemId);
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _inner.GetObjectTypesAsync(connectedSystemId);
 

@@ -975,6 +975,14 @@ public class SyncImportTaskProcessor
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id, pendingExportsTask);
         }
+
+        // A change held until its Initial Password is delivered is judged at every import, not only one that returns its
+        // account (#2039): reconciliation above covers only the objects this import updated, and an unchanged account
+        // is skipped by its hash on a Full Import and never returned by a Delta Import.
+        using (Diagnostics.Sync.StartSpan("JudgeUnreconciledInitialPasswordHolds"))
+        {
+            await JudgeUnreconciledInitialPasswordHoldsAsync(connectedSystemObjectsToBeUpdated);
+        }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
             reconcileSw.Elapsed.TotalSeconds, connectedSystemObjectsToBeUpdated.Count);
@@ -5124,6 +5132,85 @@ public class SyncImportTaskProcessor
                 "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, Exports deleted: {Deleted}",
                 totalConfirmed, totalRetry, totalFailed, totalHeld, totalReleased, exportsDeleted);
         }
+    }
+
+    /// <summary>
+    /// Judges every change on this Connected System held until an Initial Password is delivered whose Connected System
+    /// Object this import did not reconcile (#2039), after ordinary reconciliation has judged the ones it did. Without
+    /// this a hold is judged only by an import that returns its account, and an unchanged account is returned by
+    /// neither import type: a Full Import skips it by its content hash (the confirming import stamped the disabled
+    /// state it holds through the hold), and a Delta Import never returns it. A password that then expires or is
+    /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
+    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection skipping the
+    /// object permanently.
+    /// <para>
+    /// Each such change is held while a password is still owed to the object's Metaverse Object and released otherwise,
+    /// silently and exactly as reconciliation releases it (<see cref="ISyncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled"/>),
+    /// and nothing else on those objects is confirmed or retried: their values may predate the export. One set-based
+    /// query per run, answered from the partial index on the flag, so a Connected System with nothing held pays only
+    /// that; then one owed-password lookup for all of them, and a Pending Export load only for the objects to release.
+    /// </para>
+    /// </summary>
+    /// <param name="reconciledConnectedSystemObjects">The objects this import updated, which reconciliation has judged.</param>
+    private async Task JudgeUnreconciledInitialPasswordHoldsAsync(IReadOnlyCollection<ConnectedSystemObject> reconciledConnectedSystemObjects)
+    {
+        var holds = await _syncRepo.GetInitialPasswordHoldSummariesAsync(_connectedSystem.Id);
+        if (holds.Count == 0)
+            return;
+
+        var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
+        var unreconciled = holds.Where(hold => !reconciledIds.Contains(hold.ConnectedSystemObjectId)).ToList();
+        if (unreconciled.Count == 0)
+            return;
+
+        // An object joined to no Metaverse Object is owed nothing, and is released without a lookup.
+        var metaverseObjectIds = unreconciled
+            .Where(hold => hold.MetaverseObjectId.HasValue)
+            .Select(hold => hold.MetaverseObjectId!.Value)
+            .Distinct()
+            .ToList();
+        var owed = metaverseObjectIds.Count == 0
+            ? new HashSet<Guid>()
+            : await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
+
+        // Only the objects with nothing owed are loaded and judged; a change still owed a password stays exactly as it is,
+        // which is what judging it would do, so the ordinary case loads nothing more.
+        var metaverseObjectIdByConnectedSystemObjectId = unreconciled
+            .GroupBy(hold => hold.ConnectedSystemObjectId)
+            .ToDictionary(group => group.Key, group => group.First().MetaverseObjectId);
+        var toRelease = metaverseObjectIdByConnectedSystemObjectId
+            .Where(entry => entry.Value is not { } metaverseObjectId || !owed.Contains(metaverseObjectId))
+            .Select(entry => entry.Key)
+            .ToHashSet();
+        var stillOwedCount = unreconciled.Count(hold => !toRelease.Contains(hold.ConnectedSystemObjectId));
+
+        var releasedCount = 0;
+        if (toRelease.Count > 0)
+        {
+            var pendingExportsByConnectedSystemObjectId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(toRelease);
+            var pendingExportsToUpdate = new List<PendingExport>();
+            foreach (var (connectedSystemObjectId, pendingExport) in pendingExportsByConnectedSystemObjectId)
+            {
+                var result = new PendingExportReconciliationResult();
+                _syncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled(connectedSystemObjectId,
+                    metaverseObjectIdByConnectedSystemObjectId.GetValueOrDefault(connectedSystemObjectId), pendingExport, result, owed);
+
+                releasedCount += result.ReleasedChanges.Count;
+                if (result.PendingExportToUpdate != null)
+                    pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+            }
+
+            // Persisted exactly as reconciliation persists a release. No item is raised: the interim value was written on
+            // purpose, so this is not an unconfirmed export.
+            await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
+        }
+
+        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked, Executing
+        // or Failed), and is left alone here too.
+        Log.Information("JudgeUnreconciledInitialPasswordHoldsAsync: Judged {Count} change(s) held until an Initial Password is delivered on " +
+            "Connected System Object(s) this import did not return. Still held (Initial Password owed): {Held}, " +
+            "Released (no Initial Password owed): {Released}, Left on a Parked, Executing or Failed export: {Left}",
+            unreconciled.Count, stillOwedCount, releasedCount, unreconciled.Count - stillOwedCount - releasedCount);
     }
 
     /// <summary>

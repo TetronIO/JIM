@@ -227,6 +227,26 @@ public interface ISyncEngine
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null);
 
     /// <summary>
+    /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run
+    /// did not return its Connected System Object (#2039): each is held while a password is owed to the object's
+    /// Metaverse Object and released otherwise, exactly as <see cref="ReconcileCsoAgainstPendingExport"/> would; no other
+    /// change is touched, since the import did not read the object.
+    /// This method does NOT perform any database operations; the caller persists <c>result.PendingExportToUpdate</c>.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object the Pending Export writes to.</param>
+    /// <param name="metaverseObjectId">The Metaverse Object it is joined to, or null when it is joined to none.</param>
+    /// <param name="pendingExport">The object's Pending Export.</param>
+    /// <param name="result">The result object to populate with the held and released changes.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System
+    /// (<c>ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync</c>).</param>
+    void JudgeChangesAwaitingInitialPasswordNotReconciled(
+        Guid connectedSystemObjectId,
+        Guid? metaverseObjectId,
+        PendingExport pendingExport,
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid> metaverseObjectIdsOwedPassword);
+
+    /// <summary>
     /// Determines if an attribute change has been confirmed by comparing the exported value
     /// against the imported CSO attribute value. Handles all attribute data types comprehensively.
     /// </summary>

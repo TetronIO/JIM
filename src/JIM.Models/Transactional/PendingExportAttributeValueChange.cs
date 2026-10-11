@@ -126,10 +126,13 @@ public class PendingExportAttributeValueChange
     /// A confirming import that finds the interim value holds the change (unchanged, not retried, nothing reported)
     /// while a password is still owed to the account, and releases it (back to
     /// <see cref="PendingExportAttributeChangeStatus.Pending"/>, the flag cleared) once none is, so the next export
-    /// writes the asserted value as an ordinary Update. Drift Detection skips an object with such a change, and
-    /// export evaluation does not supersede it with an equal value. False for every change no Connector reported,
-    /// which makes all of that inert everywhere else; a partial index on the flag keeps the lookups free when no
-    /// change carries it.
+    /// writes the asserted value as an ordinary Update. Every import judges it, whether or not it returns the account:
+    /// one that does not (a Full Import skipping the unchanged account by its hash, a Delta Import with nothing to
+    /// report) judges it after reconciliation, and releases it the same way. Drift Detection skips an object with such
+    /// a change, in the run and in the preview; export evaluation does not supersede it with an equal value, but
+    /// withdraws it once the Metaverse now wants what the target already holds; and optimistic apply does not record
+    /// its asserted value. False for every change no Connector reported, which makes all of that inert everywhere
+    /// else; a partial index on the flag keeps the lookups free when no change carries it.
     /// </para>
     /// </summary>
     public bool AwaitsInitialPassword { get; set; }

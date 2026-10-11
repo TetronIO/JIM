@@ -164,7 +164,8 @@ public partial class SyncEngine
             }
             else if (IsAwaitingInitialPassword(attrChange))
             {
-                HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObject, attrChange, metaverseObjectIdsOwedPassword, result);
+                HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObject.Id, connectedSystemObject.MetaverseObjectId, attrChange,
+                    metaverseObjectIdsOwedPassword, result);
             }
             else
             {
@@ -253,31 +254,95 @@ public partial class SyncEngine
     /// </list>
     /// A caller that did not look up owed passwords (<paramref name="metaverseObjectIdsOwedPassword"/> null) gets a
     /// hold: the account stays disabled, which harms nothing, where a release would re-send a value the target refuses.
+    /// <para>
+    /// Judged at every import of the Connected System, whether or not the import returned the account: through
+    /// <see cref="ReconcileCsoAgainstPendingExport"/> when it did, and through
+    /// <see cref="JudgeChangesAwaitingInitialPasswordNotReconciled"/> when it did not.
+    /// </para>
     /// </summary>
     private static void HoldOrReleaseChangeAwaitingInitialPassword(
-        ConnectedSystemObject connectedSystemObject,
+        Guid connectedSystemObjectId,
+        Guid? connectedSystemObjectMetaverseObjectId,
         PendingExportAttributeValueChange attrChange,
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword,
         PendingExportReconciliationResult result)
     {
-        var passwordOwed = connectedSystemObject.MetaverseObjectId is { } metaverseObjectId &&
+        var passwordOwed = connectedSystemObjectMetaverseObjectId is { } metaverseObjectId &&
             (metaverseObjectIdsOwedPassword == null || metaverseObjectIdsOwedPassword.Contains(metaverseObjectId));
 
         if (passwordOwed)
         {
             result.HeldChanges.Add(attrChange);
-            Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} holds an interim value " +
+            Log.Debug("HoldOrReleaseChangeAwaitingInitialPassword: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} holds an interim value " +
                 "until its Initial Password is delivered; held, not retried",
-                attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObject.Id);
+                attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObjectId);
             return;
         }
 
         attrChange.Status = PendingExportAttributeChangeStatus.Pending;
         attrChange.AwaitsInitialPassword = false;
         result.ReleasedChanges.Add(attrChange);
-        Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} held an interim value, " +
+        Log.Debug("HoldOrReleaseChangeAwaitingInitialPassword: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} held an interim value, " +
             "and no Initial Password is owed any more; released to be written as an ordinary Update",
-            attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObject.Id);
+            attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObjectId);
+    }
+
+    /// <summary>
+    /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run
+    /// did not return its Connected System Object, and so did not reconcile it (#2039). A Full Import skips an unchanged
+    /// account by its content hash, and a Delta Import never returns one, so a hold whose password then expires or is
+    /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
+    /// otherwise never be judged again: the account would stay disabled, nothing would be reported, and Drift Detection
+    /// would skip the object for ever.
+    /// <para>
+    /// Each held change is held or released exactly as <see cref="ReconcileCsoAgainstPendingExport"/> would
+    /// (<see cref="HoldOrReleaseChangeAwaitingInitialPassword"/>). Nothing else is touched: the import did not read the
+    /// account, so the values JIM holds for it may predate the export, and confirming or retrying any other change
+    /// against them would be a guess. The same Pending Exports are excluded as there: Parked and Executing are never
+    /// touched, and a Failed one awaits an administrator.
+    /// </para>
+    /// <para>
+    /// After a release the Pending Export's status follows its changes as it does there, so the released change goes
+    /// out on the next export, except for a Create no import has confirmed yet: confirming a Create is what turns it
+    /// into an Update, and without that proof a Pending Create would be sent again to an object that may already exist.
+    /// It keeps its status, and the released change goes out once an import confirms the Create.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object the Pending Export writes to.</param>
+    /// <param name="metaverseObjectId">The Metaverse Object it is joined to, or null when it is joined to none (and then
+    /// nothing is owed).</param>
+    /// <param name="pendingExport">The object's Pending Export, holding at least one such change.</param>
+    /// <param name="result">Receives the held and released changes, and the Pending Export to persist when anything was
+    /// released.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System.</param>
+    public void JudgeChangesAwaitingInitialPasswordNotReconciled(
+        Guid connectedSystemObjectId,
+        Guid? metaverseObjectId,
+        PendingExport pendingExport,
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid> metaverseObjectIdsOwedPassword)
+    {
+        ArgumentNullException.ThrowIfNull(pendingExport);
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(metaverseObjectIdsOwedPassword);
+
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing or PendingExportStatus.Failed)
+        {
+            Log.Debug("JudgeChangesAwaitingInitialPasswordNotReconciled: Pending Export {ExportId} status is {Status}; its held change(s) are left as they are",
+                pendingExport.Id, pendingExport.Status);
+            return;
+        }
+
+        foreach (var heldChange in pendingExport.AttributeValueChanges.Where(IsAwaitingInitialPassword).ToList())
+            HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObjectId, metaverseObjectId, heldChange, metaverseObjectIdsOwedPassword, result);
+
+        if (result.ReleasedChanges.Count == 0)
+            return;
+
+        if (pendingExport.ChangeType != PendingExportChangeType.Create)
+            UpdatePendingExportStatus(pendingExport);
+
+        result.PendingExportToUpdate = pendingExport;
     }
 
     /// <summary>

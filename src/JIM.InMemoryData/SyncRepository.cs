@@ -2450,6 +2450,25 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(held);
     }
 
+    public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+    {
+        // Joined to the Connected System Object, as the PostgreSQL query is: a Pending Export whose object is gone has
+        // no account for a password to be owed to.
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue && _csos.ContainsKey(pe.ConnectedSystemObjectId.Value))
+            .SelectMany(pe => pe.AttributeValueChanges
+                .Where(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+                .Select(c => new InitialPasswordHoldSummary
+                {
+                    AttributeValueChangeId = c.Id,
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = pe.ConnectedSystemObjectId!.Value,
+                    MetaverseObjectId = _csos[pe.ConnectedSystemObjectId!.Value].MetaverseObjectId
+                }))
+            .ToList();
+        return Task.FromResult(held);
+    }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         GetSyncRuleIdsWithInitialPasswordEnabledCallCount++;

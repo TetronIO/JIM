@@ -35,9 +35,10 @@ public class PendingExportReconciliationResult
     public List<PendingExportAttributeValueChange> HeldChanges { get; } = new();
 
     /// <summary>
-    /// Attribute changes written with an interim value until an Initial Password is delivered that the import found
-    /// still holding it when no password is owed any more (it expired, was withdrawn, or was never staged). Put back
-    /// to <see cref="PendingExportAttributeChangeStatus.Pending"/> with the flag cleared, so the next export writes the
+    /// Attribute changes written with an interim value until an Initial Password is delivered that are still
+    /// unconfirmed when no password is owed any more (it expired, was withdrawn, or was never staged): found holding
+    /// the interim value by the import, or judged on an object the import did not return. Put back to
+    /// <see cref="PendingExportAttributeChangeStatus.Pending"/> with the flag cleared, so the next export writes the
     /// asserted value as an ordinary Update. Deliberately not reported as unconfirmed: the interim value was written
     /// on purpose.
     /// </summary>
