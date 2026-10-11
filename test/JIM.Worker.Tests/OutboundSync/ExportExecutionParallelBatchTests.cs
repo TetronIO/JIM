@@ -773,6 +773,74 @@ public class ExportExecutionParallelBatchTests
     /// <summary>
     /// Tests that the ExportExecutionOptions.MaxParallelism defaults to 1 (sequential).
     /// </summary>
+    /// <summary>
+    /// The deferred pass sends Creates too, once their references resolve, and decides for each of its batches whether
+    /// an Initial Password follows exactly as the first pass does (#2039): a Create sent without the flag would be
+    /// created enabled on Active Directory and refused there.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredCreateFromARuleThatAsksForAPassword_IsHandedToTheConnectorFlaggedAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        SyncRepo.SeedSyncRule(ProvisioningRuleAskingForAPassword(targetSystem));
+
+        var create = SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Create, DateTime.UtcNow.AddMinutes(-1), referencedMvoId);
+        create.ProvisioningSyncRuleId = InitialPasswordRuleId;
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connector = CreateCapturingConnector(handedToConnector);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 10, MaxParallelism = 1 }, CancellationToken.None);
+
+        Assert.That(handedToConnector.Where(h => h.Id == create.Id).Select(h => h.InitialPasswordFollows), Is.EqualTo(new[] { true }));
+    }
+
+    /// <summary>
+    /// Parallel deferred batches re-load their Pending Exports on a repository of their own, so each batch must make
+    /// the decision against that repository; one deciding only on the primary would hand a fresh, unflagged copy to
+    /// every connector but the first (#2039).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_CreateFromARuleThatAsksForAPasswordIsFlaggedOnEveryConnectorAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        var rule = ProvisioningRuleAskingForAPassword(targetSystem);
+        SyncRepo.SeedSyncRule(rule);
+
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var creates = Enumerable.Range(0, 2)
+            .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Create, baseTime.AddSeconds(i), referencedMvoId))
+            .ToList();
+        foreach (var create in creates)
+            create.ProvisioningSyncRuleId = InitialPasswordRuleId;
+
+        var handedToConnector = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)>();
+        var connectorFactoryCalled = false;
+        Func<IConnector> connectorFactory = () =>
+        {
+            connectorFactoryCalled = true;
+            return CreateCapturingConnector(handedToConnector).Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
+            new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData, syncRules: [rule]));
+
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateCapturingConnector(handedToConnector).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectorFactoryCalled, Is.True, "precondition: the second batch ran on a connector of its own");
+            Assert.That(handedToConnector.Select(h => h.Id), Is.EquivalentTo(creates.Select(c => c.Id)));
+            Assert.That(handedToConnector.Select(h => h.InitialPasswordFollows), Is.All.True);
+        }
+    }
+
     [Test]
     public void ExportExecutionOptions_MaxParallelism_DefaultsTo1()
     {
@@ -914,6 +982,37 @@ public class ExportExecutionParallelBatchTests
                 }
             }
         };
+    }
+
+    private const int InitialPasswordRuleId = 92039;
+
+    private static SyncRule ProvisioningRuleAskingForAPassword(ConnectedSystem targetSystem) => new()
+    {
+        Id = InitialPasswordRuleId,
+        Name = "Provision Users with an Initial Password",
+        Direction = SyncRuleDirection.Export,
+        ConnectedSystemId = targetSystem.Id,
+        ProvisionToConnectedSystem = true,
+        InitialPassword = new SyncRuleInitialPassword { SyncRuleId = InitialPasswordRuleId, Enabled = true }
+    };
+
+    /// <summary>
+    /// A connector that succeeds for everything and records, as it is handed each Pending Export, whether an Initial
+    /// Password was said to follow it.
+    /// </summary>
+    private static Mock<IConnector> CreateCapturingConnector(System.Collections.Concurrent.ConcurrentBag<(Guid Id, bool InitialPasswordFollows)> handedToConnector)
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                foreach (var handed in exports.Select(export => (export.Id, export.InitialPasswordFollows)))
+                    handedToConnector.Add(handed);
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+        return mockConnector;
     }
 
     private static Mock<IConnector> CreateMockConnector(ConnectedSystemExportResult defaultResult)

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -123,6 +124,21 @@ public class PendingExport
     public SyncRule? ProvisioningSyncRule { get; set; }
 
     public int? ProvisioningSyncRuleId { get; set; }
+
+    /// <summary>
+    /// Set on a <see cref="PendingExportChangeType.Create"/> just before it is sent when its
+    /// <see cref="ProvisioningSyncRuleId"/> names a Synchronisation Rule whose Initial Password is enabled, so an
+    /// Initial Password will be staged for the account once it exists (#2039). A Connector whose target refuses an
+    /// enabled account with no password (Active Directory) reads it to create the account disabled and leave the
+    /// password's delivery to enable it. Worked out once per export batch by the export run, alongside the lookup that
+    /// stages the password; the Connector never sees the rule or any password material.
+    /// <para>
+    /// Transient: never persisted, and false on every export the run has not decided for, so whether the rule asks
+    /// for a password is read when the account is created rather than stamped when the change was staged.
+    /// </para>
+    /// </summary>
+    [NotMapped]
+    public bool InitialPasswordFollows { get; set; }
 
     /// <summary>
     /// The Run Profile Execution Item of the synchronisation that staged this export, so the export run that

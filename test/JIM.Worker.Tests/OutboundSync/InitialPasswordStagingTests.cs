@@ -479,6 +479,180 @@ public class InitialPasswordStagingTests
         }
     }
 
+    #region An Initial Password follows the Create (#2039)
+
+    /// <summary>
+    /// A Create whose provisioning Synchronisation Rule asks for an Initial Password reaches the Connector flagged, so
+    /// a directory that refuses an enabled account with no password (Active Directory) can create it disabled and
+    /// leave the password's delivery to enable it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_IsHandedToTheConnectorFlaggedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system);
+
+        Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleWithNoInitialPassword_IsHandedToTheConnectorUnflaggedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: false);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system);
+
+        Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+    }
+
+    /// <summary>
+    /// Only a Create is followed by an Initial Password: an Update changes an account that already exists, and
+    /// staging nothing for it is exactly what <see cref="ExecuteExportsAsync_UpdateExport_StagesNothingAsync"/> pins.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateFromARuleThatAsksForAPassword_IsHandedToTheConnectorUnflaggedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        export.ChangeType = PendingExportChangeType.Update;
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system);
+
+        Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithNoProvisioningRule_IsHandedToTheConnectorUnflaggedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        export.ProvisioningSyncRuleId = null;
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system);
+
+        Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_BatchSpanningRules_FlagsOnlyTheCreateWhoseRuleAsksForAPasswordAsync()
+    {
+        var (system, _, passwordExport) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var (_, _, otherExport) = ArrangeProvisioningCreate(initialPasswordEnabled: false, syncRuleId: OtherProvisioningRuleId);
+
+        var (_, handedToConnector) = await ExportCapturingAsync(system);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == passwordExport.Id).InitialPasswordFollows, Is.True);
+            Assert.That(handedToConnector.Single(pe => pe.Id == otherExport.Id).InitialPasswordFollows, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// The lookup that flags the Create is the one that stages its password: it moved ahead of the Connector call
+    /// rather than being repeated, so a provisioning run costs no more queries than it did before (#2039).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_LooksUpTheRulesOnceForTheBatchAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        ArrangeProvisioningCreate(initialPasswordEnabled: false, syncRuleId: OtherProvisioningRuleId);
+
+        var (result, _) = await ExportCapturingAsync(system);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(1));
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1), "the one lookup still decides what is staged");
+        }
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_TwoBatches_LooksUpTheRulesOncePerBatchAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        var (result, handedToConnector) = await ExportCapturingAsync(system, new ExportExecutionOptions { BatchSize = 1 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector, Has.Count.EqualTo(2), "precondition: one Create per batch");
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(2));
+            Assert.That(handedToConnector.Select(pe => pe.InitialPasswordFollows), Is.All.True);
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(2));
+        }
+    }
+
+    /// <summary>
+    /// A batch with no Create from a provisioning Synchronisation Rule has nothing to decide, so nothing is read: a
+    /// run of Updates costs no query at all.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_NoCreateFromAProvisioningRule_DoesNotLookUpTheRulesAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        export.ChangeType = PendingExportChangeType.Update;
+
+        await ExportCapturingAsync(system);
+
+        Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.Zero);
+    }
+
+    /// <summary>
+    /// A failed lookup is contained, as it was when only staging made it: the Create is still sent, as its Attribute
+    /// Flows say, the account it creates stays created, and the password nobody could record is counted for the
+    /// Activity to report.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenTheRuleLookupFails_SendsTheCreateUnflaggedAndCountsTheUnrecordedPasswordAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        SyncRepo.FailInitialPasswordRuleLookupWith = new InvalidOperationException("The database could not be reached.");
+
+        var (result, handedToConnector) = await ExportCapturingAsync(system);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector.Single(pe => pe.Id == export.Id).InitialPasswordFollows, Is.False,
+                "JIM cannot tell a password will follow, so it does not claim one will");
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the account was created; the export must still say so");
+            Assert.That(export.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
+            Assert.That(result.InitialPasswordStagingFailedCount, Is.EqualTo(1), "contained, but never silent");
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(1), "a failed lookup is not repeated by staging");
+        }
+    }
+
+    /// <summary>
+    /// A Create written in part (#1398) reaches the Connector as a copy carrying only what it can write now; the copy
+    /// must still say an Initial Password follows, or the account would be created enabled after all.
+    /// </summary>
+    [Test]
+    public void ForConnector_CopyForAPartialWrite_KeepsInitialPasswordFollows()
+    {
+        var (_, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Add,
+            AttributeId = export.AttributeValueChanges[0].AttributeId,
+            Attribute = export.AttributeValueChanges[0].Attribute,
+            UnresolvedReferenceValue = Guid.NewGuid().ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        });
+        export.InitialPasswordFollows = true;
+
+        var handedToConnector = JIM.Application.Servers.ExportExecutionServer.ForConnector(export);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector, Is.Not.SameAs(export), "precondition: the Connector is handed a copy");
+            Assert.That(handedToConnector.InitialPasswordFollows, Is.True);
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private const int ProvisioningRuleId = 91121;
@@ -579,6 +753,31 @@ public class InitialPasswordStagingTests
 
         await SyncRepo.QueuePasswordChangesAsync([existing]);
         return existing;
+    }
+
+    /// <summary>
+    /// Runs an export whose Connector succeeds for everything, recording each Pending Export as the Connector was
+    /// handed it (the flag is read there, not on the export the run holds).
+    /// </summary>
+    private async Task<(ExportExecutionResult Result, List<PendingExport> HandedToConnector)> ExportCapturingAsync(
+        ConnectedSystem system,
+        ExportExecutionOptions? options = null)
+    {
+        var handedToConnector = new List<PendingExport>();
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                // Copied as handed over: the flag is read now, before the run moves on.
+                handedToConnector.AddRange(exports.Select(pe => new PendingExport { Id = pe.Id, InitialPasswordFollows = pe.InitialPasswordFollows }));
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(system, mockConnector.Object, SyncRunMode.PreviewAndSync,
+            options, CancellationToken.None);
+        return (result, handedToConnector);
     }
 
     private Task<ExportExecutionResult> ExportAsync(ConnectedSystem system, ConnectedSystemExportResult exportResult)

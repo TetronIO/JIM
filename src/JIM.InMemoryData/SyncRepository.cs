@@ -2406,8 +2406,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(watermarks);
     }
 
+    /// <summary>
+    /// How many times <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> has been called, so a test can prove
+    /// the export run reads which rules ask for an Initial Password once per batch (#2039).
+    /// </summary>
+    public int GetSyncRuleIdsWithInitialPasswordEnabledCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> throws it, so a test can prove a failed
+    /// lookup is contained rather than failing the export batch.
+    /// </summary>
+    public Exception? FailInitialPasswordRuleLookupWith { get; set; }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
+        GetSyncRuleIdsWithInitialPasswordEnabledCallCount++;
+        if (FailInitialPasswordRuleLookupWith != null)
+            throw FailInitialPasswordRuleLookupWith;
+
         var enabled = _syncRules.Values
             .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
             .Select(r => r.Id)
