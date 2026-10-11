@@ -79,6 +79,19 @@ public class MetaverseObject
     public string? DeletionPolicySnapshotJson { get; set; }
 
     /// <summary>
+    /// The Run Profile Execution Item that scheduled this object's deletion: the item carrying its
+    /// MvoDeletionScheduled outcome. Set when a deletion is scheduled; cleared with the other deletion markers.
+    /// </summary>
+    /// <remarks>
+    /// Housekeeping deletes the object in a later Activity, so without this nothing connects the deletion, or the
+    /// deprovisioning it causes, to the run that decided on it (#1811). Housekeeping records the link as a
+    /// <c>MetaverseObjectDeletionScheduleCausedDeletion</c> causal edge. An unconstrained snapshot scalar like
+    /// <c>PendingExport.QueuedByRunProfileExecutionItemId</c>, not a foreign key: the scheduling Activity can age
+    /// out of history long before a long grace period ends, and the deletion must still go ahead.
+    /// </remarks>
+    public Guid? DeletionScheduledByRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
     /// Projected MVOs are subject to automatic deletion rules.
     /// Internal MVOs (admin, service accounts) are protected from automatic deletion.

@@ -791,6 +791,8 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             var item = activity.RunProfileExecutionItems.SingleOrDefault(i => i.SyncOutcomes.Any(o => o.TargetEntityId == mvo.Id));
             Assert.That(item, Is.Not.Null, "an execution item must be recorded for the marked object");
             Assert.That(item!.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled), Is.True);
+            Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(item!.Id),
+                "the housekeeping deletion that follows names the item that scheduled it (#1811)");
         }
     }
 

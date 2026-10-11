@@ -31,7 +31,8 @@ public class CausalEdgeOrdinalTests
         [CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval] = 1,
         [CausalEdgeType.ExportCausedImportConfirmation] = 2,
         [CausalEdgeType.PendingExportQueueingCausedExportExecution] = 3,
-        [CausalEdgeType.ExportRejectionCausedGeneratedValueRevision] = 4
+        [CausalEdgeType.ExportRejectionCausedGeneratedValueRevision] = 4,
+        [CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion] = 5
     };
 
     /// <summary>

@@ -1924,11 +1924,14 @@ public partial class MetaverseServer
                 };
                 var policySnapshotJson = snapshot.ToJson();
 
-                var groupMvoIds = group.Select(mvo => mvo.Id).ToList();
+                // Each object is marked with the item recording its marking, so the housekeeping deletion that
+                // follows can name the run that scheduled it (#1811).
+                var groupItems = group.Select(mvo => (Mvo: mvo, Item: BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson))).ToList();
                 markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedWithNoTriggerAsync(
-                    groupMvoIds, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
+                    groupItems.Select(pair => (pair.Mvo.Id, pair.Item.Id)).ToList(),
+                    activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, policySnapshotJson);
 
-                executionItems.AddRange(group.Select(mvo => BuildZeroJoinExecutionItem(mvo, causeDescription, policySnapshotJson)));
+                executionItems.AddRange(groupItems.Select(pair => pair.Item));
             }
 
             if (executionItems.Count > 0)

@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
 - ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
 - ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
+- ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 
 ### Changed
 
