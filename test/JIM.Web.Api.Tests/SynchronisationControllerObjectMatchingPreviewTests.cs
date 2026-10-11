@@ -284,6 +284,29 @@ public class SynchronisationControllerObjectMatchingPreviewTests
     }
 
     [Test]
+    public async Task StartObjectMatchingPreview_ProposedRuleWithoutCaseSensitive_IgnoresCaseAsync()
+    {
+        // A proposed rule must be evaluated the way the same rule would behave once saved, and a rule saved without
+        // the setting ignores case (#2051).
+        await _controller.StartObjectMatchingPreviewAsync(ConnectedSystemId, new StartObjectMatchingPreviewRequest
+        {
+            Rules =
+            [
+                new ObjectMatchingRuleRequest
+                {
+                    Order = 0,
+                    ConnectedSystemObjectTypeId = CsoTypeId,
+                    MetaverseObjectTypeId = MvoTypeId,
+                    TargetMetaverseAttributeId = MailMetaverseAttributeId,
+                    Sources = [new ObjectMatchingRuleSourceRequest { Order = 0, ConnectedSystemAttributeId = MailAttributeId }]
+                }
+            ]
+        });
+
+        Assert.That(QueuedProposal().Rules.Single().CaseSensitive, Is.False);
+    }
+
+    [Test]
     public async Task StartObjectMatchingPreview_ExpressionSource_IsBlockedRatherThanEvaluatedAsync()
     {
         // Accepted on the wire and refused by validation, so the caller is told why rather than having their

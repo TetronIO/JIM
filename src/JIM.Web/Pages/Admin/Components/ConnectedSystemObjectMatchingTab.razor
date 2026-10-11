@@ -183,7 +183,7 @@ else
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
     private MetaverseObjectType? _newMatchingRuleMetaverseObjectType;
-    private bool _newMatchingRuleCaseSensitive = false;
+    private bool _newMatchingRuleCaseSensitive = ObjectMatchingDefaults.CaseSensitive;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
     // One grid per Object Type, because a Connected System with several selected types renders one table per tab.
@@ -386,7 +386,7 @@ else
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
             _newMatchingRuleMetaverseObjectType = null;
-            _newMatchingRuleCaseSensitive = false;
+            _newMatchingRuleCaseSensitive = ObjectMatchingDefaults.CaseSensitive;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
@@ -624,7 +624,7 @@ else
                          Color="Color.Primary"
                          Class="mt-3" />
             <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-                When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
+                Off by default, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.
             </MudText>
 
             <div class="mt-3">

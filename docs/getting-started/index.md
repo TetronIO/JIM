@@ -29,7 +29,7 @@ Whether you are deploying JIM for production use or setting up a development env
 
     [:octicons-arrow-right-24: Quick Start](quickstart.md)
 
--   :material-sync:{ .lg .middle } **Your First Sync**
+-   :material-sync:{ .lg .middle } **Your First Synchronisation**
 
     ---
 

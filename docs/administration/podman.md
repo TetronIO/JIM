@@ -2,7 +2,7 @@
 title: Running on Podman
 ---
 
-# Running JIM on Podman
+# Running on Podman
 
 JIM runs on Podman as well as Docker, from the same images, with the same settings and the same hardening. Podman is the container engine Red Hat ships and supports on RHEL 8, 9 and 10, so this is the way to run JIM where Docker is not permitted. Podman needs no extra software: no Docker engine, no compose tool.
 
