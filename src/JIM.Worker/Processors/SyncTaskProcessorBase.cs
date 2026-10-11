@@ -6844,12 +6844,43 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
+            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
                 EvaluateDriftAndEnforceState(cso, mvo);
+
+            if (heldConnectedSystemObjectIds.Count > 0)
+            {
+                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
+                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
+            }
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
+    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
+    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
+    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
+    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
+    /// partial index on the flag, and none at all when this run detects no drift.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+            return new HashSet<Guid>();
+
+        var connectedSystemObjectIds = _pendingDriftEvaluations
+            .Select(pending => pending.Cso.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (connectedSystemObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
     }
 
     /// <summary>

@@ -351,6 +351,162 @@ public class PendingExportMergeSemanticsTests
     }
 
     /// <summary>
+    /// A held change (written with an interim value until an Initial Password is delivered, #2039 Phase 2) survives a
+    /// rebuild caused by an unrelated attribute with its hold intact, or the next import would judge it as an
+    /// ordinary change, retry it, and Active Directory would refuse to enable an account that has no password.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_HeldChangeSurvivesAnUnrelatedChange_KeepsAwaitsInitialPasswordAsync()
+    {
+        var (_, mvo, targetCso, _, cache) = ArrangeSingleValuedScenario();
+        var heldAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER")
+            .Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var dbPendingExport = SeedExportedPendingExport(targetCso, HeldChange(heldAttr, "Enabled"));
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var newEmployeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        newEmployeeIdValue.StringValue = "E999";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [newEmployeeIdValue], cache);
+
+        var rebuilt = result.PendingExports.Single();
+        Assert.That(rebuilt.Id, Is.Not.EqualTo(dbPendingExport.Id), "precondition: the merge-replace branch rebuilt the export");
+        var survivor = rebuilt.AttributeValueChanges.Single(c => c.AttributeId == heldAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(survivor.AwaitsInitialPassword, Is.True);
+            Assert.That(survivor.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+        }
+    }
+
+    /// <summary>
+    /// Re-evaluation restating exactly the value a held change already asserts is no change at all: the incoming
+    /// change is dropped and the held one kept, so the Synchronisation Rule's enabled value is not re-sent to an
+    /// account that still has no password (#2039 Phase 2). Expression mappings are re-evaluated on any Metaverse
+    /// Object change, so this is the ordinary path for every HR change between creation and the password's delivery.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_IncomingChangeEqualToAHeldChange_KeepsTheHeldChangeAndDropsTheIncomingOneAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+        var held = HeldChange(targetEmployeeIdAttr, "E999");
+        SeedExportedPendingExport(targetCso, held);
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "E999";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+
+        var changesForAttribute = result.PendingExports
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => c.AttributeId == targetEmployeeIdAttr.Id)
+            .ToList();
+        Assert.That(changesForAttribute, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changesForAttribute[0].Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                "nothing for this attribute may be queued to send");
+            Assert.That(changesForAttribute[0].AwaitsInitialPassword, Is.True);
+            Assert.That(changesForAttribute[0].ExportAttemptCount, Is.EqualTo(held.ExportAttemptCount));
+        }
+    }
+
+    /// <summary>
+    /// The Metaverse Object now wants a different value from the one held (the account was disabled before its
+    /// password arrived): that is a genuine change, so it supersedes the held one exactly as any newer evaluation
+    /// supersedes a staged change.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_IncomingChangeDifferentFromAHeldChange_SupersedesTheHeldChangeAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+        SeedExportedPendingExport(targetCso, HeldChange(targetEmployeeIdAttr, "E999"));
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "E555";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+
+        var change = result.PendingExports.Single().AttributeValueChanges.Single(c => c.AttributeId == targetEmployeeIdAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.StringValue, Is.EqualTo("E555"));
+            Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
+            Assert.That(change.AwaitsInitialPassword, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// The guard is inert for a change that is not held: an equal incoming change supersedes an ordinary change
+    /// awaiting confirmation exactly as before.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_IncomingChangeEqualToAnUnheldChangeAwaitingConfirmation_SupersedesItAsBeforeAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+        var unheld = HeldChange(targetEmployeeIdAttr, "E999");
+        unheld.AwaitsInitialPassword = false;
+        SeedExportedPendingExport(targetCso, unheld);
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "E999";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, [employeeIdValue], cache);
+
+        var change = result.PendingExports.Single().AttributeValueChanges.Single(c => c.AttributeId == targetEmployeeIdAttr.Id);
+        Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
+    }
+
+    /// <summary>
+    /// The in-memory merge branch applies the same guard: a Pending Export already staged on this page (one the
+    /// merge-replace branch rebuilt, carrying a held change) keeps that change against an equal restatement.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_InMemoryMergeIntoAnExportHoldingAChange_KeepsItAgainstAnEqualRestatementAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+        var held = HeldChange(targetEmployeeIdAttr, "E999");
+        var stagedOnThisPage = NewUpdatePendingExport(targetCso);
+        stagedOnThisPage.AttributeValueChanges.Add(held);
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        employeeIdValue.StringValue = "E999";
+
+        await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, [employeeIdValue], cache, deferSave: true, existingPendingExports: [stagedOnThisPage]);
+
+        Assert.That(stagedOnThisPage.AttributeValueChanges.Where(c => c.AttributeId == targetEmployeeIdAttr.Id), Is.EquivalentTo(new[] { held }),
+            "the held change stands and nothing for its attribute is queued to send");
+    }
+
+    /// <summary>
+    /// A change sent with an interim value and awaiting its confirming import while an Initial Password is owed
+    /// (#2039 Phase 2).
+    /// </summary>
+    private static PendingExportAttributeValueChange HeldChange(ConnectedSystemObjectTypeAttribute attribute, string value)
+    {
+        var change = CreateChange(attribute, PendingExportAttributeChangeType.Update, value);
+        change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        change.ExportAttemptCount = 1;
+        change.LastExportedAt = new DateTime(2026, 10, 11, 9, 30, 0, DateTimeKind.Utc);
+        change.AwaitsInitialPassword = true;
+        return change;
+    }
+
+    private PendingExport SeedExportedPendingExport(ConnectedSystemObject targetCso, params PendingExportAttributeValueChange[] changes)
+    {
+        var pendingExport = NewUpdatePendingExport(targetCso);
+        pendingExport.Status = PendingExportStatus.Exported;
+        pendingExport.AttributeValueChanges.AddRange(changes);
+        SyncRepo.SeedPendingExport(pendingExport);
+        return pendingExport;
+    }
+
+    /// <summary>
     /// A stale database Pending Export left over from before the CSO's secondary external ID was
     /// confirmed (Status transitioned PendingProvisioning -> Normal) has ChangeType Create. Once the
     /// CSO is confirmed, the merge-and-replace must produce a PE typed Update (the freshly computed

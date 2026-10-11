@@ -4756,6 +4756,8 @@ public class SyncImportTaskProcessor
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
+        var totalHeld = 0;
+        var totalReleased = 0;
         var exportsDeleted = 0;
 
         // Use sync page size for batching database persistence operations
@@ -4781,6 +4783,11 @@ public class SyncImportTaskProcessor
             // clears navigation collections). AsNoTracking avoids polluting the tracker.
             var pageCsos = await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(
                 _connectedSystem.Id, pageCsoIds);
+
+            // Which of this page's accounts are still owed a password, read only when the page holds a change written
+            // with an interim value until an Initial Password is delivered (#2039): the engine holds such a change while
+            // one is owed and releases it once none is. Null otherwise, and then never read.
+            var metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -4814,7 +4821,7 @@ public class SyncImportTaskProcessor
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
-                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword);
 
                         if (isFirstPage)
                         {
@@ -4822,11 +4829,17 @@ public class SyncImportTaskProcessor
                             perCsoSw.Restart();
                         }
 
+                        // A held change changes nothing and raises no item (#2039); it is counted for the summary only.
+                        Interlocked.Add(ref totalHeld, result.HeldChanges.Count);
+
                         if (result.HasChanges)
                         {
                             Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
                             Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
                             Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
+                            // A release is persisted with the Pending Export below, but raises no item: the interim
+                            // value was written on purpose, so it is not an unconfirmed export (#2039).
+                            Interlocked.Add(ref totalReleased, result.ReleasedChanges.Count);
 
                             // Collect Pending Exports for batch operations
                             if (result.PendingExportToDelete != null)
@@ -5104,10 +5117,40 @@ public class SyncImportTaskProcessor
         // Store the confirmed count on the activity for stats reporting
         _activity.PendingExportsConfirmed = exportsDeleted;
 
-        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)
+        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0 || totalHeld > 0 || totalReleased > 0)
         {
-            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",
-                totalConfirmed, totalRetry, totalFailed, exportsDeleted);
+            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, " +
+                "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, Exports deleted: {Deleted}",
+                totalConfirmed, totalRetry, totalFailed, totalHeld, totalReleased, exportsDeleted);
         }
+    }
+
+    /// <summary>
+    /// The Metaverse Objects among this page's accounts still owed a password on this Connected System (#2039), for the
+    /// engine to hold or release a change written with an interim value until an Initial Password is delivered. Queries
+    /// only when the page holds such a change, so a page (and a deployment) with none never pays for the lookup; returns
+    /// null then, which the engine never reads because nothing is flagged.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>?> GetMetaverseObjectIdsOwedPasswordForPageAsync(
+        IReadOnlyCollection<ConnectedSystemObject> pageCsos,
+        IReadOnlyDictionary<Guid, PendingExport> pendingExportsByCsoId)
+    {
+        var csosWithAFlaggedChange = pageCsos
+            .Where(cso => pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport) &&
+                pendingExport.AttributeValueChanges.Any(SyncEngine.IsAwaitingInitialPassword))
+            .ToList();
+        if (csosWithAFlaggedChange.Count == 0)
+            return null;
+
+        // A flagged change on an object with no Metaverse Object is owed nothing and is released without a lookup.
+        var metaverseObjectIds = csosWithAFlaggedChange
+            .Where(cso => cso.MetaverseObjectId.HasValue)
+            .Select(cso => cso.MetaverseObjectId!.Value)
+            .Distinct()
+            .ToList();
+        if (metaverseObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
     }
 }

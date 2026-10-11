@@ -1323,6 +1323,45 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The newly evaluated changes, less any that restates exactly what a held change on the existing Pending Export
+    /// already asserts (#2039): a change written with an interim value until an Initial Password is delivered
+    /// (<see cref="IsAwaitingInitialPassword"/>). "Exactly" means the same merge key, value and change type. Such a
+    /// change is no change at all, but merged in it would supersede the held one and go out as a Pending write of the
+    /// very value the target refuses until the password arrives. Expression mappings are re-evaluated on any Metaverse
+    /// Object change, so this restatement is the ordinary case for every change to the person between the account's
+    /// creation and its password's delivery. An incoming change with a different value is a genuine change and still
+    /// supersedes the held one.
+    /// </summary>
+    /// <param name="incomingChanges">The newly evaluated export changes.</param>
+    /// <param name="existingChanges">The changes on the Pending Export they are about to be merged into.</param>
+    /// <returns><paramref name="incomingChanges"/> itself when nothing is held (the ordinary case, allocation-free),
+    /// otherwise a new list without the restatements, in their original order.</returns>
+    internal static List<PendingExportAttributeValueChange> WithoutChangesRestatingAHeldChange(
+        List<PendingExportAttributeValueChange> incomingChanges,
+        IEnumerable<PendingExportAttributeValueChange> existingChanges)
+    {
+        ArgumentNullException.ThrowIfNull(incomingChanges);
+        ArgumentNullException.ThrowIfNull(existingChanges);
+
+        var heldAssertions = existingChanges
+            .Where(IsAwaitingInitialPassword)
+            .Select(HeldChangeAssertion)
+            .ToHashSet();
+        if (heldAssertions.Count == 0)
+            return incomingChanges;
+
+        return incomingChanges.Where(change => !heldAssertions.Contains(HeldChangeAssertion(change))).ToList();
+    }
+
+    /// <summary>
+    /// What a change asserts, for <see cref="WithoutChangesRestatingAHeldChange"/>: its merge key (the attribute, plus
+    /// the value for a multi-valued attribute), its value, and whether it adds, removes or replaces.
+    /// </summary>
+    private static (string MergeKey, string ValueKey, PendingExportAttributeChangeType ChangeType) HeldChangeAssertion(
+        PendingExportAttributeValueChange change) =>
+        (GetAttributeChangeMergeKey(change), GetAttributeChangeKey(change), change.ChangeType);
+
+    /// <summary>
     /// The attribute ids among a set of changes whose change type sets the attribute's ENTIRE value set
     /// rather than one value within it (#1199). Update and RemoveAll both export as a replace, so every other
     /// staged change for the same attribute is superseded, whatever its value or change type.

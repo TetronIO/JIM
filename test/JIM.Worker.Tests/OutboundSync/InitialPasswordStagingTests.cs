@@ -653,6 +653,106 @@ public class InitialPasswordStagingTests
 
     #endregion
 
+    #region Attributes written with an interim value (#2039 Phase 2)
+
+    /// <summary>
+    /// The Connector names the attributes it wrote with an interim value because an Initial Password follows; each
+    /// written change for one of them is marked so the confirming import judges it against the password's delivery
+    /// rather than reporting it unconfirmed. Names match case-insensitively, as directory attribute names do.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReportsAnAttributeAwaitingInitialPassword_MarksThatChangeOnlyAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var displayNameChange = export.AttributeValueChanges.Single();
+        var employeeIdAttribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER")
+            .Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+        var employeeIdChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = employeeIdAttribute.Id,
+            Attribute = employeeIdAttribute,
+            StringValue = "E123",
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        export.AttributeValueChanges.Add(employeeIdChange);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded(null, null, ["DISPLAYNAME"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayNameChange.AwaitsInitialPassword, Is.True);
+            Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                "the change was sent and awaits its confirming import like any other");
+            Assert.That(employeeIdChange.AwaitsInitialPassword, Is.False, "only the attributes the Connector named are marked");
+            Assert.That(employeeIdChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+        }
+    }
+
+    /// <summary>
+    /// A Connector may rewrite a value only when JIM said an Initial Password follows. One that reports an interim
+    /// value on any other export has broken that contract; JIM logs it and does not mark the change, so the
+    /// confirming import treats it as an ordinary change rather than holding it for a password nobody will deliver.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReportsAnInterimValueWhenNoInitialPasswordFollows_LeavesTheChangeUnmarkedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: false);
+        var displayNameChange = export.AttributeValueChanges.Single();
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded(null, null, ["DisplayName"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the write itself succeeded and is recorded as such");
+            Assert.That(displayNameChange.AwaitsInitialPassword, Is.False);
+            Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+        }
+    }
+
+    /// <summary>
+    /// The mark describes the write just made, never an earlier one. A change marked on an earlier attempt and sent
+    /// again (a Create no import ever confirmed is retried as one) carries the value this Connector wrote now; if it
+    /// reported no interim value this time, the change is an ordinary one, or the next import would hold it for a
+    /// password that may never come.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ResentChangeMarkedBeforeButNotReportedNow_IsUnmarkedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var displayNameChange = export.AttributeValueChanges.Single();
+        displayNameChange.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+        displayNameChange.ExportAttemptCount = 1;
+        displayNameChange.AwaitsInitialPassword = true;
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                "precondition: the change was sent again");
+            Assert.That(displayNameChange.AwaitsInitialPassword, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// A Connector that rewrote nothing reports nothing, and no change is marked: the path is inert unless a Connector
+    /// names an attribute.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_InitialPasswordFollowsButConnectorRewroteNothing_LeavesTheChangeUnmarkedAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var displayNameChange = export.AttributeValueChanges.Single();
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(displayNameChange.AwaitsInitialPassword, Is.False);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private const int ProvisioningRuleId = 91121;

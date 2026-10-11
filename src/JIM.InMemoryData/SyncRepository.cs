@@ -2418,6 +2418,38 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailInitialPasswordRuleLookupWith { get; set; }
 
+    /// <summary>
+    /// How many times <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> has been called, so a test can prove the
+    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039).
+    /// </summary>
+    public int GetMetaverseObjectIdsOwedPasswordCallCount { get; private set; }
+
+    public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        GetMetaverseObjectIdsOwedPasswordCallCount++;
+
+        var asked = metaverseObjectIds.ToHashSet();
+        var owed = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && asked.Contains(c.MetaverseObjectId)
+                        && c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked)
+            .Select(c => c.MetaverseObjectId)
+            .ToHashSet();
+        return Task.FromResult(owed);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && asked.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         GetSyncRuleIdsWithInitialPasswordEnabledCallCount++;

@@ -115,5 +115,24 @@ public class PendingExportAttributeValueChange
     /// </summary>
     public string? LastImportedValue { get; set; }
 
+    /// <summary>
+    /// The Connector wrote this attribute with an interim value, not the one this change asserts, because an Initial
+    /// Password follows the Create (#2039): Active Directory refuses an enabled account with no password, so the LDAP
+    /// Connector creates it disabled and names <c>userAccountControl</c> in
+    /// <see cref="ConnectedSystemExportResult.AttributesAwaitingInitialPassword"/>, and the password's delivery
+    /// enables it. Set by the export run from that report, while the change is
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>.
+    /// <para>
+    /// A confirming import that finds the interim value holds the change (unchanged, not retried, nothing reported)
+    /// while a password is still owed to the account, and releases it (back to
+    /// <see cref="PendingExportAttributeChangeStatus.Pending"/>, the flag cleared) once none is, so the next export
+    /// writes the asserted value as an ordinary Update. Drift Detection skips an object with such a change, and
+    /// export evaluation does not supersede it with an equal value. False for every change no Connector reported,
+    /// which makes all of that inert everywhere else; a partial index on the flag keeps the lookups free when no
+    /// change carries it.
+    /// </para>
+    /// </summary>
+    public bool AwaitsInitialPassword { get; set; }
+
     #endregion
 }

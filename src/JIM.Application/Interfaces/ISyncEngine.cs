@@ -215,10 +215,16 @@ public interface ISyncEngine
     /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
     /// <param name="pendingExport">The pre-loaded Pending Export for this CSO (or null if none).</param>
     /// <param name="result">The result object to populate with reconciliation outcomes.</param>
+    /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected
+    /// System (<c>ISyncRepository.GetMetaverseObjectIdsOwedPasswordAsync</c>), deciding whether a change written with
+    /// an interim value until an Initial Password is delivered is held or released (#2039). Null when the caller did
+    /// not look, in which case such a change is held: the safe answer, since releasing re-sends a value the target
+    /// refuses. Read only for a flagged change, so callers whose objects carry none need not supply it.</param>
     void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
-        PendingExportReconciliationResult result);
+        PendingExportReconciliationResult result,
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null);
 
     /// <summary>
     /// Determines if an attribute change has been confirmed by comparing the exported value

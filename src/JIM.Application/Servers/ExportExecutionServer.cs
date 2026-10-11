@@ -1954,6 +1954,10 @@ public class ExportExecutionServer
             // Update attribute change statuses to ExportedPendingConfirmation
             UpdateAttributeChangeStatusesAfterExport(writtenChanges);
 
+            // Which of those the Connector wrote with an interim value until an Initial Password is delivered (#2039),
+            // persisted with the statuses below so the confirming import holds rather than retries them.
+            MarkChangesAwaitingInitialPassword(export, writtenChanges, exportResult, connectedSystemName);
+
             exportsToUpdate.Add(export);
             result.SuccessCount++;
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
@@ -2145,6 +2149,58 @@ public class ExportExecutionServer
     /// </summary>
     private static bool IsProvisioningCreate(PendingExport pendingExport) =>
         pendingExport.ChangeType == PendingExportChangeType.Create && pendingExport.ProvisioningSyncRuleId.HasValue;
+
+    /// <summary>
+    /// Marks each written change with whether the Connector reports it wrote that attribute with an interim value until
+    /// an Initial Password is delivered (<see cref="ConnectedSystemExportResult.AttributesAwaitingInitialPassword"/>,
+    /// #2039), matching attribute names case-insensitively as directories do. The mark is what makes the confirming
+    /// import hold such a change while the password is owed, rather than retrying a value the target refuses until the
+    /// password arrives. Every written change is decided, the unreported ones cleared: the mark describes this write,
+    /// and a change marked on an earlier attempt and sent again must not keep a hold this write did not ask for.
+    /// <para>
+    /// A Connector may only report this for an export JIM said an Initial Password follows
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>). A report on any other export breaks that contract: it is
+    /// logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any mismatch is
+    /// reported, instead of being held for a password nobody will deliver.
+    /// </para>
+    /// </summary>
+    private static void MarkChangesAwaitingInitialPassword(
+        PendingExport export,
+        List<PendingExportAttributeValueChange> writtenChanges,
+        ConnectedSystemExportResult exportResult,
+        string connectedSystemName)
+    {
+        var reported = exportResult.AttributesAwaitingInitialPassword ?? [];
+        if (reported.Count > 0 && !export.InitialPasswordFollows)
+        {
+            Log.Error("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
+                "on Pending Export {ExportId}, but JIM did not say an Initial Password follows it. The changes are not marked, and are reconciled " +
+                "as ordinary changes; this is a defect in the Connector",
+                LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", reported)), export.Id);
+        }
+
+        var reportedNames = export.InitialPasswordFollows
+            ? new HashSet<string>(reported, StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var change in writtenChanges)
+            change.AwaitsInitialPassword = change.Attribute?.Name is { } name && reportedNames.Contains(name);
+
+        if (reportedNames.Count == 0)
+            return;
+
+        var unmatched = reportedNames
+            .Where(name => !writtenChanges.Any(change => string.Equals(change.Attribute?.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (unmatched.Count > 0)
+        {
+            Log.Warning("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
+                "on Pending Export {ExportId}, but no change written for it names them; nothing was marked for those",
+                LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", unmatched)), export.Id);
+        }
+
+        Log.Debug("ProcessBatchSuccessAsync: {Count} change(s) on Pending Export {ExportId} for CSO {CsoId} written with an interim value " +
+            "until an Initial Password is delivered", writtenChanges.Count(change => change.AwaitsInitialPassword), export.Id, export.ConnectedSystemObjectId);
+    }
 
     /// <summary>
     /// Records that this batch's newly provisioned accounts are owed a first password (issue #1121, #1697): one

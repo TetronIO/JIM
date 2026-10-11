@@ -834,6 +834,21 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
+        // The changes held until an Initial Password is delivered (#2039), found by Drift Detection's per-page skip
+        // (ISyncRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync). Partial, because a held change
+        // exists only between an Active Directory Create and its password's delivery, so the index is all but empty and
+        // the per-page lookup costs nothing, while every other directory and every other change, which never carry the
+        // flag, add nothing to it. Named, so it is a second index beside the foreign key's own on PendingExportId
+        // rather than a filter applied to that one. The foreign key's index is declared explicitly beside it because
+        // EF's convention treats any index leading with the foreign key column as covering it, partial or not, and
+        // would otherwise drop the full index every load and cascade by Pending Export relies on.
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId)
+            .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
+            .HasFilter("\"AwaitsInitialPassword\"");
+
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
         // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.

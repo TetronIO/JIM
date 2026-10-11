@@ -2599,7 +2599,10 @@ public class ExportEvaluationServer
                     .SetTag("existingChangeCount", existingPendingExport.AttributeValueChanges.Count)
                     .SetTag("newChangeCount", attributeChanges.Count);
 
-                var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(existingPendingExport, attributeChanges);
+                // A Pending Export rebuilt earlier on this page can carry a held change (#2039); a restatement of it is
+                // dropped here exactly as in the merge-replace branch below.
+                var changesToMergeInMemory = DropChangesRestatingAHeldChange(attributeChanges, existingPendingExport, csoId.Value);
+                var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(existingPendingExport, changesToMergeInMemory);
                 var withdrawnInMemory = _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges);
                 RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id, withdrawnInMemory);
 
@@ -2710,7 +2713,9 @@ public class ExportEvaluationServer
                         .Where(c => c.PendingGeneration == null)
                         .Select(c => c.AttributeId)
                         .ToHashSet();
-                    var changesToMerge = attributeChanges
+                    // A change restating a held change is dropped too (#2039): the Create's interim value awaits its Initial
+                    // Password, and appended over it the restatement would be sent the moment the Create is confirmed.
+                    var changesToMerge = DropChangesRestatingAHeldChange(attributeChanges, dbPendingExport, csoId.Value)
                         .Where(c => c.PendingGeneration == null || !attributeIdsTheCreateCarries.Contains(c.AttributeId))
                         .ToList();
                     var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(mergeShell, changesToMerge);
@@ -2745,6 +2750,11 @@ public class ExportEvaluationServer
 
                     return (null, null, provisioningCso, csoAlreadyCurrentCount);
                 }
+
+                // A change restating exactly what a held change asserts (written with an interim value until an Initial
+                // Password is delivered, #2039) is dropped, so the held change survives below rather than being
+                // superseded and re-sent to an account the target will not enable without a password.
+                attributeChanges = DropChangesRestatingAHeldChange(attributeChanges, dbPendingExport, csoId.Value);
 
                 // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
                 // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
@@ -2785,7 +2795,10 @@ public class ExportEvaluationServer
                         Status = avc.Status,
                         ExportAttemptCount = avc.ExportAttemptCount,
                         LastExportedAt = avc.LastExportedAt,
-                        LastImportedValue = avc.LastImportedValue
+                        LastImportedValue = avc.LastImportedValue,
+                        // A held change stays held through the rebuild (#2039); dropping the flag would have the next
+                        // import retry a value the target refuses until the Initial Password is delivered.
+                        AwaitsInitialPassword = avc.AwaitsInitialPassword
                     })
                     .ToList();
 
@@ -3165,6 +3178,27 @@ public class ExportEvaluationServer
         IEnumerable<PendingExportAttributeValueChange> existingChanges,
         IReadOnlyCollection<PendingExportAttributeValueChange>? alreadyCurrentChanges = null)
         => SyncEngine.SelectSurvivingDriftChanges(incomingChanges, existingChanges, alreadyCurrentChanges);
+
+    /// <summary>
+    /// The newly evaluated changes less any restating a change the existing Pending Export holds until an Initial
+    /// Password is delivered (#2039; see <see cref="SyncEngine.WithoutChangesRestatingAHeldChange"/>), saying so when
+    /// it drops anything. Returns <paramref name="attributeChanges"/> itself when nothing is held.
+    /// </summary>
+    private static List<PendingExportAttributeValueChange> DropChangesRestatingAHeldChange(
+        List<PendingExportAttributeValueChange> attributeChanges,
+        PendingExport existingPendingExport,
+        Guid csoId)
+    {
+        var kept = SyncEngine.WithoutChangesRestatingAHeldChange(attributeChanges, existingPendingExport.AttributeValueChanges);
+        if (kept.Count != attributeChanges.Count)
+        {
+            Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Dropped {Count} change(s) for CSO {CsoId} restating what Pending Export " +
+                "{PendingExportId} holds until an Initial Password is delivered; the held change(s) stand",
+                attributeChanges.Count - kept.Count, csoId, existingPendingExport.Id);
+        }
+
+        return kept;
+    }
 
     /// <summary>
     /// The attribute ids among a set of changes whose change type sets the attribute's ENTIRE value set rather than

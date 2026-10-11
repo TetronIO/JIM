@@ -892,6 +892,7 @@ public partial class SyncRepository
                         trackedAttr.LastImportedValue = attrChange.LastImportedValue;
                         trackedAttr.ExportAttemptCount = attrChange.ExportAttemptCount;
                         trackedAttr.LastExportedAt = attrChange.LastExportedAt;
+                        trackedAttr.AwaitsInitialPassword = attrChange.AwaitsInitialPassword;
                     }
                 }
             }
@@ -993,7 +994,8 @@ public partial class SyncRepository
                         "Status" int,
                         "LastImportedValue" text,
                         "ExportAttemptCount" int,
-                        "LastExportedAt" timestamptz
+                        "LastExportedAt" timestamptz,
+                        "AwaitsInitialPassword" boolean
                     ) ON COMMIT PRESERVE ROWS;
                     TRUNCATE _peavc_bulk_update
                     """;
@@ -1018,6 +1020,7 @@ public partial class SyncRepository
                         await writer.WriteAsync(avc.LastExportedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                     else
                         await writer.WriteNullAsync();
+                    await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
                 }
                 await writer.CompleteAsync();
             }
@@ -1097,6 +1100,50 @@ public partial class SyncRepository
               WHERE pe.""Id"" = stamp.pending_export_id",
             new Npgsql.NpgsqlParameter { Value = pendingExportIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
             new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
+    }
+
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        // Raw SQL, asked once per synchronisation page with drift to evaluate (#2039). Led by the partial index on the
+        // flag (IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword), which holds only the
+        // changes awaiting an Initial Password, so the probe is near-free where none exists; each hit joins to its
+        // Pending Export by primary key.
+        const string sql = """
+            SELECT DISTINCT pe."ConnectedSystemObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            WHERE avc."AwaitsInitialPassword"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ConnectedSystemObjectId" = ANY(@connectedSystemObjectIds)
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId },
+            new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
+    }
+
+    /// <summary>
+    /// Runs a single-column uuid SELECT on the context's own connection and transaction and returns its rows as a set.
+    /// </summary>
+    private async Task<HashSet<Guid>> ReadGuidSetAsync(string sql, params NpgsqlParameter[] parameters)
+    {
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddRange(parameters);
+
+        var ids = new HashSet<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ids.Add(reader.GetGuid(0));
+        return ids;
     }
 
     #region Private Pending Export Bulk Helpers
@@ -1250,6 +1297,7 @@ public partial class SyncRepository
                 await writer.WriteAsync(avc.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();

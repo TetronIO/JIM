@@ -1201,6 +1201,29 @@ public interface ISyncRepository
     Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
 
     /// <summary>
+    /// Narrows a set of Metaverse Object ids to those still owed a password on a Connected System (#2039): a queued
+    /// password change for the (Metaverse Object, Connected System) pair that is Pending, Delivering or Parked, of
+    /// any origin. Keyed on the pair rather than on an account, so a live user-set or propagated change that won
+    /// coalescing over a provisioned one counts too.
+    /// <para>
+    /// Asked by the confirming import, once per page and only when the page holds a change written with an interim
+    /// value until an Initial Password is delivered: a change whose account is still owed one is held, one whose
+    /// account is not is released. Expired and Cancelled changes are never delivered, so they owe nothing.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
+    /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
+    /// those objects entirely, because a correction staged for any of their attributes
+    /// would replace the Pending Export holding the change. Answered from a partial index, so it costs nothing where
+    /// no change carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets the object types (schema) for a Connected System.
     /// Used during sync to resolve attribute mappings.
     /// </summary>
