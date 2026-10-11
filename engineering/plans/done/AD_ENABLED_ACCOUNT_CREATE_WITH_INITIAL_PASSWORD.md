@@ -1,7 +1,7 @@
 # Creating an Enabled Active Directory Account When an Initial Password Follows
 
 - **Status:** Done
-- **Note:** Phase 3's Windows Active Directory lab run (Scenario 001 with `-InitialPassword`, and Scenario 017 on the lab) has not yet been performed: the lab was unreachable from the environment that implemented this, so the first lab run is also the first check that Active Directory stores `514` rather than `546` for an explicit `514` create (see Risks & Mitigations).
+- **Note:** Phase 3's Windows Active Directory lab run (Scenario 001 with `-InitialPassword`, and Scenario 017 on the lab) has not yet been performed: the lab was unreachable from the environment that implemented this, so the first lab run is also the first check that Active Directory stores `514` rather than `546` for an explicit `514` create (see Risks & Mitigations). Scenario 001's Joiner on the lab is also blocked by [#2064](https://github.com/TetronIO/JIM/issues/2064) (Open Decision 6) until that is fixed: the HR generator always makes some joiners `Archived`, the flow creates them `514`, the Static Initial Password's EnableAccount delivery enables them, and the confirming Delta Import reports `ExportNotConfirmed` for them, so `Assert-ActivitySuccess` fails. The scripts are unchanged; run the Joiner on the lab once #2064 lands.
 - **Issue:** [#2039](https://github.com/TetronIO/JIM/issues/2039)
 - **Created:** 2026-10-10
 
@@ -67,10 +67,13 @@ The account stays disabled throughout; nothing is lost.
 |---|---|---|
 | Transient failure (still `Pending`, backing off) | Held | The password delivery Activity |
 | `Parked` | Held until Retry or a rule edit releases it; delivery then enables, and the next import confirms | The Parked surfaces under Operations > Passwords |
-| Expired, Withdrawn, never staged, or no Metaverse Object | Released on the next import that returns the CSO; the Update to the flow's value fails with the new actionable error and backs off to `Failed` | The export's execution item |
+| Expired, Withdrawn, Cancelled, never staged, or no Metaverse Object | Released at the next import of the Connected System, Full or Delta, whether or not it returns the CSO; the Update to the flow's value fails with the new actionable error and backs off to `Failed` | The export's execution item |
+| Delivered with `EnableAccount = false` | Released at the next import, as above; the Update to the flow's value succeeds, because the account now has a password | Nothing to see: it converges |
 | Coalesced into a Propagated change | Delivered, released, reassert succeeds | Nothing to see: it converges |
 
-Caveat: an expired password changes nothing in Active Directory, so a Delta Import never returns the account; the release waits for a Full Import.
+An expired or cancelled password changes nothing in Active Directory, so a Delta Import never returns the account, and a Full Import skips it as unchanged by its content hash; reconciliation, which runs only over the CSOs an import updated, would never judge the hold again. Every import therefore also judges, after reconciliation, each held change on the Connected System whose CSO it did not reconcile (`SyncImportTaskProcessor.JudgeUnreconciledInitialPasswordHoldsAsync`, one `ISyncRepository.GetInitialPasswordHoldSummariesAsync` query per run): released as above when no password is owed, otherwise left held, and nothing else on those objects is confirmed or retried. A Create no import has confirmed keeps its status, so it is not sent again; its released change goes out once an import confirms it. This replaced the original "the release waits for a Full Import" caveat, which a review of #2039 found wrong: the Full Import skips the unchanged account too.
+
+**Leaver during the hold.** Before the confirming import, the leaver's different `userAccountControl` value supersedes the held one (guard 5). After it, the CSO records the interim `514` the flow now asks for, so the held `512` is withdrawn like any queued change at the next synchronisation (`SyncEngine.IsKeptAgainstAlreadyCurrent`): nothing is exported, and no later release can enable the account. The held change stands only when the already-current answer restates exactly what it asserts. The password's own delivery is a separate path and still enables the account under `EnableAccount = true` (Open Decision 6).
 
 ## Open Decisions
 
@@ -79,7 +82,7 @@ Caveat: an expired password changes nothing in Active Directory, so a Delta Impo
 3. **On release.** Release silently (recommended): the interim value was deliberate. Or raise a "not confirmed, will reassert" warning.
 4. **Connection state.** Keep the ordinary Update Pending state for a held account (recommended for now), or add an "Awaiting Initial Password" state across portal, REST and PowerShell.
 5. **Scope.** Real Active Directory only, as the acceptance criteria say (recommended), or the whole AD family including Samba.
-6. **Pre-existing, separate issue.** With `EnableAccount = true`, an account the flow deliberately creates disabled is enabled by the delivery until drift corrects it. It happens on Samba today; track it separately.
+6. **Pre-existing, separate issue.** With `EnableAccount = true`, an account the flow deliberately creates disabled is enabled by the delivery until drift corrects it. It happens on Samba today; tracked separately as [#2064](https://github.com/TetronIO/JIM/issues/2064), and documented for administrators under "Accounts your Attribute Flow creates disabled" on the LDAP Connector page.
 
 ## Implementation Phases
 

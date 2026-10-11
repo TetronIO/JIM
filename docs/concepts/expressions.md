@@ -355,6 +355,8 @@ This reads as: "If the Employee Status is Active, set the value to 512 (enabled)
 !!! note "Creating accounts enabled on Active Directory"
     Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
 
+    One exception: with the Initial Password's **Enable the Connected System Object once the password is set** on, as it is by default, the password's delivery enables every account the rule provisions, including one this expression creates disabled (`514`), such as a pre-hire's. That account stays enabled until the next import and export disable it again. Nothing is lost, since the expression's `514` is restored, but anyone who knows the account's password can sign in until then. Where that matters, switch that setting off, or scope provisioning to active people; see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled).
+
 **Check if an account is currently disabled:**
 
 ```csharp
