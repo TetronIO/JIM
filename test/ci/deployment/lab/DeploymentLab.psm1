@@ -15,7 +15,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
@@ -65,7 +65,29 @@ function Test-LabMatrix {
         if ($cell.MemoryGiB -lt $script:MinimumMemoryGiB) {
             "${name}: MemoryGiB must be at least $script:MinimumMemoryGiB"
         }
+        $databaseMemory = if ($cell.ContainsKey('DatabaseMemoryGiB')) { $cell.DatabaseMemoryGiB } else { 0 }
+        if ($cell.Scenario -eq 'ExternalDatabase' -and $databaseMemory -lt 1) {
+            "${name}: an ExternalDatabase cell needs DatabaseMemoryGiB, at least 1, for its database server"
+        }
+        elseif ($cell.Scenario -ne 'ExternalDatabase' -and $cell.ContainsKey('DatabaseMemoryGiB')) {
+            "${name}: DatabaseMemoryGiB is for ExternalDatabase cells only"
+        }
     }
+}
+
+function Get-LabCellMemory {
+    <#
+    .SYNOPSIS
+        Returns the GiB of memory a cell takes while it runs: its VM's, and its database server's if it has one.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Cell
+    )
+
+    [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB')
 }
 
 function Select-LabCell {
@@ -208,6 +230,69 @@ function ConvertTo-LabRootlessCommand {
 
 #endregion
 
+#region What the installer leaves behind
+
+function Get-LabSetupMessage {
+    <#
+    .SYNOPSIS
+        Returns the messages setup.sh printed at one level ([INFO], [OK], [WARN] or [ERR]), without the colour codes or
+        the label, including one printed on the line of a question it asked.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$Line,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('INFO', 'OK', 'WARN', 'ERR')]
+        [string]$Level
+    )
+
+    foreach ($text in $Line) {
+        $plain = $text -replace "`e\[[0-9;]*m", ''
+        # A message can follow a question on its line, as the answer's newline is the user's, not the installer's.
+        if ($plain -match "(?:^|\]: )\[$Level\]\s+(.*)$") {
+            $Matches[1]
+        }
+    }
+}
+
+function Compare-LabFingerprint {
+    <#
+    .SYNOPSIS
+        Returns how two fingerprints of an installation differ: "- <line>" for each line only before, then "+ <line>"
+        for each only after, each in the order of its fingerprint, and nothing when they are the same.
+
+    .DESCRIPTION
+        A fingerprint (guest/Invoke-LabGuestCommand.ps1 -Action Fingerprint) lists every file of an installation with
+        its checksum, and every JIM container running with its image: what a refused or interrupted installer run must
+        leave exactly as it was.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$Before,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$After
+    )
+
+    $kept = [System.Collections.Generic.HashSet[string]]::new([string[]]$After)
+    $had = [System.Collections.Generic.HashSet[string]]::new([string[]]$Before)
+    $Before | Where-Object { -not $kept.Contains($_) } | ForEach-Object { "- $_" }
+    $After | Where-Object { -not $had.Contains($_) } | ForEach-Object { "+ $_" }
+}
+
+#endregion
+
 #region The schedule
 
 function Get-LabMemoryBudget {
@@ -267,7 +352,7 @@ function Select-LabCellToStart {
     $index = 0
     $ordered = $Pending |
         ForEach-Object { [pscustomobject]@{ Cell = $_; Order = $index++ } } |
-        Sort-Object -Property @{ Expression = { $_.Cell.MemoryGiB }; Descending = $true }, @{ Expression = 'Order' }
+        Sort-Object -Property @{ Expression = { Get-LabCellMemory -Cell $_.Cell }; Descending = $true }, @{ Expression = 'Order' }
 
     $free = $BudgetGiB - $RunningGiB
     $count = $RunningCount
@@ -275,7 +360,7 @@ function Select-LabCellToStart {
         if ($MaxParallel -gt 0 -and $count -ge $MaxParallel) {
             break
         }
-        $size = $entry.Cell.MemoryGiB
+        $size = Get-LabCellMemory -Cell $entry.Cell
         if ($size -le $free) {
             $entry.Cell
             $free -= $size
@@ -656,6 +741,27 @@ function Copy-LabFile {
     Invoke-LabLxc -Arguments $arguments | Out-Null
 }
 
+function Set-LabVmProfile {
+    <#
+    .SYNOPSIS
+        Gives a lab VM a new set of profiles, such as another network's, by shutting it down, assigning them and
+        starting it again, and waits for it to boot.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string[]]$Profile
+    )
+
+    Invoke-LabLxc -Arguments @('stop', $Name, '--timeout', '180') | Out-Null
+    Invoke-LabLxc -Arguments @('profile', 'assign', $Name, ($Profile -join ',')) | Out-Null
+    Invoke-LabLxc -Arguments @('start', $Name) | Out-Null
+    Wait-LabVm -Name $Name
+}
+
 function Get-LabVmAddress {
     <#
     .SYNOPSIS
@@ -858,8 +964,8 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
-    Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc, Invoke-LabVm, Wait-LabVm, New-LabVm,
-    Remove-LabVm, Restart-LabVm, Copy-LabFile, Get-LabVmAddress, Invoke-LabSignIn, Get-LabPowerShellArchive,
-    Get-LabReleaseBundle
+    Get-LabSetupMessage, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
+    Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
+    Invoke-LabSignIn, Get-LabPowerShellArchive, Get-LabReleaseBundle
