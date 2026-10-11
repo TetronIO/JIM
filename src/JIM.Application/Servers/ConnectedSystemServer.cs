@@ -5333,7 +5333,8 @@ public partial class ConnectedSystemServer
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
-        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool? hasUnresolvedReferences = null)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeaders")
             .SetTag("connectedSystemId", connectedSystemId)
@@ -5343,10 +5344,11 @@ public partial class ConnectedSystemServer
             .SetTag("sortBy", sortBy ?? "default")
             .SetTag("hasStatusFilter", statusFilter != null)
             .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
-            .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
+            .SetTag("hasJoinTypeFilter", joinTypeFilter != null)
+            .SetTag("hasUnresolvedReferencesFilter", hasUnresolvedReferences != null);
         var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
-            objectTypeFilter, joinTypeFilter);
+            objectTypeFilter, joinTypeFilter, hasUnresolvedReferences);
         ResolveConnectionStates(result.Results);
         return result;
     }
@@ -5368,7 +5370,8 @@ public partial class ConnectedSystemServer
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        bool? hasUnresolvedReferences = null)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
             .SetTag("connectedSystemId", connectedSystemId)
@@ -5376,10 +5379,11 @@ public partial class ConnectedSystemServer
             .SetTag("count", count)
             .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
             .SetTag("sortBy", sortBy ?? "default")
-            .SetTag("includeTotalCount", includeTotalCount);
+            .SetTag("includeTotalCount", includeTotalCount)
+            .SetTag("hasUnresolvedReferencesFilter", hasUnresolvedReferences != null);
         var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
-            objectTypeFilter, joinTypeFilter, includeTotalCount);
+            objectTypeFilter, joinTypeFilter, includeTotalCount, hasUnresolvedReferences);
         ResolveConnectionStates(result.Results);
         return result;
     }

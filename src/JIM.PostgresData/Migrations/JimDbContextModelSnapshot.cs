@@ -3279,6 +3279,9 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId", "AttributeId")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
 
+                    b.HasIndex(new[] { "ConnectedSystemObjectId" }, "IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved")
+                        .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL AND \"ReferenceValueId\" IS NULL");
+
                     b.ToTable("ConnectedSystemObjectAttributeValues");
                 });
 

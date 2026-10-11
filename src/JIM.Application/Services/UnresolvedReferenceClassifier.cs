@@ -115,7 +115,7 @@ public sealed class UnresolvedReferenceClassifier
         if (partitionBoundary == null)
             return Conclude(diagnosis, UnresolvedReferenceCause.OutsideConnectedSystem,
                 $"This value is in none of {_connectedSystem.Name}'s partitions, so JIM cannot import the object it names.",
-                "If references like this are expected, set Unresolved Reference Handling to Warn.");
+                OutsideConnectedSystemRemedy());
 
         var partition = _partitionsById[partitionBoundary.Id];
         if (!partition.Selected)
@@ -207,4 +207,17 @@ public sealed class UnresolvedReferenceClassifier
                 yield return descendant;
         }
     }
+
+    /// <summary>
+    /// What to do about a value JIM cannot import, given the handling already chosen: each step suggests the next quieter
+    /// setting, so the advice never names the one in force.
+    /// </summary>
+    private string OutsideConnectedSystemRemedy() => _connectedSystem.UnresolvedReferenceHandling switch
+    {
+        UnresolvedReferenceHandling.Warn =>
+            "If references like this are expected, set Unresolved Reference Handling to Ignore so runs stop reporting them.",
+        UnresolvedReferenceHandling.Ignore =>
+            "Runs already leave references like this unreported; nothing in JIM needs changing if they are expected.",
+        _ => "If references like this are expected, set Unresolved Reference Handling to Warn."
+    };
 }

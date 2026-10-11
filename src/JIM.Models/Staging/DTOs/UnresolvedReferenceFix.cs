@@ -4,8 +4,8 @@
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
-/// One next step and how many of a Connected System Object's unresolved reference values it addresses (#959): a change
-/// to JIM's configuration, or a cause to resolve in the Connected System.
+/// One next step and how many unresolved reference values it addresses, on one Connected System Object or across a
+/// Connected System (#959): a change to JIM's configuration, or a cause to resolve in the Connected System.
 /// </summary>
 public class UnresolvedReferenceFix
 {
@@ -23,6 +23,12 @@ public class UnresolvedReferenceFix
 
     /// <summary>How many values the step addresses.</summary>
     public int Count { get; set; }
+
+    /// <summary>
+    /// How many Connected System Objects hold the values the step addresses, counting each object once. Set in a
+    /// Connected System's summary; null in one object's, where every step is about that object.
+    /// </summary>
+    public int? ObjectCount { get; set; }
 
     /// <summary>
     /// What is wrong, in words. Names the Container or partition concerned exactly as <see cref="ContainerExternalId"/> or

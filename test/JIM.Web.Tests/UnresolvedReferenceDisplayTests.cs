@@ -126,6 +126,82 @@ public class UnresolvedReferenceDisplayTests
         }), "What the administrator can change in JIM comes first, whatever the counts.");
     }
 
+    [TestCase(UnresolvedReferenceHandling.Error, UnresolvedReferenceTone.Warning)]
+    [TestCase(UnresolvedReferenceHandling.Warn, UnresolvedReferenceTone.Warning)]
+    [TestCase(UnresolvedReferenceHandling.Ignore, UnresolvedReferenceTone.None)]
+    public void SignpostTone_Handling_IsAmberOnlyWhereTheAdministratorAskedToBeTold(UnresolvedReferenceHandling handling, UnresolvedReferenceTone expected)
+    {
+        Assert.That(UnresolvedReferenceDisplay.SignpostTone(handling), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void SignpostTooltip_ReferencesOnSeveralObjects_SaysHowManyOfEachAndTheHandling()
+    {
+        var tooltip = UnresolvedReferenceDisplay.SignpostTooltip(
+            new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = 1284, ObjectCount = 312 }, UnresolvedReferenceHandling.Warn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tooltip, Does.Contain("1,284 references"));
+            Assert.That(tooltip, Does.Contain("312 Connected System Objects"));
+            Assert.That(tooltip, Does.Contain("Warn"));
+        }
+    }
+
+    [Test]
+    public void SignpostTooltip_OneReferenceOnOneObject_IsSingular()
+    {
+        var tooltip = UnresolvedReferenceDisplay.SignpostTooltip(
+            new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = 1, ObjectCount = 1 }, UnresolvedReferenceHandling.Error);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tooltip, Does.Contain("1 reference "));
+            Assert.That(tooltip, Does.Contain("1 Connected System Object "));
+        }
+    }
+
+    [Test]
+    public void SignpostTooltip_Ignore_SaysRunsDoNotReportThem()
+    {
+        var warn = UnresolvedReferenceDisplay.SignpostTooltip(new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = 2, ObjectCount = 1 }, UnresolvedReferenceHandling.Warn);
+        var ignore = UnresolvedReferenceDisplay.SignpostTooltip(new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = 2, ObjectCount = 1 }, UnresolvedReferenceHandling.Ignore);
+
+        Assert.That(ignore, Has.Length.GreaterThan(warn.Length),
+            "Ignore stops runs reporting them, which the button's neutral colour alone does not explain.");
+    }
+
+    [Test]
+    public void ConnectorSpaceHref_ConnectedSystem_OpensItsConnectorSpaceFilteredToUnresolvedReferences()
+    {
+        var href = UnresolvedReferenceDisplay.ConnectorSpaceHref(ConnectedSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(href, Is.EqualTo($"/admin/connected-systems/{ConnectedSystemId}/connector-space?references={UnresolvedReferenceDisplay.UnresolvedReferencesFilterValue}"));
+            Assert.That(UnresolvedReferenceDisplay.IsUnresolvedReferencesFilter(UnresolvedReferenceDisplay.UnresolvedReferencesFilterValue), Is.True,
+                "The Connector Space must recognise the value the link carries.");
+        }
+    }
+
+    [TestCase("unresolved", true)]
+    [TestCase("UNRESOLVED", true)]
+    [TestCase("resolved", false)]
+    [TestCase("", false)]
+    [TestCase(null, false)]
+    public void IsUnresolvedReferencesFilter_QueryValue_IsRecognisedIgnoringCase(string? value, bool expected)
+    {
+        Assert.That(UnresolvedReferenceDisplay.IsUnresolvedReferencesFilter(value), Is.EqualTo(expected));
+    }
+
+    [TestCase(1, "on 1 object")]
+    [TestCase(241, "on 241 objects")]
+    [TestCase(12034, "on 12,034 objects")]
+    public void ObjectCountText_Count_IsPluralisedAndGrouped(int count, string expected)
+    {
+        Assert.That(UnresolvedReferenceDisplay.ObjectCountText(count), Is.EqualTo(expected));
+    }
+
     [Test]
     public void CauseLabel_EveryCause_HasItsOwnLabel()
     {
