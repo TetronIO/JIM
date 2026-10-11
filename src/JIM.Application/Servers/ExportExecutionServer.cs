@@ -2109,8 +2109,9 @@ public class ExportExecutionServer
         foreach (var pendingExport in batch)
         {
             pendingExport.InitialPasswordFollows = rulesAskingForAPassword != null
-                && IsProvisioningCreate(pendingExport)
-                && rulesAskingForAPassword.Contains(pendingExport.ProvisioningSyncRuleId!.Value);
+                && pendingExport.ChangeType == PendingExportChangeType.Create
+                && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
+                && rulesAskingForAPassword.Contains(provisioningRuleId);
         }
 
         return rulesAskingForAPassword;
