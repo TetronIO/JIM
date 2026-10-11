@@ -8,8 +8,6 @@ LANG-3	administration/upgrading.md	1
 LANG-3	concepts/architecture.md	5
 LANG-3	concepts/attribute-priority.md	1
 LANG-3	concepts/expressions.md	2
-LANG-3	concepts/jml-lifecycle.md	6
-LANG-3	concepts/synchronisation-pipeline.md	17
 LANG-3	configuration/activities.md	4
 LANG-3	configuration/api-keys.md	1
 LANG-3	configuration/certificates.md	1
@@ -43,8 +41,6 @@ LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
 LANG-3	reference/glossary.md	1
-LANG-4	concepts/jml-lifecycle.md	39
-LANG-4	concepts/synchronisation-pipeline.md	32
 LANG-4	configuration/activities.md	1
 LANG-4	configuration/connected-systems.md	9
 LANG-4	configuration/synchronisation-rules.md	24
@@ -59,7 +55,6 @@ LANG-7	administration/troubleshooting.md	1
 LANG-7	administration/upgrading.md	1
 LANG-7	concepts/attribute-priority.md	6
 LANG-7	concepts/expressions.md	2
-LANG-7	concepts/synchronisation-pipeline.md	1
 LANG-7	configuration/activities.md	2
 LANG-7	configuration/connected-systems.md	5
 LANG-7	configuration/data-flow.md	1
@@ -95,10 +90,8 @@ STR-2	concepts/architecture.md	4
 STR-2	concepts/attribute-priority.md	4
 STR-2	concepts/case-sensitivity.md	4
 STR-2	concepts/expressions.md	4
-STR-2	concepts/jml-lifecycle.md	4
 STR-2	concepts/object-naming.md	4
 STR-2	concepts/passwords.md	4
-STR-2	concepts/synchronisation-pipeline.md	4
 STR-2	configuration/activities.md	3
 STR-2	configuration/api-keys.md	3
 STR-2	configuration/certificates.md	3
