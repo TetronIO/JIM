@@ -29,6 +29,7 @@ Settings are grouped by concern:
 - **Maintenance**<br /> Maintenance mode and system health settings.
 - **History**<br /> Audit history retention and cleanup settings.
 - **Security**<br /> Credential encryption and [API rate limiting](../api/rate-limiting.md) settings.
+- **UI**<br /> How often progress is reported while JIM generates Example Data.
 - **Preview Features**<br /> Feature flags: features JIM is rolling out gradually. See below.
 
 The category is mostly a UI grouping; it does not change semantics.
@@ -77,4 +78,4 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 
 ## See also
 
-- [Administration: Configuration Reference](../administration/configuration.md): detailed reference for the settings that exist and what each one does
+- [Administration: Configuration Reference](../administration/configuration.md#service-settings): every Service Setting, what it does and its default
