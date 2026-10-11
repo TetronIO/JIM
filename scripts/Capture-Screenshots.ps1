@@ -39,9 +39,23 @@
 .PARAMETER ManifestPath
     The manifest to read. Defaults to scripts/screenshots/manifest.json.
 
+.PARAMETER PrepareData
+    Before capturing, load the data the published images show and put the portal in the state a customer sees: run
+    integration Scenario 8 (Cross-Domain Entitlement Sync) against OpenLDAP through Run-IntegrationTests.ps1, which
+    resets the environment first and leaves it running; add the Scenario 8 Schedules; then recreate jim.web in
+    Production mode on the same database. Replaces whatever the local stack held.
+
+.PARAMETER Template
+    The Scenario 8 data size for -PrepareData. Defaults to Scale100k50Groups, the size the published images show
+    (100,001 users), which needs a host with 20+ GB of memory; use Small or Medium where that is not available.
+
+.EXAMPLE
+    pwsh ./scripts/Capture-Screenshots.ps1 -PrepareData
+    Loads the published data, then captures every screenshot into artifacts/screenshots/v<VERSION>/.
+
 .EXAMPLE
     pwsh ./scripts/Capture-Screenshots.ps1
-    Captures every screenshot into artifacts/screenshots/v<VERSION>/.
+    Captures every screenshot from the stack as it stands.
 
 .EXAMPLE
     pwsh ./scripts/Capture-Screenshots.ps1 -Version dev -Name connected-systems-list
@@ -54,7 +68,9 @@ param(
     [string[]]$Name,
     [string]$BaseUrl = 'http://localhost:5200',
     [pscredential]$Credential,
-    [string]$ManifestPath
+    [string]$ManifestPath,
+    [switch]$PrepareData,
+    [string]$Template = 'Scale100k50Groups'
 )
 
 Set-StrictMode -Version Latest
@@ -74,6 +90,39 @@ if (-not $Credential) {
 }
 
 $manifest = Read-ScreenshotManifest -Path $ManifestPath
+
+if ($PrepareData) {
+    $integration = Join-Path $repoRoot 'test' 'integration'
+    $dataStarted = Get-Date
+
+    Write-Host "Loading Scenario 8 at $Template against OpenLDAP (resets the local stack) ..."
+    & (Join-Path $integration 'Run-IntegrationTests.ps1') -Scenario 8 -Template $Template -DirectoryType OpenLDAP
+    if ($LASTEXITCODE -ne 0) { throw "Scenario 8 did not complete (exit $LASTEXITCODE); the data is not what the screenshots should show." }
+
+    # The runner leaves the key it minted here; it is read, never printed.
+    $apiKey = (Get-Content -LiteralPath (Join-Path $integration '.api-key') -Raw).Trim()
+    Write-Host 'Adding the Scenario 8 Schedules ...'
+    $global:LASTEXITCODE = 0
+    & (Join-Path $integration 'Add-Scenario-008-Schedules.ps1') -JIMUrl $BaseUrl -ApiKey $apiKey
+    if (-not $? -or $LASTEXITCODE -ne 0) { throw 'Adding the Scenario 8 Schedules failed.' }
+
+    Write-Host 'Recreating jim.web in Production mode ...'
+    $compose = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'scripts/screenshots/docker-compose.production-web.yml')
+    Push-Location $repoRoot
+    try { docker compose @compose up -d --no-deps jim.web | Out-Host }
+    finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { throw "Recreating jim.web failed (docker compose exited $LASTEXITCODE)." }
+
+    $deadline = (Get-Date).AddMinutes(5)
+    do {
+        Start-Sleep -Seconds 3
+        try { $ready = (Invoke-WebRequest -Uri "$BaseUrl/api/v1/health/ready" -SkipHttpErrorCheck -TimeoutSec 10).StatusCode -eq 200 }
+        catch [System.Net.Http.HttpRequestException] { $ready = $false }
+    } until ($ready -or (Get-Date) -gt $deadline)
+    if (-not $ready) { throw "The portal did not report ready within 5 minutes of restarting in Production mode." }
+    Write-Host ("Data ready in {0:hh\:mm\:ss}." -f ((Get-Date) - $dataStarted))
+}
+
 $screenshots = @($manifest.Screenshots)
 if ($Name) {
     $unknown = @($Name | Where-Object { $_ -notin $screenshots.name })
