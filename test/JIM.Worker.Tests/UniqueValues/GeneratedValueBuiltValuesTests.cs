@@ -216,6 +216,59 @@ public class GeneratedValueBuiltValuesTests
         Assert.That(building, Is.Empty);
     }
 
+    [Test]
+    public void BuiltValueOf_DerivedValue_DescribesItRelativeToTheGeneratedValue()
+    {
+        Expression(_hrImport, 101, _model.Email, "mv[\"Account Name\"] + \"@panoply.local\"");
+        var upn = Expression(_hrImport, 102, _model.UserPrincipalName, "mv[\"Email\"]");
+
+        var value = Resolve().BuiltValueOf(upn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value, Is.Not.Null);
+            Assert.That(value!.GeneratedMapping, Is.SameAs(_accountName));
+            Assert.That(value.Kind, Is.EqualTo(GeneratedValueBuiltValueKind.Form));
+            Assert.That(value.Via, Is.EqualTo(new[] { "Email" }));
+            Assert.That(value.BuiltFromAttributeNames, Is.EqualTo(new[] { "Account Name" }));
+        }
+    }
+
+    [Test]
+    public void BuiltValueOf_FlowBeingEditedThatIsNotSavedYet_IsDescribed()
+    {
+        // The portal describes the Attribute Flow as it is being edited, before it has an id.
+        var proposal = new SyncRuleMapping { SyncRule = _hrImport, SyncRuleId = _hrImport.Id, TargetMetaverseAttribute = _model.Email, TargetMetaverseAttributeId = _model.Email.Id };
+        proposal.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" });
+
+        var value = Resolve().BuiltValueOf(proposal);
+
+        Assert.That(value?.GeneratedMapping, Is.SameAs(_accountName));
+    }
+
+    [Test]
+    public void BuiltValueOf_BuiltFromTwoGeneratedValues_NamesBoth()
+    {
+        Generated(_hrImport, 103, _model.MailNickname, "Lower(cs[\"first\"])");
+        var upn = Expression(_hrImport, 102, _model.UserPrincipalName, "mv[\"Account Name\"] + mv[\"Mail Nickname\"]");
+
+        var value = Resolve().BuiltValueOf(upn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value!.Kind, Is.EqualTo(GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues));
+            Assert.That(value.BuiltFromAttributeNames, Is.EquivalentTo(new[] { "Account Name", "Mail Nickname" }));
+        }
+    }
+
+    [Test]
+    public void BuiltValueOf_FlowReadingNoGeneratedValue_IsNull()
+    {
+        var displayName = Expression(_hrImport, 101, _model.DisplayName, "cs[\"first\"] + \" \" + cs[\"last\"]");
+
+        Assert.That(Resolve().BuiltValueOf(displayName), Is.Null);
+    }
+
     // ---- Helpers ----
 
     private GeneratedValueBuiltValues Resolve(params SyncRule[] otherRules)

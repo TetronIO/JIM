@@ -378,19 +378,31 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// The values built from generated values among the Synchronisation Rules of one Metaverse Object Type (Generated
-    /// Value Forms, #2023): its import rules and every export rule for the type.
+    /// Value Forms, #2023): its import rules and every export rule for the type, as saved, or with
+    /// <paramref name="stagedRule"/> in place of its saved self (the portal describes a rule being edited).
     /// </summary>
-    internal async Task<GeneratedValueBuiltValues> GetGeneratedValueBuiltValuesAsync(int metaverseObjectTypeId)
+    internal async Task<GeneratedValueBuiltValues> GetGeneratedValueBuiltValuesAsync(int metaverseObjectTypeId, SyncRule? stagedRule = null)
     {
         var importRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
         var exportRules = (await Application.Repository.ConnectedSystems.GetExportSyncRulesWithAttributeFlowsAsync())
             .Where(rule => rule.MetaverseObjectTypeId == metaverseObjectTypeId);
         List<SyncRule> rules = [.. importRules, .. exportRules];
+        if (stagedRule != null)
+        {
+            if (stagedRule.Id > 0)
+                rules.RemoveAll(rule => rule.Id == stagedRule.Id);
+            rules.Add(stagedRule);
+        }
+
+        // The rule queries do not load the type, and mv["..."] names are resolved against its attributes.
+        var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true)
+            ?? stagedRule?.MetaverseObjectType;
+        List<MetaverseObjectType> types = metaverseObjectType == null ? [] : [metaverseObjectType];
 
         DerivedFlowGraph? graph = null;
         try
         {
-            graph = DerivedFlowGraphFactory.Create(rules, []);
+            graph = DerivedFlowGraphFactory.Create(rules, types);
         }
         catch (DerivedFlowCycleException)
         {
@@ -398,7 +410,7 @@ public partial class ConnectedSystemServer
             // derivation until it is broken.
         }
 
-        return GeneratedValueBuiltValues.Create(rules, graph);
+        return GeneratedValueBuiltValues.Create(rules, graph, types);
     }
 
     /// <summary>

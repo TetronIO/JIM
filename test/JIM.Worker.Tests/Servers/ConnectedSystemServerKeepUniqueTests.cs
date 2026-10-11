@@ -148,6 +148,23 @@ public class ConnectedSystemServerKeepUniqueTests
     }
 
     [Test]
+    public async Task UpdateSyncRuleMappingSettingsAsync_RulesLoadedWithoutTheirType_StillFindsTheGeneratedValueAsync()
+    {
+        // The rule queries do not load the Metaverse Object Type, whose attributes resolve mv["..."] names; the type is
+        // read on its own.
+        // User Principal Name is two steps away (via Email), so finding Account Name needs the derived flow graph.
+        var upnAttribute = new MetaverseAttribute { Id = 13, Name = "User Principal Name", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        _hrImport.MetaverseObjectType.Attributes.Add(upnAttribute);
+        var upn = Mapping(103, upnAttribute);
+        upn.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Email\"]" });
+        _hrImport.MetaverseObjectType = null!;
+
+        await Application().ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(upn.Id, new SyncRuleMappingSettingsUpdate { KeepUnique = false }, _initiator);
+
+        Assert.That(_syncRepo.GeneratedValueAssignments[_waiting.Id].State, Is.Not.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+    }
+
+    [Test]
     public async Task UpdateSyncRuleMappingSettingsAsync_KeepUniqueUnchanged_LeavesHeldDecisionsAloneAsync()
     {
         await Application().ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(_email.Id, new SyncRuleMappingSettingsUpdate { KeepUnique = true }, _initiator);

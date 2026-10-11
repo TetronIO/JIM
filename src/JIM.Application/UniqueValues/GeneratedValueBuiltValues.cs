@@ -31,7 +31,7 @@ public sealed class GeneratedValueBuiltValues
     private readonly Dictionary<string, int> _metaverseAttributeIdsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, string> _metaverseAttributeNamesById = [];
 
-    private GeneratedValueBuiltValues(IEnumerable<SyncRule> rules, DerivedFlowGraph? graph)
+    private GeneratedValueBuiltValues(IEnumerable<SyncRule> rules, DerivedFlowGraph? graph, IEnumerable<MetaverseObjectType> metaverseObjectTypes)
     {
         _graph = graph;
         _rules = rules.ToList();
@@ -46,8 +46,8 @@ public sealed class GeneratedValueBuiltValues
             .ToDictionary(g => g.Key, g => g.Select(x => x.Mapping.ResolveTargetMetaverseAttributeId()!.Value).ToHashSet());
 
         // Names an expression may read with mv["..."], from every Metaverse Object Type the rules know.
-        foreach (var attribute in _rules
-                     .SelectMany(rule => rule.MetaverseObjectType?.Attributes ?? [])
+        foreach (var attribute in metaverseObjectTypes.SelectMany(type => type.Attributes)
+                     .Concat(_rules.SelectMany(rule => rule.MetaverseObjectType?.Attributes ?? []))
                      .Concat(_importMappings.Select(x => x.Mapping.TargetMetaverseAttribute).OfType<MetaverseAttribute>()))
         {
             _metaverseAttributeIdsByName.TryAdd(attribute.Name, attribute.Id);
@@ -62,10 +62,12 @@ public sealed class GeneratedValueBuiltValues
     /// <param name="rules">The Synchronisation Rules.</param>
     /// <param name="graph">The derived flow graph of the enabled import rules; null when it could not be built (a
     /// dependency cycle), in which case nothing is followed through a derivation.</param>
-    public static GeneratedValueBuiltValues Create(IEnumerable<SyncRule> rules, DerivedFlowGraph? graph)
+    /// <param name="metaverseObjectTypes">The Metaverse Object Types the rules flow to, with their attributes, for
+    /// resolving the <c>mv["..."]</c> names export expressions read, when the rules' own type navigation is not loaded.</param>
+    public static GeneratedValueBuiltValues Create(IEnumerable<SyncRule> rules, DerivedFlowGraph? graph, IEnumerable<MetaverseObjectType>? metaverseObjectTypes = null)
     {
         ArgumentNullException.ThrowIfNull(rules);
-        return new GeneratedValueBuiltValues(rules, graph);
+        return new GeneratedValueBuiltValues(rules, graph, metaverseObjectTypes ?? []);
     }
 
     /// <summary>
@@ -87,37 +89,85 @@ public sealed class GeneratedValueBuiltValues
         foreach (var (rule, mapping) in CandidateMappings(ownRule.MetaverseObjectTypeId))
         {
             var paths = PathsFrom(rule, mapping, applySwitch: false);
-            if (!paths.Any(p => p.GeneratedAttributeId == generatedAttributeId.Value))
-                continue;
-
-            var kind = paths.Select(p => p.GeneratedAttributeId).Distinct().Count() > 1
-                ? GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues
-                : paths.All(p => p.StepRuleIds.All(id => id == ownRule.Id))
-                    ? GeneratedValueBuiltValueKind.Form
-                    : GeneratedValueBuiltValueKind.BuiltOnAnotherRule;
-
-            var via = paths
-                .Where(p => p.GeneratedAttributeId == generatedAttributeId.Value)
-                .OrderBy(p => p.Via.Count)
-                .First().Via;
-
-            var metaverseAttributeId = rule.Direction == SyncRuleDirection.Import ? mapping.ResolveTargetMetaverseAttributeId() : null;
-            built.Add(new GeneratedValueBuiltValue
-            {
-                Mapping = mapping,
-                SyncRule = rule,
-                Kind = kind,
-                MetaverseAttributeId = metaverseAttributeId,
-                MetaverseAttributeName = metaverseAttributeId.HasValue ? NameOf(metaverseAttributeId.Value) : null,
-                Via = via.Select(NameOf).ToList(),
-                ExportedTo = metaverseAttributeId.HasValue
-                    ? DirectExportTargets(metaverseAttributeId.Value, rule.MetaverseObjectTypeId)
-                    : [(rule.ConnectedSystemId, mapping.ResolveTargetConnectedSystemAttributeId()!.Value)]
-            });
+            if (paths.Any(p => p.GeneratedAttributeId == generatedAttributeId.Value))
+                built.Add(Describe(rule, mapping, paths, generatedMapping, generatedAttributeId.Value, ownRule));
         }
 
         return built;
     }
+
+    /// <summary>
+    /// What <paramref name="mapping"/>'s value is built from, for its own editor and its REST representation: the value
+    /// described relative to the generated value it is built from, or, built from several, relative to the first of them.
+    /// Null when it is built from no generated value (a direct flow, a generated mapping itself, an expression reading
+    /// none). The mapping need not be saved or enabled: the portal describes the flow being edited.
+    /// </summary>
+    public GeneratedValueBuiltValue? BuiltValueOf(SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+        var rule = RuleOf(mapping);
+        if (rule == null || mapping.Generation != null || !IsExpressionMapping(mapping))
+            return null;
+
+        var paths = PathsFrom(rule, mapping, applySwitch: false);
+        var generatedMapping = paths
+            .Select(p => p.GeneratedAttributeId)
+            .Distinct()
+            .Select(id => GeneratedMappingOf(id, rule.MetaverseObjectTypeId))
+            .OfType<SyncRuleMapping>()
+            .OrderBy(m => m.Id)
+            .FirstOrDefault();
+        var ownRule = generatedMapping == null ? null : RuleOf(generatedMapping);
+        if (generatedMapping == null || ownRule == null)
+            return null;
+
+        return Describe(rule, mapping, paths, generatedMapping, generatedMapping.ResolveTargetMetaverseAttributeId()!.Value, ownRule);
+    }
+
+    private GeneratedValueBuiltValue Describe(SyncRule rule, SyncRuleMapping mapping, List<SourcePath> paths, SyncRuleMapping generatedMapping,
+        int generatedAttributeId, SyncRule ownRule)
+    {
+        var generatedAttributeIds = paths.Select(p => p.GeneratedAttributeId).Distinct().ToList();
+        var kind = generatedAttributeIds.Count > 1
+            ? GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues
+            : paths.All(p => p.StepRuleIds.All(id => id == ownRule.Id))
+                ? GeneratedValueBuiltValueKind.Form
+                : GeneratedValueBuiltValueKind.BuiltOnAnotherRule;
+
+        var via = paths
+            .Where(p => p.GeneratedAttributeId == generatedAttributeId)
+            .OrderBy(p => p.Via.Count)
+            .First().Via;
+
+        var metaverseAttributeId = rule.Direction == SyncRuleDirection.Import ? mapping.ResolveTargetMetaverseAttributeId() : null;
+        return new GeneratedValueBuiltValue
+        {
+            Mapping = mapping,
+            SyncRule = rule,
+            GeneratedMapping = generatedMapping,
+            Kind = kind,
+            MetaverseAttributeId = metaverseAttributeId,
+            MetaverseAttributeName = metaverseAttributeId.HasValue ? NameOf(metaverseAttributeId.Value) : null,
+            Via = via.Select(NameOf).ToList(),
+            BuiltFromAttributeNames = generatedAttributeIds
+                .OrderBy(id => id == generatedAttributeId ? 0 : 1)
+                .ThenBy(NameOf, StringComparer.OrdinalIgnoreCase)
+                .Select(NameOf)
+                .ToList(),
+            ExportedTo = metaverseAttributeId.HasValue
+                ? DirectExportTargets(metaverseAttributeId.Value, rule.MetaverseObjectTypeId)
+                : [(rule.ConnectedSystemId, mapping.ResolveTargetConnectedSystemAttributeId()!.Value)]
+        };
+    }
+
+    private SyncRuleMapping? GeneratedMappingOf(int generatedAttributeId, int metaverseObjectTypeId) =>
+        _importMappings
+            .Where(x => x.Mapping.Generation != null
+                && x.Rule.MetaverseObjectTypeId == metaverseObjectTypeId
+                && x.Mapping.ResolveTargetMetaverseAttributeId() == generatedAttributeId)
+            .Select(x => x.Mapping)
+            .OrderBy(m => m.Id)
+            .FirstOrDefault();
 
     /// <summary>
     /// The generated import mappings whose values <paramref name="mapping"/>'s value is built from: one for a value built

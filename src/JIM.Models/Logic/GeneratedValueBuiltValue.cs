@@ -22,6 +22,18 @@ public sealed class GeneratedValueBuiltValue
     public required SyncRule SyncRule { get; init; }
 
     /// <summary>
+    /// The generated mapping the value is described relative to: the one it is built from, or, for a value built from
+    /// several, the one asked about (or the first of them).
+    /// </summary>
+    public required SyncRuleMapping GeneratedMapping { get; init; }
+
+    /// <summary>
+    /// The names of every generated Metaverse attribute the value is built from, <see cref="GeneratedMapping"/>'s first:
+    /// one name, or several for a value <see cref="GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues"/>.
+    /// </summary>
+    public IReadOnlyList<string> BuiltFromAttributeNames { get; init; } = [];
+
+    /// <summary>
     /// How the value relates to the generated value, which decides whether it is checked before the generated value is
     /// issued and whether it is corrected with it.
     /// </summary>
