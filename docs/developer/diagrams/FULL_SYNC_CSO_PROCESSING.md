@@ -111,7 +111,7 @@ flowchart TD
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
     %% --- Join/Project path ---
-    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Synchronisation Rule:<br/>Find matching MVO by join criteria]
+    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Synchronisation Rule:<br/>each Object Matching Rule in order computes<br/>its match values, one lookup per rule]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
     JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Synchronisation Rule has<br/>ProjectToMetaverse = true?}
@@ -120,6 +120,7 @@ flowchart TD
 
     JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined<br/>Record the matching import rule<br/>Cancels a scheduled MVO deletion when<br/>the rejoin falsifies its trigger:<br/>MvoDeletionCancelled outcome #1627]
     JoinResult -->|Multiple matches| AmbiguousError[AmbiguousMatch error<br/>RPEI with error]
+    JoinResult -->|Rule could not be<br/>evaluated| RuleFailedError[ObjectMatchingRuleFailed error<br/>RPEI with error<br/>neither joined nor projected]
     JoinResult -->|Match already joined| ExistingJoinError[CouldNotJoinDueToExistingJoin<br/>error RPEI]
 
     %% --- Attribute Flow path ---
@@ -138,7 +139,7 @@ flowchart TD
     DriftDetect --> Result([Return change result:<br/>Projected / Joined / AttributeFlow / NoChanges])
 
     %% --- Error handling ---
-    Entry -.->|SyncJoinException| JoinError[RPEI with specific error type<br/>AmbiguousMatch, ExistingJoin, etc.]
+    Entry -.->|SyncJoinException| JoinError[RPEI with specific error type<br/>AmbiguousMatch, ObjectMatchingRuleFailed,<br/>ExistingJoin, etc.]
     Entry -.->|Expression failed or<br/>missing input| ExpressionError[RPEI: ExpressionEvaluationError<br/>or ExpressionMissingInput<br/>MVO left untouched]
     Entry -.->|Unhandled Exception| UnhandledError[RPEI with UnhandledError<br/>+ stack trace<br/>Processing continues to next CSO]
 ```

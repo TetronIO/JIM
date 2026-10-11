@@ -42,6 +42,12 @@ public class SyncPreviewMessageDto
     /// </summary>
     public string? AttributeName { get; set; }
 
+    /// <summary>
+    /// For an <c>AmbiguousMatch</c>, the objects the match found: up to 10, ordered by display name, each carrying how
+    /// many were found in all. Empty for any other condition.
+    /// </summary>
+    public List<MatchCandidateDto> MatchCandidates { get; set; } = [];
+
     public static SyncPreviewMessageDto FromModel(SyncPreviewMessage model) => new()
     {
         Code = model.Code,
@@ -49,6 +55,7 @@ public class SyncPreviewMessageDto
         SyncRuleId = model.SyncRuleId,
         SyncRuleName = model.SyncRuleName,
         ConnectedSystemId = model.ConnectedSystemId,
-        AttributeName = model.AttributeName
+        AttributeName = model.AttributeName,
+        MatchCandidates = model.MatchCandidates.Select(MatchCandidateDto.FromModel).ToList()
     };
 }

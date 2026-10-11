@@ -911,6 +911,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(omr => omr.MetaverseObjectType)
             .SingleOrDefaultAsync(omr => omr.Id == id);
     }
+
+    public async Task<List<ObjectMatchingRule>> GetObjectMatchingRulesAsync(IReadOnlyCollection<int> ids)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        return await Repository.Database.ObjectMatchingRules
+            .AsSplitQuery()
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(omr => omr.TargetMetaverseAttribute)
+            .Where(omr => ids.Contains(omr.Id))
+            .ToListAsync();
+    }
     #endregion
 
     #region Connected System Objects
@@ -5689,6 +5703,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // As the single-object read above, only the values that identify an object, plus the ones that name it, so each
+        // joined object reads as the rest of the portal names it (ConnectedSystemObject.Name) rather than by its id alone.
+        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLowerInvariant()).ToList();
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.ConnectedSystem)
+            .Include(cso => cso.AttributeValues.Where(av =>
+                    av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId || nameAttributes.Contains(av.Attribute.Name.ToLower())))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId != null && metaverseObjectIds.Contains(cso.MetaverseObjectId.Value))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        return (await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => connectedSystemObjectIds.Contains(cso.Id))
+            .Select(cso => cso.Id)
+            .ToListAsync()).ToHashSet();
+    }
+
+    /// <inheritdoc />
     public async Task<List<SyncRule>> GetSyncRulesForScopingExplanationAsync(int metaverseObjectTypeId)
     {
         // A projection rather than includes: the page needs a few columns of the rule, its Connected System and its
@@ -5980,7 +6027,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
-    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// This is the export-side counterpart of the import join lookup (FindMetaverseObjectIdsByMatchValuesAsync): it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     public async Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
@@ -8142,6 +8189,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -8268,7 +8317,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer, {{{offset + 9}}}::integer, {{{offset + 10}}}::integer, {{{offset + 11}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer, {{{offset + 9}}}::integer, {{{offset + 10}}}::integer, {{{offset + 11}}}::text, {{{offset + 12}}}::integer, {{{offset + 13}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -8283,6 +8332,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");
@@ -8317,7 +8368,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::integer, {{{offset + 6}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::integer, {{{offset + 6}}}::text, {{{offset + 7}}}::integer, {{{offset + 8}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -8327,6 +8378,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");

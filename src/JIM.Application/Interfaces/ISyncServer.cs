@@ -87,7 +87,7 @@ public interface ISyncServer
     /// <summary>
     /// Finds a matching MVO for join evaluation using the configured matching rules.
     /// </summary>
-    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
+    Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
 
     /// <summary>
     /// Finds a matching CSO for export provisioning using Object Matching Rules.

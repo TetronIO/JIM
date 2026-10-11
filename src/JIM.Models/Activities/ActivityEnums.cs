@@ -527,3 +527,16 @@ public enum ActivityStatDimension
     /// </remarks>
     ExcludedContainer = 5
 }
+
+/// <summary>
+/// What kind of object an ambiguous match's candidate is (#2052). Persisted by ordinal on
+/// <see cref="ActivityRunProfileExecutionItemMatchCandidate"/>, so append-only.
+/// </summary>
+public enum MatchCandidateKind
+{
+    /// <summary>A Metaverse Object an import could have joined.</summary>
+    MetaverseObject = 0,
+
+    /// <summary>A Connected System Object provisioning could have claimed.</summary>
+    ConnectedSystemObject = 1
+}

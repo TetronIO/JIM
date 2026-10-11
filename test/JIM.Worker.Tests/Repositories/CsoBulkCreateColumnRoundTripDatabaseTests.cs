@@ -148,12 +148,20 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             ConnectedSystemObjectType = csType, MetaverseObjectType = mvoType
         };
 
-        seed.AddRange(connectorDefinition, system, csType, partition, mvoType, mvo, syncRule);
+        // The Object Matching Rule a matching join records (#2052).
+        var employeeIdAttribute = new MetaverseAttribute { Name = "Employee ID", Type = AttributeDataType.Text };
+        var matchingRule = new ObjectMatchingRule
+        {
+            ConnectedSystemObjectType = csType, MetaverseObjectType = mvoType, TargetMetaverseAttribute = employeeIdAttribute,
+            Sources = [new ObjectMatchingRuleSource { ConnectedSystemAttribute = extIdAttr }]
+        };
+
+        seed.AddRange(connectorDefinition, system, csType, partition, mvoType, mvo, syncRule, employeeIdAttribute, matchingRule);
         await seed.SaveChangesAsync();
 
         return new Seeded(system.Id, csType.Id, extIdAttr.Id, secondaryExtIdAttr.Id, textAttr.Id, numberAttr.Id,
             longNumberAttr.Id, decimalAttr.Id, binaryAttr.Id, guidAttr.Id, boolAttr.Id, dateAttr.Id,
-            referenceAttr.Id, partition.Id, mvo.Id, syncRule.Id);
+            referenceAttr.Id, partition.Id, mvo.Id, syncRule.Id, matchingRule.Id);
     }
 
     private const string JoinSyncRuleName = "Yellowstone HR Import";
@@ -161,7 +169,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
     private sealed record Seeded(
         int SystemId, int TypeId, int ExtIdAttrId, int SecondaryExtIdAttrId, int TextAttrId, int NumberAttrId,
         int LongNumberAttrId, int DecimalAttrId, int BinaryAttrId, int GuidAttrId, int BoolAttrId, int DateAttrId,
-        int ReferenceAttrId, int PartitionId, Guid MvoId, int SyncRuleId);
+        int ReferenceAttrId, int PartitionId, Guid MvoId, int SyncRuleId, int MatchingRuleId);
 
     [Test]
     public async Task CreateConnectedSystemObjectsAsync_PageSizedBatchEveryColumnPopulated_RoundTripsExactlyAsync()
@@ -206,6 +214,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             JoinMethod = ConnectedSystemObjectJoinMethod.InboundMatching,
             JoinSyncRuleId = s.SyncRuleId,
             JoinSyncRuleName = JoinSyncRuleName,
+            JoinObjectMatchingRuleId = s.MatchingRuleId,
+            JoinMatchValue = "E100",
             PartitionId = s.PartitionId,
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt,
@@ -246,6 +256,8 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
             Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
             Assert.That(storedCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching), "#348: the join record must round-trip");
+            Assert.That(storedCso.JoinObjectMatchingRuleId, Is.EqualTo(s.MatchingRuleId), "#2052: the matching rule must round-trip");
+            Assert.That(storedCso.JoinMatchValue, Is.EqualTo("E100"), "#2052: the match value must round-trip");
             Assert.That(storedCso.JoinSyncRuleId, Is.EqualTo(s.SyncRuleId), "#348: the join record must round-trip");
             Assert.That(storedCso.JoinSyncRuleName, Is.EqualTo(JoinSyncRuleName), "#348: the join record must round-trip");
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));

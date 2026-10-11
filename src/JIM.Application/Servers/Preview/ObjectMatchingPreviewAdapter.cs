@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -38,6 +39,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     private const string MatchAttributeName = "Object Matching";
     private const string NoMatchValue = "No match; projects a new identity";
     private const string AmbiguousValue = "More than one match";
+    private const string FailedValue = "Rule could not be evaluated; neither joins nor projects";
 
     /// <summary>
     /// The Connected System attribute types the matching query can compare. Anything else makes the query throw
@@ -271,12 +273,20 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
         try
         {
-            var mvo = await _application.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, rules);
-            return mvo == null ? MatchOutcome.NoMatch : new MatchOutcome(MatchKind.Match, mvo);
+            var match = await _application.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, rules);
+            return match == null
+                ? MatchOutcome.NoMatch
+                : new MatchOutcome(MatchKind.Match, match.MetaverseObject, match.Resolution.Values);
         }
-        catch (MultipleMatchesException)
+        catch (MultipleMatchesException ex)
         {
-            return MatchOutcome.Ambiguous;
+            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues);
+        }
+        catch (ObjectMatchingRuleFailedException ex)
+        {
+            // The run would stop this object with an ObjectMatchingRuleFailed error (#2052): neither joined nor
+            // projected. The preview says so, with the reason.
+            return new MatchOutcome(MatchKind.Failed, null, [], ex.Resolution.FailureMessage);
         }
     }
 
@@ -331,6 +341,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
         var transition = (stored.Kind, proposed.Kind) switch
         {
+            (_, MatchKind.Failed) => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail,
             (_, MatchKind.Ambiguous) => ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
             (MatchKind.Match, MatchKind.Match) => ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject,
             (_, MatchKind.Match) => ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinInsteadOfProject,
@@ -356,21 +367,30 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     {
         NoMatch,
         Match,
-        Ambiguous
+        Ambiguous,
+
+        /// <summary>A rule could not be worked out for the object, so the run would stop it (#2052).</summary>
+        Failed
     }
 
-    private record MatchOutcome(MatchKind Kind, MetaverseObject? MetaverseObject)
+    /// <param name="MatchValues">What the deciding rule computed, so a row shows the value it matched on.</param>
+    /// <param name="FailureMessage">Why a rule could not be worked out, for <see cref="MatchKind.Failed"/>.</param>
+    private record MatchOutcome(MatchKind Kind, MetaverseObject? MetaverseObject, IReadOnlyList<object>? MatchValues = null, string? FailureMessage = null)
     {
         public static readonly MatchOutcome NoMatch = new(MatchKind.NoMatch, null);
-        public static readonly MatchOutcome Ambiguous = new(MatchKind.Ambiguous, null);
 
         /// <summary>How this outcome reads in a drill-down row's value column.</summary>
         public string Describe() => Kind switch
         {
-            MatchKind.Match => MetaverseObject?.NameOrId ?? NoMatchValue,
-            MatchKind.Ambiguous => AmbiguousValue,
+            MatchKind.Match => MetaverseObject == null ? NoMatchValue : $"{MetaverseObject.NameOrId}{OnValues()}",
+            MatchKind.Ambiguous => $"{AmbiguousValue}{OnValues()}",
+            MatchKind.Failed => $"{FailedValue}: {FailureMessage}",
             _ => NoMatchValue
         };
+
+        private string OnValues() => MatchValues is { Count: > 0 }
+            ? $" (on {string.Join(", ", MatchValues.Select(value => Convert.ToString(value, CultureInfo.InvariantCulture)))})"
+            : string.Empty;
     }
 
     #endregion
