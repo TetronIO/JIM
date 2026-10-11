@@ -35,6 +35,7 @@ public class ConnectedSystemServerKeepUniqueTests
     private SyncRuleMapping _email = null!;
     private SyncRuleMapping _displayName = null!;
     private GeneratedValueAssignment _waiting = null!;
+    private List<SyncRule> _exportRules = [];
 
     [SetUp]
     public void SetUp()
@@ -82,7 +83,8 @@ public class ConnectedSystemServerKeepUniqueTests
         _csRepo.Setup(r => r.GetSyncRuleMappingForUpdateAsync(It.IsAny<int>()))
             .ReturnsAsync((int id) => _hrImport.AttributeFlowRules.SingleOrDefault(m => m.Id == id));
         _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => [_hrImport]);
-        _csRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => []);
+        _csRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => _exportRules);
+        _csRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(() => new Dictionary<int, string> { [1] = "HR", [2] = "Corp AD" });
         _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(() => _hrImport.AttributeFlowRules);
         _csRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
@@ -170,6 +172,78 @@ public class ConnectedSystemServerKeepUniqueTests
         await Application().ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(_email.Id, new SyncRuleMappingSettingsUpdate { KeepUnique = true }, _initiator);
 
         Assert.That(_syncRepo.GeneratedValueAssignments[_waiting.Id].State, Is.EqualTo(GeneratedValueAssignmentState.NeedsDecision));
+    }
+
+    [Test]
+    public async Task GetBuiltFromGeneratedValuesAsync_DerivedValue_NamesTheGeneratedValueAndHowItIsBuiltAsync()
+    {
+        var upn = AddUserPrincipalNameViaEmail();
+
+        var described = await Application().ConnectedSystems.GetBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(described.Keys, Is.EquivalentTo(new[] { _email.Id, upn.Id }), "a direct flow and the generated value itself are built from nothing");
+            Assert.That(described[upn.Id].GeneratedAttributeName, Is.EqualTo("Account Name"));
+            Assert.That(described[upn.Id].Via, Is.EqualTo(new[] { "Email" }));
+            Assert.That(described[upn.Id].Kind, Is.EqualTo(GeneratedValueBuiltValueKind.Form));
+            Assert.That(described[upn.Id].KeepUnique, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetValuesBuiltFromGeneratedValuesAsync_GeneratedValue_ListsEachValueAndWhereItIsExportedAsync()
+    {
+        AddUserPrincipalNameViaEmail();
+        AddDirectoryExport();
+
+        var described = await Application().ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules);
+
+        var values = described[_accountName.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(values.Select(v => v.MetaverseAttributeName), Is.EqualTo(new[] { "Email", "User Principal Name" }));
+            Assert.That(values[0].ExportedTo.Single().ConnectedSystemName, Is.EqualTo("Corp AD"));
+            Assert.That(values[0].ExportedTo.Single().AttributeName, Is.EqualTo("mail"));
+        }
+    }
+
+    [Test]
+    public async Task DescribeBuiltFromGeneratedValueAsync_FlowBeingEdited_IsDescribedAsync()
+    {
+        var proposal = new SyncRuleMapping { TargetMetaverseAttribute = _email.TargetMetaverseAttribute, TargetMetaverseAttributeId = _email.TargetMetaverseAttributeId };
+        proposal.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "Upper(mv[\"Account Name\"])" });
+
+        var described = await Application().ConnectedSystems.DescribeBuiltFromGeneratedValueAsync(_hrImport, proposal);
+
+        Assert.That(described?.GeneratedAttributeName, Is.EqualTo("Account Name"));
+    }
+
+    private SyncRuleMapping AddUserPrincipalNameViaEmail()
+    {
+        var upnAttribute = new MetaverseAttribute { Id = 13, Name = "User Principal Name", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        _hrImport.MetaverseObjectType.Attributes.Add(upnAttribute);
+        var upn = Mapping(103, upnAttribute);
+        upn.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Email\"]" });
+        return upn;
+    }
+
+    private void AddDirectoryExport()
+    {
+        var mail = new ConnectedSystemObjectTypeAttribute { Id = 950, Name = "mail", Type = AttributeDataType.Text };
+        var export = new SyncRule
+        {
+            Id = 2, Name = "Corp AD Export", Direction = SyncRuleDirection.Export, Enabled = true, ConnectedSystemId = 2,
+            MetaverseObjectTypeId = _hrImport.MetaverseObjectTypeId
+        };
+        var direct = new SyncRuleMapping
+        {
+            Id = 200, SyncRule = export, SyncRuleId = export.Id, Enabled = true,
+            TargetConnectedSystemAttribute = mail, TargetConnectedSystemAttributeId = mail.Id
+        };
+        direct.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = _email.TargetMetaverseAttribute, MetaverseAttributeId = _email.TargetMetaverseAttributeId });
+        export.AttributeFlowRules.Add(direct);
+        _exportRules.Add(export);
     }
 
     private JimApplication Application() => new(_repo.Object, syncRepository: _syncRepo);
