@@ -94,8 +94,8 @@ public class SecurityAuditServer
         var windowStart = FloorToWindow(now);
 
         // Postgres unique indexes treat NULLs as distinct from one another, which would defeat deduplication for
-        // paths with no known prefix/IP (e.g. a bad-format API key). Normalise to "" so those attempts still
-        // aggregate onto a single row instead of one row per attempt.
+        // paths with no known prefix/IP (SSO access token and interactive sign-in failures). Normalise to "" so those
+        // attempts still aggregate onto a single row instead of one row per attempt.
         var normalisedPrefix = apiKeyPrefix ?? string.Empty;
         var normalisedIp = clientIp ?? string.Empty;
 

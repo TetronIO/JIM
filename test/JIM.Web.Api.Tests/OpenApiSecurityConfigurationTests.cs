@@ -2,10 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using JIM.Web.Extensions.Api;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 using NUnit.Framework;
 
@@ -50,6 +53,44 @@ public class OpenApiSecurityConfigurationTests
             Assert.That(requirements[1].EnumerateObject().Select(p => p.Name), Is.EqualTo(new[] { "ApiKey" }));
             Assert.That(requirements[1].GetProperty("ApiKey").GetArrayLength(), Is.Zero);
         }
+    }
+
+    [Test]
+    public async Task ApplyToOperation_AnonymousEndpoint_PublishesThatItNeedsNoAuthenticationAsync()
+    {
+        // The health probes and the auth configuration bootstrap are [AllowAnonymous]. Without an operation-level
+        // "security: []" they inherit the document-wide requirement, and a client generator or gateway that honours
+        // the document demands a credential the endpoint never asks for.
+        var json = await SerialiseWithOperationAsync(new List<object> { new AllowAnonymousAttribute() });
+
+        var security = json.RootElement.GetProperty("paths").GetProperty("/probe").GetProperty("get").GetProperty("security");
+        Assert.That(security.GetArrayLength(), Is.Zero);
+    }
+
+    [Test]
+    public async Task ApplyToOperation_AuthenticatedEndpoint_InheritsTheDocumentRequirementAsync()
+    {
+        var json = await SerialiseWithOperationAsync(new List<object> { new AuthorizeAttribute() });
+
+        var operation = json.RootElement.GetProperty("paths").GetProperty("/probe").GetProperty("get");
+        Assert.That(operation.TryGetProperty("security", out _), Is.False);
+    }
+
+    private static async Task<JsonDocument> SerialiseWithOperationAsync(IList<object> endpointMetadata)
+    {
+        var document = new OpenApiDocument();
+        OpenApiSecurityConfiguration.Apply(document, new Uri("https://idp.example.com/auth"),
+            new Uri("https://idp.example.com/token"), ApiScope);
+        var operation = new OpenApiOperation { Responses = new OpenApiResponses() };
+        document.Paths = new OpenApiPaths
+        {
+            ["/probe"] = new OpenApiPathItem { Operations = new Dictionary<HttpMethod, OpenApiOperation> { [HttpMethod.Get] = operation } }
+        };
+
+        OpenApiSecurityConfiguration.ApplyToOperation(operation, endpointMetadata);
+
+        var json = await document.SerializeAsJsonAsync(OpenApiSpecVersion.OpenApi3_1);
+        return JsonDocument.Parse(json);
     }
 
     private static async Task<JsonDocument> SerialiseAsync()

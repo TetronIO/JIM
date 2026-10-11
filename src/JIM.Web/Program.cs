@@ -405,18 +405,11 @@ try
             // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
             // deployment without anyone first signing in to the web portal. The resolved roles and
             // MetaverseObject id are attached to this request's principal.
-            options.Events = new JwtBearerEvents
+            // A token that fails validation is recorded in the security audit log (#2108); see JimJwtBearerEvents.
+            options.Events = JimJwtBearerEvents.Create(async ctx =>
             {
-                OnTokenValidated = async ctx =>
-                {
-                    await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
-                },
-
-                // Security audit events (issue #2108): an access token that fails validation is recorded as failed
-                // API keys and failed interactive sign-ins are. This includes a malformed API key, since any bearer
-                // token without the key prefix is validated here.
-                OnAuthenticationFailed = AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync
-            };
+                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+            });
         });
 
     // setup authorisation policies
@@ -437,7 +430,12 @@ try
     // The pagination depth filter (issue #487) applies the shared retrieval depth ceiling to every action,
     // including the endpoints that bind page/pageSize as bare query parameters rather than a PaginationRequest.
     // Registered globally so a new paginated endpoint is guarded by default rather than by the author remembering.
-    builder.Services.AddControllers(options => options.Filters.Add<PaginationDepthActionFilter>())
+    // ApiChallengeResultFilter puts the WWW-Authenticate challenge on 401s that actions return themselves (#2088).
+    builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<PaginationDepthActionFilter>();
+            options.Filters.Add<ApiChallengeResultFilter>();
+        })
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
@@ -494,6 +492,13 @@ try
             OpenApiSecurityConfiguration.Apply(document, new Uri(oidcConfig.AuthorizationEndpoint),
                 new Uri(oidcConfig.TokenEndpoint), apiScope!);
 
+            return Task.CompletedTask;
+        });
+
+        // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement.
+        options.AddOperationTransformer((operation, context, _) =>
+        {
+            OpenApiSecurityConfiguration.ApplyToOperation(operation, context.Description.ActionDescriptor.EndpointMetadata);
             return Task.CompletedTask;
         });
     });

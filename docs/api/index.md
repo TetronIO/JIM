@@ -28,7 +28,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.17.0**
 
-- **API keys are sent as bearer tokens.** An API key now goes in the `Authorization` header, `Authorization: Bearer jim_ak_...`, exactly as an SSO access token does; the `X-Api-Key` header is no longer read, so a request that sends a key only there is unauthenticated and receives a `401`. Update any integration or script that sets `X-Api-Key`; the JIM PowerShell module already sends the new header. This is a pre-v1.0 breaking change.
+- **API keys are sent as bearer tokens.** An API key now goes in the `Authorization` header, `Authorization: Bearer jim_ak_...`, exactly as an SSO access token does; the `X-Api-Key` header is no longer read, so a request that sends a key only there is unauthenticated and receives a `401`. Update any integration or script that sets `X-Api-Key`. Upgrade the JIM PowerShell module together with JIM: version 0.17.0 sends the new header, while earlier versions send `X-Api-Key` and are refused with "JIM rejected the API key", although the key itself is fine. Roll the module back with JIM, too. This is a pre-v1.0 breaking change.
 
 **v0.16.0**
 

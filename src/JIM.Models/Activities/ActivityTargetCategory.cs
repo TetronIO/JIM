@@ -17,7 +17,10 @@ public enum ActivityTargetCategory
     SyncRuns = 2,
     /// <summary>System-level operations: housekeeping, resets, example data generation.</summary>
     System = 3,
-    /// <summary>Security audit events: interactive sign-in success/failure and API key authentication failure.</summary>
+    /// <summary>
+    /// Security audit events: interactive sign-in success/failure, and failed API key or SSO access token
+    /// authentication.
+    /// </summary>
     Security = 4,
     /// <summary>Password events: a password change fanning out to the systems an identity has accounts in.</summary>
     PasswordSynchronisation = 5

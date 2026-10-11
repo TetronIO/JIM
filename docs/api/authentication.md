@@ -27,7 +27,7 @@ Obtain a token via your identity provider's OIDC token endpoint, then include it
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 Tokens are validated against the configured OIDC provider. Standard JWT claims (expiry, audience, issuer) are enforced.
@@ -51,7 +51,7 @@ Send the API key as a bearer token in the `Authorization` header:
 
 ```bash
 curl -H "Authorization: Bearer jim_ak_xxxxxxxxxxxx" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 The `Authorization` header is the only place JIM reads an API key from. A key sent in any other header (for example `X-Api-Key`) is ignored, and the request is treated as unauthenticated.
@@ -62,14 +62,14 @@ The `Authorization` header is the only place JIM reads an API key from. A key se
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOi..." \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 ### Listing Connected Systems with an API Key
 
 ```bash
 curl -H "Authorization: Bearer jim_ak_xxxxxxxxxxxx" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 ### Using PowerShell
@@ -94,7 +94,7 @@ A request that is not authenticated receives `401 Unauthorized` with a `WWW-Auth
 | No credential | `Bearer realm="JIM"` |
 | A credential JIM rejected (unknown, disabled or expired API key, or an invalid access token) | `Bearer realm="JIM", error="invalid_token"` |
 
-The response does not say why a credential was rejected. Each failed API key attempt is recorded in JIM's security audit Activities, which administrators can review.
+The response does not say why a credential was rejected. Each failed API key or access token attempt is recorded in JIM's [security audit log](../administration/security-audit-events.md), with the reason, which administrators can review.
 
 ## Security Recommendations
 

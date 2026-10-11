@@ -60,11 +60,7 @@ function Invoke-JIMApi {
     }
 
     # Proactive token refresh: check before the request if token is near expiry
-    if ($script:JIMConnection.AuthMethod -eq 'OAuth') {
-        if ($script:JIMConnection.TokenExpiresAt -and $script:JIMConnection.TokenExpiresAt -lt (Get-Date).AddMinutes(2)) {
-            Invoke-TokenRefresh -Reason "Access token expired or expiring soon"
-        }
-    }
+    Update-JIMExpiringAccessToken
 
     # Build and execute the request, with reactive 401 retry for OAuth
     $response = Invoke-JIMApiRequest -Endpoint $Endpoint -Method $Method -Body $Body -ContentType $ContentType

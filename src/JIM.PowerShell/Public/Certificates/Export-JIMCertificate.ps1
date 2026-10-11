@@ -75,11 +75,7 @@ function Export-JIMCertificate {
         try {
             $uri = "$($script:JIMConnection.Url)/api/v1/certificates/$Id/download"
 
-            # Refresh an expiring SSO access token first, as Invoke-JIMApi does
-            if ($script:JIMConnection.AuthMethod -eq 'OAuth' -and $script:JIMConnection.TokenExpiresAt -and
-                $script:JIMConnection.TokenExpiresAt -lt (Get-Date).AddMinutes(2)) {
-                Invoke-TokenRefresh -Reason "Access token expired or expiring soon"
-            }
+            Update-JIMExpiringAccessToken
 
             $headers = Get-JIMCredentialHeader
 

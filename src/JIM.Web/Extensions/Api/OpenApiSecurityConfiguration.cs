@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 
 namespace JIM.Web.Extensions.Api;
@@ -86,5 +87,23 @@ public static class OpenApiSecurityConfiguration
                 new List<string>()
             }
         });
+    }
+
+    /// <summary>
+    /// Publishes an anonymous endpoint (<c>[AllowAnonymous]</c>: the health probes, version, and the auth
+    /// configuration a client reads before it can obtain a token) as needing no authentication. An empty
+    /// operation-level <c>security</c> overrides the document-wide requirement; without it, the endpoint inherits
+    /// that requirement and tooling that honours the document demands a credential the endpoint never asks for.
+    /// Every other operation inherits the document's requirement and is left untouched.
+    /// </summary>
+    /// <param name="operation">The operation being generated.</param>
+    /// <param name="endpointMetadata">The endpoint's metadata, as the authorisation middleware sees it.</param>
+    public static void ApplyToOperation(OpenApiOperation operation, IList<object> endpointMetadata)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(endpointMetadata);
+
+        if (endpointMetadata.OfType<IAllowAnonymous>().Any())
+            operation.Security = [];
     }
 }

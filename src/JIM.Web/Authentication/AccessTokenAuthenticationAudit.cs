@@ -4,7 +4,6 @@
 using JIM.Web.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Serilog;
 
 namespace JIM.Web.Authentication;
 
@@ -16,19 +15,25 @@ namespace JIM.Web.Authentication;
 public static class AccessTokenAuthenticationAudit
 {
     /// <summary>
-    /// The JWT bearer scheme's <c>OnAuthenticationFailed</c> event: records the failure, off the request path, and
+    /// The JWT bearer scheme's <c>OnAuthenticationFailed</c> event: records a refused token, off the request path, and
     /// leaves the authentication outcome untouched.
+    /// <para>
+    /// JwtBearerHandler raises this event for anything thrown while authenticating, not only for a token that failed
+    /// validation: a fault resolving the caller's JIM identity in <c>OnTokenValidated</c> (two users holding the same
+    /// SSO identifier, say), or the identity provider's metadata being unreachable. Those are server-side faults; the
+    /// handler rethrows them, and the global exception handler reports them. Recording them here would show a valid
+    /// caller as a refused, anonymous credential, so only a token's own failures are recorded.
+    /// </para>
     /// </summary>
     public static Task OnAuthenticationFailedAsync(AuthenticationFailedContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var recorder = context.HttpContext.RequestServices.GetService<IFailedAuthenticationRecorder>();
-        if (recorder == null)
-        {
-            Log.Warning("AccessTokenAuthenticationAudit: No IFailedAuthenticationRecorder is registered; failed access token authentication not recorded.");
+        if (!IsTokenValidationFailure(context.Exception))
             return Task.CompletedTask;
-        }
+
+        // Required, not optional: a missing registration must fail at once rather than silently stop the audit.
+        var recorder = context.HttpContext.RequestServices.GetRequiredService<IFailedAuthenticationRecorder>();
 
         // ForwardedHeaders middleware (when configured) has already made RemoteIpAddress the real client address.
         var clientIp = context.HttpContext.Connection.RemoteIpAddress.ToNormalisedString();
@@ -36,6 +41,18 @@ public static class AccessTokenAuthenticationAudit
             apiKeyPrefix: null, clientIp);
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Whether an authentication failure is the token's own fault: IdentityModel's token exceptions, its oversized
+    /// token error, or an aggregate made only of them (one per token handler that tried it). Anything else is a
+    /// server-side fault.
+    /// </summary>
+    public static bool IsTokenValidationFailure(Exception? exception) => exception switch
+    {
+        AggregateException aggregate => aggregate.InnerExceptions.Count > 0 && aggregate.InnerExceptions.All(IsTokenValidationFailure),
+        SecurityTokenException or SecurityTokenArgumentException => true,
+        _ => IsOversizedTokenFailure(exception)
+    };
 
     /// <summary>
     /// Maps a token validation failure to a short, sanitised reason for the audit record. The exception's message is
@@ -59,7 +76,17 @@ public static class AccessTokenAuthenticationAudit
         SecurityTokenInvalidTypeException => "Access token type invalid",
         SecurityTokenReplayDetectedException => "Access token replayed",
         SecurityTokenArgumentException => "Access token malformed",
+        _ when IsOversizedTokenFailure(exception) => "Access token malformed",
         SecurityTokenDecryptionFailedException => "Access token decryption failed",
         _ => "Access token validation failed"
     };
+
+    /// <summary>
+    /// IdentityModel reports a token over its size limit (IDX10209) as a plain <see cref="ArgumentException"/>, not a
+    /// token exception, through the same event as server-side faults. The exact type and the IdentityModel "IDX" code
+    /// tell the two apart, so an <see cref="ArgumentException"/> (or subclass) thrown by JIM's own code while resolving
+    /// the caller is not mistaken for a malformed token. The message is read for this test only and never recorded.
+    /// </summary>
+    private static bool IsOversizedTokenFailure(Exception? exception) =>
+        exception?.GetType() == typeof(ArgumentException) && exception.Message.StartsWith("IDX", StringComparison.Ordinal);
 }

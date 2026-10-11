@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
@@ -59,6 +60,7 @@ public class AccessTokenAuthenticationAuditTests
         yield return new TestCaseData(new SecurityTokenReplayDetectedException(), "Access token replayed");
         yield return new TestCaseData(new SecurityTokenMalformedException(), "Access token malformed");
         yield return new TestCaseData(new SecurityTokenArgumentException(), "Access token malformed");
+        yield return new TestCaseData(new ArgumentException("IDX10209: Token has length: '300000' which is larger than the MaximumTokenSizeInBytes."), "Access token malformed");
         yield return new TestCaseData(new SecurityTokenDecryptionFailedException(), "Access token decryption failed");
         yield return new TestCaseData(new SecurityTokenValidationException(), "Access token validation failed");
         yield return new TestCaseData(new InvalidOperationException("IDX20803: Unable to obtain configuration"), "Access token validation failed");
@@ -115,8 +117,9 @@ public class AccessTokenAuthenticationAuditTests
     }
 
     [Test]
-    public void OnAuthenticationFailedAsync_NoRecorderRegistered_DoesNotThrow()
+    public void OnAuthenticationFailedAsync_NoRecorderRegistered_FailsLoudly()
     {
+        // A missing registration must surface at once rather than silently stop recording every failure.
         var httpContext = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
         var scheme = new AuthenticationScheme(JwtBearerDefaults.AuthenticationScheme, null, typeof(JwtBearerHandler));
         var context = new AuthenticationFailedContext(httpContext, scheme, new JwtBearerOptions())
@@ -124,7 +127,53 @@ public class AccessTokenAuthenticationAuditTests
             Exception = new SecurityTokenExpiredException()
         };
 
-        Assert.That(() => AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync(context), Throws.Nothing);
+        Assert.That(() => AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync(context), Throws.InvalidOperationException);
+    }
+
+    [TestCase(typeof(InvalidOperationException))]
+    [TestCase(typeof(TimeoutException))]
+    public async Task OnAuthenticationFailedAsync_ServerFaultRatherThanTokenFault_RecordsNothingAsync(Type exceptionType)
+    {
+        // JwtBearerHandler raises AuthenticationFailed for anything thrown while authenticating: a duplicate identity
+        // in OnTokenValidated, or the identity provider's metadata being unreachable. Neither means the caller
+        // presented a bad credential, so neither belongs in the security audit log as one.
+        var recorder = NewRecorder();
+        var httpContext = NewHttpContext(recorder.Object);
+        var scheme = new AuthenticationScheme(JwtBearerDefaults.AuthenticationScheme, null, typeof(JwtBearerHandler));
+        var context = new AuthenticationFailedContext(httpContext, scheme, new JwtBearerOptions())
+        {
+            Exception = (Exception)Activator.CreateInstance(exceptionType, "IDX20803: Unable to obtain configuration")!
+        };
+
+        await AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync(context);
+
+        VerifyNothingRecorded(recorder);
+    }
+
+    // ─── IsTokenValidationFailure ───
+
+    private static IEnumerable<TestCaseData> TokenFailureCases()
+    {
+        yield return new TestCaseData(new SecurityTokenExpiredException(), true);
+        yield return new TestCaseData(new SecurityTokenMalformedException(), true);
+        yield return new TestCaseData(new SecurityTokenSignatureKeyNotFoundException(), true);
+        yield return new TestCaseData(new AggregateException(new SecurityTokenExpiredException(), new SecurityTokenInvalidAudienceException()), true);
+        yield return new TestCaseData(new AggregateException(new SecurityTokenExpiredException(), new InvalidOperationException()), false);
+        yield return new TestCaseData(new AggregateException(), false);
+        yield return new TestCaseData(new InvalidOperationException("Sequence contains more than one element"), false);
+        // IdentityModel reports an oversized token as a plain ArgumentException carrying its IDX code.
+        yield return new TestCaseData(new ArgumentException("IDX10209: Token has length: '300000' which is larger than the MaximumTokenSizeInBytes."), true);
+        // JIM's own code throwing an ArgumentException (or a subclass) while resolving the caller is a server fault.
+        yield return new TestCaseData(new ArgumentException("Value does not fall within the expected range."), false);
+        yield return new TestCaseData(new ArgumentNullException("principal", "IDX-like but not IdentityModel's"), false);
+        yield return new TestCaseData(new HttpRequestException(), false);
+        yield return new TestCaseData(null, false);
+    }
+
+    [TestCaseSource(nameof(TokenFailureCases))]
+    public void IsTokenValidationFailure_Exception_SaysWhetherTheTokenWasAtFault(Exception? exception, bool expected)
+    {
+        Assert.That(AccessTokenAuthenticationAudit.IsTokenValidationFailure(exception), Is.EqualTo(expected));
     }
 
     // ─── Through the real JWT bearer handler ───
@@ -196,13 +245,33 @@ public class AccessTokenAuthenticationAuditTests
     }
 
     [Test]
+    public async Task JwtBearerHandler_OversizedToken_RecordsMalformedAsync()
+    {
+        var (result, recorder) = await AuthenticateAsync(new string('a', 300_000));
+
+        Assert.That(result.Succeeded, Is.False);
+        VerifyRecorded(recorder, "Access token malformed");
+    }
+
+    [Test]
+    public async Task JwtBearerHandler_TokenValidatedHandlerThrows_RecordsNothingAsync()
+    {
+        // A valid token whose identity JIM cannot resolve (here, two users holding the same SSO identifier) is a
+        // server-side fault: the exception propagates, and the security audit log does not call it a refused credential.
+        var (authenticate, recorder) = PrepareAuthentication(CreateToken(),
+            _ => throw new InvalidOperationException("Sequence contains more than one element"));
+
+        Assert.That(async () => await authenticate(), Throws.InvalidOperationException);
+        VerifyNothingRecorded(recorder);
+    }
+
+    [Test]
     public async Task JwtBearerHandler_ValidToken_RecordsNothingAsync()
     {
         var (result, recorder) = await AuthenticateAsync(CreateToken());
 
         Assert.That(result.Succeeded, Is.True);
-        recorder.Verify(r => r.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()),
-            Times.Never);
+        VerifyNothingRecorded(recorder);
     }
 
     // ─── Helpers ───
@@ -227,6 +296,10 @@ public class AccessTokenAuthenticationAuditTests
     private static void VerifyRecorded(Mock<IFailedAuthenticationRecorder> recorder, string reason) =>
         recorder.Verify(r => r.RecordAsync(FailedAuthenticationEventNames.AccessToken, reason, null, ClientIp), Times.Once);
 
+    private static void VerifyNothingRecorded(Mock<IFailedAuthenticationRecorder> recorder) =>
+        recorder.Verify(r => r.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+
     private static string CreateToken(
         SecurityKey? key = null, string issuer = Issuer, string audience = Audience,
         DateTime? expires = null, DateTime? notBefore = null)
@@ -245,6 +318,15 @@ public class AccessTokenAuthenticationAuditTests
 
     private static async Task<(AuthenticateResult Result, Mock<IFailedAuthenticationRecorder> Recorder)> AuthenticateAsync(string token)
     {
+        var (authenticate, recorder) = PrepareAuthentication(token, _ => Task.CompletedTask);
+        return (await authenticate(), recorder);
+    }
+
+    // Drives JwtBearerHandler with the events JIM's Program.cs builds (JimJwtBearerEvents.Create), so these tests also
+    // prove the wiring: dropping OnAuthenticationFailed from the factory fails them.
+    private static (Func<Task<AuthenticateResult>> Authenticate, Mock<IFailedAuthenticationRecorder> Recorder) PrepareAuthentication(
+        string token, Func<TokenValidatedContext, Task> onTokenValidated)
+    {
         var options = new JwtBearerOptions
         {
             TokenValidationParameters = new TokenValidationParameters
@@ -257,7 +339,7 @@ public class AccessTokenAuthenticationAuditTests
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = SigningKey
             },
-            Events = new JwtBearerEvents { OnAuthenticationFailed = AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync }
+            Events = JimJwtBearerEvents.Create(onTokenValidated)
         };
         var monitor = new Mock<IOptionsMonitor<JwtBearerOptions>>();
         monitor.Setup(m => m.Get(It.IsAny<string>())).Returns(options);
@@ -268,9 +350,11 @@ public class AccessTokenAuthenticationAuditTests
         httpContext.Request.Headers.Authorization = $"Bearer {token}";
 
         var handler = new JwtBearerHandler(monitor.Object, NullLoggerFactory.Instance, UrlEncoder.Default);
-        await handler.InitializeAsync(
-            new AuthenticationScheme(JwtBearerDefaults.AuthenticationScheme, null, typeof(JwtBearerHandler)), httpContext);
-
-        return (await handler.AuthenticateAsync(), recorder);
+        return (async () =>
+        {
+            await handler.InitializeAsync(
+                new AuthenticationScheme(JwtBearerDefaults.AuthenticationScheme, null, typeof(JwtBearerHandler)), httpContext);
+            return await handler.AuthenticateAsync();
+        }, recorder);
     }
 }

@@ -73,6 +73,20 @@ An Activity that a [Schedule](../configuration/schedules.md) produced also carri
 
 All four are empty for work nobody scheduled.
 
+A [security audit event](../administration/security-audit-events.md) (`TargetType` `Authentication`) also carries what the audit recorded:
+
+| Property | Type | Description |
+|---|---|---|
+| `SecurityEventReason` | `String` | Why the authentication failed, for example `Access token expired` or `API key not found`. Empty for a successful sign-in. |
+| `ClientIpAddress` | `String` | The client IP address the attempt came from, where one was available. |
+| `ApiKeyPrefix` | `String` | The identifying prefix of the API key involved, never the key itself. Empty when no API key was involved. |
+| `AttemptCount` | `Int32` | Failures only: how many matching attempts this Activity counts in its 15-minute window. |
+| `FirstSeen` | `DateTime` | Failures only: when the first of those attempts was made. |
+| `LastSeen` | `DateTime` | Failures only: when the most recent of those attempts was made. It advances while the window is open. |
+| `AggregationWindowStart` | `DateTime` | Failures only: the start of the 15-minute UTC window this Activity counts. |
+
+All seven are empty for every other kind of Activity.
+
 An Activity for a [Connector Space clear](../configuration/connected-systems.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
 
 | Property | Type | Description |

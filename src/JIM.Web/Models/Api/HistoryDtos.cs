@@ -36,7 +36,7 @@ public class HistoryCleanupResponse
 
     /// <summary>
     /// Number of security event Activity records (TargetType Authentication: interactive sign-in success/failure,
-    /// API key authentication failure) deleted, per the security event retention period.
+    /// failed API key or SSO access token authentication) deleted, per the security event retention period.
     /// </summary>
     public int SecurityEventActivitiesDeleted { get; set; }
 

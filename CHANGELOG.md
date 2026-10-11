@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A Metaverse Object's Connections tab now explains each connection: expand a row to see how it joined, the Synchronisation Rule responsible, and whether each relevant rule's scoping still includes it. JIM records the joining rule from now on. (#348)
 - ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
 - ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
+- ✨ The REST API and `Get-JIMActivity` now return a failed authentication's reason, client IP, attempt count and timing, as the portal shows, so a SIEM can tell a forged-token spray from one expired token. (#2108)
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
@@ -37,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 API keys are now sent as a standard bearer token (`Authorization: Bearer jim_ak_...`), like SSO access tokens; `X-API-Key` is no longer accepted, so update any script that sets it. Refused API requests now carry a `WWW-Authenticate: Bearer` challenge. (#2088)
+- 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
 - 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
@@ -51,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 The API's OpenAPI document now states that every request needs an SSO access token or API key; it declared no authentication, so tools generating clients from it sent none. (#2088)
+- 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
 - 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
 - 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
 - 🐛 Deleting a Synchronisation Rule, deleting a Connected System through synchronisation, and the stranded value sweep now record queued export changes they withdraw on their Activity too, and the Connected System deletion preview shows them beforehand. (#2011)
@@ -106,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are, so a SIEM sees every refused credential. (#2108)
+- 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
 
 ### Performance
 
