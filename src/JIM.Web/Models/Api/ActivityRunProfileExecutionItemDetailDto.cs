@@ -55,6 +55,13 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>How many Metaverse attributes changed alongside a join, projection or disconnection.</summary>
     public int? AttributeFlowCount { get; set; }
 
+    /// <summary>
+    /// How many of the object's reference values the import could not resolve to a Connected System Object, under
+    /// any Unresolved Reference Handling and whatever error the item carries; null when none were left unresolved.
+    /// The values themselves are on the Connected System Object.
+    /// </summary>
+    public int? UnresolvedReferenceCount { get; set; }
+
     /// <summary>Outcome types with counts, for example <c>Projected:1,AttributeFlow:12</c>.</summary>
     public string? OutcomeSummary { get; set; }
 
@@ -79,6 +86,7 @@ public class ActivityRunProfileExecutionItemDetailDto
             ErrorMessage = entity.ErrorMessage,
             ErrorStackTrace = entity.ErrorStackTrace,
             AttributeFlowCount = entity.AttributeFlowCount,
+            UnresolvedReferenceCount = entity.UnresolvedReferenceCount,
             OutcomeSummary = entity.OutcomeSummary
         };
     }

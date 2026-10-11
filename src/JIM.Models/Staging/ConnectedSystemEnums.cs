@@ -95,14 +95,18 @@ public enum ObjectMatchingRuleMode
 
 /// <summary>
 /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object is
-/// treated, per Connected System. Applies only to import-side reference resolution; export-side (Pending Export)
-/// unresolved reference handling is unaffected.
+/// treated, per Connected System. Governs import-side reference resolution, and since #1398 the export references
+/// that cannot be written because the referenced object has no Connected System Object in the target system. On
+/// import, under every mode, the affected object's Run Profile Execution Item records how many references it was
+/// left with (<c>UnresolvedReferenceCount</c>, #959); the mode decides only whether that is also reported as an error
+/// or an Activity warning.
 /// </summary>
 public enum UnresolvedReferenceHandling
 {
     /// <summary>
-    /// Default: the affected object's Run Profile Execution Item is marked with an unresolved reference error, and
-    /// the Activity completes with a warning or failed status accordingly.
+    /// Default: the affected object's Run Profile Execution Item is marked with an unresolved reference error, unless
+    /// another error already holds the item's error slot, and the Activity completes with a warning or failed status
+    /// accordingly.
     /// </summary>
     Error = 0,
     /// <summary>
@@ -111,8 +115,8 @@ public enum UnresolvedReferenceHandling
     /// </summary>
     Warn = 1,
     /// <summary>
-    /// The Run Profile Execution Item is not marked as errored and no Activity warning is raised. Unresolved
-    /// references are recorded only in the logs.
+    /// The Run Profile Execution Item is not marked as errored and no Activity warning is raised. The item's count
+    /// and the logs are the only record on the run.
     /// </summary>
     Ignore = 2
 }

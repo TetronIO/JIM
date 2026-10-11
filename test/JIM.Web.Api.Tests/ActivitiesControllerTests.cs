@@ -980,6 +980,29 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithUnresolvedReferences_ReturnsTheCountAsync()
+    {
+        // #959: the count travels on every item it applies to, including one whose error slot holds another error,
+        // so a script reading the item learns about the references as the portal does.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Added,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            ErrorMessage = "Failed to parse 'startDate' as DateTime.",
+            UnresolvedReferenceCount = 2
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.UnresolvedReferenceCount, Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task GetActivityExecutionItemAsync_WithNonExistentId_ReturnsNotFoundAsync()
     {
         var itemId = Guid.NewGuid();

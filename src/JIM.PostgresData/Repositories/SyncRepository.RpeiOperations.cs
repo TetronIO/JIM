@@ -962,6 +962,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(rpei.MetaverseObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            if (rpei.UnresolvedReferenceCount.HasValue)
+                await writer.WriteAsync(rpei.UnresolvedReferenceCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

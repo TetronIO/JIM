@@ -202,15 +202,18 @@ Each Connected System has an **Unresolved Reference Handling** setting that cont
 
 | Mode | Behaviour |
 |------|-----------|
-| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, and the Activity completes with a warning status showing the errored items. Choose this when every reference is expected to resolve. |
+| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, headed **Reference Unresolved**, and the Activity completes with a warning status showing the errored items. The error counts every reference the object was left with, broken down by attribute. Choose this when every reference is expected to resolve. |
 | **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
 | **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
+
+Whichever mode is selected, each affected object's execution item records how many of its references the import left unresolved, so none is ever lost from the Activity. Under Error, an object whose item already carries a different error (for example an attribute value the Connector could not parse) keeps that error, and its item says it was also left with unresolved references. Under Warn and Ignore, the item is not marked as an error, but opening it shows the count.
 
 The same setting also governs **ambiguous references**: a reference value that matches objects of more than one Object Type, where the attribute does not declare which Object Type it points at. Two Object Types may legitimately share an anchor value space (a view over a table has the table's keys by construction), so JIM never resolves such a reference by guessing; it is reported per the mode above, with a message naming the candidate Object Types. Where the Connector's schema can declare the reference's target Object Type (the [SQL Connector](../connectors/jim-sql-connector.md)'s `referencesObjectType`), declaring it removes the ambiguity entirely: the reference resolves within the declared Object Type alone.
 
 Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 - **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
+- **Activity execution items**<br /> Each item records how many references its object was left with (`UnresolvedReferenceCount` from `Get-JIMActivityExecutionItem` and the REST API), whatever the mode and whatever error the item carries.
 - **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds.
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 

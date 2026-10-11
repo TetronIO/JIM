@@ -136,4 +136,93 @@ public class ImportOutcomeMessageTests
             Assert.That(message, Does.Contain(" Object Type 'group' is deselected"));
         }
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // ForUnresolvedReferences: one item error covering every reference the object left unresolved (#959)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void ForUnresolvedReferences_OneValueMatchingNothing_NamesTheAttributeTheValueAndBothScopeCauses()
+    {
+        var message = ImportOutcomeMessage.ForUnresolvedReferences(
+            [("manager", "CN=Mark Doyle,OU=Contractors,DC=corp", null)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("manager"));
+            Assert.That(message, Does.Contain("CN=Mark Doyle,OU=Contractors,DC=corp"));
+            Assert.That(message, Does.Contain("Container Scope"));
+            Assert.That(message, Does.Contain("exclude"),
+                "An excluding Container is the harder cause to spot (#1255), so the message must name it.");
+            Assert.That(message, Does.Not.Contain("there may be more"));
+        }
+    }
+
+    [Test]
+    public void ForUnresolvedReferences_SeveralValues_CountsThemPerAttributeRatherThanNamingOnlyTheFirst()
+    {
+        var message = ImportOutcomeMessage.ForUnresolvedReferences(
+        [
+            ("member", "CN=Ana Silva,OU=Contractors,DC=corp", null),
+            ("manager", "CN=Mark Doyle,OU=Contractors,DC=corp", null),
+            ("member", "CN=Ben Ortiz,OU=Contractors,DC=corp", null)
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("3 references"));
+            Assert.That(message, Does.Contain("1 on manager, 2 on member"),
+                "The breakdown is per attribute, in a stable order, so two runs with the same problem read the same.");
+            Assert.That(message, Does.Contain("Container Scope"));
+            Assert.That(message, Does.Not.Contain("there may be more"));
+        }
+    }
+
+    [Test]
+    public void ForUnresolvedReferences_LargeCount_GroupsTheDigits()
+    {
+        var references = Enumerable.Range(0, 1_284)
+            .Select(i => ("member", $"CN=User {i},OU=Contractors,DC=corp", (IReadOnlyList<string>?)null))
+            .ToList();
+
+        var message = ImportOutcomeMessage.ForUnresolvedReferences(references);
+
+        Assert.That(message, Does.Contain("1,284 references").And.Contain("1,284 on member"));
+    }
+
+    [Test]
+    public void ForUnresolvedReferences_OneAmbiguousValue_NamesTheCandidateObjectTypesAndTheSchemaFix()
+    {
+        var message = ImportOutcomeMessage.ForUnresolvedReferences(
+            [("member", "42", ["SOURCE_USER", "SOURCE_GROUP"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("SOURCE_GROUP").And.Contain("SOURCE_USER"));
+            Assert.That(message, Does.Contain("member"));
+            Assert.That(message, Does.Contain("schema configuration"));
+            Assert.That(message, Does.Not.Contain("Container Scope"),
+                "An ambiguous value was found, twice; scope is not its cause, and saying so would mislead.");
+        }
+    }
+
+    [Test]
+    public void ForUnresolvedReferences_AmbiguousAndMissingTogether_GivesEachCauseItsOwnRemedy()
+    {
+        var message = ImportOutcomeMessage.ForUnresolvedReferences(
+        [
+            ("member", "CN=Ana Silva,OU=Contractors,DC=corp", null),
+            ("member", "42", ["SOURCE_USER", "SOURCE_GROUP"]),
+            ("member", "CN=Ben Ortiz,OU=Contractors,DC=corp", null)
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("3 references"));
+            Assert.That(message, Does.Contain("2 match no Connected System Object"));
+            Assert.That(message, Does.Contain("Container Scope"));
+            Assert.That(message, Does.Contain("1 matches objects of more than one Object Type"));
+            Assert.That(message, Does.Contain("schema configuration"));
+        }
+    }
 }

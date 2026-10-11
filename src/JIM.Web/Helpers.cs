@@ -340,6 +340,11 @@ public static class Helpers
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
             [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
 
+            // Raised on an object that otherwise imported or exported (#959): only the reference values that could not
+            // be linked are affected, so "Failed" would overstate it. Raised by import and export alike (#1398), so
+            // the heading names the condition rather than a phase.
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Reference Unresolved",
+
             // Import-phase diagnostics: the object imported and its changes were applied.
             [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
             [ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport] = "Import Fell Back",
@@ -349,7 +354,6 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
             // One error type covering two outcomes: Fail this mapping costs the object one attribute and nothing
@@ -404,6 +408,24 @@ public static class Helpers
 
         // Unreachable while ErrorPhaseTitleTests passes; a neutral fallback beats an empty heading.
         return "Operation Failed";
+    }
+
+    /// <summary>
+    /// The note a Run Profile Execution Item's page shows about the references its import left unresolved (#959), or
+    /// null where there is nothing to add. The item records the count whatever error it carries and under every
+    /// Unresolved Reference Handling mode; where the unresolved reference error holds the item's error slot, that
+    /// error already says it all, and everywhere else this note is the only place the count is seen.
+    /// </summary>
+    public static string? GetUnresolvedReferenceNote(ActivityRunProfileExecutionItemErrorType? errorType, int? unresolvedReferenceCount)
+    {
+        if (unresolvedReferenceCount is not { } count || count <= 0 || errorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference)
+            return null;
+
+        var references = count == 1 ? "1 reference" : $"{count:N0} references";
+        var statement = $"{references} on this object could not be resolved to Connected System Objects.";
+        return errorType is null or ActivityRunProfileExecutionItemErrorType.NotSet
+            ? statement
+            : $"Also: {statement}";
     }
 
     #region mudblazor related

@@ -44,7 +44,9 @@ public enum ActivityRunProfileExecutionItemErrorType
     UnexpectedAttribute,
     /// <summary>
     /// An attribute contains a reference to another Connected System Object that could not be found.
-    /// This may occur when the referenced object is outside the configured container scope.
+    /// This may occur when the referenced object is outside the configured container scope. On import, one error
+    /// covers every reference the object was left with; the item's <c>UnresolvedReferenceCount</c> records how many,
+    /// and is set even when another error holds the item's error slot (#959).
     /// </summary>
     UnresolvedReference,
     /// <summary>

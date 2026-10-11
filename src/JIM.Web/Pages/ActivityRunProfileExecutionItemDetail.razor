@@ -443,6 +443,21 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
                             <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
                         }
+
+                        @* References the import left unresolved that no error above describes (#959): another error
+                           holds the item's error slot, or Unresolved Reference Handling is Warn or Ignore. *@
+                        @if (Helpers.GetUnresolvedReferenceNote(_activityRunProfileExecutionItem.ErrorType,
+                                 _activityRunProfileExecutionItem.UnresolvedReferenceCount) is { } unresolvedReferenceNote)
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mb-3">
+                                @unresolvedReferenceNote
+                                @if (_activityRunProfileExecutionItem.ConnectedSystemObject is { } referencingObject)
+                                {
+                                    <text> </text>
+                                    <MudLink Href="@Utilities.GetConnectedSystemObjectHref(referencingObject)">View the values on the Connected System Object</MudLink>
+                                }
+                            </MudAlert>
+                        }
         </MudTabPanel>
 
         @* Shown only where there is one: an empty tab invites a click that answers nothing. *@
