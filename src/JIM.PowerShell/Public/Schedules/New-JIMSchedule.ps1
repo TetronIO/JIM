@@ -194,25 +194,26 @@ function New-JIMSchedule {
 
             # Add schedule configuration based on trigger type
             if ($TriggerType -eq 'Cron') {
-                if ($DaysOfWeek) {
+                # Bound, not truthy: PowerShell reads @(0), Sunday alone, as false.
+                if ($PSBoundParameters.ContainsKey('DaysOfWeek')) {
                     $body.daysOfWeek = ($DaysOfWeek | Sort-Object) -join ','
                 }
 
                 switch ($PatternType) {
                     'SpecificTimes' {
-                        if ($RunTimes) {
+                        if ($PSBoundParameters.ContainsKey('RunTimes')) {
                             $body.runTimes = $RunTimes -join ','
                         }
                     }
                     'Interval' {
-                        if ($IntervalValue) {
+                        if ($PSBoundParameters.ContainsKey('IntervalValue')) {
                             $body.intervalValue = $IntervalValue
                         }
                         $body.intervalUnit = $IntervalUnit
-                        if ($IntervalWindowStart) {
+                        if ($PSBoundParameters.ContainsKey('IntervalWindowStart')) {
                             $body.intervalWindowStart = $IntervalWindowStart
                         }
-                        if ($IntervalWindowEnd) {
+                        if ($PSBoundParameters.ContainsKey('IntervalWindowEnd')) {
                             $body.intervalWindowEnd = $IntervalWindowEnd
                         }
                     }
