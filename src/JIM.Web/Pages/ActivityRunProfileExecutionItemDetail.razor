@@ -302,7 +302,11 @@
                                 Timestamp="@_activity?.Executed"
                                 Chain="_causalChain"
                                 DeletionPolicySnapshot="_deletionPolicySnapshot"
-                                IsSynchronisationRun="IsSyncContext()" />
+                                IsSynchronisationRun="IsSyncContext()"
+                                Consequences="_consequences"
+                                ConsequencesLoading="_consequencesLoading"
+                                OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
+                                LoadConsequenceMembers="LoadConsequenceMembersAsync" />
             </div>
 
             @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
@@ -501,6 +505,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // the panel so the panel stays a rendering component with no data access of its own.
     private CausalChain? _causalChain;
 
+    // The downward walk (#1811): what this item went on to cause. Read after the first render, so the panel never waits
+    // on it, and read again only when the reader asks to check while a branch is waiting.
+    private CausalConsequences? _consequences;
+    private bool _consequencesLoading;
+    private Guid? _consequencesReadFor;
+
     // Decision-time deletion policy snapshot (#119): the deletion rule context panels render from the facts
     // recorded when the decision was made, never from the object type's current configuration, so the
     // explanation stays accurate after an administrator edits the rule.
@@ -640,6 +650,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_consequencesReadFor != Id)
+        {
+            _consequences = null;
+            _consequencesReadFor = null;
+        }
+
         using var jim = JimFactory.Create();
         _activityRunProfileExecutionItem = await jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
         if (_activityRunProfileExecutionItem == null)
@@ -787,6 +803,57 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
             }
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Every render, not only the first: the page is reused across navigations between items, and each item's walk
+        // is read once, after its panel is already on screen.
+        if (_activityRunProfileExecutionItem is not { } item || _consequencesReadFor == Id || _consequencesLoading
+            || !ShowsCausality(item))
+            return;
+
+        await ReadConsequencesAsync();
+    }
+
+    /// <summary>
+    /// Reads what this item went on to cause, a reading taken now: consequences can still be happening.
+    /// </summary>
+    private async Task ReadConsequencesAsync()
+    {
+        var itemId = Id;
+        _consequencesLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var consequences = await jim.Activities.GetCausalConsequencesAsync(itemId);
+            // A navigation to another item while this one was being read must not show this one's consequences there.
+            if (itemId == Id)
+            {
+                _consequences = consequences;
+                _consequencesReadFor = itemId;
+            }
+        }
+        finally
+        {
+            _consequencesLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task CheckConsequencesAgainAsync()
+    {
+        _consequences = null;
+        _consequencesReadFor = null;
+        return ReadConsequencesAsync();
+    }
+
+    private async Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?> LoadConsequenceMembersAsync(string cohortKey, int page, string? search)
+    {
+        using var jim = JimFactory.Create();
+        return await jim.Activities.GetCausalConsequenceCohortMembersAsync(Id, cohortKey, page,
+            JIM.Application.Servers.ActivityServer.CausalConsequenceMemberPageSize, search);
     }
 
     /// <summary>

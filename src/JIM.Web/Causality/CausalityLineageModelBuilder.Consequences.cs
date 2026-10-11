@@ -39,9 +39,19 @@ public static partial class CausalityLineageModelBuilder
         private int _sequence;
         private bool _furtherThanShown;
         private readonly List<CausalityLineageConsequence> _placed = [];
+        private HashSet<Guid> _livePendingExportIds = [];
 
         public CausalityLineageConsequenceSummary Place(CausalConsequences consequences)
         {
+            // A Pending Export is deleted once exported, so only the ones the walk found still waiting can be linked as
+            // rows; every other one a later run's card names links its system's queue instead.
+            _livePendingExportIds = AllCohorts(consequences.Cohorts)
+                .Where(c => c.HopKind == CausalConsequenceHopKind.OutstandingPendingExport)
+                .SelectMany(c => c.Members)
+                .Where(m => m.PendingExportId.HasValue)
+                .Select(m => m.PendingExportId!.Value)
+                .ToHashSet();
+
             var rootScope = new Scope(null);
             foreach (var state in recordColumns.Where(c => c.SystemId.HasValue))
                 rootScope.BindIfAbsent(state.SystemId!.Value, state);
@@ -50,15 +60,17 @@ public static partial class CausalityLineageModelBuilder
                 PlaceEnding(ending, subject);
 
             foreach (var cohort in consequences.Cohorts)
-                PlaceCohort(cohort, rootScope, subject, deletedName: null);
+                PlaceCohort(cohort, rootScope, subject, deletedName: null, parentNoun: CohortNoun.None);
 
             return Summarise(consequences);
         }
 
-        private void PlaceCohort(CausalConsequenceCohort cohort, Scope parentScope, ColumnState parentObject, string? deletedName)
+        private void PlaceCohort(CausalConsequenceCohort cohort, Scope parentScope, ColumnState parentObject, string? deletedName,
+            CohortNoun parentNoun)
         {
             var scope = new Scope(parentScope);
             var cohortObject = parentObject;
+            var noun = CohortNoun.For(cohort, parentNoun);
 
             switch (cohort.HopKind)
             {
@@ -85,10 +97,10 @@ public static partial class CausalityLineageModelBuilder
                         ? NewReferringObject(cohort, scope)
                         : null;
                     cohortObject = cohort.Representative != null
-                        ? PlaceOutcomes(cohort, cohort.Representative, scope, removalObject, deletedName) ?? removalObject ?? parentObject
+                        ? PlaceOutcomes(cohort, cohort.Representative, scope, removalObject, deletedName, noun) ?? removalObject ?? parentObject
                         : removalObject ?? parentObject;
                     if (cohort.Representative == null)
-                        Add(cohortObject, UnretainedCard(cohort));
+                        Add(cohortObject, UnretainedCard(cohort, noun));
                     deletedName = cohort.Representative?.SyncOutcomes
                         .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted)?.TargetEntityDescription
                         ?? deletedName;
@@ -110,7 +122,7 @@ public static partial class CausalityLineageModelBuilder
             }
 
             foreach (var consequence in cohort.Consequences)
-                PlaceCohort(consequence, scope, cohortObject, deletedName);
+                PlaceCohort(consequence, scope, cohortObject, deletedName, noun);
         }
 
         /// <summary>
@@ -118,10 +130,10 @@ public static partial class CausalityLineageModelBuilder
         /// own story continues on: the last record its events reached, else the Metaverse Object.
         /// </summary>
         private ColumnState? PlaceOutcomes(CausalConsequenceCohort cohort, ActivityRunProfileExecutionItem representative,
-            Scope scope, ColumnState? removalObject, string? deletedName)
+            Scope scope, ColumnState? removalObject, string? deletedName, CohortNoun noun)
         {
             var representativeContext = RepresentativeContext(cohort, representative, scope);
-            var model = CausalityModelBuilder.Build(representative, representativeContext, chain: QueueingChain(cohort));
+            var model = CausalityModelBuilder.Build(representative, representativeContext, _livePendingExportIds, chain: QueueingChain(cohort));
             var runLabel = GetRunLabel(representative.Activity);
             var occurred = representative.Activity?.Executed ?? cohort.FirstOccurred;
             var itemHref = cohort.MemberCount == 1 ? $"/activity/item/{representative.Id}" : null;
@@ -165,13 +177,14 @@ public static partial class CausalityLineageModelBuilder
                     Kind = isConfirmation ? CausalityLineageConsequenceKind.Confirmation : CausalityLineageConsequenceKind.Outcome,
                     Event = causalityEvent,
                     Title = isConfirmation
-                        ? ConfirmationTitle(cohort)
-                        : isReferenceRemoval ? ReferenceRemovalTitle(cohort, deletedName) : null,
+                        ? ConfirmationTitle(cohort, noun)
+                        : isReferenceRemoval ? ReferenceRemovalTitle(cohort, deletedName, noun) : null,
                     Text = isConfirmation ? null : GetWhy(cohort, causalityEvent, parentEvent, first),
                     RunLabel = runLabel,
                     Occurred = occurred,
                     ActivityItemHref = itemHref,
                     Cohort = first && cohort.MemberCount > 1 ? cohort : null,
+                    MembersNoun = noun.For(cohort.MemberCount),
                     PillLabel = isConfirmation
                         ? null
                         : isReferenceRemoval ? ReferenceRemovalPill(cohort) : causalityEvent.Label,
@@ -181,7 +194,7 @@ public static partial class CausalityLineageModelBuilder
 
                 if (target.Kind == CausalityLineageColumnKind.Record)
                 {
-                    NameFromItem(target, cohort, representative, isReferring: removalObject != null);
+                    NameFromItem(target, cohort, representative, isReferring: removalObject != null, noun);
                     lastRecord = target;
                 }
 
@@ -310,15 +323,16 @@ public static partial class CausalityLineageModelBuilder
         /// A cohort whose items have since been purged: the count and the change are still known from the walk, so it is
         /// said rather than dropped.
         /// </summary>
-        private static CausalityLineageConsequence UnretainedCard(CausalConsequenceCohort cohort) => new()
+        private static CausalityLineageConsequence UnretainedCard(CausalConsequenceCohort cohort, CohortNoun noun) => new()
         {
             Kind = CausalityLineageConsequenceKind.Outcome,
             Title = cohort.MemberCount == 1
                 ? "A later run acted on this object"
-                : $"A later run acted on {cohort.MemberCount} {Noun(cohort)}",
+                : $"A later run acted on {cohort.MemberCount} {noun.For(cohort.MemberCount)}",
             Text = "The items it recorded are no longer retained.",
             Occurred = cohort.FirstOccurred,
             Cohort = cohort.MemberCount > 1 ? cohort : null,
+            MembersNoun = noun.For(cohort.MemberCount),
             MemberCount = cohort.MemberCount
         };
 
@@ -353,7 +367,8 @@ public static partial class CausalityLineageModelBuilder
         /// so their snapshots name the object better than an event's link can (a queued deprovision knows only the
         /// account's id). A cohort of several is a role, headed by its exact count.
         /// </summary>
-        private void NameFromItem(ColumnState target, CausalConsequenceCohort cohort, ActivityRunProfileExecutionItem representative, bool isReferring)
+        private static void NameFromItem(ColumnState target, CausalConsequenceCohort cohort, ActivityRunProfileExecutionItem representative,
+            bool isReferring, CohortNoun noun)
         {
             var isAboutTarget = isReferring || representative.Activity?.ConnectedSystemId == target.SystemId;
             if (!target.IsConsequenceObject || !isAboutTarget
@@ -362,7 +377,15 @@ public static partial class CausalityLineageModelBuilder
 
             if (cohort.MemberCount > 1)
             {
-                target.ConsequenceHead = new ColumnHead(Capitalise(Noun(cohort)), IsRoleHead: true, Href: null, ObjectTypeName: null);
+                // The first cohort to reach the objects names them; a later one only adds to how many there are, so an
+                // import that snapshotted no type cannot rename the Groups "objects".
+                // A type name is the system's own identifier and keeps its own casing; only the bare fallback needs a head
+                // of its own.
+                if (target.ConsequenceHead is not { IsRoleHead: true })
+                {
+                    var title = noun.Type == null && noun.Plural == null ? "Connected System Objects" : noun.For(cohort.MemberCount);
+                    target.ConsequenceHead = new ColumnHead(title, IsRoleHead: true, Href: null, ObjectTypeName: null);
+                }
                 target.MemberCount = Math.Max(target.MemberCount ?? 0, cohort.MemberCount);
                 return;
             }
@@ -538,39 +561,25 @@ public static partial class CausalityLineageModelBuilder
                 : null;
         }
 
-        private static string ReferenceRemovalTitle(CausalConsequenceCohort cohort, string? deletedName)
+        private static string ReferenceRemovalTitle(CausalConsequenceCohort cohort, string? deletedName, CohortNoun noun)
         {
             var removed = string.IsNullOrWhiteSpace(deletedName) ? "a deleted Metaverse Object" : deletedName;
             var attribute = string.IsNullOrWhiteSpace(cohort.AttributeName) ? "a reference" : cohort.AttributeName;
             return cohort.MemberCount == 1
                 ? $"Removed {removed} from {attribute}"
-                : $"Removed {removed} from {attribute} on {cohort.MemberCount} {Noun(cohort)}";
+                : $"Removed {removed} from {attribute} on {cohort.MemberCount} {noun.For(cohort.MemberCount)}";
         }
 
         private static string ReferenceRemovalPill(CausalConsequenceCohort cohort) =>
             string.IsNullOrWhiteSpace(cohort.AttributeName) ? "Reference removed" : $"Removed from {cohort.AttributeName}";
 
-        private static string ConfirmationTitle(CausalConsequenceCohort cohort) =>
+        private static string ConfirmationTitle(CausalConsequenceCohort cohort, CohortNoun noun) =>
             cohort.MemberCount == 1
                 ? "Confirmed by the next import"
-                : $"Confirmed by the next import, on {cohort.MemberCount} {Noun(cohort)}";
+                : $"Confirmed by the next import, on {cohort.MemberCount} {noun.For(cohort.MemberCount)}";
 
-        /// <summary>
-        /// The cohort's objects, singular or plural by count, from the type the items snapshotted.
-        /// </summary>
-        private static string Noun(CausalConsequenceCohort cohort)
-        {
-            var noun = cohort.MemberCount == 1
-                ? cohort.ObjectTypeName
-                : cohort.ObjectTypePluralName ?? cohort.ObjectTypeName;
-            if (!string.IsNullOrWhiteSpace(noun))
-                return noun;
-
-            return cohort.MemberCount == 1 ? "object" : "objects";
-        }
-
-        private static string Capitalise(string text) =>
-            text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+        private static IEnumerable<CausalConsequenceCohort> AllCohorts(IEnumerable<CausalConsequenceCohort> cohorts) =>
+            cohorts.SelectMany(c => AllCohorts(c.Consequences).Prepend(c));
     }
 
     /// <summary>
@@ -586,5 +595,34 @@ public static partial class CausalityLineageModelBuilder
         public void Bind(int systemId, ColumnState state) => _objects[systemId] = state;
 
         public void BindIfAbsent(int systemId, ColumnState state) => _objects.TryAdd(systemId, state);
+    }
+
+    /// <summary>
+    /// What a cohort's objects are called (#1811): the type its items snapshotted, else the type the branch above already
+    /// gave the same objects, since a confirming import often snapshots none.
+    /// </summary>
+    private sealed record CohortNoun(string? Type, string? Plural)
+    {
+        public static readonly CohortNoun None = new(null, null);
+
+        public static CohortNoun For(CausalConsequenceCohort cohort, CohortNoun parent) =>
+            string.IsNullOrWhiteSpace(cohort.ObjectTypeName)
+                ? parent
+                : new CohortNoun(cohort.ObjectTypeName, cohort.ObjectTypePluralName);
+
+        /// <summary>
+        /// Singular or plural by count. A type with no curated plural is not given an invented one ("jimGroups"); it
+        /// reads as "jimGroup objects", which is plural however the type is named.
+        /// </summary>
+        public string For(int count)
+        {
+            if (count == 1)
+                return string.IsNullOrWhiteSpace(Type) ? "object" : Type;
+
+            if (!string.IsNullOrWhiteSpace(Plural))
+                return Plural;
+
+            return string.IsNullOrWhiteSpace(Type) ? "objects" : $"{Type} objects";
+        }
     }
 }

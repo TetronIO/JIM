@@ -62,6 +62,11 @@ public sealed class CausalityLineageConsequence
     public CausalConsequenceCohort? Cohort { get; init; }
 
     /// <summary>
+    /// What <see cref="Cohort"/>'s members are called, singular or plural by its count ("Groups").
+    /// </summary>
+    public string? MembersNoun { get; init; }
+
+    /// <summary>
     /// A link the card offers (a Pending Export, the queue it sits in).
     /// </summary>
     public string? LinkText { get; init; }
