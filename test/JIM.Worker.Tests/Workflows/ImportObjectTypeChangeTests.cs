@@ -182,10 +182,10 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task FullImport_AllowObjectTypeChangesWithTheObjectReturnedTwice_CarriesOutOneChangeAsync()
+    public async Task FullImport_AllowObjectTypeChangesWithTheObjectReturnedTwice_RejectsBothAndKeepsTheHeldObjectAsync()
     {
-        // A Connector reading by calls reports a repeated External ID as a duplicate of the first copy, which is
-        // imported as usual; the change is carried out once, never as two replacements for one held object.
+        // Both copies are rejected (#2063), so nothing replaces the held object and retiring it would remove the
+        // directory object from JIM altogether.
         var context = await ArrangeAsync(allowObjectTypeChanges: true);
         var held = SeedCso(context, context.UserType, Guid.NewGuid());
 
@@ -194,9 +194,29 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SingleErroredRpei(context).ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DuplicateObject));
-            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(2), "One replacement beside the retired held object");
-            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(ErroredRpeis(context).Select(r => r.ErrorType),
+                Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.DuplicateObject, ActivityRunProfileExecutionItemErrorType.DuplicateObject }));
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(1), "No replacement is created");
+            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ObjectReturnedTwiceUnderItsNewObjectType_IsRejectedAndTheHeldObjectKeptAsync()
+    {
+        // Refusal is the default, but the copies are duplicates first: neither is reported as an Object Type change,
+        // and the held object is kept as it would be for a refusal.
+        var context = await ArrangeAsync();
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport,
+            [ImportObject(context.ComputerType, held.ExternalId), ImportObject(context.ComputerType, held.ExternalId)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ErroredRpeis(context).Select(r => r.ErrorType),
+                Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.DuplicateObject, ActivityRunProfileExecutionItemErrorType.DuplicateObject }));
+            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
         }
     }
 

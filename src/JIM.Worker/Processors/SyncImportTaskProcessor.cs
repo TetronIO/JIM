@@ -1329,31 +1329,12 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// #2049: the held objects deletion detection retires for the Object Type changes this run carried out. A change
-    /// whose replacement did not survive processing (rejected as a duplicate of another object in the same import)
-    /// has nothing to hand over to, so its held objects are protected instead.
+    /// #2049: the held objects deletion detection retires for the Object Type changes this run carried out. An object
+    /// returned more than once is rejected before it can carry out a change (#2063), so every change here has its
+    /// replacement still to be created.
     /// </summary>
-    private HashSet<Guid> PrepareObjectTypeChangeRetirements()
-    {
-        var retirements = new HashSet<Guid>();
-        foreach (var change in _objectTypeChangesCarriedOut)
-        {
-            if (IsStillCarriedOut(change))
-                retirements.UnionWith(change.Held.CsoIds);
-            else
-                _csoIdsHeldUnderAnotherObjectType.UnionWith(change.Held.CsoIds);
-        }
-
-        return retirements;
-    }
-
-    /// <summary>
-    /// Whether a carried-out Object Type change's replacement is still to be created: duplicate handling clears the
-    /// item's object and records an error when it takes a created object back out of the create list.
-    /// </summary>
-    private static bool IsStillCarriedOut(CarriedOutObjectTypeChange change) =>
-        ReferenceEquals(change.ExecutionItem.ConnectedSystemObject, change.Replacement)
-        && change.ExecutionItem.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet;
+    private HashSet<Guid> PrepareObjectTypeChangeRetirements() =>
+        _objectTypeChangesCarriedOut.SelectMany(change => change.Held.CsoIds).ToHashSet();
 
     /// <summary>
     /// #2049: keeps each carried-out Object Type change whose held objects were all retired, and withdraws the
@@ -1365,10 +1346,9 @@ public class SyncImportTaskProcessor
     {
         _objectTypeChangesReconciled = true;
 
-        var stillCarriedOut = _objectTypeChangesCarriedOut.Where(IsStillCarriedOut).ToList();
-        _objectTypeChangesAllowedCount += stillCarriedOut.Count(change => change.Held.CsoIds.All(retiredCsoIds.Contains));
+        _objectTypeChangesAllowedCount += _objectTypeChangesCarriedOut.Count(change => change.Held.CsoIds.All(retiredCsoIds.Contains));
 
-        foreach (var change in stillCarriedOut.Where(change => !change.Held.CsoIds.All(retiredCsoIds.Contains)))
+        foreach (var change in _objectTypeChangesCarriedOut.Where(change => !change.Held.CsoIds.All(retiredCsoIds.Contains)))
             WithdrawObjectTypeChange(change, connectedSystemObjectsToBeCreated);
     }
 
@@ -2316,12 +2296,12 @@ public class SyncImportTaskProcessor
             ? await _syncRepo.GetReferenceExternalIdsForCsosAsync(hydratedCsoPage.Keys)
             : new Dictionary<Guid, Dictionary<Guid, string>>();
 
-        // Track external IDs seen in THIS batch to detect same-batch duplicates.
-        // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
-        // Value: Tuple of (index in ImportObjects, RPEI, CSO if created)
-        // When duplicate found, we error BOTH objects - no "random winner" based on file order.
-        var seenExternalIds = new Dictionary<string, (int index, ActivityRunProfileExecutionItem rpei, ConnectedSystemObject? cso)>(StringComparer.OrdinalIgnoreCase);
-        var knownDuplicateExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Find the External IDs this page returns more than once, and those an earlier page already returned, before
+        // any object is processed (#2063). Every copy of an object repeated on this page is then rejected before
+        // anything is created or updated from it: JIM has no reason to prefer one copy over another (#280), and
+        // taking the first copy back once the second turns up is too late for an object JIM already holds, whose
+        // update has been applied by then.
+        var (repeatedOnThisPage, returnedOnAnEarlierPage) = FindDuplicateExternalIds(connectedSystemImportResult.ImportObjects, crossPageSeenExternalIds);
 
         // Set up progress tracking for this batch of imported objects.
         // At ~50ms per object (cache-miss), 100 objects = ~5 seconds between UI updates.
@@ -2432,20 +2412,12 @@ public class SyncImportTaskProcessor
                 if (externalIdImportAttr != null)
                 {
                     // Extract the external ID value as a string for tracking (works for all data types)
-                    var externalIdValue = externalIdAttribute.Type switch
-                    {
-                        AttributeDataType.Text => externalIdImportAttr.StringValues.FirstOrDefault(),
-                        AttributeDataType.Number => externalIdImportAttr.IntValues.FirstOrDefault().ToString(),
-                        AttributeDataType.LongNumber => externalIdImportAttr.LongValues.FirstOrDefault().ToString(),
-                        AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(externalIdImportAttr.DecimalValues.FirstOrDefault()),
-                        AttributeDataType.Guid => externalIdImportAttr.GuidValues.FirstOrDefault().ToString(),
-                        _ => null
-                    };
+                    var externalIdValue = GetDuplicateDetectionExternalIdValue(externalIdImportAttr, externalIdAttribute.Type);
 
                     if (!string.IsNullOrEmpty(externalIdValue))
                     {
                         // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
-                        var duplicateKey = $"{csObjectType.Id}:{externalIdValue}";
+                        var duplicateKey = GetDuplicateDetectionKey(csObjectType, externalIdValue);
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
@@ -2454,80 +2426,39 @@ public class SyncImportTaskProcessor
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
 
-                        // Cross-page duplicate detection (defence-in-depth)
-                        // This catches duplicates that span multiple pages, which can occur with
-                        // directory servers that don't properly support paging (e.g., Samba AD)
-                        if (crossPageSeenExternalIds != null && !crossPageSeenExternalIds.Add(duplicateKey))
+                        // An earlier page returned this object already, and decided it: this copy is rejected. Directory
+                        // servers that do not page properly (e.g. Samba AD) can repeat an object across pages.
+                        if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
-                            // This external ID was already seen on a previous page
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. This object was already processed on a previous page. This may indicate a directory server paging issue.";
-                            Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. Object was already imported on a previous page. Skipping.",
+                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. An object with this external ID was already returned on an earlier page, so this copy has been rejected. This may indicate a directory server paging issue.";
+                            Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. An earlier page already returned it. Rejecting this copy.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
-                        if (knownDuplicateExternalIds.Contains(duplicateKey))
+                        // This page returns the object more than once: every copy is rejected, so the data owner fixes
+                        // the source rather than JIM picking a winner by order.
+                        if (repeatedOnThisPage.Contains(duplicateKey))
                         {
-                            // This is the 3rd+ duplicate - just mark it as error (first already handled)
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' (3rd+ occurrence) at index {Index}. Marking as error.",
+                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' at index {Index}. This page returns it more than once, so every copy is rejected.",
                                 LogSanitiser.Sanitise(externalIdValue), importIndex);
-                            continue;
-                        }
 
-                        if (seenExternalIds.TryGetValue(duplicateKey, out var firstOccurrence))
-                        {
-                            // Duplicate found! Error BOTH objects.
-                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' found at index {CurrentIndex}. First occurrence was at index {FirstIndex}. Erroring BOTH objects.",
-                                LogSanitiser.Sanitise(externalIdValue), importIndex, firstOccurrence.index);
-
-                            // Mark THIS object as duplicate
-                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-
-                            // Go back and mark the FIRST object as duplicate too
-                            firstOccurrence.rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
-                            firstOccurrence.rpei.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
-                            // Reset change type since no object was actually created/updated
-                            firstOccurrence.rpei.ObjectChangeType = ObjectChangeType.NotSet;
-
-                            // If the first object had already created a CSO, remove it from the create list
-                            if (firstOccurrence.cso != null)
-                            {
-                                var removed = connectedSystemObjectsToBeCreated.Remove(firstOccurrence.cso);
-                                if (removed)
-                                {
-                                    Log.Debug("ProcessImportObjectsAsync: Removed CSO for first occurrence of duplicate external ID '{ExternalId}' from create list.",
-                                        LogSanitiser.Sanitise(externalIdValue));
-                                }
-                                // Clear the CSO reference from the RPEI since we're not persisting it
-                                firstOccurrence.rpei.ConnectedSystemObject = null;
-                                firstOccurrence.rpei.ConnectedSystemObjectId = null;
-                            }
-
-                            // Track this as a known duplicate for any subsequent occurrences (3rd, 4th, etc.)
-                            knownDuplicateExternalIds.Add(duplicateKey);
-
-                            // Remove from seenExternalIds since we've handled it
-                            seenExternalIds.Remove(duplicateKey);
+                            // Nothing replaces an object JIM holds under another Object Type, so it is kept (#2049).
+                            if (hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var repeatedHeldElsewhere))
+                                _csoIdsHeldUnderAnotherObjectType.UnionWith(repeatedHeldElsewhere.CsoIds);
 
                             continue;
                         }
-
-                        // First time seeing this external ID in this batch - track it
-                        // We'll update the CSO reference after it's created (if it gets created)
-                        seenExternalIds[duplicateKey] = (importIndex, activityRunProfileExecutionItem, null);
                     }
                 }
 
                 // SPEC-1082 D8: skip check, INSTEAD of TryAndFindMatchingConnectedSystemObjectAsync,
                 // for objects the pre-fetch already proved unchanged (hash+fingerprint match, Normal
                 // status, not a delete, no pending partition backfill). Mirrors the existing no-op
-                // path immediately below (RPEI removal, including its known same-batch-duplicate
-                // quirk of marking an already-removed RPEI - mirrored deliberately, not fixed here);
-                // skipped objects are NOT added to the update list. Their external ID was already
+                // path immediately below (RPEI removal); skipped objects are NOT added to the update list. Their external ID was already
                 // collected for deletion detection at page level before processing (AddExternalIdsToCollection),
                 // so a genuinely missing object still obsoletes; see ImportContentHashSkipTests.
                 if (hydrationResult.SkipEligible.Contains(importObject))
@@ -2680,31 +2611,6 @@ public class SyncImportTaskProcessor
                             SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
                                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded,
                                 detailCount: importObject.Attributes.Count);
-                        }
-
-                        // Update the seenExternalIds entry with the CSO reference so we can remove it if a duplicate is found later
-                        var extIdAttr = csObjectType.Attributes.First(a => a.IsExternalId);
-                        var extIdImportAttr = importObject.Attributes
-                            .FirstOrDefault(a => a.Name.Equals(extIdAttr.Name, StringComparison.OrdinalIgnoreCase));
-                        if (extIdImportAttr != null)
-                        {
-                            var extIdVal = extIdAttr.Type switch
-                            {
-                                AttributeDataType.Text => extIdImportAttr.StringValues.FirstOrDefault(),
-                                AttributeDataType.Number => extIdImportAttr.IntValues.FirstOrDefault().ToString(),
-                                AttributeDataType.LongNumber => extIdImportAttr.LongValues.FirstOrDefault().ToString(),
-                                AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(extIdImportAttr.DecimalValues.FirstOrDefault()),
-                                AttributeDataType.Guid => extIdImportAttr.GuidValues.FirstOrDefault().ToString(),
-                                _ => null
-                            };
-                            if (!string.IsNullOrEmpty(extIdVal))
-                            {
-                                var dupKey = $"{csObjectType.Id}:{extIdVal}";
-                                if (seenExternalIds.ContainsKey(dupKey))
-                                {
-                                    seenExternalIds[dupKey] = (seenExternalIds[dupKey].index, seenExternalIds[dupKey].rpei, connectedSystemObject);
-                                }
-                            }
                         }
                     }
                     else
@@ -2919,8 +2825,8 @@ public class SyncImportTaskProcessor
         var duplicateCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject);
         var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null || x.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet);
         var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null && x.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. Seen external IDs tracked: {SeenCount}",
-            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, seenExternalIds.Count);
+        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
+            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, repeatedOnThisPage.Count);
     }
 
     /// <summary>
@@ -3036,6 +2942,73 @@ public class SyncImportTaskProcessor
         var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
         return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
     }
+
+    /// <summary>
+    /// #2063: the duplicate detection keys this page returns more than once, and those an earlier page already returned,
+    /// then adds this page's keys to <paramref name="earlierPageKeys"/> for the pages after it. File-based imports are a
+    /// single page and pass no set.
+    /// </summary>
+    private (HashSet<string> RepeatedOnThisPage, HashSet<string> ReturnedOnAnEarlierPage) FindDuplicateExternalIds(
+        IEnumerable<ConnectedSystemImportObject> importObjects, HashSet<string>? earlierPageKeys)
+    {
+        var pageKeys = importObjects.Select(GetDuplicateDetectionKey).OfType<string>().ToList();
+        var repeatedOnThisPage = pageKeys
+            .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (earlierPageKeys == null)
+            return (repeatedOnThisPage, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var returnedOnAnEarlierPage = pageKeys.Where(earlierPageKeys.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        earlierPageKeys.UnionWith(pageKeys);
+        return (repeatedOnThisPage, returnedOnAnEarlierPage);
+    }
+
+    /// <summary>
+    /// #2063: the key duplicate detection files an import object under, worked out as the per-object loop works it out,
+    /// or null for an object that loop rejects before duplicate detection (one the Connector could not read, one with a
+    /// repeated attribute, one of an unknown Object Type) or that carries no External ID value.
+    /// </summary>
+    private string? GetDuplicateDetectionKey(ConnectedSystemImportObject importObject)
+    {
+        if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet and not ConnectedSystemImportObjectError.AttributeValueError)
+            return null;
+
+        if (importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            return null;
+
+        var csObjectType = _connectedSystem.ObjectTypes?.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        var externalIdAttribute = csObjectType?.Attributes.FirstOrDefault(a => a.IsExternalId);
+        if (csObjectType == null || externalIdAttribute == null)
+            return null;
+
+        RemoveNullImportObjectAttributes(importObject);
+        var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+        var externalIdValue = externalIdImportAttr == null ? null : GetDuplicateDetectionExternalIdValue(externalIdImportAttr, externalIdAttribute.Type);
+        return string.IsNullOrEmpty(externalIdValue) ? null : GetDuplicateDetectionKey(csObjectType, externalIdValue);
+    }
+
+    /// <summary>
+    /// The composite key duplicate detection uses: the same External ID under two Object Types is two keys.
+    /// </summary>
+    private static string GetDuplicateDetectionKey(ConnectedSystemObjectType objectType, string externalIdValue) =>
+        $"{objectType.Id}:{externalIdValue}";
+
+    /// <summary>
+    /// The External ID value duplicate detection compares and execution items record, as text for every data type.
+    /// </summary>
+    private static string? GetDuplicateDetectionExternalIdValue(ConnectedSystemImportObjectAttribute externalIdImportAttribute, AttributeDataType type) =>
+        type switch
+        {
+            AttributeDataType.Text => externalIdImportAttribute.StringValues.FirstOrDefault(),
+            AttributeDataType.Number => externalIdImportAttribute.IntValues.FirstOrDefault().ToString(),
+            AttributeDataType.LongNumber => externalIdImportAttribute.LongValues.FirstOrDefault().ToString(),
+            AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(externalIdImportAttribute.DecimalValues.FirstOrDefault()),
+            AttributeDataType.Guid => externalIdImportAttribute.GuidValues.FirstOrDefault().ToString(),
+            _ => null
+        };
 
     /// <summary>
     /// The import object's External ID value in the form the pre-fetched lookup keys carry it (the same form

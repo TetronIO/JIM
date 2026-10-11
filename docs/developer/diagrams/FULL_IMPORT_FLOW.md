@@ -111,15 +111,13 @@ flowchart TD
     TypeFound -->|No| TypeErr[RPEI: CouldNotMatchObjectType<br/>Skip object]
 
     TypeFound -->|Yes| ExtractExtId[Extract external ID value<br/>from import attributes]
-    ExtractExtId --> CrossPageDup{Cross-page<br/>duplicate?}
+    ExtractExtId --> CrossPageDup{Returned on an<br/>earlier page?}
     CrossPageDup -->|Yes| CrossPageErr[RPEI: DuplicateObject<br/>Cross-page duplicate detected<br/>Skip object]
 
-    CrossPageDup -->|No| SameBatchDup{Same-batch<br/>duplicate?}
-    SameBatchDup -->|3rd+ occurrence| ThirdDupErr[RPEI: DuplicateObject<br/>Skip object]
-    SameBatchDup -->|2nd occurrence| BothDupErr[Error BOTH objects:<br/>Mark current as DuplicateObject<br/>Go back and mark first as DuplicateObject<br/>Remove first CSO from create list<br/>No random winner]
+    CrossPageDup -->|No| SameBatchDup{Returned more than<br/>once on this page? #2063}
+    SameBatchDup -->|Yes| BothDupErr[RPEI: DuplicateObject<br/>Every copy rejected, no random winner<br/>Object held under another<br/>Object Type is kept]
 
-    SameBatchDup -->|First occurrence| TrackExtId[Track external ID<br/>in seenExternalIds]
-    TrackExtId --> HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
+    SameBatchDup -->|No| HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
     HashSkip -->|Yes| SkipObject[Skip hydration and diff<br/>Remove RPEI, count as skipped<br/>Not added to update list<br/>External ID already collected<br/>for deletion detection]
     HashSkip -->|No| CheckDelete{Connector says<br/>Delete?}
 
@@ -282,9 +280,11 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Cross-page duplicate detection**<br /> A `HashSet<string>` tracks external IDs across all pages of a paginated import. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
+- **Duplicates are found before any object is processed**<br /> Each page is scanned for repeated external IDs before its first object is processed (#2063), so every copy of a repeated object is rejected before anything is created or updated from it. Rejecting the first copy only once the second turned up was too late for an object JIM already held, whose update had been applied by then. A rejected copy still counts as returned for deletion detection, so a duplicate never deletes the object it repeats.
 
-- **Same-batch duplicate handling**<br /> When duplicates are found within a single page, BOTH objects are rejected (no "random winner" based on file order). This forces data owners to fix the source data.
+- **Cross-page duplicate detection**<br /> A `HashSet<string>` holds the external IDs of every earlier page of a paginated import; a later copy is rejected, because the earlier page has already decided the object. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
+
+- **Same-batch duplicate handling**<br /> When an external ID is repeated within a single page, EVERY copy is rejected (no "random winner" based on order). This forces data owners to fix the source data. It applies to every Connector, whether it imports from a file or by calls.
 
 - **Watermark consistency**<br /> For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page, ensuring consistent queries. The new watermark from the first page is only saved at the very end of the run, once everything the pages returned has been staged (#1868): a run that fails or is cancelled before then keeps the watermark it started with, so the next Delta Import re-reads what it did not stage rather than skipping it.
 
