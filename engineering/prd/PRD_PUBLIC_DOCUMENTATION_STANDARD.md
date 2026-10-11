@@ -1,0 +1,245 @@
+# Public Documentation Standard
+
+- **Status:** Planned
+- **Created:** 2026-10-11
+- **Author:** Drafted by Claude Code for product owner review
+- **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
+- **Evidence:** [`engineering/notes/docs-audit-2026-10/`](../notes/docs-audit-2026-10/README.md) (every page read in full; product surfaces inventoried from source)
+
+## Problem Statement
+
+JIM's public documentation is written for the people who build JIM more often than for the people who implement it. An administrator who opens a page usually needs three answers: what this is, what to do, and what it means for their data. Too many pages answer a fourth question instead: how JIM does it inside.
+
+The October 2026 audit read all 99 authored pages (about 222,000 words on the 80 customer-facing ones) and measured where the gap actually is. It is not where the issue's wording suggests.
+
+**The mechanical style rules are already met.** No em dashes, no "Sync Rule", about seven American spellings across the whole site. A prose linter enforcing more rules of that kind would make the docs no more useful to an administrator.
+
+**The defects that hurt are substance, structure, accuracy and coverage:**
+
+| Defect | Scale | Example |
+|--------|-------|---------|
+| Pages explain JIM's internals instead of the meaning to the reader | 15 of 31 core pages; 31 of 49 operations pages | "inside the same transaction ... arms the stranded-value sweep" (`configuration/connected-systems.md`) |
+| Changelog voice: history, release and roadmap narration in reference and how-to pages | 16 of 31; 24 of 49 | "Until now ... Each service now writes a heartbeat" (`configuration/operations.md`); GitHub issue numbers on 4 customer pages |
+| Sibling pages share no structure | 33 of 49 operations pages | The PowerShell pages use three heading schemes and four ways of presenting `-WhatIf` and `-Confirm`; the three SSO guides share no template |
+| Pages too long to use, mixing every Diátaxis mode | 9 core pages; the largest five hold 51,000 of 87,000 words | `configuration/synchronisation-rules.md` is 17,800 words; the setup steps in `configuration/connected-systems.md` start at line 645 of 708 |
+| The same fact told twice, and the copies now disagree | 12 core pages | The glossary says a Partition is an organisational unit; the Connected Systems page says it is not. The JML page says a Disable action is planned, then its worked example disables accounts |
+| Examples and names that do not work | 15 operations pages | `Get-JIMConnectedSystem -All` and `Get-JIMSyncRule -All` (no such parameter); `Invoke-JIMRunProfile`, `Invoke-JIMSchedule` and `New-JIMCertificate` (no such cmdlets); every REST example in `api/authentication.md` uses a route that is not the controller's |
+| Missing journeys | 2 pages | `getting-started/first-synchronisation.md` is a 63-word stub, so no page takes a new administrator from install to a working synchronisation; `administration/troubleshooting.md` has no synchronisation section at all |
+| Missing terms and settings | See Coverage below | About 25 product nouns used in the docs have no glossary entry; 13 of 34 Service Settings are named nowhere |
+
+**Coverage is better than feared on the mechanical inventories and weak on the conceptual ones.** Connector settings 65 of 65, environment variables 23 of 24, cmdlets 172 of 182 with a section, every REST endpoint in the generated reference. But the glossary lacks Object Type, Metaverse Attribute, Container, Deletion Rule, Generated Value, Run Profile Execution Item and about twenty more; 10 of 43 customer-facing portal pages are documented nowhere; Service Settings are 13 of 34 in the reference table.
+
+**Nothing checks any of it before merge.** `mkdocs build --strict` runs only after merge to `main`, anchors are not validated, `unrecognized_links: ignore` hides one broken link, and two pages have front matter so malformed that MkDocs silently drops it.
+
+### Why the existing guidance did not prevent this
+
+`docs/CLAUDE.md` already contains a good voice specification ("Writing for the Reader"), and the best pages (`concepts/case-sensitivity.md`, `connectors/jim-sql-connector.md`, `administration/backup-recovery.md`) follow it closely. So "no defined voice" is only half true. What is actually missing:
+
+1. **A home a human can find.** The rules live in an agent-instruction file excluded from the site. Only Claude sessions working under `docs/` ever read them.
+2. **An audience and a page shape.** There is no definition of who each page is for, and no required structure per page type. `configuration/`, the largest customer section, has no Diátaxis mode at all, so every one of its 16 pages decides its own shape, and nearly all mix four modes.
+3. **A check.** Everything is enforced by memory, and the rules that matter most are the ones a reviewer is least likely to catch.
+4. **A migration driver.** "Existing pages will migrate over time" has been the policy since the Diátaxis section was written; without a mechanism, they did not.
+
+## Goals
+
+- One specification for public documentation, in one place, where every rule has a stable ID that the lint message, the review rubric and the specification all share.
+- Every published page declares its type and its audience, and the build checks it has the shape its type requires.
+- Defects that a machine can see (broken links and anchors, malformed front matter, cmdlets or parameters that do not exist, REST routes that do not exist, undocumented settings, missing glossary entries, issue numbers, time-relative narration) fail the pull request that introduces them.
+- Existing debt can only fall: a shrink-only baseline lets every existing page keep working while forbidding new debt, and every new page is conformant from its first commit.
+- "Complete coverage" is defined against inventories generated from source, and each inventory has a check that fails when something exists but is undocumented, or is documented but no longer exists.
+- Every customer-facing folder is migrated to the specification, each finishing with an empty baseline.
+- A new administrator can go from installation to a first working synchronisation using only the docs.
+
+## Non-Goals
+
+- **Migrating off MkDocs or Material for MkDocs.** Material entered maintenance mode in November 2025 with fixes promised only until about 5 November 2026, and MkDocs 2.0 drops the plugin system. That is a real risk, but a separate decision; this work keeps every check generator-agnostic (Markdown sources and built HTML) so it survives a move. See Dependencies.
+- **A versioned docs site, or shipping docs inside the air-gapped release bundle.** The specification adds version markers to mitigate an unversioned site; versioning the site is a product decision.
+- **Generating the PowerShell cmdlet reference.** That is [#1083](https://github.com/TetronIO/JIM/issues/1083). This work depends on it for the `powershell/` migration (see Dependencies) rather than doing it.
+- **Rewriting the generated REST API reference (Scalar).** Only the `docs/api/` overview pages are in scope.
+- **Blocking a merge on a language model's judgement.** The rubric review is advisory by construction.
+- **Screenshots.** The existing rule against them stands.
+- **Translation or localisation.**
+
+## User Stories
+
+1. As an **evaluator**, I want each concept page to open with what the thing is and why it matters to me, so that I can judge whether JIM fits without reading about its internals.
+2. As an **implementer**, I want a tutorial that takes me from installation to a first working synchronisation, so that I learn JIM by succeeding with it rather than by assembling twenty pages.
+3. As an **administrator**, I want every task page to say what I need first, what to do, how to check it worked and what survives anything destructive, so that I can act on production without reading defensively.
+4. As an **operator**, I want troubleshooting entries titled by the exact symptom I am seeing, with cause, fix and check, so that I can recover a failed run without raising a ticket.
+5. As an **automation author**, I want every PowerShell and REST example to run as written, so that I can trust the docs as much as the product.
+6. As a **security assessor**, I want security behaviour stated plainly in one place per fact, so that I can sign off a deployment without reconciling contradictory pages.
+7. As a **JIM author (human or Claude)**, I want the shape of the page I am writing, and to be told at pull request time which rule I broke and where it is defined, so that I do not have to learn the standard by review comments.
+8. As the **product owner**, I want to see each folder's conformance at a glance, so that I know how far the migration has come and where to spend effort.
+
+## Requirements
+
+### Functional Requirements
+
+#### The specification
+
+1. The specification lives in one document (proposed: `engineering/DOCUMENTATION_STANDARD.md`; see Open Question 1). `docs/CLAUDE.md` keeps only site mechanics (diagrams, lightbox, dependencies) and points to it; it no longer restates any rule. The "Writing for the Reader" rules move into the specification unchanged in substance.
+2. Every rule has a stable ID (for example `LANG-5`). The ID appears in the lint message, the rubric and the specification, and the lint message links to the rule.
+3. **Audiences.** The specification names the readers and what each needs: evaluator, implementer, administrator, operator, automation author, security assessor. Every page declares one primary audience in front matter (`audience:`). JIM contributors are not an audience of the public site (see Open Question 3).
+4. **Page types and required shapes.** Every page declares `type:` in front matter, and each type has a required shape:
+
+    | Type | Title | Required | Forbidden |
+    |------|-------|----------|-----------|
+    | `tutorial` | Outcome ("Run your first synchronisation") | Time and outcome up front; prerequisites; checkpoints; "What you achieved" | Branches and alternatives |
+    | `how-to` | Imperative ("Configure SSO with Microsoft Entra ID") | When to do this and the outcome; "Before you begin" when there are prerequisites; numbered steps; a warning before any destructive step stating what survives; "Check it worked"; next steps | Teaching digressions (link to the concept) and exhaustive option lists (link to the reference) |
+    | `concept` | Noun phrase, never "Overview" | What it is and why it matters, in the first paragraph; a diagram where the shape is the point; links on to tasks and reference | Numbered procedures |
+    | `reference` | Noun phrase | One-line scope; consistent tables (setting, default, allowed values, effect, available from); generated where possible | Narrative and instructions |
+    | `troubleshooting` | "Troubleshooting <area>" | Entries titled by the symptom or message verbatim, each with cause, fix, check and what is not lost; data-loss entries first; "Still stuck?" with what to collect | Reassurance with no fix |
+    | `landing` | Section name | One purpose paragraph, then cards or links | Other content |
+    | `object` (proposed; Open Question 4) | The domain noun ("Connected Systems") | A fixed order: what it is and why it matters, then tasks (each a verb heading), then settings reference, then troubleshooting; split when over the size budget | Anything out of that order |
+
+5. **Voice.** Present tense, active voice, addressed to "you", JIM as the subject of what JIM does. Name the domain concept, never the implementation. Hedge only where JIM is genuinely uncertain. A failure is named with its remedy; anything destructive or refused says what survives. (These are the existing "Writing for the Reader" rules, kept.)
+6. **What does not belong on a public page:** GitHub issue or pull request numbers; release, upgrade or roadmap narration ("now", "until now", "previously", "this release", "planned"); JIM's own development or test infrastructure (devcontainer, integration lab); design defence ("this is deliberate", "we chose"); class, method, property or table names unless the reader types them.
+7. **Version language.** The site is unversioned while customers run several releases, so time-relative words are banned. Behaviour that differs by release carries an `Available from vX.Y.Z` marker, validated against released versions; a `vNEXT` placeholder is resolved by `/release`. Upgrade-specific notes live in `administration/upgrading.md` and the changelog only.
+8. **Terminology.** A machine-readable controlled vocabulary file (proposed `docs/vocabulary.yml`, excluded from the build) is the single source for product nouns: each entry has its canonical form, rejected variants, glossary anchor and home page. It drives the glossary check, the Title Case check and the rejected-synonym check, and it is reconciled with the existing `TermDefinitions` that the portal's `TermHint` shows.
+9. **One home per fact.** Each concept has exactly one home page (recorded in the vocabulary file); other pages link to it rather than restating it.
+10. **Size budget.** Pages over 5,000 words warn; the specification says how to split (one sub-feature per page, the parent keeping its URL and linking on).
+11. **Accessibility.** Meaningful link text; one H1 and no skipped heading levels; a text alternative for every non-text element, including an `accTitle`/`accDescr` for every Mermaid diagram (none of the 54 has one today).
+
+#### Enforcement
+
+12. One PowerShell orchestrator (proposed `scripts/Test-DocsConformance.ps1`) runs every check, locally and in CI, inside the existing required `changelog-lint` job so that no new required status check is needed. Each rule has Pester tests with passing and failing fixtures.
+13. Rules are tiered:
+    - **Blocking:** internal links and anchors; built-site links (including the Scalar reference); front matter parses and has the required keys; one H1 and no skipped levels; fenced code declares a language; every page is in the nav; no stub pages in the nav; no em dashes or American spellings; cmdlet parameter aliases (exists today) and unknown cmdlets or parameters in examples; REST routes in examples exist in the OpenAPI document; coverage checks (below); issue numbers on customer pages; every docs URL in product source resolves to a page and anchor.
+    - **Ratcheted** (blocking for new occurrences, baselined for existing ones): Title Case domain nouns, required front matter keys, title = H1 = nav label, page-type shape, Mermaid text alternatives, glossary coverage.
+    - **Warnings** (annotations, never fail): abbreviations in prose, time-relative words, future promises, minimisers ("simply", "just"), Latin abbreviations, size budget, opening paragraph. A warning is promoted to blocking once its baseline is zero and it has run a release without a false positive.
+    - **Rubric only** (advisory review plus human): audience fit, voice, implementation nouns, "what survives", failure plus remedy, Diátaxis purity, one home per fact, claims about source.
+    - **Scheduled** (weekly, non-blocking, one tracking issue): external links, staleness, coverage drift summary.
+14. **Shrink-only baseline.** One sorted line per entry (`rule`, `path`, `count`), so parallel branches touch different lines and merge cleanly. A file absent from the baseline has an allowance of zero. Exceeding a count fails and annotates only that rule's hits in that file; a count that has fallen also fails until the improvement is locked in with `-UpdateBaseline`, so the baseline never silently re-admits debt.
+15. **Permanent exceptions** are marker comments in the page with a reason (for example `<!-- conformance: allow STR-7 "landing page opens with cards by design" -->`), never baseline entries. A marker without a reason fails.
+16. Findings appear as annotations on the pull request diff and as a per-rule table in the job summary.
+17. Checks are generator-agnostic: they read Markdown sources and built HTML, and treat MkDocs' own `validation:` settings as a bonus rather than a foundation.
+18. An advisory review (separate, non-required workflow on the already-pinned Claude Code action, read-only tools) comments on documentation pull requests against the rubric rules, citing rule IDs.
+
+#### Coverage
+
+19. Inventories are generated from source, never from hand-maintained lists:
+    - cmdlets and their parameters (module manifest plus the PowerShell AST);
+    - environment variables the product reads, and installer variables;
+    - Service Settings (`Constants.SettingKeys`, plus an assertion that every key is actually seeded);
+    - portal pages (each routable page declares its docs page through the existing `PageInfo` component);
+    - REST resource groups (OpenAPI tags) mapped to `docs/api/` overview pages;
+    - connector settings (each connector's settings, read from a test rather than by parsing);
+    - expression functions;
+    - the controlled vocabulary.
+20. "Documented" means named in a heading, in the first column of a reference table, or as a glossary entry with an anchor; a mention in running text does not count.
+21. Every coverage check also runs in reverse: a name in the docs that no longer exists in source fails.
+22. Deliberate exclusions live in one allow-list with a reason per entry; an entry for something that no longer exists, or is now documented, fails.
+
+#### Migration
+
+23. **Phase 0 corrects the factual defects first**, before any rewriting: the non-existent cmdlets and parameters, the wrong REST route, the broken link, the malformed front matter, the contradictions listed in the audit, the glossary's three factual errors, and the stub tutorial.
+24. Folders migrate one at a time, in order of reader impact: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation. A folder is marked conformant in the conformance configuration when every page declares its type and its baseline is empty; the mark never reverts.
+25. Splitting a page keeps the original URL as the parent and moves sub-features to child pages. Every deep link from the product into the docs (the portal's glossary links and `docs.junctional.io` links in source) keeps resolving, checked by requirement 13.
+26. Customer-relevant behaviour currently explained only in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) is rewritten into `concepts/` before any developer content moves.
+
+### Non-Functional Requirements
+
+- The checks add no more than about 60 seconds to `changelog-lint`; the MkDocs build and link check short-circuit unless the pull request touches the docs, the module's public cmdlets, `CHANGELOG.md` or the conformance configuration.
+- Every new CI tool is pinned by version and SHA-256 per `engineering/DEPENDENCY_PINNING.md`, covered by `tooling-pin-check`, and approved per the dependency governance rule before it is added.
+- Nothing is added to the product's runtime; the product stays air-gap deployable.
+- A rule that produces a false positive it cannot be configured out of is demoted, not tolerated.
+
+## Examples and Scenarios
+
+### Scenario 1: A new page without a type
+
+**Given**: an author adds `docs/configuration/generated-values.md` with no `type:` in its front matter
+**When**: the pull request runs `changelog-lint`
+**Then**: it fails with `STR-1: front matter has no 'type' (docs/configuration/generated-values.md:1)` and a link to the rule; new files have no baseline allowance
+
+### Scenario 2: Editing a large legacy page without adding debt
+
+**Given**: `configuration/synchronisation-rules.md` is baselined at 31 lower-cased domain nouns
+**When**: an author corrects a paragraph and the count stays at 31 or below
+**Then**: the check passes, and if the count fell, it asks the author to run `-UpdateBaseline` to lock the improvement in
+
+### Scenario 3: Adding a cmdlet without documenting it
+
+**Given**: a feature adds `Get-JIMGeneratedValueForm` to the module manifest
+**When**: no `docs/powershell/` page has a heading for it
+**Then**: `COV-1` fails, naming the cmdlet and the page its noun maps to
+
+### Scenario 4: An example that cannot run
+
+**Given**: a page shows `Get-JIMConnectedSystem -All`
+**When**: the AST check resolves the cmdlet's real parameter sets
+**Then**: `ACC-2` fails: "`-All` is not a parameter of Get-JIMConnectedSystem"
+
+### Scenario 5: Changelog voice in a how-to
+
+**Given**: a pull request adds "Until now, JIM retried indefinitely; it now stops after three attempts" to a how-to page
+**When**: the checks run
+**Then**: `LANG-5` annotates the line as a warning, and the advisory review suggests "JIM stops after three attempts", with an `Available from` marker if the release matters to the reader
+
+## Constraints
+
+- All automation in PowerShell; no new bash scripts.
+- No new third-party dependency without the user's approval (Open Question 2).
+- British English, no em dashes, Title Case domain nouns, no competing product names (existing rules).
+- The required status check list stays unchanged unless the user decides otherwise (Open Question 5).
+- Parallel sessions edit `docs/` constantly; the baseline format and folder-by-folder rollout must not create merge conflicts or block unrelated work.
+
+## Affected Areas
+
+| Area | Impact |
+|------|--------|
+| `engineering/` | New `DOCUMENTATION_STANDARD.md` |
+| `docs/` | Front matter on every page; folder-by-folder rewrites; page splits; new tutorial and troubleshooting content; new `vocabulary.yml` (excluded from the build) |
+| `docs/CLAUDE.md` | Reduced to site mechanics plus a pointer to the standard |
+| `scripts/` | `Test-DocsConformance.ps1` and its rule modules, Pester tests, baseline and configuration files; `Lint-DocExamples.ps1` extended with unknown-parameter detection |
+| `.github/workflows/` | `changelog-lint.yml` gains the conformance step; new advisory `docs-review.yml`; new weekly docs health workflow |
+| `mkdocs.yml` | Stricter `validation:` settings; `overrides/` excluded from the published files |
+| UI | `PageInfo` gains a docs page parameter so every routable page declares where it is documented |
+| Tests | Coverage assertions that need reflection (connector settings, seeded Service Settings) as NUnit tests beside `GlossaryTermConsistencyTests` |
+
+## Documentation Impact
+
+| Doc | Change |
+|-----|--------|
+| `engineering/DOCUMENTATION_STANDARD.md` | New: the specification |
+| `docs/CLAUDE.md` | Rules move out; pointer and site mechanics remain |
+| `engineering/CLAUDE.md` | "Keeping Documentation Current" links the standard |
+| `engineering/prompts/api-docs-section.md` | Retire or rewrite: it tells authors to create per-endpoint pages that `docs/CLAUDE.md` forbids |
+| Every page under `docs/` | Migrated per requirement 24 |
+
+## Dependencies
+
+- **[#1083](https://github.com/TetronIO/JIM/issues/1083), generating the PowerShell cmdlet reference,** should be decided before the `powershell/` migration. The 23 PowerShell pages are the largest drift surface; linting them is a stopgap, generating them removes the defect class. To be recorded as a native blocked-by link once this PRD is accepted.
+- **The docs generator's end of support.** Material for MkDocs' maintenance window closes in about four weeks, and MkDocs 2.0 is incompatible with it. No issue tracks this yet; a separate issue is recommended (Open Question 6).
+
+## Open Questions
+
+Each has a recommendation; the product owner decides.
+
+1. **Where does the specification live?** Recommended: `engineering/DOCUMENTATION_STANDARD.md`, because its readers are JIM's authors, not customers. The alternative, a public page under `docs/`, only helps outside contributors, and a public page would itself have to conform.
+2. **New tooling.** Recommended: approve **lychee** (link checker; Apache-2.0 or MIT; a single static binary) for the built-site link check, which found the one broken link MkDocs cannot see; and **do not adopt Vale**. Vale is the industry-standard prose linter, but the mechanical style rules it would enforce are already 99% met, its Markdown parser skips indented content after a blank line (every admonition body, about 109 lines in 20 files, exactly where warnings live), and the stock style packages raised 38,998 alerts that mostly contradict JIM's own conventions. PowerShell rules driven by the vocabulary file cover the same ground without the blind spot. markdownlint-cli2 is not recommended (81 npm packages, high false positives on MkDocs syntax).
+3. **What happens to `docs/developer/`?** Recommended: 16 of its 18 pages are for JIM's own contributors (the ten diagram pages alone carry more than 200 issue references); move them to `engineering/`, after the customer-relevant behaviour they hold is rewritten into `concepts/` (requirement 26). Keep connector authoring as a small "Extending JIM" section once its placeholder content is finished. This also stops the Quick Start and Prerequisites pages sending new customers into contributor material.
+4. **What shape are `configuration/` and `connectors/` pages?** Recommended: the `object` type above, a fixed concept, tasks, reference, troubleshooting order on one page per domain object, with the size budget forcing splits. Strict Diátaxis would instead scatter "Connected Systems" across four folders, which is purer but makes an administrator assemble the answer; the fixed-order page is what administrators actually look for, and the order makes each mode findable.
+5. **Run the checks inside `changelog-lint`, or rename the job?** Recommended: inside `changelog-lint` for now, which needs no ruleset change. The job will then run eight unrelated checks under a misleading name; renaming it (for example to `pr-lint`) is a one-time ruleset edit you can make whenever convenient.
+6. **File an issue for the generator's end of support?** Recommended: yes, now. Zensical (the same team's successor) is at an alpha release; the decision between pinning MkDocs 1.6.1 deliberately and moving is better made before the window closes than after.
+
+## Acceptance Criteria
+
+- [ ] `engineering/DOCUMENTATION_STANDARD.md` exists, every rule has an ID, and `docs/CLAUDE.md` restates none of them
+- [ ] Every page under `docs/` declares `type:` and `audience:`, and its shape matches its type
+- [ ] `Test-DocsConformance.ps1` runs in `changelog-lint` on every pull request, with Pester fixtures for every rule
+- [ ] Introducing any blocking-tier defect on any page fails the pull request with the rule ID and location
+- [ ] The baseline is shrink-only, and new files have no allowance
+- [ ] Every coverage inventory is generated from source and checked in both directions
+- [ ] Every factual defect listed in the audit is corrected
+- [ ] `getting-started/first-synchronisation.md` takes a new administrator from installation to a working synchronisation, and `administration/troubleshooting.md` has a synchronisation section
+- [ ] Every customer-facing folder is marked conformant with an empty baseline
+- [ ] The advisory review comments on documentation pull requests citing rule IDs
+- [ ] Every product deep link into the docs resolves, and stays checked
+
+## Additional Context
+
+- **Audit evidence:** [`engineering/notes/docs-audit-2026-10/`](../notes/docs-audit-2026-10/README.md): per-page findings with quotes and suggested rewrites, the coverage inventories with every gap, and the tooling evaluation with measured baselines.
+- **Exemplar pages to model the specification on:** `concepts/case-sensitivity.md`, `configuration/data-flow.md`, `configuration/sync-preview.md`, `connectors/jim-sql-connector.md` and its two Delta Import guides, `administration/backup-recovery.md`, `administration/deploying-with-ansible.md`, `powershell/connection.md`, `powershell/password-synchronisation.md`.
+- **Sources:** [Diátaxis](https://diataxis.fr/); [Google developer documentation style guide](https://developers.google.com/style); [Microsoft Writing Style Guide](https://learn.microsoft.com/style-guide/welcome/); [GitLab documentation topic types](https://docs.gitlab.com/development/documentation/topic_types/) and its Vale-based enforcement; Mark Baker, *Every Page is Page One*; [ESLint bulk suppressions](https://eslint.org/blog/2025/04/introducing-bulk-suppressions/) (the model for the shrink-only baseline). Full list with notes in the research file.
+- **Effort.** The issue is sized Medium. Phases 0 to 2 (corrections, specification, enforcement framework) are about that; the migration of about 222,000 words across 80 pages, including splitting the five largest pages, is substantially larger and is best delivered as one pull request per folder.
