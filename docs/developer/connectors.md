@@ -198,11 +198,19 @@ Set `ErrorType` and `ErrorMessage` on the `ConnectedSystemImportObject` and retu
 | `CouldNotDetermineObjectType` | The object's type is unknown, so nothing can be done with it | Reports it; the object is not imported |
 | `ExternalIdAttributes` | The object arrived without the attribute that identifies it | Reports it; the object is not imported |
 | `ConfigurationError` | The Connected System's configuration in JIM prevents processing it | Reports it; the object is not imported |
-| `AttributeValueError` | One attribute value would not parse; the rest of the object is sound | Reports it, **and imports the object with the values that did parse** |
+| `AttributeValueError` | One or more attribute values would not parse; the rest of the object is sound | Reports every value, **leaves those attributes as JIM already held them, and imports the rest of the object** |
 
-The last row is the important distinction. An object-level problem means there is nothing importable. An attribute-level problem does not: the object's identity and every other attribute are intact, so withholding it would freeze that identity (name, department, leaver status) over a single malformed value, and for a new joiner would mean never provisioning them at all. Flag the attribute, return the object, and let the administrator fix the source data.
+The last row is the important distinction. An object-level problem means there is nothing importable. An attribute-level problem does not: the object's identity and every other attribute are intact, so withholding it would freeze that identity (name, department, leaver status) over a single malformed value, and for a new joiner would mean never provisioning them at all.
 
-An object you flag still counts as present in the Connected System for deletion detection, provided it carries a usable external ID, so a row that failed to parse never causes its Connected System Object to be deleted as absent.
+Report an unreadable value with `AddAttributeValueError`, once for **every** value that would not parse, then carry on reading the object's other values and return it:
+
+```csharp
+importObject.AddAttributeValueError("startDate", rawValue, "Not a valid date and time.");
+```
+
+It records the attribute, the value as you received it, and a reason the administrator can act on, and sets `ErrorType` for you; JIM writes the Activity's message from them, so leave `ErrorMessage` unset. Leave the attribute itself off the object. A value you could not read is not the same as no value: JIM leaves an attribute named this way exactly as it already held it, rather than removing its stored values, and passes over whatever you did read of it, since part of a multi-valued attribute is not the attribute. A Connector that sets `ErrorType` and `ErrorMessage` alone still works, but JIM cannot tell which attribute to leave alone, and reads a missing attribute as one holding no value.
+
+An object you flag still counts as present in the Connected System for deletion detection, provided it carries a usable external ID, so a row that failed to parse never causes its Connected System Object to be deleted as absent. If the value you could not read is the external ID itself, report it the same way: JIM cannot match the object, so a Full Import does not check that Object Type for deleted objects, and says so on the Activity.
 
 Do not use this channel for a problem that affects the whole run; throw instead, as below.
 

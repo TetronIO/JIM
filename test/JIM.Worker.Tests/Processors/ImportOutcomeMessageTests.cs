@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 
@@ -223,6 +224,86 @@ public class ImportOutcomeMessageTests
             Assert.That(message, Does.Contain("Container Scope"));
             Assert.That(message, Does.Contain("1 matches objects of more than one Object Type"));
             Assert.That(message, Does.Contain("schema configuration"));
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // ForUnreadableAttributeValues / ForUnreadableExternalIds (#2066)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private static ConnectedSystemImportObjectAttributeValueError Unreadable(string attributeName, string? value, string reason = "Not a valid whole number.") =>
+        new() { AttributeName = attributeName, Value = value, Reason = reason };
+
+    [Test]
+    public void ForUnreadableAttributeValues_OneValue_NamesTheAttributeTheValueAndWhy()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableAttributeValues([Unreadable("startDate", "31/02/2026", "Not a valid date and time")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("startDate").And.Contain("31/02/2026").And.Contain("Not a valid date and time."));
+            Assert.That(message, Does.Contain("left startDate as it already held it"), "The message says what JIM did about it.");
+        }
+    }
+
+    [Test]
+    public void ForUnreadableAttributeValues_SeveralValues_CountsThemPerAttributeAndListsEach()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableAttributeValues(
+        [
+            Unreadable("Rates", "lots"),
+            Unreadable("Rates", "heaps"),
+            Unreadable("startDate", "31/02/2026")
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("3 values (2 on Rates, 1 on startDate)"));
+            Assert.That(message, Does.Contain("lots").And.Contain("heaps").And.Contain("31/02/2026"));
+        }
+    }
+
+    [Test]
+    public void ForUnreadableAttributeValues_ManyValues_ListsTheFirstFiveAndCountsTheRest()
+    {
+        var values = Enumerable.Range(1, 8).Select(i => Unreadable("Grades", $"bad{i}")).ToList();
+
+        var message = ImportOutcomeMessage.ForUnreadableAttributeValues(values);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("bad5"));
+            Assert.That(message, Does.Not.Contain("bad6"));
+            Assert.That(message, Does.Contain("3 more"));
+        }
+    }
+
+    [Test]
+    public void ForUnreadableAttributeValues_LongValue_IsShortened()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableAttributeValues([Unreadable("notes", new string('x', 5_000))]);
+
+        Assert.That(message.Length, Is.LessThan(500), "The item says what is wrong; it is not a place to keep a payload.");
+    }
+
+    [Test]
+    public void ForUnreadableAttributeValues_ValueTheConnectorCouldNotRender_IsLeftOut()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableAttributeValues([Unreadable("photo", null, "Not valid base64-encoded binary.")]);
+
+        Assert.That(message, Does.Contain("photo").And.Not.Contain("''"));
+    }
+
+    [Test]
+    public void ForUnreadableExternalIds_NamesEachObjectTypeAndHowManyObjects()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableExternalIds([("User", 1), ("Group", 3)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("'User'").And.Contain("1 object "));
+            Assert.That(message, Does.Contain("'Group'").And.Contain("3 objects"));
+            Assert.That(message, Does.Contain("None of its objects were marked as deleted"));
         }
     }
 }

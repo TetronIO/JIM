@@ -115,6 +115,12 @@ An object that leaves an import Synchronisation Rule's scope while the rule's [O
 
 A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show a **Metaverse Object not deleted** step on the Metaverse Object column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
 
+### Values a Connector could not read
+
+A Connector can find a value it cannot read as its attribute's type: a date that does not exist, letters in a number column, a decimal wider than JIM can hold. JIM treats that as a value it could not read, not as no value. The File, SQL and SCIM Connectors list every such value on the object's execution item, with what was received and why it could not be read, and JIM leaves the attribute exactly as it already held it. Nothing is removed from the Connected System Object, so nothing flows on to the Metaverse Object or out to other Connected Systems. The rest of the object imports as normal, a new object is imported without the attribute, and the next import that can read the value applies it.
+
+When the value is an object's External ID, JIM cannot tell which object it is, so that Full Import does not check the Object Type for deleted objects, and the Activity says so: marking objects deleted on that basis could remove one the Connected System still holds. Checking resumes on the next Full Import that reads every External ID.
+
 ### Causes and consequences
 
 The Lineage reads beyond the run in both directions: up the chain to what caused the item, and down it to what the item went on to cause in later runs, each on the object it happened to. [Causality](causality.md) explains both, including how each branch says where it ends.
