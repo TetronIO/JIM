@@ -2426,8 +2426,9 @@ public class SyncImportTaskProcessor
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
 
-                        // An earlier page returned this object already, and decided it: this copy is rejected. Directory
-                        // servers that do not page properly (e.g. Samba AD) can repeat an object across pages.
+                        // An earlier page returned this object already, so this copy is rejected. Directory servers that do
+                        // not page properly (e.g. Samba AD) can repeat an object across pages. A change-log Delta Import can
+                        // also return a later change to it, such as a re-insert after a delete; this rejects that too (#2074).
                         if (returnedOnAnEarlierPage.Contains(duplicateKey))
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
