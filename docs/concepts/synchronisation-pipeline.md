@@ -1,4 +1,4 @@
-# Sync Pipeline
+# Synchronisation Pipeline
 
 JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and **Export**. Each phase has a distinct responsibility, and data must pass through them in order. This separation ensures that data is validated, transformed, and reconciled at each stage before reaching its destination.
 

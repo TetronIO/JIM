@@ -7,7 +7,7 @@ title: Synchronisation Rules
 Synchronisation Rules define how data flows between Connected Systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of Synchronisation Rule configuration.
 
 ---
-
+<!-- conformance: allow STR-4 "group heading above the cmdlet sections; the page is restructured when the PowerShell pages migrate (#1083)" -->
 ### Synchronisation Rule CRUD
 
 Create, retrieve, update, and delete Synchronisation Rules.

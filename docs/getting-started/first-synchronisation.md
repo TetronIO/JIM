@@ -1,8 +1,8 @@
 ---
-title: Your First Sync
+title: Your First Synchronisation
 ---
 
-# Your First Sync
+# Your First Synchronisation
 
 !!! info "Documentation In Progress"
     This page is under active development. Content will be added in a future update.

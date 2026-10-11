@@ -41,7 +41,7 @@ Security audit events are queryable through the same [Activities REST API](../..
 
 **Polling pattern:**
 
-```
+```http
 GET /api/v1/activities?targetType=Authentication&sortBy=created&sortDirection=desc
 ```
 

@@ -9,7 +9,7 @@ The connection cmdlets manage authentication and session state with a JIM instan
 !!! info "Running a cmdlet before connecting"
     If you run any JIM cmdlet before `Connect-JIM`, it produces no output and reports a clear, non-terminating error telling you to connect first, for example:
 
-    ```
+    ```text
     Get-JIMConnectedSystem: You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again.
     ```
 
