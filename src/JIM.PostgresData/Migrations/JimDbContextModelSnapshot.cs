@@ -460,6 +460,56 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
 
+            modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CandidateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CandidateKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CandidateTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConnectedSystemNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DisplayNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MatchedValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObjectMatchingRuleDescriptionSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ObjectMatchingRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TypeNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityRunProfileExecutionItemId")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItemMatchCandidates_RpeiId");
+
+                    b.ToTable("ActivityRunProfileExecutionItemMatchCandidates");
+                });
+
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3081,7 +3131,13 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ImportStateHash")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("JoinMatchValue")
+                        .HasColumnType("text");
+
                     b.Property<int?>("JoinMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("JoinObjectMatchingRuleId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("JoinSyncRuleId")
@@ -3127,6 +3183,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
                         .HasFilter("\"DerivedInputChangePending\"");
+
+                    b.HasIndex("JoinObjectMatchingRuleId")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_JoinObjectMatchingRuleId")
+                        .HasFilter("\"JoinObjectMatchingRuleId\" IS NOT NULL");
 
                     b.HasIndex("JoinSyncRuleId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
@@ -4923,6 +4983,18 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObject");
                 });
 
+            modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
+                        .WithMany()
+                        .HasForeignKey("ActivityRunProfileExecutionItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_MatchCandidates_ActivityRunProfileExecutionItems");
+
+                    b.Navigation("ActivityRunProfileExecutionItem");
+                });
+
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", b =>
                 {
                     b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
@@ -5649,6 +5721,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.ObjectMatchingRule", null)
+                        .WithMany()
+                        .HasForeignKey("JoinObjectMatchingRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany()

@@ -35,6 +35,38 @@ public sealed class UniqueValueReservationSet
         _reservations.TryAdd((scope, attributeId, normalisedValue), ownerId);
 
     /// <summary>
+    /// Claims every one of <paramref name="keys"/> for <paramref name="ownerId"/>, or none of them (Generated Value Forms,
+    /// #2023: a candidate and the values built from it are issued together or not at all). Returns false, leaving
+    /// nothing claimed by this call, as soon as one is already claimed.
+    /// </summary>
+    public bool TryReserveAll(Guid ownerId, IReadOnlyCollection<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        var claimed = new List<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)>(keys.Count);
+        foreach (var key in keys.Distinct())
+        {
+            if (!_reservations.TryAdd(key, ownerId))
+            {
+                foreach (var undo in claimed)
+                    Release(ownerId, undo.Scope, undo.AttributeId, undo.NormalisedValue);
+                return false;
+            }
+
+            claimed.Add(key);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Releases one claim, if <paramref name="ownerId"/> holds it: for values claimed for a candidate that was then not
+    /// issued after all. A claim held by another owner is left alone.
+    /// </summary>
+    public void Release(Guid ownerId, UniqueValueScope scope, int attributeId, string normalisedValue) =>
+        _reservations.TryRemove(new KeyValuePair<(UniqueValueScope, int, string), Guid>((scope, attributeId, normalisedValue), ownerId));
+
+    /// <summary>
     /// Whether (scope, attribute, value) is currently claimed by an owner other than <paramref name="ownerId"/>.
     /// Used as a candidate's first gate (plan "The service"): a cheap, in-process check before the repository's
     /// gates are queried at all. Returns false both when the triple is unclaimed and when it is claimed by

@@ -9,6 +9,7 @@ The standard is the authority; this is the short version of what trips people up
 
 - **Every page declares its type and audience** in front matter, alongside its `title` and `description` (STR-1, STR-2), and takes the shape its type requires (TYP-1). Quote any front matter value containing `: `; MkDocs silently drops a block it cannot parse.
 - **When behaviour changes, rewrite what is now wrong; never append release history** ("previously", "now", "this release"). Search `docs/` for the sentence your change made false before you look for where to describe the new thing (MNT-1, MNT-2).
+- **Product nouns come from the glossary.** Write them in Title Case (LANG-3); a new one needs a glossary entry and an entry in `docs/.conformance/vocabulary.psd1` in the same change (TERM-1).
 - **A page over 5,000 words must not grow** (MNT-3; a warning until the over-budget pages are split, then blocking): split it, or make room by rewriting what your change superseded.
 - **`changelog-lint` checks the mechanical rules on every pull request,** and each failure names its rule ID. If your change removes existing debt (adding front matter to a page, say), the conformance check fails until you lock the improvement in:
 

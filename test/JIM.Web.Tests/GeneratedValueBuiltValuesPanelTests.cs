@@ -24,10 +24,13 @@ public class GeneratedValueBuiltValuesPanelTests : JimComponentTestContext
     public async Task TearDownAsync() => await DisposeComponentsAsync();
 
     private static GeneratedValueBuiltValueDescription Value(int mappingId, string name, GeneratedValueBuiltValueKind kind = GeneratedValueBuiltValueKind.Form,
-        bool keepUnique = true) => new()
+        bool keepUnique = true, string syncRuleName = "HR Import", IReadOnlyList<string>? probedIn = null, string? moveTo = null) => new()
     {
         SyncRuleMappingId = mappingId,
-        SyncRuleName = "HR Import",
+        SyncRuleName = syncRuleName,
+        CheckedBeforeIssuing = kind == GeneratedValueBuiltValueKind.Form && keepUnique,
+        ProbedIn = probedIn ?? [],
+        MoveToSyncRuleName = moveTo,
         GeneratedAttributeName = "Account Name",
         BuiltFromAttributeNames = kind == GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues ? ["Account Name", "Badge Number"] : ["Account Name"],
         MetaverseAttributeName = name,
@@ -44,6 +47,9 @@ public class GeneratedValueBuiltValuesPanelTests : JimComponentTestContext
 
     private static string[] Outcomes(IRenderedComponent<GeneratedValueBuiltValuesPanel> cut) =>
         cut.FindAll(RowMarker).Select(row => row.GetAttribute("data-outcome") ?? string.Empty).ToArray();
+
+    private static string[] BeforeIssuing(IRenderedComponent<GeneratedValueBuiltValuesPanel> cut) =>
+        cut.FindAll(RowMarker).Select(row => row.GetAttribute("data-before-issuing") ?? string.Empty).ToArray();
 
     [Test]
     public void Render_WhileLoading_ShowsNoRowsAndNoEmptyText()
@@ -92,5 +98,25 @@ public class GeneratedValueBuiltValuesPanelTests : JimComponentTestContext
         var cut = RenderPanel([Value(1, "Email"), Value(2, "Mailbox Address", keepUnique: false)], collisionRemediation: false);
 
         Assert.That(Outcomes(cut), Is.All.EqualTo(nameof(GeneratedValueBuiltValueRefusal.CollisionRemediationOff)));
+    }
+
+    [Test]
+    public void Render_EachValue_SaysWhetherItIsCheckedBeforeIssuing()
+    {
+        // Generated Value Forms (#2023).
+        var cut = RenderPanel([
+            Value(1, "Email", probedIn: ["Corp AD"]),
+            Value(2, "Mailbox Address", GeneratedValueBuiltValueKind.BuiltOnAnotherRule, syncRuleName: "Mail Import", moveTo: "HR Import"),
+            Value(3, "Display Email", keepUnique: false),
+            Value(4, "Badge Login", GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues)
+        ]);
+
+        Assert.That(BeforeIssuing(cut), Is.EqualTo(new[]
+        {
+            nameof(GeneratedValueBuiltValueBeforeIssuing.Checked),
+            nameof(GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule),
+            nameof(GeneratedValueBuiltValueBeforeIssuing.KeepUniqueOff),
+            nameof(GeneratedValueBuiltValueBeforeIssuing.BuiltFromSeveral)
+        }));
     }
 }

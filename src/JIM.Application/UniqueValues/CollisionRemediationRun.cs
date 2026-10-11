@@ -3,12 +3,15 @@
 
 using System.Globalization;
 using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
@@ -186,10 +189,27 @@ internal sealed class CollisionRemediationRun
             AttributeName = attribute.Name,
             BaseValue = BaseValueFor(assignment, mapping.Generation),
             ConnectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList(),
-            RejectedValues = RejectedValuesFor(assignment)
+            RejectedValues = RejectedValuesFor(assignment),
+            FormSource = await BuildFormSourceAsync(mapping, metaverseObjectId.Value, attribution, context, repository)
         };
 
-        var outcome = await generationServer.RegenerateAsync(request, Options);
+        // The next value is checked with the values built from it (Generated Value Forms, #2023). One that cannot be
+        // worked out holds the correction back as an ordinary export error: a decision would ask an administrator to
+        // choose between values JIM cannot check yet.
+        GenerationOutcome outcome;
+        try
+        {
+            outcome = await generationServer.RegenerateAsync(request, Options);
+        }
+        catch (SyncExpressionEvaluationException ex)
+        {
+            return LogOrdinary(export, $"a value built from the next candidate could not be worked out ({ex.Message.TrimEnd('.')})");
+        }
+
+        if (outcome.Kind == GenerationOutcomeKind.Waiting && outcome.FormWaits.Count > 0)
+            return LogOrdinary(export, "the values built from the next candidate cannot be worked out until " +
+                string.Join(", ", outcome.FormWaits.Select(w => $"{w.InputName} (needed by {w.NeededBy})")) + " has a value");
+
         if (outcome.Kind != GenerationOutcomeKind.Generated)
             return await EnterNeedsDecisionAsync(export, assignment, attribute.Name, rejectedValue, anchoredBy: null, executionItemId, repository,
                 GeneratedValueNeedsDecisionReason.NoValueAvailable, $"no other value could be found for it: {outcome.FailureMessage}");
@@ -452,6 +472,62 @@ internal sealed class CollisionRemediationRun
     /// value for an only-if-taken token, which is exact for a value issued without a suffix (the common case) and still
     /// yields a unique value otherwise.
     /// </summary>
+    /// <summary>
+    /// The form source for drawing the next value (Generated Value Forms, #2023): the values built from it on the
+    /// generated flow's own Synchronisation Rule, worked out by replaying that rule's system's derived flows on the
+    /// object as it stands, with the account in that system the flows read. Checked against JIM's records only: an
+    /// export run has no probe. A form the rejecting target refused carries the refused value as taken. Null when there
+    /// is nothing to check, or the object or its account in that system is gone.
+    /// </summary>
+    private static async Task<IGeneratedValueFormSource?> BuildFormSourceAsync(
+        SyncRuleMapping mapping, Guid metaverseObjectId, GeneratedValueRejectionAttributionResult attribution, Context context, ISyncRepository repository)
+    {
+        var forms = GeneratedValueParticipation.DescribeForms(mapping, context.BuiltValues, context.AllExportRules);
+        var hostRule = mapping.SyncRule ?? context.ImportRules.FirstOrDefault(rule => rule.Id == mapping.SyncRuleId);
+        if (forms.Count == 0 || hostRule?.ConnectedSystemObjectType == null)
+            return null;
+
+        var metaverseObject = (await repository.GetMetaverseObjectsByIdsNoTrackingAsync([metaverseObjectId])).SingleOrDefault();
+        var accounts = await repository.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync([metaverseObjectId], [hostRule.ConnectedSystemId]);
+        if (metaverseObject == null || !accounts.TryGetValue((metaverseObjectId, hostRule.ConnectedSystemId), out var account))
+            return null;
+
+        var hostAccount = new ConnectedSystemObject
+        {
+            Id = account.Id,
+            TypeId = account.TypeId,
+            ConnectedSystemId = account.ConnectedSystemId,
+            MetaverseObjectId = metaverseObjectId,
+            MetaverseObject = metaverseObject,
+            AttributeValues = account.AttributeValues.Count > 0 ? account.AttributeValues : await repository.GetCsoAttributeValuesByCsoIdsAsync([account.Id])
+        };
+
+        var refused = attribution.ThroughDerivation && attribution.CarryingChange != null ? CarriedValue(attribution.CarryingChange) : null;
+        var prepared = forms
+            .Select(form => form with
+            {
+                ProbeTargets = [],
+                RejectedValues = refused != null && form.ConnectorSpaceAttributeIds.Contains(attribution.CarryingChange!.AttributeId) ? [refused] : []
+            })
+            .ToList();
+
+        var pending = new PendingGeneratedValue
+        {
+            Mapping = mapping,
+            AttributeId = mapping.TargetMetaverseAttribute!.Id,
+            ContributedBySystemId = hostRule.ConnectedSystemId,
+            ContributedBySyncRuleId = hostRule.Id,
+            SourceConnectedSystemObjectId = account.Id
+        };
+
+        var inScopeRules = context.ImportRules
+            .Where(rule => rule.Enabled && rule.ConnectedSystemId == hostRule.ConnectedSystemId && rule.MetaverseObjectTypeId == hostRule.MetaverseObjectTypeId)
+            .ToList();
+
+        return GeneratedValueFormSource.Create(new SyncEngine(), hostAccount, pending, prepared, inScopeRules, [hostRule.ConnectedSystemObjectType],
+            new DynamicExpressoEvaluator(), context.PriorityContext);
+    }
+
     private static string? BaseValueFor(GeneratedValueAssignment assignment, SyncRuleMappingGeneration generation) =>
         assignment.BaseValue ?? (generation.TokenKind == GeneratedValueTokenKind.OnlyIfTaken ? assignment.Value : null);
 
@@ -527,7 +603,8 @@ internal sealed class CollisionRemediationRun
             DerivedFlowGraph: graph,
             ConnectedSystems: connectedSystems,
             GeneratedMappings: generatedMappings,
-            BuiltValues: GeneratedValueBuiltValues.Create(allRules, graph));
+            BuiltValues: GeneratedValueBuiltValues.Create(allRules, graph),
+            PriorityContext: new AttributePriorityContext(allRules, honourNullAssertions: true, graph));
     }
 
     /// <summary>
@@ -540,7 +617,8 @@ internal sealed class CollisionRemediationRun
         DerivedFlowGraph? DerivedFlowGraph,
         Dictionary<int, ConnectedSystem> ConnectedSystems,
         Dictionary<int, SyncRuleMapping> GeneratedMappings,
-        GeneratedValueBuiltValues BuiltValues)
+        GeneratedValueBuiltValues BuiltValues,
+        AttributePriorityContext PriorityContext)
     {
         /// <summary>
         /// The attribute names the rejecting system can mean for this export: its object type's attributes, from the

@@ -77,4 +77,4 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 
 ## See also
 
-- [Administration: Configuration Reference](../administration/configuration.md) -- detailed reference for the settings that exist and what each one does
+- [Administration: Configuration Reference](../administration/configuration.md): detailed reference for the settings that exist and what each one does

@@ -39,12 +39,12 @@ After registration, note these values from the **Overview** page:
 3. Add a description (e.g. `JIM Web Client`)
 4. Select an expiry period
 5. Click **Add**
-6. **Copy the secret value immediately** -- it will not be shown again
+6. **Copy the secret value immediately**; it will not be shown again
 
 ## Step 4: Configure API Permissions
 
 1. Go to **API permissions**
-2. Verify `User.Read` (Delegated) is present -- this is added by default and provides the OpenID Connect scopes needed for authentication
+2. Verify `User.Read` (Delegated) is present; it is added by default and provides the OpenID Connect scopes needed for authentication
 
 !!! note
     The standard OIDC scopes (`openid`, `profile`, `email`, `offline_access`) are requested at runtime and do not need to be added as Graph API permissions.
@@ -105,7 +105,7 @@ Because the web and PowerShell platforms share the same **Application (client) I
 - **Use a separate app registration** for the PowerShell module (stricter isolation): create a second app registration with only the Mobile/Desktop platform, note its Application (client) ID, and set `JIM_SSO_PUBLIC_CLIENT_ID` to that value.
 
 !!! note
-    Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401--8409. You may need to add additional redirect URIs if you encounter port conflicts.
+    Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401 to 8409. You may need to add additional redirect URIs if you encounter port conflicts.
 
 !!! note "Refresh tokens"
     The refresh token is issued because JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. Setting **Allow public client flows** to **Yes** (step 8 above) is a separate requirement: it marks the registration as a public client so the module can redeem the authorization code via PKCE without a client secret. This matters when the module shares the web application's registration, which already has a secret and would otherwise be treated as confidential. The refresh token enables silent in-session renewal and optional cross-session token persistence.

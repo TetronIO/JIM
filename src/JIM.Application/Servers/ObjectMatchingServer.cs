@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using JIM.Application.Expressions;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -19,6 +22,9 @@ public class ObjectMatchingServer
 {
     #region accessors
     private JimApplication Application { get; }
+
+    /// <summary>What each rule compares for an object; shared by every matching path (#2052).</summary>
+    private readonly MatchValueResolver _matchValueResolver = new(new DynamicExpressoEvaluator());
     #endregion
 
     #region constructors
@@ -40,9 +46,21 @@ public class ObjectMatchingServer
     /// <param name="matchingRules">The matching rules to evaluate. Each rule must carry its own
     /// <see cref="ObjectMatchingRule.MetaverseObjectType"/> (simple mode) or the caller must set it
     /// from the Synchronisation Rule before passing (advanced mode).</param>
-    /// <returns>The matching MVO, or null if no match found.</returns>
-    /// <exception cref="MultipleMatchesException">Thrown if multiple MVOs match the criteria.</exception>
-    public async Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(
+    /// <returns>The match, or null if no rule found one.</returns>
+    /// <exception cref="MultipleMatchesException">A rule's values find more than one Metaverse Object.</exception>
+    /// <exception cref="ObjectMatchingRuleFailedException">A rule could not be worked out for this object.</exception>
+    public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<ObjectMatchingRule> matchingRules)
+        => FindMatchingMetaverseObjectAsync(Application.SyncRepo, connectedSystemObject, matchingRules);
+
+    /// <summary>
+    /// As <see cref="FindMatchingMetaverseObjectAsync(ConnectedSystemObject, List{ObjectMatchingRule})"/>, against the
+    /// given repository: Sync Preview passes its read-only guard, so a preview evaluates rules exactly as a
+    /// synchronisation would without being able to write.
+    /// </summary>
+    internal async Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
+        ISyncRepository repository,
         ConnectedSystemObject connectedSystemObject,
         List<ObjectMatchingRule> matchingRules)
     {
@@ -52,10 +70,14 @@ public class ObjectMatchingServer
             return null;
         }
 
-        // Evaluate rules in order until we find a match
+        // Rules are tried in order. Only a rule with nothing to look up, or one that finds nothing, lets the next rule
+        // be tried: a rule that cannot be worked out, or whose values find more than one Metaverse Object, stops the
+        // object (#2052). Trying the next rule instead would let the object join on a weaker rule, or project a
+        // duplicate, because of a fault the administrator never sees.
         foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
         {
-            // Rule must have a MetaverseObjectType to know where to search
+            // Rule must have a MetaverseObjectType to know where to search. This is a configuration state the portal
+            // already flags, and skipping it is deterministic.
             var metaverseObjectType = matchingRule.MetaverseObjectType;
             if (metaverseObjectType == null)
             {
@@ -63,32 +85,159 @@ public class ObjectMatchingServer
                 continue;
             }
 
-            try
-            {
-                var mvo = await Application.SyncRepo.FindMetaverseObjectUsingMatchingRuleAsync(
-                    connectedSystemObject,
-                    metaverseObjectType,
-                    matchingRule);
+            var resolution = _matchValueResolver.Resolve(matchingRule, connectedSystemObject.AttributeValues, connectedSystemObject.Type);
+            if (resolution.Kind == MatchValueResolutionKind.Failed)
+                throw new ObjectMatchingRuleFailedException(matchingRule, resolution);
+            if (resolution.Kind == MatchValueResolutionKind.NoValue)
+                continue;
 
-                if (mvo != null)
+            // Resolve succeeded, so the rule has a Target Metaverse Attribute.
+            var ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
+                metaverseObjectType.Id,
+                matchingRule.TargetMetaverseAttribute!.Id,
+                resolution.ValueType,
+                resolution.Values,
+                matchingRule.CaseSensitive,
+                take: ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1);
+
+            if (ids.Count == 0)
+                continue;
+
+            if (ids.Count > 1)
+            {
+                var candidates = await DescribeCandidatesAsync(repository, metaverseObjectType.Id, matchingRule, resolution, ids);
+                throw new MultipleMatchesException("Multiple Metaverse Objects were found to match the source attribute.", [.. ids])
                 {
-                    Log.Debug("FindMatchingMetaverseObjectAsync: Found MVO {MvoId} using rule {RuleId}", mvo.Id, matchingRule.Id);
-                    return mvo;
-                }
+                    Rule = matchingRule,
+                    MatchValues = resolution.Values,
+                    Candidates = candidates
+                };
             }
-            catch (MultipleMatchesException)
+
+            var mvo = await repository.GetMetaverseObjectForJoinMatchAsync(ids[0]);
+            if (mvo == null)
             {
-                // Re-throw - caller needs to handle this
-                throw;
+                // Found by the lookup and gone by the load: deleted in between. Nothing to join to.
+                Log.Warning("FindMatchingMetaverseObjectAsync: MVO {MvoId} matched by rule {RuleId} no longer exists", ids[0], matchingRule.Id);
+                continue;
             }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "FindMatchingMetaverseObjectAsync: Error evaluating matching rule {RuleId}", matchingRule.Id);
-                // Continue to next rule
-            }
+
+            Log.Debug("FindMatchingMetaverseObjectAsync: Found MVO {MvoId} using rule {RuleId}", mvo.Id, matchingRule.Id);
+            return new ImportMatch(mvo, matchingRule, resolution, DescribeMatchedValues(mvo, matchingRule, resolution));
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The candidates an ambiguous match lists on its Activity item (#2052), so the administrator can open each one
+    /// rather than read a count. At most <see cref="ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/> are
+    /// listed, ordered by display name; the full total is counted only when the lookup found more than that.
+    /// </summary>
+    private static async Task<IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate>> DescribeCandidatesAsync(
+        ISyncRepository repository,
+        int metaverseObjectTypeId,
+        ObjectMatchingRule rule,
+        MatchValueResolution resolution,
+        IReadOnlyList<Guid> ids)
+    {
+        var total = ids.Count > ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded
+            ? await repository.CountMetaverseObjectsByMatchValuesAsync(
+                metaverseObjectTypeId, rule.TargetMetaverseAttribute!.Id, resolution.ValueType, resolution.Values, rule.CaseSensitive)
+            : ids.Count;
+
+        var listed = await repository.GetMetaverseObjectsByIdsNoTrackingAsync(ids.Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded));
+        var description = DescribeRule(rule);
+        return listed
+            .OrderBy(mvo => mvo.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(mvo => mvo.Id)
+            .Select((mvo, ordinal) => new ActivityRunProfileExecutionItemMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.MetaverseObject,
+                CandidateId = mvo.Id,
+                DisplayNameSnapshot = mvo.Name,
+                TypeNameSnapshot = mvo.Type?.Name,
+                MatchedValue = DescribeMatchedValues(mvo, rule, resolution),
+                ObjectMatchingRuleId = rule.Id == 0 ? null : rule.Id,
+                ObjectMatchingRuleDescriptionSnapshot = description,
+                Ordinal = ordinal,
+                CandidateTotal = total
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The error an ambiguous match records (#2052): how many identities the object matched, on what, and why that
+    /// stops it. The candidates themselves travel separately, so the message does not list ids.
+    /// </summary>
+    /// <param name="ambiguity">The ambiguous match.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static string DescribeAmbiguity(MultipleMatchesException ambiguity, bool previewing = false)
+    {
+        const int maxValuesShown = 10;
+        var total = ambiguity.Candidates.Count > 0 ? ambiguity.Candidates[0].CandidateTotal : ambiguity.Matches.Count;
+        var on = string.Empty;
+        if (ambiguity.Rule != null)
+        {
+            var values = ambiguity.MatchValues
+                .Take(maxValuesShown)
+                .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
+                .ToList();
+            if (ambiguity.MatchValues.Count > maxValuesShown)
+                values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
+            on = $" on {DescribeRule(ambiguity.Rule)} ({string.Join(", ", values)})";
+        }
+
+        var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
+        return $"This object matches {total} Metaverse Objects{on}, so {outcome}. " +
+               "A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, " +
+               "so that its values identify one.";
+    }
+
+    /// <summary>
+    /// What a rule compares, for example "Employee ID equals employeeNumber", or the expression in place of the
+    /// attribute name when the rule computes its value.
+    /// </summary>
+    internal static string DescribeRule(ObjectMatchingRule rule)
+    {
+        var source = rule.Sources.OrderBy(s => s.Order).FirstOrDefault();
+        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
+            ? source?.ConnectedSystemAttribute?.Name
+            : source.Expression;
+        var target = rule.TargetMetaverseAttribute?.Name ?? rule.TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
+        return $"{target} equals {sourceText}";
+    }
+
+    /// <summary>
+    /// The looked-up values <paramref name="mvo"/> holds for the rule's Metaverse attribute, as text: what the join
+    /// matched on, recorded on the joined object (#2052). Every value is listed when, unexpectedly, none can be
+    /// confirmed, so the record never claims less than was looked up.
+    /// </summary>
+    private static string DescribeMatchedValues(MetaverseObject mvo, ObjectMatchingRule rule, MatchValueResolution resolution)
+    {
+        var attributeId = rule.TargetMetaverseAttribute!.Id;
+        var held = mvo.AttributeValues
+            .Where(av => av.AttributeId == attributeId)
+            .Select(av => resolution.ValueType switch
+            {
+                AttributeDataType.Text => (object?)av.StringValue,
+                AttributeDataType.Number => av.IntValue,
+                AttributeDataType.LongNumber => av.LongValue,
+                AttributeDataType.Decimal => av.DecimalValue,
+                AttributeDataType.Guid => av.GuidValue,
+                _ => null
+            })
+            .Where(value => value != null)
+            .ToList();
+
+        var comparer = rule.CaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        bool Holds(object value) => value is string text
+            ? held.OfType<string>().Any(heldText => comparer.Equals(heldText, text))
+            : held.Contains(value);
+
+        var matched = resolution.Values.Where(Holds).ToList();
+        return string.Join(", ", (matched.Count > 0 ? matched : resolution.Values)
+            .Select(value => Convert.ToString(value, CultureInfo.InvariantCulture)));
     }
 
     /// <summary>

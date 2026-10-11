@@ -40,6 +40,7 @@ public class ObjectMatchingPreviewAdapterTests
     private const int CreatedAttributeId = 103;
     private const int EmployeeIdMetaverseAttributeId = 201;
     private const int MailMetaverseAttributeId = 202;
+    private const int StaffNumberMetaverseAttributeId = 203;
     private const int ImportRuleId = 42;
 
     private Mock<IRepository> _repo = null!;
@@ -90,7 +91,8 @@ public class ObjectMatchingPreviewAdapterTests
             Attributes =
             [
                 new MetaverseAttribute { Id = EmployeeIdMetaverseAttributeId, Name = "Employee ID", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued },
-                new MetaverseAttribute { Id = MailMetaverseAttributeId, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued }
+                new MetaverseAttribute { Id = MailMetaverseAttributeId, Name = "Email", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued },
+                new MetaverseAttribute { Id = StaffNumberMetaverseAttributeId, Name = "Staff Number", Type = AttributeDataType.Number, AttributePlurality = AttributePlurality.SingleValued }
             ]
         };
 
@@ -303,8 +305,28 @@ public class ObjectMatchingPreviewAdapterTests
             Assert.That(deltas[0].TransitionType,
                 Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject));
             Assert.That(deltas[0].MetaverseObjectId, Is.EqualTo(_bob.Id), "the delta names the identity the object would end up on");
-            Assert.That(deltas[0].OldValue, Is.EqualTo("Alice Smith"));
-            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones"));
+            // Each side names the value it matched on (#2052), so the row says why the identity changed.
+            Assert.That(deltas[0].OldValue, Is.EqualTo("Alice Smith (on E1)"));
+            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones (on alice@example.com)"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposedRuleCannotBeEvaluated_ReportsThatTheObjectWouldFail()
+    {
+        // A Text source compared with a Number attribute cannot be worked out. The run would stop the object rather
+        // than let it project a duplicate (#2052), and the preview has to say so rather than throw.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "alice@example.com")];
+
+        var proposal = ProposalWith(RuleProposal() with { TargetMetaverseAttributeId = StaffNumberMetaverseAttributeId });
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(1));
+            Assert.That(deltas[0].TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(deltas[0].NewValue, Does.Contain("Staff Number"));
         }
     }
 

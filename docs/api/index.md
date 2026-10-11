@@ -20,7 +20,7 @@ The interactive API reference is the canonical, up-to-date specification of ever
 
 ## Versioning
 
-The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. Future versions will appear under `/api/v2/` etc., with a deprecation period for the previous version.
+The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. A new major version gets its own prefix (`/api/v2/` and so on), and the version before it stays available through a deprecation period.
 
 ## Breaking changes
 
@@ -28,7 +28,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.16.0**
 
-- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) now ends `CompleteWithError`, naming the failed steps in `errorMessage`, where it previously ended `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
+- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) ends `CompleteWithError`, naming the failed steps in `errorMessage`; v0.15.0 and earlier ended it `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
 
 **v0.15.0**
 
@@ -41,7 +41,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.13.0**
 
-- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is now serialised as `"SynchronisationRule"` (previously `"SyncRule"`) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
+- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is serialised as `"SynchronisationRule"` (`"SyncRule"` in v0.12.0 and earlier) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
 
 ## Authentication
 

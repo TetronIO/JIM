@@ -189,5 +189,5 @@ When changing a schedule from automation you can record a reason alongside the c
 
 ## See also
 
-- [Run Profiles](run-profiles.md) -- the operations executed by Run Profile steps
-- [Activities](activities.md) -- each schedule execution produces a parent activity with child activities per step
+- [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
+- [Activities](activities.md): each schedule execution produces a parent activity with child activities per step

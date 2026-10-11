@@ -214,6 +214,13 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void MatchCandidateBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate),
+            "ActivityRunProfileExecutionItemMatchCandidates", MatchCandidateBulkColumns.MatchCandidates);
+    }
+
+    [Test]
     public void ActivityPhaseBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityPhase), "ActivityPhases", ActivityPhaseBulkColumns.ActivityPhases);

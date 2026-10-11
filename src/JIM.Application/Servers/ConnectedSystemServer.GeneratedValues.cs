@@ -2,10 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -541,14 +543,66 @@ public partial class ConnectedSystemServer
             foreach (var attribute in stagedRule.AttributeFlowRules.Select(m => m.TargetConnectedSystemAttribute).OfType<ConnectedSystemObjectTypeAttribute>())
                 attributeNames.TryAdd(attribute.Id, attribute.Name);
 
-        return new BuiltValueContext(builtValues, systemNames, attributeNames);
+        // The export rules the run checks values built from a generated value against (Generated Value Forms, #2023), with
+        // an export rule being edited in place of its saved self, and the attributes their Connectors would probe.
+        List<SyncRule> formExportRules = stagedRule is { Direction: SyncRuleDirection.Export }
+            ? [.. exportRules.Where(rule => stagedRule.Id <= 0 || rule.Id != stagedRule.Id), stagedRule]
+            : exportRules;
+        var probeable = await GetProbeableExportTargetsAsync(formExportRules);
+
+        return new BuiltValueContext(builtValues, systemNames, attributeNames, formExportRules, probeable);
+    }
+
+    /// <summary>
+    /// The (Connected System, attribute) pairs among <paramref name="exportRules"/>' targets whose Connector would probe the
+    /// attribute (Generated Value Forms, #2023), asking each Connector as <see cref="DescribeGeneratedValueParticipantsAsync"/>
+    /// does, without connecting to anything.
+    /// </summary>
+    private async Task<HashSet<(int ConnectedSystemId, int AttributeId)>> GetProbeableExportTargetsAsync(IReadOnlyList<SyncRule> exportRules)
+    {
+        var targets = exportRules
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Select(mapping => mapping.TargetConnectedSystemAttribute)
+                .OfType<ConnectedSystemObjectTypeAttribute>()
+                .Select(attribute => (rule.ConnectedSystemId, Attribute: attribute)))
+            .ToList();
+        if (targets.Count == 0)
+            return [];
+
+        var connectedSystems = await Application.Repository.ConnectedSystems.GetConnectedSystemsWithConnectorDefinitionsAsync() ?? [];
+        var probes = new Dictionary<string, IConnectorUniquenessProbe?>(StringComparer.Ordinal);
+        var created = new List<IConnector>();
+        try
+        {
+            var probeBySystem = connectedSystems.ToDictionary(cs => cs.Id, cs => GetUniquenessProbe(cs.ConnectorDefinition, probes, created));
+            return targets
+                .Where(target => probeBySystem.GetValueOrDefault(target.ConnectedSystemId)?.CanProbeAttribute(target.Attribute.Name) == true)
+                .Select(target => (target.ConnectedSystemId, target.Attribute.Id))
+                .ToHashSet();
+        }
+        finally
+        {
+            foreach (var connector in created.OfType<IDisposable>())
+                connector.Dispose();
+        }
     }
 
     /// <summary>
     /// The values built from generated values for one Metaverse Object Type, and the names to describe them with.
     /// </summary>
-    private sealed record BuiltValueContext(GeneratedValueBuiltValues BuiltValues, IReadOnlyDictionary<int, string> SystemNames, IReadOnlyDictionary<int, string> AttributeNames)
+    private sealed record BuiltValueContext(
+        GeneratedValueBuiltValues BuiltValues,
+        IReadOnlyDictionary<int, string> SystemNames,
+        IReadOnlyDictionary<int, string> AttributeNames,
+        IReadOnlyList<SyncRule> FormExportRules,
+        IReadOnlySet<(int ConnectedSystemId, int AttributeId)> Probeable)
     {
+        /// <summary>
+        /// The values checked before each generated value is issued, by generated mapping, worked out once each by the
+        /// run's own rule (<see cref="GeneratedValueParticipation.DescribeForms"/>).
+        /// </summary>
+        private readonly Dictionary<SyncRuleMapping, List<GeneratedValueForm>> _forms = new(ReferenceEqualityComparer.Instance);
+
         public List<GeneratedValueBuiltValueDescription> DescribeAll(IEnumerable<GeneratedValueBuiltValue> values) =>
             values
                 .Select(Describe)
@@ -576,14 +630,57 @@ public partial class ConnectedSystemServer
                 .Select(t => new GeneratedValueBuiltValueTarget
                 {
                     ConnectedSystemId = t.ConnectedSystemId,
-                    ConnectedSystemName = SystemNames.TryGetValue(t.ConnectedSystemId, out var name) ? name : $"Connected System {t.ConnectedSystemId}",
+                    ConnectedSystemName = SystemName(t.ConnectedSystemId),
                     AttributeId = t.AttributeId,
                     AttributeName = AttributeName(t.AttributeId)
                 })
                 .OrderBy(t => t.ConnectedSystemName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(t => t.AttributeName, StringComparer.OrdinalIgnoreCase)
-                .ToList()
+                .ToList(),
+            CheckedBeforeIssuing = FormOf(value) != null,
+            ProbedIn = (FormOf(value)?.ProbeTargets ?? [])
+                .Where(target => Probeable.Contains((target.ConnectedSystemId, target.ConnectedSystemObjectTypeAttributeId)))
+                .Select(target => SystemName(target.ConnectedSystemId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            MoveToSyncRuleName = MoveToSyncRuleName(value),
+            Expression = value.Mapping.Sources.Count == 1 ? value.Mapping.Sources[0].Expression : null
         };
+
+        /// <summary>
+        /// The form <paramref name="value"/> is checked as before its generated value is issued, or null when it is not.
+        /// </summary>
+        private GeneratedValueForm? FormOf(GeneratedValueBuiltValue value)
+        {
+            if (!_forms.TryGetValue(value.GeneratedMapping, out var forms))
+            {
+                forms = GeneratedValueParticipation.DescribeForms(value.GeneratedMapping, BuiltValues, FormExportRules);
+                _forms[value.GeneratedMapping] = forms;
+            }
+
+            return forms.FirstOrDefault(form => ReferenceEquals(form.BuiltValue.Mapping, value.Mapping)
+                || (value.Mapping.Id > 0 && form.BuiltValue.Mapping.Id == value.Mapping.Id));
+        }
+
+        /// <summary>
+        /// The generated flow's own Synchronisation Rule, when <paramref name="value"/> is a Derived Attribute Flow on
+        /// another rule that reads the generated value directly and nothing but Metaverse attributes: moved there, it
+        /// would be checked before issuing (PRD requirement 9). Null for anything else, including a value built through
+        /// another value, where moving this one flow alone would not be enough.
+        /// </summary>
+        private static string? MoveToSyncRuleName(GeneratedValueBuiltValue value)
+        {
+            if (value.Kind != GeneratedValueBuiltValueKind.BuiltOnAnotherRule || !value.MetaverseAttributeId.HasValue || value.Via.Count > 0)
+                return null;
+
+            var readsOnlyMetaverse = value.Mapping.Sources.All(source => !string.IsNullOrWhiteSpace(source.Expression)
+                && ExpressionInputResolver.ResolveCached(source.Expression).All(input => input.Source == ExpressionInputSource.Metaverse));
+            return readsOnlyMetaverse ? value.GeneratedMapping.SyncRule?.Name : null;
+        }
+
+        private string SystemName(int connectedSystemId) =>
+            SystemNames.TryGetValue(connectedSystemId, out var name) ? name : $"Connected System {connectedSystemId}";
 
         private string AttributeName(int? attributeId) =>
             attributeId.HasValue && AttributeNames.TryGetValue(attributeId.Value, out var name) ? name : $"Attribute {attributeId}";

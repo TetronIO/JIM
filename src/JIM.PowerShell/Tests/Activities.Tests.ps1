@@ -703,6 +703,36 @@ Describe 'Get-JIMActivityExecutionItem' {
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$second" }
             }
         }
+
+        It 'Returns an ambiguous match''s candidates with what each is joined to' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                $candidateId = [guid]::NewGuid()
+                # The wire shape: camelCase, candidates nested in the item, joined objects nested in each candidate.
+                $wire = @{
+                    id = $itemId
+                    errorType = 'AmbiguousMatch'
+                    matchCandidates = @(
+                        @{
+                            candidateKind = 'MetaverseObject'; candidateId = $candidateId; displayNameSnapshot = 'Ann Bloggs'
+                            matchedValue = '48213'; candidateTotal = 2; exists = $true
+                            joinedObjects = @(@{ connectedSystemName = 'Corporate Directory'; externalId = 'abloggs' })
+                        }
+                    )
+                } | ConvertTo-Json -Depth 5
+                Mock Invoke-RestMethod { $wire | ConvertFrom-Json }
+
+                $result = Get-JIMActivityExecutionItem -Id $itemId
+
+                $candidate = @($result.MatchCandidates)[0]
+                $candidate.PSObject.Properties.Name | Should -Contain 'DisplayNameSnapshot'
+                $candidate.CandidateId | Should -Be $candidateId
+                $candidate.Exists | Should -BeTrue
+                @($candidate.JoinedObjects)[0].PSObject.Properties.Name | Should -Contain 'ConnectedSystemName'
+                @($candidate.JoinedObjects)[0].ExternalId | Should -Be 'abloggs'
+            }
+        }
     }
 
     Context 'Causes and consequences' {
