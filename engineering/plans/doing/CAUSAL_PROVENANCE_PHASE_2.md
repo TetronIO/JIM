@@ -1,6 +1,6 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 in review as #2071; Phase 2a under way)
+- **Status:** Doing (Phase 2-0 in review as #2071; Phase 2a complete; Phase 2b under way)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
@@ -85,7 +85,7 @@ The `CohortKey` encodes the cohort's path from the root (each level's tuple), so
 
 ## Implementation Phases
 
-### Phase 2-0: Grace-period scheduling link (stack layer below the feature)
+### Phase 2-0: Grace-period scheduling link (stack layer below the feature) ✅
 
 Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in its own right (Phase 1's upward walk stops at the housekeeping item for exactly the same reason), and the downward walk needs it.
 
@@ -95,7 +95,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 - The upward walk gains the hop for free; assert it in `CausalChainWalkTests`.
 - Runtime: Scenario 004 Test 4 (grace period) asserts the edge.
 
-### Phase 2a: Index and downward reads
+### Phase 2a: Index and downward reads ✅
 
 - Migration: filtered index on `CausalEdges.CausePendingExportId` (`WHERE "CausePendingExportId" IS NOT NULL`), which also fixes Phase 1's scanning read.
 - Repository reads in `ActivitiesRepository`, raw SQL: `GetCausalConsequenceLevelAsync` (one level: edge hops by cause item, confirmations via the queueing edges' Pending Export ids, the next synchronisation per Connected System Object or external ID after an import, outstanding Pending Exports, pending scheduled deletions, and the endings of frontier items with no hop, aggregated per cohort with the first member page and the next frontier) and `GetCausalConsequenceCohortMembersAsync` (one cohort's members, paged, with an optional name filter). Enum values are parameters, never literals.
