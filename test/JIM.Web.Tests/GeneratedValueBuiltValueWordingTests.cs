@@ -16,10 +16,14 @@ namespace JIM.Web.Tests;
 public class GeneratedValueBuiltValueWordingTests
 {
     private static GeneratedValueBuiltValueDescription Value(GeneratedValueBuiltValueKind kind = GeneratedValueBuiltValueKind.Form,
-        bool keepUnique = true, IReadOnlyList<string>? via = null, string? metaverseAttributeName = "Email") => new()
+        bool keepUnique = true, IReadOnlyList<string>? via = null, string? metaverseAttributeName = "Email", bool? checkedBeforeIssuing = null,
+        IReadOnlyList<string>? probedIn = null, string? moveTo = null, string syncRuleName = "HR Import") => new()
     {
+        CheckedBeforeIssuing = checkedBeforeIssuing ?? (kind == GeneratedValueBuiltValueKind.Form && keepUnique),
+        ProbedIn = probedIn ?? [],
+        MoveToSyncRuleName = moveTo,
         SyncRuleMappingId = 7,
-        SyncRuleName = "HR Import",
+        SyncRuleName = syncRuleName,
         GeneratedAttributeName = "Account Name",
         BuiltFromAttributeNames = kind == GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues ? ["Account Name", "Badge Number"] : ["Account Name"],
         MetaverseAttributeName = metaverseAttributeName,
@@ -78,5 +82,70 @@ public class GeneratedValueBuiltValueWordingTests
     public void HowBuilt_FromSeveralGeneratedValues_NamesTheOthers()
     {
         Assert.That(GeneratedValueBuiltValueWording.HowBuilt(Value(GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues)), Does.Contain("Badge Number"));
+    }
+
+    // ---- Before issuing (Generated Value Forms, #2023) ----
+
+    [Test]
+    public void BeforeIssuingOutcome_EachKindOfValue_SaysWhetherAndWhyItIsChecked()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(Value()), Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.Checked));
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(Value(keepUnique: false)), Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.KeepUniqueOff));
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(Value(GeneratedValueBuiltValueKind.BuiltOnAnotherRule)),
+                Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule));
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(Value(GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues, keepUnique: false)),
+                Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.BuiltFromSeveral), "a value built from several is never checked, whatever its switch");
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(Value(checkedBeforeIssuing: false)),
+                Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.Excluded), "on the generated value's own rule and switched on, yet not checked: excluded");
+        }
+    }
+
+    [Test]
+    public void BeforeIssuingOutcome_SwitchTurnedOnSinceTheValueWasDescribed_FollowsTheSwitch()
+    {
+        // The flow's dialog describes the value once and edits the switch in place.
+        var describedOff = Value(keepUnique: false, checkedBeforeIssuing: false);
+
+        Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingOutcome(describedOff, keepUnique: true), Is.EqualTo(GeneratedValueBuiltValueBeforeIssuing.Checked));
+    }
+
+    [Test]
+    public void BeforeIssuingDetail_CheckedValue_NamesTheConnectedSystemsItIsProbedIn()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingDetail(Value(probedIn: ["Corp AD"])), Does.Contain("Corp AD"));
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingDetail(Value()), Does.Not.Contain(" and "), "JIM's records alone");
+        }
+    }
+
+    [Test]
+    public void BeforeIssuingDetail_ValueBuiltOnAnotherRule_SuggestsTheMoveOnlyWhereItHelps()
+    {
+        var movable = Value(GeneratedValueBuiltValueKind.BuiltOnAnotherRule, moveTo: "HR Import", syncRuleName: "Mail Import");
+        var notMovable = Value(GeneratedValueBuiltValueKind.BuiltOnAnotherRule, syncRuleName: "Mail Import");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingDetail(movable), Does.Contain("Mail Import").And.Contain("HR Import"));
+            Assert.That(GeneratedValueBuiltValueWording.BeforeIssuingDetail(notMovable), Does.Contain("Mail Import").And.Not.Contain("HR Import"));
+        }
+    }
+
+    [Test]
+    public void SwitchHelpText_SwitchOn_SaysWhetherTheValueIsCheckedBeforeIssuing()
+    {
+        var onAnotherRule = Value(GeneratedValueBuiltValueKind.BuiltOnAnotherRule, moveTo: "HR Import", syncRuleName: "Mail Import");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValueBuiltValueWording.SwitchHelpText(Value(), keepUnique: true), Does.StartWith("Checked before Account Name is issued"));
+            Assert.That(GeneratedValueBuiltValueWording.SwitchHelpText(onAnotherRule, keepUnique: true),
+                Does.StartWith("Not checked before Account Name is issued").And.Contain("Mail Import").And.Contain("HR Import"));
+            Assert.That(GeneratedValueBuiltValueWording.SwitchHelpText(Value(), keepUnique: false), Does.Not.Contain("checked before"),
+                "switched off, it is neither checked nor corrected");
+        }
     }
 }

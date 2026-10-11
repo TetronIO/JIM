@@ -60,40 +60,57 @@ public partial class SyncEngine
         var metaverseAttributes = BuildEffectiveAttributeDictionary(mvo);
 
         foreach (var (syncRule, mapping) in toEvaluate)
-        {
-            // A derived flow runs after the object's ordinary flows, from whichever of its rules hosts it, so every
-            // error it raises names that rule (plan Phase 3): the administrator has to know which rule to open. The
-            // error itself is surfaced exactly as an ordinary mapping's is (decision 10): a thrown one fails the object,
-            // a mapping-level one is returned for the caller to record.
-            var errorCountBefore = errors.Count;
-            try
-            {
-                ProcessMapping(cso, mapping, objectTypes, expressionEvaluator,
-                    contributingSystemId: cso.ConnectedSystemId,
-                    errors: errors,
-                    mvoObjectTypeId: syncRule.MetaverseObjectTypeId,
-                    priorityContext: priorityContext,
-                    metaverseAttributes: metaverseAttributes);
-            }
-            catch (SyncExpressionEvaluationException ex)
-            {
-                ex.SyncRuleName ??= syncRule.Name;
-                throw;
-            }
-            catch (SyncExpressionMissingInputException ex)
-            {
-                ex.SyncRuleName ??= syncRule.Name;
-                throw;
-            }
-
-            for (var i = errorCountBefore; i < errors.Count; i++)
-                errors[i].SyncRuleName ??= syncRule.Name;
-        }
+            EvaluateDerivedMapping(cso, syncRule, mapping, objectTypes, expressionEvaluator, priorityContext, metaverseAttributes, errors);
 
         Log.Verbose("EvaluateDerivedLevel: evaluated {Count} derived Attribute Flow(s) at level {Level} for MVO {MvoId} (CSO {CsoId}).",
             toEvaluate.Count, level, mvo.Id, cso.Id);
 
         return errors;
+    }
+
+    /// <summary>
+    /// Evaluates one derived mapping, hosted on <paramref name="syncRule"/>, against <paramref name="metaverseAttributes"/>:
+    /// the Metaverse Object's effective values as its level reads them. The whole of the derived pass's work for one
+    /// mapping, shared with Generated Value Forms (#2023), which replays it on a scratch copy to work out a candidate's
+    /// forms before issuing it, so a value worked out there is the value the pass then writes.
+    /// </summary>
+    internal static void EvaluateDerivedMapping(
+        ConnectedSystemObject cso,
+        SyncRule syncRule,
+        SyncRuleMapping mapping,
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes,
+        IExpressionEvaluator? expressionEvaluator,
+        AttributePriorityContext priorityContext,
+        IDictionary<string, object?> metaverseAttributes,
+        List<AttributeFlowError> errors)
+    {
+        // A derived flow runs after the object's ordinary flows, from whichever of its rules hosts it, so every error it
+        // raises names that rule (plan Phase 3): the administrator has to know which rule to open. The error itself is
+        // surfaced exactly as an ordinary mapping's is (decision 10): a thrown one fails the object, a mapping-level one
+        // is returned for the caller to record.
+        var errorCountBefore = errors.Count;
+        try
+        {
+            ProcessMapping(cso, mapping, objectTypes, expressionEvaluator,
+                contributingSystemId: cso.ConnectedSystemId,
+                errors: errors,
+                mvoObjectTypeId: syncRule.MetaverseObjectTypeId,
+                priorityContext: priorityContext,
+                metaverseAttributes: metaverseAttributes);
+        }
+        catch (SyncExpressionEvaluationException ex)
+        {
+            ex.SyncRuleName ??= syncRule.Name;
+            throw;
+        }
+        catch (SyncExpressionMissingInputException ex)
+        {
+            ex.SyncRuleName ??= syncRule.Name;
+            throw;
+        }
+
+        for (var i = errorCountBefore; i < errors.Count; i++)
+            errors[i].SyncRuleName ??= syncRule.Name;
     }
 
     /// <inheritdoc />
@@ -156,7 +173,7 @@ public partial class SyncEngine
     /// <exception cref="InvalidOperationException">An in-scope rule hosts a derived mapping in the graph that the
     /// rule itself does not hold as an enabled mapping: the graph and the rules were built from different
     /// configuration, and evaluating either view would be a guess.</exception>
-    private static List<(SyncRule SyncRule, SyncRuleMapping Mapping)> FindDerivedMappingsInScope(
+    internal static List<(SyncRule SyncRule, SyncRuleMapping Mapping)> FindDerivedMappingsInScope(
         DerivedFlowGraph graph,
         int level,
         IReadOnlyList<SyncRule> syncRules)

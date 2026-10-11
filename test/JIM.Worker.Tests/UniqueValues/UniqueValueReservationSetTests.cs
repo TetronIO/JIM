@@ -109,4 +109,54 @@ public class UniqueValueReservationSetTests
             Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "jane.doe"), Is.True, "ownerB's claim must be untouched");
         }
     }
+    // ---- A candidate and its forms, all or none (Generated Value Forms, #2023) ----
+
+    [Test]
+    public void TryReserveAll_EveryKeyFree_ClaimsThemAll()
+    {
+        var set = new UniqueValueReservationSet();
+        var owner = Guid.NewGuid();
+
+        var claimed = set.TryReserveAll(owner, [(UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs"), (UniqueValueScope.MetaverseAttribute, 2, "joe.bloggs@corp.local")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed, Is.True);
+            Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs"), Is.True);
+            Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 2, "joe.bloggs@corp.local"), Is.True);
+        }
+    }
+
+    [Test]
+    public void TryReserveAll_OneKeyTaken_ClaimsNoneOfThem()
+    {
+        var set = new UniqueValueReservationSet();
+        set.TryReserve(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 2, "joe.bloggs@corp.local");
+
+        var claimed = set.TryReserveAll(Guid.NewGuid(), [(UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs"), (UniqueValueScope.MetaverseAttribute, 2, "joe.bloggs@corp.local")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed, Is.False);
+            Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs"), Is.False, "the free key claimed first is let go again");
+        }
+    }
+
+    [Test]
+    public void Release_ReleasesOnlyAClaimTheOwnerHolds()
+    {
+        var set = new UniqueValueReservationSet();
+        var owner = Guid.NewGuid();
+        set.TryReserve(owner, UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs");
+        set.TryReserve(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "jane.doe");
+
+        set.Release(owner, UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs");
+        set.Release(owner, UniqueValueScope.MetaverseAttribute, 1, "jane.doe");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "joe.bloggs"), Is.False);
+            Assert.That(set.IsReservedByAnotherOwner(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, 1, "jane.doe"), Is.True, "another owner's claim is left alone");
+        }
+    }
 }

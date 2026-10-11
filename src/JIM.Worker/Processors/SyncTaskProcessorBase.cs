@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
@@ -497,12 +498,12 @@ public abstract class SyncTaskProcessorBase
     /// exists, and for requests with nothing to probe. Creating the session opens nothing: it connects to each target
     /// system only when it first has a candidate to search for.
     /// </summary>
-    private void EnsureUniquenessProbeSession(IReadOnlyList<GenerationRequest> requests)
+    private void EnsureUniquenessProbeSession(IReadOnlyList<GenerationRequest> requests, bool formsProbe = false)
     {
         if (_uniquenessProbeSessionHost == null || _uniquenessProbeSession != null || _uniqueValueResolveOptions == null)
             return;
 
-        if (!requests.Any(r => r.ProbeTargets.Count > 0))
+        if (!formsProbe && !requests.Any(r => r.ProbeTargets.Count > 0))
             return;
 
         _uniquenessProbeSession = new UniquenessProbeSession(_uniquenessProbeSessionHost, _cancellationTokenSource.Token);
@@ -523,6 +524,42 @@ public abstract class SyncTaskProcessorBase
         var returned = await _uniqueValueGenerationServer.ReturnUnusedSequenceNumbersAsync(_uniqueValueResolveOptions);
         if (returned > 0)
             Log.Information("ReturnUnusedSequenceNumbersAsync: Handed {Count} unused sequence numbers back to their counters for Activity {ActivityId}", returned, _activity.Id);
+    }
+
+    /// <summary>
+    /// Generated values the run held back because values built from them could not be worked out yet (Generated Value
+    /// Forms, #2023), by generated attribute, with each distinct reason, for the run's warning.
+    /// </summary>
+    private readonly Dictionary<string, (int Count, HashSet<string> Reasons)> _generatedValuesWaiting = new(StringComparer.Ordinal);
+
+    private void RecordGeneratedValueWaiting(string attributeName, string waitingFor)
+    {
+        if (!_generatedValuesWaiting.TryGetValue(attributeName, out var waiting))
+            waiting = (0, new HashSet<string>(StringComparer.Ordinal));
+
+        waiting.Reasons.Add(waitingFor);
+        _generatedValuesWaiting[attributeName] = (waiting.Count + 1, waiting.Reasons);
+    }
+
+    /// <summary>
+    /// Appends one Activity warning per generated attribute the run held back because values built from it could not be
+    /// worked out yet (Generated Value Forms, #2023), naming what they wait for, and logs the same. Call from the
+    /// <c>finally</c> of <c>PerformFullSyncAsync</c> and <c>PerformDeltaSyncAsync</c>: an object that waits may have no
+    /// other change, and so no item of its own, to say it on.
+    /// </summary>
+    protected void ReportGeneratedValuesWaiting()
+    {
+        foreach (var (attributeName, (count, reasons)) in _generatedValuesWaiting)
+        {
+            var warning = string.Create(CultureInfo.InvariantCulture,
+                $"JIM held back {count} {attributeName} {(count == 1 ? "value" : "values")} until the values built from {(count == 1 ? "it" : "them")} can be worked out. " +
+                $"{(count == 1 ? "It waits" : "They wait")} for {string.Join("; ", reasons.Take(5))}{(reasons.Count > 5 ? "; and more" : string.Empty)}.");
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            Log.Information("ReportGeneratedValuesWaiting: {Count} {Attribute} value(s) held back for Activity {ActivityId} until values built from them can be worked out.",
+                count, LogSanitiser.Sanitise(attributeName), _activity.Id);
+        }
+
+        _generatedValuesWaiting.Clear();
     }
 
     /// <summary>
@@ -704,6 +741,108 @@ public abstract class SyncTaskProcessorBase
     /// run, on first need, from the same export rules as <see cref="GetOrComputeGenerationParticipatingTargets"/>.
     /// </summary>
     private Dictionary<int, List<UniquenessProbeTarget>>? _generationProbeTargets;
+
+    /// <summary>
+    /// The values built from each generated value (Generated Value Forms, #2023), over every rule the run knows; null
+    /// until <see cref="BuildDriftDetectionCache"/> builds it.
+    /// </summary>
+    private GeneratedValueBuiltValues? _generatedValueBuiltValues;
+
+    /// <summary>
+    /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), the values built from it that are checked
+    /// before it is issued, and where (<see cref="GeneratedValueParticipation.DescribeForms"/>). Computed once per run,
+    /// on first need.
+    /// </summary>
+    private Dictionary<int, List<GeneratedValueForm>>? _generationForms;
+
+    /// <summary>
+    /// Every enabled import Synchronisation Rule the run knows, for working out the forms of a generated value re-elected
+    /// from another system's rule.
+    /// </summary>
+    private List<SyncRule> _allImportRules = [];
+
+    /// <summary>
+    /// For each Metaverse attribute an export expression built from a generated value reads, the systems whose generated
+    /// values it is built from (<see cref="GeneratedValueParticipation.DescribeExportFormInputReaders"/>): marked, as a
+    /// derived flow's host is, when another system changes it, so a generated value waiting on it is retried.
+    /// </summary>
+    private Dictionary<(int MetaverseObjectTypeId, int MetaverseAttributeId), List<int>> _exportFormInputReaders = [];
+
+    private List<GeneratedValueForm> GetOrComputeGenerationForms(SyncRuleMapping mapping)
+    {
+        var generation = mapping.Generation!;
+        _generationForms ??= new Dictionary<int, List<GeneratedValueForm>>();
+
+        if (_generationForms.TryGetValue(generation.Id, out var cached))
+            return cached;
+
+        var exportRules = _exportEvaluationCache != null
+            ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)
+            : Enumerable.Empty<SyncRule>();
+
+        var forms = _generatedValueBuiltValues == null ? [] : GeneratedValueParticipation.DescribeForms(mapping, _generatedValueBuiltValues, exportRules);
+        _generationForms[generation.Id] = forms;
+        return forms;
+    }
+
+    /// <summary>
+    /// The form source for a generated value the object being synchronised is about to generate (Generated Value Forms,
+    /// #2023): the values built from it on its own Synchronisation Rule, worked out for each candidate by replaying the
+    /// derived pass over <paramref name="inScopeRules"/>, and checked where each is written. Null when there are none to
+    /// check, when the request came from another object's rule, or when the run already knows the object's value is
+    /// sticky, so no candidate will be drawn. A form's probe targets are kept only when the run probes, with the values
+    /// the object's own accounts hold exempted, exactly as for the generated value.
+    /// </summary>
+    /// <param name="cso">The object being synchronised: the generated value's own account on the main path, the account
+    /// leaving the object on the re-election paths.</param>
+    /// <param name="inScopeRules">The rules whose derived flows run for the generated value's own account; null on the
+    /// re-election paths, where they are the enabled import rules of that account's own system.</param>
+    private async Task<IGeneratedValueFormSource?> BuildGeneratedValueFormSourceAsync(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        PendingGeneratedValue pending,
+        IReadOnlyList<SyncRule>? inScopeRules,
+        bool probing,
+        bool csoIsJoinedToObject)
+    {
+        if (_attributePriorityContext == null || _objectTypes == null || pending.BaseUnavailable)
+            return null;
+
+        // The account the values built from the generated value read: the one being synchronised on the main path; on a
+        // re-election path, the surviving contributor's own account, as it recorded the request.
+        var source = inScopeRules != null ? cso : pending.SourceConnectedSystemObject;
+        if (source == null || pending.SourceConnectedSystemObjectId != source.Id || !ReferenceEquals(source.MetaverseObject, mvo))
+            return null;
+
+        inScopeRules ??= _allImportRules
+            .Where(rule => rule.ConnectedSystemId == source.ConnectedSystemId && rule.MetaverseObjectTypeId == mvo.Type?.Id)
+            .ToList();
+
+        if (mvo.Id != Guid.Empty && _uniqueValueResolveOptions!.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
+            return null;
+
+        var forms = GetOrComputeGenerationForms(pending.Mapping);
+        if (forms.Count == 0)
+            return null;
+
+        var prepared = new List<GeneratedValueForm>(forms.Count);
+        foreach (var form in forms)
+        {
+            if (!probing)
+                prepared.Add(form with { ProbeTargets = [] });
+            else if (form.ProbeTargets.Count == 0)
+                prepared.Add(form);
+            else
+                prepared.Add(form with { ProbeExemptValues = await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, form.ProbeTargets) });
+        }
+
+        // Another system's account is of a type this run does not otherwise load; it carries its own.
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes = source.Type != null && _objectTypes.All(t => t.Id != source.TypeId)
+            ? [.. _objectTypes, source.Type]
+            : _objectTypes;
+
+        return GeneratedValueFormSource.Create(_syncEngine, source, pending, prepared, inScopeRules, objectTypes, _expressionEvaluator, _attributePriorityContext);
+    }
 
     private List<UniquenessProbeTarget> GetOrComputeGenerationProbeTargets(SyncRuleMapping mapping)
     {
@@ -2252,7 +2391,7 @@ public abstract class SyncTaskProcessorBase
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
     {
         var mvo = cso.MetaverseObject!;
-        var outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomesSoFar);
+        var outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, inScopeRules, outcomesSoFar);
 
         var graph = _attributePriorityContext?.DerivedFlowGraph;
         if (graph == null || inScopeRules.Count == 0)
@@ -2279,7 +2418,7 @@ public abstract class SyncTaskProcessorBase
             if (levelErrors.Count > 0)
                 _derivedFlowErroredCsoIds.Add(cso.Id);
 
-            outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomes);
+            outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, inScopeRules, outcomes);
         }
 
         return outcomes;
@@ -2292,12 +2431,13 @@ public abstract class SyncTaskProcessorBase
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>?> ResolveAndMergePendingGenerationsAsync(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
+        IReadOnlyList<SyncRule> inScopeRules,
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
     {
         if (mvo.PendingGeneratedValues.Count == 0)
             return outcomesSoFar;
 
-        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo, csoIsJoinedToObject: true);
+        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo, csoIsJoinedToObject: true, inScopeRules: inScopeRules);
         return outcomesSoFar == null ? resolvedHere : [.. outcomesSoFar, .. resolvedHere];
     }
 
@@ -2330,7 +2470,7 @@ public abstract class SyncTaskProcessorBase
     private void CollectDerivedInputMarks(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> changedValues)
     {
         var graph = _attributePriorityContext?.DerivedFlowGraph;
-        if (graph == null)
+        if (graph == null && _exportFormInputReaders.Count == 0)
             return;
 
         if (mvo.Type == null)
@@ -2342,7 +2482,19 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changedValues, _connectedSystem.Id))
+        var changed = changedValues.ToList();
+        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changed, _connectedSystem.Id))
+            _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
+
+        // Generated Value Forms (#2023): an export expression built from a generated value is not a derived flow, so the
+        // graph does not know its inputs; the generated value's own system is marked for them here.
+        var exportFormReaders = changed
+            .Select(value => value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0)
+            .Distinct()
+            .SelectMany(attributeId => _exportFormInputReaders.GetValueOrDefault((mvo.Type.Id, attributeId)) ?? [])
+            .Where(connectedSystemId => connectedSystemId != _connectedSystem.Id)
+            .Distinct();
+        foreach (var connectedSystemId in exportFormReaders)
             _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
     }
 
@@ -2459,8 +2611,12 @@ public abstract class SyncTaskProcessorBase
     /// as a <c>GeneratedValueAssigned</c> child outcome once it has built the object's root sync outcome (which
     /// happens later in the calling method); empty when nothing was generated this pass.
     /// </returns>
+    /// <param name="inScopeRules">The Synchronisation Rules in scope for <paramref name="cso"/>, whose derived flows the
+    /// synchronisation runs, for checking each request's forms with it (Generated Value Forms, #2023). Null on the
+    /// re-election paths, where the generated value comes from another system's rule and its forms are worked out from
+    /// that system's own account.</param>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesAsync(
-        ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false)
+        ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false, IReadOnlyList<SyncRule>? inScopeRules = null)
     {
         var forRpei = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
 
@@ -2472,6 +2628,7 @@ public abstract class SyncTaskProcessorBase
         try
         {
             var requests = new List<GenerationRequest>(pendingValues.Count);
+            var formsProbe = false;
             foreach (var pending in pendingValues)
             {
                 var generation = pending.Mapping.Generation!;
@@ -2493,6 +2650,9 @@ public abstract class SyncTaskProcessorBase
                     ? await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, probeTargets)
                     : [];
 
+                var formSource = await BuildGeneratedValueFormSourceAsync(cso, mvo, pending, inScopeRules, probing: _uniquenessProbeSessionHost != null, csoIsJoinedToObject);
+                formsProbe |= formSource != null && GetOrComputeGenerationForms(pending.Mapping).Any(f => f.ProbeTargets.Count > 0);
+
                 requests.Add(new GenerationRequest
                 {
                     Mode = GeneratedValueMode.Import,
@@ -2511,17 +2671,30 @@ public abstract class SyncTaskProcessorBase
                     StickyOnly = pending.BaseUnavailable,
                     ProbeTargets = probeTargets,
                     ProbeExemptValues = probeExemptValues,
+                    FormSource = formSource,
                     CallerState = mvo
                 });
             }
 
-            EnsureUniquenessProbeSession(requests);
-            var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+            EnsureUniquenessProbeSession(requests, formsProbe);
+            IReadOnlyList<GenerationOutcome> outcomes;
+            // Generation time, including the values built from each candidate (Generated Value Forms, #2023): the PRD
+            // asks for it in the run's performance diagnostics.
+            using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues")
+                       .SetTag("requests", requests.Count)
+                       .SetTag("withForms", requests.Count(r => r.FormSource != null)))
+                outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
             for (var i = 0; i < outcomes.Count; i++)
             {
                 var outcome = outcomes[i];
                 var pending = pendingValues[i];
+                var attributeName = pending.Mapping.TargetMetaverseAttribute!.Name;
+
+                // Generated Value Forms (#2023): candidates passed over because a value built from them was already
+                // held, whatever came of the request, a bounded number of them per object.
+                forRpei.AddRange(GeneratedValueFormReporting.DescribeSkippedCandidates(outcome.SkippedCandidates)
+                    .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
                 {
@@ -2540,7 +2713,15 @@ public abstract class SyncTaskProcessorBase
                         break;
 
                     case GenerationOutcomeKind.Waiting:
-                        // Nothing to do: any existing value stays, and there is nothing new to apply.
+                        // Nothing to apply: any existing value stays. A value held back because a value built from it
+                        // cannot be worked out yet is reported, on the object's item and on the run, since the object
+                        // may have nothing else to record (Generated Value Forms, #2023).
+                        if (outcome.FormWaits.Count > 0)
+                        {
+                            var waitingFor = GeneratedValueFormReporting.DescribeWaits(outcome.FormWaits);
+                            forRpei.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
+                            RecordGeneratedValueWaiting(attributeName, waitingFor);
+                        }
                         break;
 
                     case GenerationOutcomeKind.Exhausted:
@@ -2850,7 +3031,9 @@ public abstract class SyncTaskProcessorBase
         }
 
         EnsureUniquenessProbeSession(requests);
-        var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+        IReadOnlyList<GenerationOutcome> outcomes;
+        using (Diagnostics.Sync.StartSpan("ResolveGeneratedValues").SetTag("requests", requests.Count))
+            outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
         for (var i = 0; i < outcomes.Count; i++)
         {
@@ -6904,6 +7087,13 @@ public abstract class SyncTaskProcessorBase
         // are honoured now the NullValue read-query filter is in place (markers are excluded from export/drift/scoping
         // value sourcing, so an asserted null clears downstream targets and cannot resurrect a lower-priority value).
         _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
+
+        // The values built from each generated value (Generated Value Forms, #2023), from the same rules and graph, so
+        // a generated value's forms are checked with it before it is issued.
+        _generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
+        _generationForms = null;
+        _allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
+        _exportFormInputReaders = GeneratedValueParticipation.DescribeExportFormInputReaders(_generatedValueBuiltValues, allSyncRules);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftGeneratedObjectTypes = null; // recomputed from the rules below on first need
