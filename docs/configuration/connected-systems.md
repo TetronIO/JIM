@@ -702,7 +702,7 @@ Automation gets the same evaluation: [`New-JIMConfigurationChangePreview -Connec
 
 ## See also
 
-- [Connectors](../connectors/index.md) -- the connector types JIM ships with, and what each one does
-- [Concepts: Architecture](../concepts/architecture.md) -- how Connected Systems fit into JIM's hub-and-spoke model
-- [Run Profiles](run-profiles.md) -- the operations executed against a Connected System
-- [Synchronisation Rules](synchronisation-rules.md) -- how data flows between a Connected System and the metaverse
+- [Connectors](../connectors/index.md): the connector types JIM ships with, and what each one does
+- [Concepts: Architecture](../concepts/architecture.md): how Connected Systems fit into JIM's hub-and-spoke model
+- [Run Profiles](run-profiles.md): the operations executed against a Connected System
+- [Synchronisation Rules](synchronisation-rules.md): how data flows between a Connected System and the metaverse

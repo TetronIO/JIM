@@ -81,8 +81,8 @@ Both require the Administrator role. Full endpoint detail is in the [interactive
 
 ## See also
 
-- [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) -- previewing a proposed configuration *edit*, rather than what today's stored configuration would do
-- [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- what import, sync and export actually do when they run for real
-- [Deletion behaviour](metaverse.md#deletion-behaviour) -- Deletion Rules, grace periods, and provisioned targets as connectors
-- [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) -- what happens to a downstream target object when its Metaverse Object is deleted
-- [Preview cmdlets](../powershell/previews.md) -- `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview`
+- [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it): previewing a proposed configuration *edit*, rather than what today's stored configuration would do
+- [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): what import, sync and export actually do when they run for real
+- [Deletion behaviour](metaverse.md#deletion-behaviour): Deletion Rules, grace periods, and provisioned targets as connectors
+- [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action): what happens to a downstream target object when its Metaverse Object is deleted
+- [Preview cmdlets](../powershell/previews.md): `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview`

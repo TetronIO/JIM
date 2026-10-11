@@ -117,7 +117,7 @@ An export does not wait whole for its references. Everything that can be written
 
 ### Pre-Export Reconciliation
 
-JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
+JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled, avoiding unnecessary operations on the target system.
 
 ### Safeguards
 
@@ -163,7 +163,7 @@ Initialise JIM once in a new deployment, and again after any significant change 
 
 ## Run Profiles
 
-Each phase is executed through a **Run Profile** -- a configured operation on a Connected System. Common Run Profiles include:
+Each phase is executed through a **Run Profile**: a configured operation on a Connected System. Common Run Profiles include:
 
 | Run Profile | Phase | Description |
 |-------------|-------|-------------|
