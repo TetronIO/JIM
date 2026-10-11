@@ -1993,6 +1993,10 @@ function Clear-ConnectorFilesVolume {
         and rm -rf's its contents as root. This is safe to call whether jim.worker is running
         or not; falls back to the compose-project image name when the container isn't up.
 
+        The same container then counts what is left, and the helper throws, naming the volume, when the
+        wipe could not run or anything remains (#2056): a scenario that starts with the previous
+        scenario's files is not a clean run, and the reset must not carry on as though it were.
+
         Call sites:
           - Run-IntegrationTests.ps1 Step 1 (top-level reset)
           - Run-IntegrationTests.ps1 Reset-JIMForNextScenario (between-scenarios lightweight reset)
@@ -2009,9 +2013,77 @@ function Clear-ConnectorFilesVolume {
     }
 
     Write-Host "  Emptying $($lane.ConnectorFilesVolume) contents (via throwaway $workerImage container)..." -ForegroundColor Gray
-    docker run --rm --user 0 --entrypoint sh `
+    $output = @(docker run --rm --user 0 --entrypoint sh `
         -v "$($lane.ConnectorFilesVolume):/vol" $workerImage `
-        -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
+        -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; ls -A /vol | wc -l' 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not empty $($lane.ConnectorFilesVolume) (exit code $LASTEXITCODE): $($output -join ' ')"
+    }
+
+    $remaining = "$($output | Select-Object -Last 1)".Trim()
+    if ($remaining -ne '0') {
+        throw "$($lane.ConnectorFilesVolume) still holds $remaining entries after being emptied, so the next scenario would not start clean."
+    }
+}
+
+function Remove-ConnectorFilesVolume {
+    <#
+    .SYNOPSIS
+        Remove this lane's connector files volume, wiping it in place when something still holds it.
+
+    .DESCRIPTION
+        Run-IntegrationTests.ps1 Step 1 force-removes the stack's containers first, so the volume normally goes
+        outright. When it cannot (a container from an unrelated Docker project still mounts it),
+        Clear-ConnectorFilesVolume empties it in place so the next scenario does not inherit stale files, and stops
+        the run if even that fails. A volume that does not exist yet, as on a fresh host, needs neither: there is
+        nothing to wipe, and the worker image the wipe runs on is not built until Step 2 (#2056).
+    #>
+    param()
+
+    $lane = Get-IntegrationLane
+    docker volume inspect $lane.ConnectorFilesVolume 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        return
+    }
+
+    $rmResult = docker volume rm $lane.ConnectorFilesVolume 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  $($lane.ConnectorFilesVolume) could not be removed ($rmResult); wiping in place instead..." -ForegroundColor Gray
+        Clear-ConnectorFilesVolume
+    }
+}
+
+function Get-UnexpectedComposeResourcesInUse {
+    <#
+    .SYNOPSIS
+        The "still in use" lines from a `docker compose down` naming anything other than the resources expected
+        to stay in use (#2056).
+
+    .DESCRIPTION
+        The directory containers keep the lane's network and connector files volume in use across scenarios
+        by design, so `docker compose down -v` reports both as "Resource is still in use" on every reset;
+        Clear-ConnectorFilesVolume has already emptied the volume, and the network is reused as it is. Anything
+        else still in use is held by something outside the integration stack, and is worth a warning. Names are
+        matched exactly, so a lane never excuses another lane's resources; an in-use line with no readable name
+        is returned too.
+
+    .PARAMETER DownOutput
+        The command's output, as `2>&1` captures it: strings, error records, or both.
+
+    .PARAMETER ExpectedInUse
+        The network and volume names expected to stay in use.
+    #>
+    param(
+        [AllowEmptyCollection()][object[]]$DownOutput,
+        [string[]]$ExpectedInUse
+    )
+
+    foreach ($line in @($DownOutput | ForEach-Object { "$_" } | Where-Object { $_ -match 'Resource is still in use' })) {
+        $isExpected = $line -match '(?:Network|Volume)\s+(?<name>\S+)\s+Resource is still in use' -and $ExpectedInUse -ccontains $Matches['name']
+        if (-not $isExpected) {
+            $line.Trim()
+        }
+    }
 }
 
 function Write-FilesToConnectorVolume {
