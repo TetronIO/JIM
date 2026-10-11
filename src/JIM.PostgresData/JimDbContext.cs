@@ -1113,6 +1113,13 @@ public class JimDbContext : DbContext
             .HasIndex(e => e.CauseMetaverseObjectId)
             .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
 
+        // The export cycle a confirmation names (#1811): the downward walk reaches a confirming import through it, and
+        // Phase 1's upward walk reaches an export through it. Filtered because most edges name no Pending Export.
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CausePendingExportId)
+            .HasDatabaseName("IX_CausalEdges_CausePendingExportId")
+            .HasFilter(@"""CausePendingExportId"" IS NOT NULL");
+
         // Ambiguous match candidates (#2052): cascade with the Activity item that reports them, as a causal edge's
         // effect side does; the candidate itself is snapshot scalars with no foreign key, so a candidate deleted to
         // resolve the ambiguity still reads. Read by item, so indexed by item.

@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011175122_AddRpeiUnresolvedReferenceCount")]
+    [Migration("20261011185010_AddRpeiUnresolvedReferenceCount")]
     partial class AddRpeiUnresolvedReferenceCount
     {
         /// <inheritdoc />
@@ -657,6 +657,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("CauseMetaverseObjectId")
                         .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
+
+                    b.HasIndex("CausePendingExportId")
+                        .HasDatabaseName("IX_CausalEdges_CausePendingExportId")
+                        .HasFilter("\"CausePendingExportId\" IS NOT NULL");
 
                     b.HasIndex("CauseRunProfileExecutionItemId")
                         .HasDatabaseName("IX_CausalEdges_CauseRunProfileExecutionItemId");
