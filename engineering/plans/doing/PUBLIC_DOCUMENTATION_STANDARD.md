@@ -69,8 +69,8 @@ Delivered on `claude/bold-gauss-yt9ekg` (second pull request).
 
 - **`engineering/DOCUMENTATION_STANDARD.md`:** audiences; page types and their required shapes, including `object`; front matter and structure (STR); voice (VOI, SAFE, HOME: the "Writing for the Reader" rules, moved unchanged in substance); language (LANG); maintenance (MNT, including integrate-don't-append); accuracy and links (ACC, LNK); accessibility (A11Y); style (STY); priority pages and tutorials (PRI, TUT); coverage (COV, TERM); and a rule index giving every rule its tier and checker. Rules not yet checked say so (Review, or Planned with their phase).
 - **`docs/CLAUDE.md`** reduced to site mechanics plus a "Before you change a page" pointer; the root `CLAUDE.md`, `engineering/CLAUDE.md` and `src/JIM.PowerShell/CLAUDE.md` point at the standard; the PR template's Documentation section asks for MNT-1 and MNT-2; `engineering/prompts/api-docs-section.md` retired.
-- **`scripts/Test-DocsConformance.ps1`** with 41 Pester tests written red first: STR-1 to STR-8, MNT-3, A11Y-1, A11Y-2, TYP-1 and EXC-1; tiers from `docs/.conformance/config.psd1`; the shrink-only baseline (`docs/.conformance/baseline.tsv`, `-UpdateBaseline`, `-SeedBaseline`, `merge=union` with the lower count winning); in-page exception markers; conformant and priority pages; annotations and a job-summary table. About three seconds over the whole site, so it runs on every pull request.
-- **Seeded** with 81 STR-2 entries (258 missing front matter keys) and the two stub pages (STR-6). Everything else blocks from day one, after fixing what it found: ten pages given one name (title, H1 and nav label), seven code blocks given a language, and one heading skip excused in place until the PowerShell pages migrate.
+- **`scripts/Test-DocsConformance.ps1`** with 42 Pester tests written red first: STR-1 to STR-8, MNT-3, A11Y-1, A11Y-2, TYP-1 and EXC-1; tiers from `docs/.conformance/config.psd1`; the shrink-only baseline (`docs/.conformance/baseline.tsv`, `-UpdateBaseline`, `-SeedBaseline`, `merge=union` with the lower count winning); in-page exception markers; conformant and priority pages; annotations and a job-summary table. About three seconds over the whole site, so it runs on every pull request.
+- **Seeded** with 81 STR-2 entries (258 missing front matter keys) and the two stub pages (STR-6). Everything else except MNT-3 blocks from day one, after fixing what it found: ten pages given one name (title, H1 and nav label), seven code blocks given a language, and one heading skip excused in place until the PowerShell pages migrate.
 
 Differences from the plan as first written:
 
@@ -78,6 +78,8 @@ Differences from the plan as first written:
 - **The conformance data lives in `docs/.conformance/`**, which MkDocs never publishes because the folder starts with a dot.
 - **STR-3 accepts a nav label that drops leading words of the page's name** ("Authentication" under API for "API Authentication"), after the first run showed the stricter rule flagging legitimate section-qualified names.
 - **A11Y-1 blocks rather than ratchets:** every one of the site's 53 Mermaid diagrams is on a contributor page leaving in Phase 5, so customer pages already conform.
+- **MNT-3 warns until Phase 5 rather than blocking now.** Eleven pages are already over budget, among them the Synchronisation Rules, Connected Systems and PowerShell pages most features document into. Replayed against `main`, the check failed the first Generated Value Forms pull request ([#2062](https://github.com/TetronIO/JIM/pull/2062)) on both Synchronisation Rules pages, so blocking would have failed most feature pull requests, or pushed authors to cut useful text to make room, until those pages are split.
+- **No exception marker can excuse MNT-3.** It compares with the base branch, so a marker excusing growth suppresses nothing once that growth merges, and EXC-1 would then fail every later pull request.
 
 ### Phase 2: Coverage and language
 
@@ -96,12 +98,12 @@ Differences from the plan as first written:
 
 ### Phase 4: Folder migrations
 
-One pull request per folder, each ending with every page declaring its type and an empty baseline, then marked conformant: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation (native blocked-by link recorded on #1454).
+One pull request per folder, each ending with every page declaring its type, an empty baseline and no page over its size budget, then marked conformant: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation (native blocked-by link recorded on #1454).
 
 ### Phase 5: Contributor content, promotion, close
 
 - Customer-relevant behaviour in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) rewritten into `concepts/`; the 16 contributor pages moved to `engineering/`; a small "Extending JIM" section kept for connector authors.
-- Warnings whose baseline has reached zero and that ran a release without a false positive promoted to blocking.
+- Warnings whose baseline has reached zero and that ran a release without a false positive promoted to blocking, and MNT-3 promoted to Block now that no page is over budget.
 - PRD and this plan moved to `done/` in the pull request that closes #1454.
 
 ## Success Criteria
