@@ -712,6 +712,66 @@ function Get-LdapCsoHeader {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: Assert the deletion's own outcome tree says what became of the target account and which rule decided it
+# (#1811). Beneath the "Metaverse Object deleted" outcome, a Delete action records Deprovision queued and a Disconnect
+# action records Disconnected from target system, each naming the export Synchronisation Rule. The outcome tree is not
+# on the REST API's execution item list, so it is read from the database, as Get-MvoDeletionMarkers does.
+# -----------------------------------------------------------------------------------------------------------------
+function Assert-DeletionOutcomeNamesDeprovisioningRule {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$DeprovisionAction,
+
+        [Parameter(Mandatory=$true)]
+        [string]$RuleName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$StepName
+    )
+
+    # Interpolated because psql -c over docker exec takes no bind parameters; the names are this scenario's own
+    # constants, and anything else is refused before it reaches SQL.
+    if ($DisplayName -notmatch '^[A-Za-z0-9 ._-]+$') {
+        throw "Assert-DeletionOutcomeNamesDeprovisioningRule: display name '$DisplayName' is not a plain test name."
+    }
+
+    # Ordinals pinned by SyncOutcomeTypeOrdinalTests: MvoDeleted 11, DeprovisionQueued 25, TargetDisconnected 55.
+    $expectedType = if ($DeprovisionAction -eq 'Delete') { 25 } else { 55 }
+    $expectedLabel = if ($DeprovisionAction -eq 'Delete') { 'Deprovision queued' } else { 'Disconnected from target system' }
+    $query = @"
+SELECT COALESCE(child."SyncRuleName", '')
+FROM "ActivityRunProfileExecutionItemSyncOutcomes" child
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" parent ON parent."Id" = child."ParentSyncOutcomeId"
+WHERE parent."OutcomeType" = 11
+  AND parent."TargetEntityDescription" = '$DisplayName'
+  AND child."OutcomeType" = $expectedType;
+"@
+
+    $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-DeletionOutcomeNamesDeprovisioningRule: psql query failed for '$DisplayName'. Output: $rows"
+    }
+
+    $ruleNames = @($rows | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+    if ($ruleNames.Count -eq 0) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "No $expectedLabel outcome under the Metaverse Object deletion" }
+        throw "$TestName failed: the deletion of '$DisplayName' recorded no $expectedLabel outcome naming a rule ($DeprovisionAction action)"
+    }
+    if ($ruleNames -notcontains $RuleName) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "$expectedLabel outcome names '$($ruleNames -join "', '")', expected '$RuleName'" }
+        throw "$TestName failed: the $expectedLabel outcome names '$($ruleNames -join "', '")' rather than export rule '$RuleName'"
+    }
+    Write-Host "  PASSED: The deletion records $expectedLabel, naming export rule '$RuleName'" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Count delete-type Pending Exports on the LDAP system
 # -----------------------------------------------------------------------------------------------------------------
 function Get-DeletePendingExportCount {
@@ -885,6 +945,9 @@ function Invoke-DeprovisionActionTest {
         }
         Write-Host "  PASSED: Delete Pending Export staged for the $CsoOrigin CSO" -ForegroundColor Green
 
+        Assert-DeletionOutcomeNamesDeprovisioningRule -DisplayName $DisplayName -DeprovisionAction Delete `
+            -RuleName (Get-LdapExportSyncRule -Config $Config).name -TestName $TestName -StepName $StepName
+
         # Assert 3: LDAP export removes the account from the directory
         Write-Host "  Running LDAP export to apply the delete..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
@@ -909,6 +972,9 @@ function Invoke-DeprovisionActionTest {
             throw "$TestName Assert 2 failed: a delete Pending Export was staged for the $CsoOrigin CSO (Disconnect action)"
         }
         Write-Host "  PASSED: No delete Pending Export staged (Disconnect action)" -ForegroundColor Green
+
+        Assert-DeletionOutcomeNamesDeprovisioningRule -DisplayName $DisplayName -DeprovisionAction Disconnect `
+            -RuleName (Get-LdapExportSyncRule -Config $Config).name -TestName $TestName -StepName $StepName
 
         # Assert 3: the CSO was disconnected (join broken, object left in place)
         $csoAfter = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
