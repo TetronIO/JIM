@@ -1,6 +1,6 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 in review as #2071; Phases 2a, 2b and 2d complete; Phase 2c under way)
+- **Status:** Doing (Phase 2-0 merged as #2071; Phases 2a, 2b and 2d complete; Phase 2c under way)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
