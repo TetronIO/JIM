@@ -415,13 +415,39 @@ public interface ISyncRepository
     #region Object Matching — Data Access
 
     /// <summary>
-    /// Finds an MVO that matches a CSO using the specified matching rule.
-    /// Used by object matching during import (CSO→MVO join).
+    /// Finds the distinct Metaverse Objects of a type that hold any of <paramref name="values"/> for an attribute: the
+    /// lookup behind an Object Matching Rule's import join (#2052). One query covers every value, so several values
+    /// that all belong to one Metaverse Object are one match, and values belonging to different ones are several.
     /// </summary>
-    Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
-        ConnectedSystemObject connectedSystemObject,
-        MetaverseObjectType metaverseObjectType,
-        ObjectMatchingRule objectMatchingRule);
+    /// <param name="valueType">The attribute's data type. The values are typed accordingly: <see cref="string"/>,
+    /// <see cref="int"/>, <see cref="long"/>, <see cref="decimal"/> or <see cref="Guid"/>.</param>
+    /// <param name="caseSensitive">For Text, whether a value must match case exactly.</param>
+    /// <param name="take">The most ids to return, in id order. A caller deciding between one match and several asks
+    /// for two.</param>
+    Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int take);
+
+    /// <summary>
+    /// How many distinct Metaverse Objects <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> would find with no
+    /// limit (#2052). Asked only when an ambiguous match finds more candidates than an Activity item lists.
+    /// </summary>
+    Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive);
+
+    /// <summary>
+    /// Loads a Metaverse Object found by <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/>, with everything
+    /// joining it needs.
+    /// </summary>
+    Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
 
     /// <summary>
     /// Finds a CSO that matches an MVO using the specified matching rule.

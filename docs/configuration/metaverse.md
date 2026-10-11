@@ -225,8 +225,8 @@ The filter is available with the same behaviour across all three interfaces:
 
 ## See also
 
-- [Concepts: Architecture](../concepts/architecture.md) -- how the metaverse fits into JIM's hub-and-spoke architecture
-- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- how data flows through the metaverse during import, sync, and export
-- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- joiner/mover/leaver lifecycle and how it relates to Metaverse Object state
-- [Synchronisation Rules](synchronisation-rules.md) -- how data flows in and out of the metaverse
-- [Predefined Searches](predefined-searches.md) -- named, reusable searches over Metaverse Objects
+- [Concepts: Architecture](../concepts/architecture.md): how the metaverse fits into JIM's hub-and-spoke architecture
+- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): how data flows through the metaverse during import, sync, and export
+- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md): joiner/mover/leaver lifecycle and how it relates to Metaverse Object state
+- [Synchronisation Rules](synchronisation-rules.md): how data flows in and out of the metaverse
+- [Predefined Searches](predefined-searches.md): named, reusable searches over Metaverse Objects

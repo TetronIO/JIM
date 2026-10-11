@@ -1,9 +1,10 @@
 # Generated Value Forms - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete; Phases 2 and 3 to follow)
+- **Status:** Done
+- **Note:** Anchoring over values written only by an export expression (Phase 1, step 3) is deferred: Collision Remediation still counts only values written to another target unchanged by a direct export Attribute Flow.
 - **Created:** 2026-10-11
 - **Issue:** [#2023](https://github.com/TetronIO/JIM/issues/2023) (absorbs [#2014](https://github.com/TetronIO/JIM/issues/2014))
-- **PRD:** [PRD_GENERATED_VALUE_FORMS.md](../../prd/doing/PRD_GENERATED_VALUE_FORMS.md)
+- **PRD:** [PRD_GENERATED_VALUE_FORMS.md](../../prd/done/PRD_GENERATED_VALUE_FORMS.md)
 
 ## Overview
 
@@ -99,7 +100,7 @@ Two appended `SyncOutcomeType` members, `GeneratedValueWaiting` and `GeneratedVa
 4. Model, migration, change history, settings path, held-decision release; `RequiresPostgres` tests.
 5. REST, PowerShell, portal (UI mock approved first), docs, changelog. The provisioning scoping advice (D5) ships with Phase 3, where waiting first appears. Also added at review: the Attribute Flow tab's Mapping Type filter gains Derived, so derived flows and generated values can be shown together or apart.
 
-### Phase 2: One probe search per Connected System and route
+### Phase 2: One probe search per Connected System and route ✅
 
 1. Default interface member.
 2. LDAP combined searches.
@@ -107,7 +108,7 @@ Two appended `SyncOutcomeType` members, `GeneratedValueWaiting` and `GeneratedVa
 4. Gate grouping.
 5. LDAP Connector docs, changelog.
 
-### Phase 3: Values built from the generated value checked before issuing (closes #2023)
+### Phase 3: Values built from the generated value checked before issuing (closes #2023) ✅
 
 1. Engine extraction with parity tests.
 2. Form source: applicability, wait, fail closed.

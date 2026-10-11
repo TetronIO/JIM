@@ -30,4 +30,10 @@ public sealed class CausalityLineageModel
     /// the whole story".
     /// </summary>
     public bool IsTruncatedByDepth { get; init; }
+
+    /// <summary>
+    /// The reading of what the item went on to cause (#1811), or null where it has not been read yet: the page loads
+    /// it after the panel first renders, so the Lineage never waits on the walk.
+    /// </summary>
+    public CausalityLineageConsequenceSummary? Consequences { get; init; }
 }

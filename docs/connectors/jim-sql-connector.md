@@ -18,7 +18,7 @@ One Connected System covers one database, and can synchronise several of its tab
 | **Microsoft SQL Server** | Host, optional port, database name; named instances supported (`SERVER\INSTANCE`) | Encrypted by default. Identity columns and defaults are read back when JIM creates a row. |
 | **Oracle Database** | Host, optional port, service name or SID | Encrypted by default with Native Network Encryption. Sequence-backed and identity keys are read back when JIM creates a row. Oracle Database Free 23ai works without changes. |
 
-Both databases use the same settings and the same Object Types document, and behave the same way; only the connection details differ. Support for PostgreSQL and MySQL is planned as further dialects of this same connector; see [Wider database support](#wider-database-support).
+Both databases use the same settings and the same Object Types document, and behave the same way; only the connection details differ. For other database engines, see [Wider database support](#wider-database-support).
 
 ## What the connector can do
 
@@ -418,7 +418,7 @@ The SQL Server dialect uses `Microsoft.Data.SqlClient`, which is MIT licensed.
 
 ## Wider database support
 
-PostgreSQL and MySQL are planned as further dialects of this connector, with the same settings and the same Object Types document; see the [roadmap](../reference/roadmap.md). If you need another database engine, or need one of those sooner, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas); what comes next is decided by who asks.
+The connector supports Microsoft SQL Server and Oracle Database; for other engines, see the [Roadmap](../reference/roadmap.md). If you need another database engine, or need one of those sooner, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas); what comes next is decided by who asks.
 
 ## Troubleshooting
 

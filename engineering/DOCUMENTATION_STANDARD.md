@@ -155,19 +155,21 @@ These rules decide how the sentences read. They are the house voice that `docs/C
 
 ## Language
 
-The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as they apply to code. Their checks are planned for Phase 2 of the plan; until then they are Review tier.
+The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as they apply to code. `Test-DocsConformance.ps1` checks each page's running text, leaving out code, link targets, URLs and HTML, and matches only wording that is wrong wherever it appears. Where the same words are usually right ("now", "currently", "just", a lower-case "schedule"), the reviewer judges instead, because a check that is mostly false alarms teaches authors to ignore it.
 
-| ID | Rule |
-|----|------|
-| **LANG-1** | Never an em dash. Use a semicolon, comma, colon or parentheses. Never a literal `--` as a dash either: the site has no smart-punctuation extension, so readers see two hyphens. |
-| **LANG-2** | British English throughout ("synchronisation", "authorisation", "behaviour"). A third-party product's on-screen label keeps its own spelling ("Authorization" in Keycloak). |
-| **LANG-3** | JIM's domain nouns are proper nouns in Title Case, even mid-sentence: Connected System, Metaverse, Metaverse Object, Synchronisation Rule, Run Profile, Connector Space, Pending Export. Always "Synchronisation Rule" in full, never "Sync Rule". |
-| **LANG-4** | Abbreviations such as CSO, MVO and RPEI only in tight table headers, with the full term nearby; never in running prose. |
-| **LANG-5** | No time-relative words ("now", "currently", "until now", "previously", "no longer", "this release"). The site is unversioned while customers run several releases, so "now" is wrong for some reader whatever it says. Behaviour that differs by release carries a marker: `Available from v0.17.0`. Upgrade-specific notes live in `administration/upgrading.md` and the changelog only. |
-| **LANG-6** | No promises about the future ("planned", "will be added", "coming soon"). Say what JIM does today; the roadmap is `reference/roadmap.md`. |
-| **LANG-7** | No minimisers ("simply", "just", "easy"). What is simple to the writer is the reader's problem. |
-| **LANG-8** | No GitHub issue or pull request numbers on a public page (VOI-4). |
-| **LANG-9** | No names of competing identity products; use generic terms ("traditional ILM solutions"). Industry standards (SCIM, LDAP, OIDC) are fine. |
+| ID | Tier | Rule | What the check matches |
+|----|------|------|------------------------|
+| **LANG-1** | Block | Never an em dash. Use a semicolon, comma, colon or parentheses. Never a literal `--` as a dash either: the site has no smart-punctuation extension, so readers see two hyphens. | An em dash, and `--` with a space either side or between two words or numbers (write a range with "to": 1 to 2 GB). |
+| **LANG-2** | Block | British English throughout ("synchronisation", "authorisation", "behaviour"). A third-party product's on-screen label keeps its own spelling ("Authorization" in Keycloak). | Words ending *-ize*, *-ized*, *-izing*, *-ization* and so on, less the English words that only look like them (*size*, *seize*); and a list of others (*behavior*, *color*, *center*, *canceled*) in `docs/.conformance/config.psd1`, which also lists the third-party and protocol terms that keep their spelling ("authorization code", "Global Catalog"). |
+| **LANG-3** | Ratchet | JIM's domain nouns are proper nouns in Title Case, even mid-sentence: Connected System, Metaverse, Metaverse Object, Synchronisation Rule, Run Profile, Connector Space, Pending Export. Always "Synchronisation Rule" in full, never "Sync Rule". | Each glossary term the vocabulary holds to Title Case, written in any other case; and the vocabulary's rejected variants ("Sync Rule", "Connector Space Object"). |
+| **LANG-4** | Ratchet | Abbreviations such as CSO, MVO and RPEI only in tight table headers, with the full term nearby; never in running prose. | The vocabulary's abbreviations anywhere but a table's header row, unless the full term introduces them ("Metaverse Object (MVO)"). |
+| **LANG-5** | Block | No time-relative words ("now", "currently", "until now", "previously", "no longer", "this release"). The site is unversioned while customers run several releases, so "now" is wrong for some reader whatever it says. Behaviour that differs by release carries a marker: `Available from v0.17.0`, or names the releases ("v0.16.0 or earlier"). Upgrade-specific notes live in `administration/upgrading.md` and the changelog only. | "Until now", "this release", "in this version", "(previously", "previously called". |
+| **LANG-6** | Block | No promises about the future ("planned", "will be added", "coming soon"). Say what JIM does today; the roadmap is `reference/roadmap.md`. | "Is planned", "planned for", "future release", "coming soon", "will be added" and similar. |
+| **LANG-7** | Ratchet | No minimisers ("simply", "just", "easy"). What is simple to the writer is the reader's problem. | "Simply", "straightforward", "obviously", "of course". |
+| **LANG-8** | Block | No GitHub issue or pull request numbers on a public page (VOI-4). | `#` followed by digits in running text, and links to GitHub issues, pull requests and discussions. |
+| **LANG-9** | Review | No names of competing identity products; use generic terms ("traditional ILM solutions"). Industry standards (SCIM, LDAP, OIDC) are fine. | Not checked: a check would have to list the very names this rule keeps out of the repository. |
+
+**The product vocabulary.** The glossary (`reference/glossary.md`) is the one place each product noun is named and defined: its entry gives the canonical form and the anchor to link to. `docs/.conformance/vocabulary.psd1` adds only what the glossary cannot hold: each term's home page (HOME-1), whether it is held to Title Case (every multi-word name, and "Metaverse"; not the single words that are also ordinary English, such as "Activity", "Export" and "Schedule"), and the variants a page must not use. TERM-1 checks the two against each other both ways. The portal's term hints are checked against the glossary too (`GlossaryTermConsistencyTests`), so the portal, the glossary and the pages use one set of names. A new product noun needs a glossary entry and a vocabulary entry in the same pull request.
 
 ## Maintaining pages
 
@@ -185,11 +187,11 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 |----|------|------|------------|
 | **ACC-1** | Block | A PowerShell example invokes a cmdlet with each parameter's real name, never a declared alias. An alias reads like a different parameter: `Get-JIMRunProfile -Id 42` means "every Run Profile on Connected System 42". | `Lint-DocExamples.ps1` |
 | **ACC-2** | Block | Every JIM cmdlet a page names exists, and every parameter an example passes binds: declared, a common parameter, or `-WhatIf`/`-Confirm` where the cmdlet supports them; never abbreviated. | `Lint-DocExamples.ps1` |
-| **ACC-3** | Planned (Phase 2) | Every REST route in an example exists in the OpenAPI document. | |
+| **ACC-3** | Block | Every REST route a page gives exists in the OpenAPI document, and takes the method given with it. Write routes in full, as the API reference names them: `/connected-systems/{id}/clear` fails, naming `/api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`. A path given without a method names a resource rather than a call, so it may stop short of a whole route (`/api/v1/metaverse`). | `Test-DocsCoverage.ps1`, in `build-and-test`, which builds the OpenAPI document it reads |
 | **ACC-4** | Review | Every factual claim is a claim about source, so check it there. Parameter names, property names, setting keys, defaults, file paths, endpoint routes, counts and limits are all verifiable, and none is verified by the build. State a default alongside the setting key that carries it, so a reader who finds the default has drifted can find what to change. | |
 | **LNK-1** | Block | Every link and anchor in the Markdown resolves. Grep the target file for the heading rather than inferring the slug: `#passwords` and `#password-synchronisation` look equally plausible. | `Test-DocsSite.ps1` (strict MkDocs build) |
 | **LNK-2** | Block | Every link in the built site resolves, including links into the generated API reference and links written in raw HTML. | `Test-DocsSite.ps1` (lychee) |
-| **LNK-3** | Planned (Phase 2) | Every link from the product into the docs (the portal's glossary links, and `docs.junctional.io` URLs in source) resolves to a page and anchor. | |
+| **LNK-3** | Block | Every link from the product into the docs (the portal's glossary links, and `docs.junctional.io` URLs in source, the installer and the deployment files) resolves to a page and anchor. | `Test-DocsCoverage.ps1`; the glossary links, built from a template, by `GlossaryTermConsistencyTests` |
 
 **The generated references are not restated.** REST endpoint specifications live in the Scalar reference, rendered from the OpenAPI document at build time; `docs/api/` holds only overview pages that link into it. PowerShell cmdlet pages are the exception, and a known liability: no generation exists yet ([#1083](https://github.com/TetronIO/JIM/issues/1083)), so the pages under `docs/powershell/` hand-maintain parameter and output tables. Until generation exists, treat those tables as hand-written claims about source and verify each against the DTO; `src/JIM.PowerShell/CLAUDE.md` has the sharpest version of ACC-4.
 
@@ -229,19 +231,19 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 ## Coverage
 
-"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. All planned for Phase 2.
+"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2, COV-4 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-5 and the connector settings of COV-6 are planned for Phase 2.
 
 | ID | Inventory | Documented means |
 |----|-----------|------------------|
-| **COV-1** | Exported cmdlets (module manifest) | A heading on the cmdlet's `docs/powershell/` page |
-| **COV-2** | Environment variables the product and installer read | A row in a settings table |
+| **COV-1** | Exported cmdlets (module manifest) | A heading, or a row in the first column of a table, on a `docs/powershell/` page |
+| **COV-2** | Environment variables the product and installer read: `Constants.Config` and `GetEnvironmentVariable` reads, the PowerShell module's `$env:` reads, the compose files, `.env.example`, and the variables the installer's header documents | A row in a settings table |
 | **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings reference |
-| **COV-4** | REST resource groups (OpenAPI tags) | An overview page under `docs/api/` that names the group |
+| **COV-4** | REST resource groups (OpenAPI tags) | A row in the Resource groups table on the API overview page (`docs/api/index.md`) |
 | **COV-5** | Portal pages (routable components) | The docs page each declares through `PageInfo` exists |
 | **COV-6** | Connector settings and expression functions | A row in the connector's or the function reference's table |
-| **TERM-1** | Product nouns (`docs/vocabulary.yml`: canonical form, rejected variants, glossary anchor, home page) | A glossary entry with an anchor, and a home page (HOME-1) |
+| **TERM-1** | Product nouns: the glossary's entries, and `docs/.conformance/vocabulary.psd1` (see "The product vocabulary" under Language) | A glossary entry with an anchor, a vocabulary entry, and a home page that exists (HOME-1) |
 
-"Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
+"Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list (`docs/.conformance/coverage.psd1`) with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
 
 ## Rule index
 
@@ -265,22 +267,33 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | SAFE-1 | Says what survives | Review | |
 | SAFE-2 | Names the remedy with the failure | Review | |
 | HOME-1 | One home per fact | Review | |
-| LANG-1 to LANG-9 | Language | Review (checks planned, Phase 2) | |
+| LANG-1 | No em dash, no `--` as a dash | Block | `Test-DocsConformance.ps1` |
+| LANG-2 | British English | Block | `Test-DocsConformance.ps1` |
+| LANG-3 | Product nouns in Title Case, no rejected variants | Ratchet | `Test-DocsConformance.ps1` |
+| LANG-4 | Abbreviations only in table headers | Ratchet | `Test-DocsConformance.ps1` |
+| LANG-5 | No time-relative wording | Block (the unambiguous phrases); Review (the rest) | `Test-DocsConformance.ps1` |
+| LANG-6 | No promises about the future | Block | `Test-DocsConformance.ps1` |
+| LANG-7 | No minimisers | Ratchet ("simply" and its kind); Review ("just", "easy") | `Test-DocsConformance.ps1` |
+| LANG-8 | No issue or pull request numbers | Block | `Test-DocsConformance.ps1` |
+| LANG-9 | No competing products named | Review | |
 | MNT-1 | Integrate, don't append | Review | |
 | MNT-2 | Find what is now wrong first | Review | |
 | MNT-3 | An over-budget page cannot grow | Warn (Block from Phase 5) | `Test-DocsConformance.ps1` |
 | ACC-1 | Real parameter names, never aliases | Block | `Lint-DocExamples.ps1` |
 | ACC-2 | Cmdlets and parameters exist | Block | `Lint-DocExamples.ps1` |
-| ACC-3 | REST routes exist | Planned (Phase 2) | |
+| ACC-3 | REST routes exist | Block | `Test-DocsCoverage.ps1` |
 | ACC-4 | Claims checked against source | Review | |
 | LNK-1 | Markdown links and anchors resolve | Block | `Test-DocsSite.ps1` |
 | LNK-2 | Built-site links resolve | Block | `Test-DocsSite.ps1` |
-| LNK-3 | Product deep links resolve | Planned (Phase 2) | |
+| LNK-3 | Product deep links resolve | Block | `Test-DocsCoverage.ps1` |
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
 | PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
 | TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
-| COV-1 to COV-6, TERM-1 | Coverage and terminology | Planned (Phase 2) | |
+| COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |
+| COV-6 | Expression functions are documented (connector settings: planned, Phase 2) | Block | `Test-DocsCoverage.ps1` |
+| COV-3, COV-5 | Service Settings and portal pages are documented | Planned (Phase 2) | |
+| TERM-1 | The vocabulary and the glossary agree; every product noun has a home page | Block | `Test-DocsConformance.ps1` |
 | EXC-1 | Exception markers are well formed and in use | Block | `Test-DocsConformance.ps1` |

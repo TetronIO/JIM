@@ -37,7 +37,7 @@ This two-stage approach gives you:
 
 A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
 
-The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /connected-systems/{id}/connector-space` and `Get-JIMConnectedSystemObject` too.
+The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space` and `Get-JIMConnectedSystemObject` too.
 
 ### Connected System Objects (CSOs)
 
@@ -59,13 +59,13 @@ CSOs have a lifecycle:
 
 An obsoleted CSO is not deleted straight away. It stays obsolete until a Synchronisation Run Profile runs on the same Connected System, which is what disconnects it from its Metaverse Object and deletes it, applying grace periods and [Metaverse Deletion Rules](metaverse.md#deletion-behaviour) as configured. On a system that is imported and synchronised on a normal schedule this is a state objects pass through in minutes.
 
-A system that is imported but rarely synchronised is the case worth watching, because obsolete objects accumulate there with nothing acting on them. The Connected System's page states the count whenever it is above zero, with **Review** opening the Connector Space narrowed to exactly those objects; you can also reach them from the Connector Space's own **Obsolete** status filter, over the REST API with `GET /connected-systems/{id}/connector-space?status=Obsolete`, or with `Get-JIMConnectedSystemObject -ConnectedSystemId <id> -Status Obsolete`.
+A system that is imported but rarely synchronised is the case worth watching, because obsolete objects accumulate there with nothing acting on them. The Connected System's page states the count whenever it is above zero, with **Review** opening the Connector Space narrowed to exactly those objects; you can also reach them from the Connector Space's own **Obsolete** status filter, over the REST API with `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space?status=Obsolete`, or with `Get-JIMConnectedSystemObject -ConnectedSystemId <id> -Status Obsolete`.
 
 Only the first import to find an object missing records a deletion against it. Later imports that find it still missing change nothing and record nothing, because nothing has happened: the object was already obsolete when they started.
 
 ### Clearing the connector space
 
-Clearing a Connected System's connector space removes every CSO (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing itself is a hard delete: no Metaverse Object Deletion Rule or grace period runs at the moment of the clear, so the removal of the CSOs is immediate. The portal's Connector Space page, `POST /connected-systems/{id}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
+Clearing a Connected System's connector space removes every CSO (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing itself is a hard delete: no Metaverse Object Deletion Rule or grace period runs at the moment of the clear, so the removal of the CSOs is immediate. The portal's Connector Space page, `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
 
 Because a clear skips obsoletion, any Metaverse attribute value the cleared system contributed keeps its provenance and keeps exporting downstream even though nothing joins it to the system any more, and the identities themselves receive no Deletion Rule decision at all. For the common case, a Full Import that brings every object straight back, this is exactly what you want: the join re-forms and nothing changes. It only matters when an object never returns, for example a source population that shrank during the clear, or a system you are decommissioning without deleting: without something to notice the gap, those values and identities would be stranded indefinitely.
 
@@ -202,19 +202,38 @@ Each Connected System has an **Unresolved Reference Handling** setting that cont
 
 | Mode | Behaviour |
 |------|-----------|
-| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, and the Activity completes with a warning status showing the errored items. Choose this when every reference is expected to resolve. |
+| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, headed **Reference Unresolved**, and the Activity completes with a warning status showing the errored items. The error counts every reference the object was left with, broken down by attribute. Choose this when every reference is expected to resolve. |
 | **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
 | **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
+
+Whichever mode is selected, each affected object's execution item records how many of its references the import left unresolved, so none is ever lost from the Activity. Under Error, an object whose item already carries a different error (for example an attribute value the Connector could not parse) keeps that error, and its item lists the unresolved references as well, in amber rather than red. Under Warn and Ignore, the item is not marked as an error, but opening it lists the references, in amber.
 
 The same setting also governs **ambiguous references**: a reference value that matches objects of more than one Object Type, where the attribute does not declare which Object Type it points at. Two Object Types may legitimately share an anchor value space (a view over a table has the table's keys by construction), so JIM never resolves such a reference by guessing; it is reported per the mode above, with a message naming the candidate Object Types. Where the Connector's schema can declare the reference's target Object Type (the [SQL Connector](../connectors/jim-sql-connector.md)'s `referencesObjectType`), declaring it removes the ambiguity entirely: the reference resolves within the declared Object Type alone.
 
 Whichever mode is selected, genuine data-quality issues remain discoverable:
 
-- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
-- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds.
+- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects. The object's detail page opens with an **Unresolved References** panel listing every one, with its likely cause, where the fix lies and the next step (see [Finding out why a reference is unresolved](#finding-out-why-a-reference-is-unresolved)), and each unresolved value in the Attributes table carries its likely cause too.
+- **Activity execution items**<br /> Each item records how many references its object was left with (`UnresolvedReferenceCount` from `Get-JIMActivityExecutionItem` and the REST API), whatever the mode and whatever error the item carries. Opening the item lists the references as they stand now on the object, says how that compares with what the run left (fewer remain once some resolve), and links to the object.
+- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds, and `Get-JIMConnectedSystemObjectUnresolvedReference` lists one object's unresolved references with their likely causes, or summarises them with `-Summary`.
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
+### Finding out why a reference is unresolved
+
+For each unresolved reference, JIM works out the most likely cause by comparing the value with the Connected System's partitions and its current Container Scope, using the Connector's own rule for which Container holds a value (for a directory, the Distinguished Name's position in the hierarchy). It then says whether the fix lies in JIM's configuration or in the Connected System, and what to do:
+
+| Likely cause | What it means | Where to fix it |
+|--------------|---------------|-----------------|
+| **Container not in scope** | The referenced object sits in a Container that is not selected, so it was never imported. | JIM: select the Container on the Scope tab, then run a Full Import. |
+| **Container excluded** | The referenced object sits beneath a Container excluded from Container Scope. | JIM: lift the exclusion on the Scope tab if its objects belong in JIM, then run a Full Import. |
+| **Partition not selected** | The referenced object is in a partition that is not selected. | JIM: select the partition on the Scope tab, then run a Full Import. |
+| **Ambiguous Object Type** | The value matches objects of more than one Object Type, and the attribute does not declare which one it references. | JIM: declare the attribute's target Object Type on the Schema tab, where the Connector supports it. |
+| **Outside this Connected System** | The value is in none of the Connected System's partitions, for example a member from another domain. JIM cannot import the object it names. | The Connected System. If references like this are expected, set Unresolved Reference Handling to Warn. |
+| **Not found in scope** | The value sits in Container Scope, but nothing with that value has been imported. | The Connected System. Run a Full Import to rule out a missed change; if it is still unresolved, the object no longer exists there, or its Object Type is not imported. |
+| **Not found** | JIM cannot place the value in a Container (the Connector does not say which Container holds a value, as with a file or a database), and nothing with that value has been imported. | The Connected System, as for **Not found in scope**. |
+
+The causes are judged against the Container Scope as it stands now, not as it stood when the import ran, so they always describe what would fix the references today: once you select a Container, its references read **Not found in scope** until the next Full Import imports the objects they name and resolves them. Above the list, the panel's **Next steps** group the references by the change that would fix them, most first, so a group whose hundreds of unresolved members all sit in one unselected Container shows one step rather than hundreds. Steps you can take in JIM are listed first, under **Fix in JIM**, then those that lie in the Connected System. Nothing about the references themselves changes until an import resolves them.
 
 ### On export
 
@@ -742,7 +761,7 @@ Automation gets the same evaluation: [`New-JIMConfigurationChangePreview -Connec
 
 ## See also
 
-- [Connectors](../connectors/index.md) -- the connector types JIM ships with, and what each one does
-- [Concepts: Architecture](../concepts/architecture.md) -- how Connected Systems fit into JIM's hub-and-spoke model
-- [Run Profiles](run-profiles.md) -- the operations executed against a Connected System
-- [Synchronisation Rules](synchronisation-rules.md) -- how data flows between a Connected System and the metaverse
+- [Connectors](../connectors/index.md): the connector types JIM ships with, and what each one does
+- [Concepts: Architecture](../concepts/architecture.md): how Connected Systems fit into JIM's hub-and-spoke model
+- [Run Profiles](run-profiles.md): the operations executed against a Connected System
+- [Synchronisation Rules](synchronisation-rules.md): how data flows between a Connected System and the metaverse

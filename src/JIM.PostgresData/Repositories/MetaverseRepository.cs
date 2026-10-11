@@ -1388,7 +1388,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// (the ranked naming attributes, plus the external id and secondary external id values). This is a
     /// deliberately separate, heavier retrieval for the single-object read paths (the REST API and
     /// Metaverse Object views) that surface provenance. The base <see cref="GetMetaverseObjectAsync"/>
-    /// is on the synchronisation join hot path (FindMetaverseObjectUsingMatchingRuleAsync, per-CSO
+    /// is on the synchronisation join hot path (the matched Metaverse Object loaded per joining CSO
     /// during sync); the sync engine reads provenance via the FK scalars (ContributedBySyncRuleId), never
     /// these navigations, so it must not pay for the extra split-query round-trips these includes add.
     /// </summary>
@@ -1832,6 +1832,19 @@ public class MetaverseRepository : IMetaverseRepository
             GuidValue = r.GuidValue,
             NullValue = r.NullValue
         }).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, string>> GetExistingMetaverseObjectTypePluralNamesAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mvo => metaverseObjectIds.Contains(mvo.Id))
+            .Select(mvo => new { mvo.Id, mvo.Type.PluralName })
+            .ToDictionaryAsync(mvo => mvo.Id, mvo => mvo.PluralName);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
@@ -3040,173 +3053,122 @@ public class MetaverseRepository : IMetaverseRepository
         return pagedResultSet;
     }
 
-    /// <summary>
-    /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
-    /// This is to help the process of joining a CSO to an MVO.
-    /// </summary>
-    /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
-    /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="syncRuleMapping">The Synchronisation Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
-    /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Synchronisation Rule mapping source Connected System attribute is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
-    /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
-    public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
     {
-        if (objectMatchingRule.Sources.Count > 1)
-            throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
+        if (values.Count == 0 || take <= 0)
+            return [];
 
-        // at this point in development, we expect and can process a single source.
-        var source = objectMatchingRule.Sources[0];
-        if (source.ConnectedSystemAttribute == null)
-            throw new InvalidDataException("objectMatchingRule.Sources[0].ConnectedSystemAttribute is null");
+        // Raw SQL: this runs once per object on the synchronisation join hot path (src/CLAUDE.md, "Worker Hot Path").
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(BuildMatchValueLookupSql(valueType, caseSensitive), connection,
+            (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+        AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, values, take);
 
-        // validate the matching attribute type up front. Unsupported types must fail loudly and
-        // immediately; deferring this to the per-value filter switch would let the null-value
-        // pre-check below silently skip every value first, converting a misconfigured Object
-        // Matching Rule into a quiet no-match (the Synchronisation Integrity rules forbid that).
-        switch (source.ConnectedSystemAttribute.Type)
+        var ids = new List<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ids.Add(reader.GetGuid(0));
+        return ids;
+    }
+
+    /// <summary>
+    /// The SQL behind <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/>. Internal so a database test can
+    /// <c>EXPLAIN</c> exactly what runs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Equality only, never <c>LIKE</c>/<c>ILIKE</c>, so <c>%</c>, <c>_</c> and <c>\</c> in a value are literal. The
+    /// case-insensitive form lowers both sides with PostgreSQL's own <c>lower()</c>, so .NET and PostgreSQL never
+    /// disagree about a non-ASCII letter. It joins the sought values rather than comparing against an array built by a
+    /// subquery, which would hide them from the planner; joined, each value seeks the
+    /// <c>IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue</c> expression index, whose
+    /// <c>"StringValue" IS NOT NULL</c> filter is repeated so the planner can use it.
+    /// </para>
+    /// <para>
+    /// The matches are found first, in a materialised CTE, and only then ordered and limited. Ordering and limiting
+    /// the scan itself invites an ordered walk of the attribute's every value in the hope of stopping early, which
+    /// never happens when nothing matches: the common case before a projection, so a full scan per object.
+    /// </para>
+    /// </remarks>
+    internal static string BuildMatchValueLookupSql(AttributeDataType valueType, bool caseSensitive) => $"""
+        WITH matched AS MATERIALIZED (
+            SELECT DISTINCT av."MetaverseObjectId"
+            {MatchValueLookupFromWhere(valueType, caseSensitive)}
+        )
+        SELECT "MetaverseObjectId" FROM matched
+        ORDER BY "MetaverseObjectId"
+        LIMIT @take
+        """;
+
+    /// <summary>The count form of <see cref="BuildMatchValueLookupSql"/>, sharing its filter exactly.</summary>
+    internal static string BuildMatchValueCountSql(AttributeDataType valueType, bool caseSensitive) => $"""
+        SELECT COUNT(DISTINCT av."MetaverseObjectId")
+        {MatchValueLookupFromWhere(valueType, caseSensitive)}
+        """;
+
+    private static string MatchValueLookupFromWhere(AttributeDataType valueType, bool caseSensitive)
+    {
+        var soughtJoin = valueType == AttributeDataType.Text && !caseSensitive
+            ? @"JOIN unnest(@values) AS sought(value) ON lower(av.""StringValue"") = lower(sought.value)"
+            : string.Empty;
+        var comparison = valueType switch
         {
-            case AttributeDataType.Text:
-            case AttributeDataType.Number:
-            case AttributeDataType.LongNumber:
-            case AttributeDataType.Decimal:
-            case AttributeDataType.Guid:
-                break;
-            case AttributeDataType.DateTime:
-                throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
-            case AttributeDataType.Binary:
-                throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
-            case AttributeDataType.Reference:
-                throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
-            case AttributeDataType.Boolean:
-                throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
-            case AttributeDataType.NotSet:
-            default:
-                throw new InvalidDataException("Unexpected Connected System Attribute Type");
-        }
+            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = ANY(@values)",
+            AttributeDataType.Text => @"av.""StringValue"" IS NOT NULL",
+            AttributeDataType.Number => @"av.""IntValue"" = ANY(@values)",
+            AttributeDataType.LongNumber => @"av.""LongValue"" = ANY(@values)",
+            AttributeDataType.Decimal => @"av.""DecimalValue"" = ANY(@values)",
+            AttributeDataType.Guid => @"av.""GuidValue"" = ANY(@values)",
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
+        };
 
-        // get the source attribute value(s)
-        var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
+        return $"""
+            FROM "MetaverseObjectAttributeValues" AS av
+            JOIN "MetaverseObjects" AS mo ON mo."Id" = av."MetaverseObjectId"
+            {soughtJoin}
+            WHERE av."AttributeId" = @attributeId
+              AND mo."TypeId" = @typeId
+              AND {comparison}
+            """;
+    }
 
-        // try and find a match for any of the source attribute values.
-        // this enables an MVA such as 'CN' to be used as a matching attribute.
-        foreach (var csoAttributeValue in csoAttributeValues)
+    /// <inheritdoc />
+    public async Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+    {
+        if (values.Count == 0)
+            return 0;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(BuildMatchValueCountSql(valueType, caseSensitive), connection,
+            (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+        AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, values, take: 0);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Binds the parameters <see cref="BuildMatchValueLookupSql"/> names, typing the value array by the attribute's
+    /// data type. Internal for the same reason.
+    /// </summary>
+    internal static void AddMatchValueLookupParameters(
+        NpgsqlCommand command, int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, int take)
+    {
+        command.Parameters.Add(new NpgsqlParameter("attributeId", NpgsqlDbType.Integer) { Value = metaverseAttributeId });
+        command.Parameters.Add(new NpgsqlParameter("typeId", NpgsqlDbType.Integer) { Value = metaverseObjectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("take", NpgsqlDbType.Integer) { Value = take });
+        command.Parameters.Add(valueType switch
         {
-            // Skip null values - null is always a non-match
-            var hasValue = source.ConnectedSystemAttribute.Type switch
-            {
-                AttributeDataType.Text => !string.IsNullOrEmpty(csoAttributeValue.StringValue),
-                AttributeDataType.Number => csoAttributeValue.IntValue.HasValue,
-                AttributeDataType.LongNumber => csoAttributeValue.LongValue.HasValue,
-                AttributeDataType.Decimal => csoAttributeValue.DecimalValue.HasValue,
-                AttributeDataType.Guid => csoAttributeValue.GuidValue.HasValue,
-                _ => false // unreachable: unsupported types are rejected before the loop
-            };
-
-            if (!hasValue)
-            {
-                Log.Debug("FindMetaverseObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                    source.ConnectedSystemAttribute.Name);
-                continue;
-            }
-
-            // Phase 1: Lightweight match — query only MVO IDs (no Include chains, no entity materialisation).
-            // This avoids the expensive AsSplitQuery + Include overhead when there's no match (common case).
-            var matchQuery = Repository.Database.MetaverseObjects
-                .Where(mvo => mvo.Type.Id == metaverseObjectType.Id);
-
-            // Apply attribute-type-specific filter
-            switch (source.ConnectedSystemAttribute.Type)
-            {
-                case AttributeDataType.Text:
-                    // Check case sensitivity setting on the matching rule
-                    if (objectMatchingRule.CaseSensitive)
-                    {
-                        matchQuery = matchQuery.Where(mvo =>
-                            mvo.AttributeValues.Any(av =>
-                                objectMatchingRule.TargetMetaverseAttribute != null &&
-                                av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                                av.StringValue != null &&
-                                av.StringValue == csoAttributeValue.StringValue));
-                    }
-                    else
-                    {
-                        // Exact case-insensitive equality (not EF.Functions.ILike, which treats %, _ and
-                        // \ in the value as wildcards: a Connected System value like "j_smith" would
-                        // otherwise join to a Metaverse Object holding "jxsmith"). EF translates
-                        // ToLower() to PostgreSQL's lower(). Mirrors the export-side fix in
-                        // ConnectedSystemRepository.FindConnectedSystemObjectUsingMatchingRuleAsync.
-                        matchQuery = matchQuery.Where(mvo =>
-                            mvo.AttributeValues.Any(av =>
-                                objectMatchingRule.TargetMetaverseAttribute != null &&
-                                av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                                av.StringValue != null &&
-                                av.StringValue.ToLower() == csoAttributeValue.StringValue!.ToLower()));
-                    }
-                    break;
-                case AttributeDataType.Number:
-                    matchQuery = matchQuery.Where(mvo =>
-                        mvo.AttributeValues.Any(av =>
-                            objectMatchingRule.TargetMetaverseAttribute != null &&
-                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                            av.IntValue != null &&
-                            av.IntValue == csoAttributeValue.IntValue));
-                    break;
-                case AttributeDataType.LongNumber:
-                    matchQuery = matchQuery.Where(mvo =>
-                        mvo.AttributeValues.Any(av =>
-                            objectMatchingRule.TargetMetaverseAttribute != null &&
-                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                            av.LongValue != null &&
-                            av.LongValue == csoAttributeValue.LongValue));
-                    break;
-                case AttributeDataType.Decimal:
-                    matchQuery = matchQuery.Where(mvo =>
-                        mvo.AttributeValues.Any(av =>
-                            objectMatchingRule.TargetMetaverseAttribute != null &&
-                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                            av.DecimalValue != null &&
-                            av.DecimalValue == csoAttributeValue.DecimalValue));
-                    break;
-                case AttributeDataType.Guid:
-                    matchQuery = matchQuery.Where(mvo =>
-                        mvo.AttributeValues.Any(av =>
-                            objectMatchingRule.TargetMetaverseAttribute != null &&
-                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
-                            av.GuidValue != null &&
-                            av.GuidValue == csoAttributeValue.GuidValue));
-                    break;
-                default:
-                    // unsupported types were rejected with NotSupportedException before the loop;
-                    // reaching here means the up-front validation and this dispatch have diverged
-                    throw new InvalidDataException("Unexpected Connected System Attribute Type");
-            }
-
-            // Only select IDs — avoids materialising full entity graphs with all attribute values.
-            // Take(2) to detect ambiguous matches without loading more than needed.
-            var matchingIds = await matchQuery.OrderBy(mvo => mvo.Id).Select(mvo => mvo.Id).Take(2).ToListAsync();
-
-            switch (matchingIds.Count)
-            {
-                case 0:
-                    continue;
-                case > 1:
-                    throw new MultipleMatchesException(
-                        "Multiple Metaverse Objects were found to match the source attribute.",
-                        matchingIds);
-                default:
-                {
-                    // Phase 2: Load the full MVO entity by PK with all navigation properties needed for sync.
-                    var mvo = await GetMetaverseObjectAsync(matchingIds[0]);
-                    return mvo;
-                }
-            }
-        }
-
-        // no match
-        return null;
+            AttributeDataType.Text => new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = values.Cast<string>().ToArray() },
+            AttributeDataType.Number => new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = values.Cast<int>().ToArray() },
+            AttributeDataType.LongNumber => new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = values.Cast<long>().ToArray() },
+            AttributeDataType.Decimal => new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Numeric) { Value = values.Cast<decimal>().ToArray() },
+            AttributeDataType.Guid => new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = values.Cast<Guid>().ToArray() },
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
+        });
     }
 
     /// <summary>
@@ -3248,7 +3210,7 @@ public class MetaverseRepository : IMetaverseRepository
         // otherwise SaveChangesAsync will try to write the stale FK value.
         // The join record (#348) goes with the join; JoinType and DateJoined are left as they always have been here.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL, ""JoinObjectMatchingRuleId"" = NULL, ""JoinMatchValue"" = NULL WHERE ""MetaverseObjectId"" = {0}",
             metaverseObject.Id);
         foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
             .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
@@ -3258,6 +3220,8 @@ public class MetaverseRepository : IMetaverseRepository
             trackedCso.Entity.JoinMethod = null;
             trackedCso.Entity.JoinSyncRuleId = null;
             trackedCso.Entity.JoinSyncRuleName = null;
+            trackedCso.Entity.JoinObjectMatchingRuleId = null;
+            trackedCso.Entity.JoinMatchValue = null;
         }
 
         // Reference attribute values on other MVOs that point to this MVO: valueless rows are

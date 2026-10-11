@@ -2,7 +2,7 @@
 
 ## Overview
 
-The JIM LDAP Connector enables bi-directional synchronisation with LDAP-compliant directory services. It supports a wide range of directories and provides full lifecycle management of identity objects -- from importing existing data to provisioning new accounts and groups.
+The JIM LDAP Connector enables bi-directional synchronisation with LDAP-compliant directory services. It supports a wide range of directories and provides full lifecycle management of identity objects, from importing existing data to provisioning new accounts and groups.
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
@@ -117,7 +117,7 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 
 These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
-Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
+Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
 ## Auxiliary Object Classes
 
@@ -197,11 +197,11 @@ Every control above is available to the REST API and PowerShell:
 
 | Task | REST | PowerShell |
 |------|------|------------|
-| List the classes on offer | `GET /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
-| Set which classes are merged | `PUT /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
-| Set the Structural Carrier Class | `PUT /connected-systems/{id}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
-| Start a discovery run | `POST /connected-systems/{id}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
-| Read the last discovery run | `GET /connected-systems/{id}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| List the classes on offer | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
+| Set which classes are merged | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
+| Set the Structural Carrier Class | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
+| Start a discovery run | `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| Read the last discovery run | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
 
 Setting the merged classes replaces the whole set, so read the current one first if you mean to add to it:
 
@@ -274,7 +274,7 @@ This is deliberate. The platform LDAP client will follow a referral, but it does
 
 In practice this affects Partition discovery on Active Directory and Samba AD, where the search for the forest's domain list can return referrals alongside its results. JIM takes the results and discards the referrals.
 
-**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects today; following referrals with JIM's own credentials, so that the follow-up read is authenticated and every server followed is recorded, is planned.
+**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects.
 
 ### Container Scope
 
@@ -392,8 +392,8 @@ A naming context or crossRef partition the service account cannot read (a least-
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
-| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2--8. | `4` |
-| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100--2000. | `1000` |
+| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2 to 8. | `4` |
+| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
 ### Directory Tuning for Large Groups (OpenLDAP)

@@ -824,6 +824,23 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// What an export expression mapping's Expression source stages for a Metaverse Object whose values are
+    /// <paramref name="mvAttributeDictionary"/>: its result, or null when it stages nothing (no value, or a mapping-level
+    /// fault export staging reports for itself). Generated Value Forms (#2023) checks an export expression built from a
+    /// generated value with it before the value is issued, so what is checked is what export staging then sends. Throws
+    /// exactly as export staging does for an expression that fails.
+    /// </summary>
+    internal static object? EvaluateExportExpressionValue(
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        Dictionary<string, object?> mvAttributeDictionary,
+        IExpressionEvaluator expressionEvaluator)
+    {
+        var evaluation = EvaluateExportExpressionSource(mapping, source, mvAttributeDictionary, expressionEvaluator, flowErrors: null);
+        return evaluation.Stopped || evaluation.NoValue ? null : evaluation.Result;
+    }
+
+    /// <summary>
     /// Evaluates one export mapping's Expression source against the Metaverse Object (Unique Value Generation,
     /// #242, Phase 2 work package H; #1361 Missing Input Behaviour): the shared behaviour between an ordinary
     /// expression mapping and a generated mapping's base expression. <c>FailObject</c> throws

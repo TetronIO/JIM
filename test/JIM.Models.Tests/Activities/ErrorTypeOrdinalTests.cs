@@ -58,11 +58,14 @@ public class ErrorTypeOrdinalTests
         // A Connected System rejected an export because a value is already in use there (#242, release 4).
         [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
 
+        // An Object Matching Rule could not be worked out for an object (#2052).
+        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28,
+
         // An imported External ID already belongs to a Connected System Object of another Object Type (#2049).
-        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 28,
+        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 29,
 
         // Active Directory refused to enable an account that has no password (#2039).
-        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 29
+        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 30
     };
 
     [Test]

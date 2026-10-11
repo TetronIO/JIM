@@ -1,6 +1,7 @@
 # Generated Value Forms
 
-- **Status:** Doing (implementation plan: [GENERATED_VALUE_FORMS.md](../../plans/doing/GENERATED_VALUE_FORMS.md))
+- **Status:** Done (implementation plan: [GENERATED_VALUE_FORMS.md](../../plans/done/GENERATED_VALUE_FORMS.md))
+- **Note:** A value written to another target only by an export expression does not yet anchor the generated value against correction (Collision Remediation counts values written there unchanged by a direct export Attribute Flow).
 - **Created:** 2026-10-08
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#2023](https://github.com/TetronIO/JIM/issues/2023)
@@ -194,15 +195,15 @@ Settled with the product owner on 2026-10-10.
 
 ## Acceptance Criteria
 
-- [ ] A form is resolved by one shared implementation used by generation, Collision Remediation, the panel and the REST API.
-- [ ] In the reference setup, a clash on Email (`mail` or a `proxyAddresses` alias) or on UPN rejects the candidate before export, and the next candidate is issued with matching forms (Scenario 001, Medium template).
-- [ ] A refused value whose **Keep unique** switch is off is an ordinary **Value Already in Use** error and leaves the generated value unchanged (Scenario 023).
-- [ ] Values built from two generated values are neither checked nor corrected, and the panel says why.
-- [ ] Probing several forms bound for one Connected System uses one search per route, measured on an initial load.
-- [ ] A value built on another Synchronisation Rule is not checked before issuing, is still corrected after a refusal, and the panel says so, suggesting the move where the flow reads only Metaverse attributes.
-- [ ] The panel, the **Keep unique** switch and the values built from a generated value are available in the portal, REST API and PowerShell, with tests and docs, using the Decision 2 wording; "form" appears in no user-facing text.
-- [ ] The docs and the release notes say that only values chosen after upgrading are protected.
-- [ ] Sync Preview names the forms it would probe.
+- [x] A form is resolved by one shared implementation used by generation, Collision Remediation, the panel and the REST API.
+- [x] In the reference setup, a clash on Email (`mail` or a `proxyAddresses` alias) or on UPN rejects the candidate before export, and the next candidate is issued with matching forms (Scenario 001, Medium template).
+- [x] A refused value whose **Keep unique** switch is off is an ordinary **Value Already in Use** error and leaves the generated value unchanged (Scenario 023).
+- [x] Values built from two generated values are neither checked nor corrected, and the panel says why.
+- [x] Probing several forms bound for one Connected System uses one search per route, measured on an initial load.
+- [x] A value built on another Synchronisation Rule is not checked before issuing, is still corrected after a refusal, and the panel says so, suggesting the move where the flow reads only Metaverse attributes.
+- [x] The panel, the **Keep unique** switch and the values built from a generated value are available in the portal, REST API and PowerShell, with tests and docs, using the Decision 2 wording; "form" appears in no user-facing text.
+- [x] The docs and the release notes say that only values chosen after upgrading are protected.
+- [x] Sync Preview names the forms it would probe.
 
 ## Additional Context
 

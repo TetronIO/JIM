@@ -133,7 +133,7 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 | `JIM_SSO_CLIENT_ID`   | OAuth client/application ID.                                                                     | `12345678-1234-1234-1234-123456789abc`                       |
 | `JIM_SSO_SECRET`      | OAuth client secret. **Keep this value secure.**                                                 | *(from your IdP)*                                            |
 | `JIM_SSO_API_SCOPE`   | API scope for JWT bearer authentication (API endpoints).                                         | `api://{client-id}/access_as_user`                           |
-| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed -- JIM auto-detects the issuer from the authority URL. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
+| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed; JIM auto-detects the issuer from the authority URL. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
 | `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (e.g. a dev devcontainer where the JIM container reaches Keycloak via Docker DNS while the host reaches it via `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
 | `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
 
@@ -209,7 +209,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable                  | Description                                                                                                                                                                                 | Default                          | Example        |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|----------------|
-| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)* -- resolves to `/data/keys` in Docker | `/data/keys`   |
+| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)*: resolves to `/data/keys` in Docker | `/data/keys`   |
 
 !!! danger "These keys must be backed up with the database"
     The database ciphertext cannot be decrypted without these keys. A database backup restored without its matching keys leaves every stored secret unrecoverable. See [Backup & Disaster Recovery](backup-recovery.md).
@@ -228,7 +228,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
-| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
+| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)*: forwarded headers are not trusted; the connecting socket's address is used as-is |
 
 !!! warning "Only set this behind a trusted reverse proxy"
     Trusting forwarded headers from an address you do not control lets a client spoof its own IP, defeating IP-based rate limiting and polluting logs. Only list proxies (or the proxy network) that terminate connections in front of JIM.
@@ -251,11 +251,34 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
+## Installer
+
+`setup.sh` asks a question only when its answer is not already in its environment, so an installation can run unattended. Set the variables below, the identity provider's settings under [SSO / Authentication](#sso-authentication), and any database, port, proxy or API key settings from the sections above, and the installer asks nothing it already knows. Where a description names a flag, the flag does the same as the variable.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JIM_INSTALL_DIR` | The folder JIM is installed in | `/opt/jim` when run as root, otherwise `./jim` |
+| `JIM_SETUP_RUNTIME` | `docker` or `podman`; the same as `--runtime` | The one installed; asks if both are |
+| `JIM_SETUP_DB_MODE` | `bundled` for the bundled PostgreSQL, or `external` for your own server (with `JIM_DB_HOSTNAME`) | Asks |
+| `JIM_SETUP_TLS_MODE` | `generate` to create a certificate authority and a server certificate, or `provided` to install your organisation's certificate | Asks |
+| `JIM_SETUP_TLS_NAMES` | The DNS names and IP addresses users reach JIM at, comma-separated, for a generated certificate | Asks, suggesting this host's name and address |
+| `JIM_SETUP_TLS_CERT_FILE` | Your organisation's PEM certificate, followed by any intermediate CA certificates. Required with `provided` | |
+| `JIM_SETUP_TLS_KEY_FILE` | The certificate's unencrypted PEM private key. Required with `provided` | |
+| `JIM_SETUP_AUTO_START` | `true` to start JIM without asking | Asks |
+| `JIM_SETUP_PODMAN_ROOTLESS` | `true` to run JIM rootless on Podman; the same as `--rootless` | `false` |
+| `JIM_SETUP_PODMAN_ACCOUNT` | The account that runs JIM rootless, with `--rootless` | `jim` |
+| `JIM_SETUP_OPEN_FIREWALL` | `true` or `false`: open the HTTPS port in firewalld, when it is running. Podman only | Asks |
+| `JIM_SETUP_FIX_APPARMOR` | `true` or `false`: on a host whose AppArmor profiles for Podman stop JIM's containers using the network, or stop their processes signalling one another (Ubuntu 24.04), add the rules JIM needs. Podman only | Asks |
+| `JIM_SETUP_BACKUP_CONFIRMED` | `true`, with `--upgrade`: the database and encryption keys are backed up, so the upgrade does not ask | Asks, and an answer of no cancels the upgrade |
+
+---
+
 ## Performance Tuning
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
 | `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count  |
+| `JIM_CACHE_WARM_PARALLELISM` | How many Connected Systems the Worker loads into its lookup cache at once when it starts, before it takes any work. Higher values shorten start-up when there are many Connected Systems, at the cost of more database queries at once. A Connected System whose cache fails to load fills it as work needs it. | `3` |
 
 !!! info
-    The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required -- it is set automatically.
+    The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required; it is set automatically.

@@ -57,8 +57,57 @@ public static class GeneratedValueBuiltValueWording
 
     /// <summary>The table's explanation, under its title.</summary>
     public static string PanelHelperText(string generatedAttributeName) =>
-        $"Each of these changes when {generatedAttributeName} does. If a target refuses one as already in use, JIM corrects " +
-        $"{generatedAttributeName}, unless the value's Keep unique switch is off. Change a value's switch on its own Attribute Flow.";
+        $"JIM issues {generatedAttributeName} only when every value checked before issuing is free too, so they stay consistent. " +
+        $"If a target refuses one anyway, JIM corrects {generatedAttributeName}, unless the value's Keep unique switch is off. " +
+        "Change a value's switch on its own Attribute Flow.";
+
+    /// <summary>
+    /// Whether <paramref name="value"/> is checked before its generated value is issued, and if not, why (Generated Value
+    /// Forms, #2023). <paramref name="keepUnique"/> is the switch as it now stands where that may differ from when the
+    /// value was described (the flow's own dialog edits it in place); a value on the generated value's own rule that was
+    /// described switched off is taken to be checked once switched on.
+    /// </summary>
+    public static GeneratedValueBuiltValueBeforeIssuing BeforeIssuingOutcome(GeneratedValueBuiltValueDescription value, bool? keepUnique = null)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Kind == GeneratedValueBuiltValueKind.BuiltFromSeveralGeneratedValues)
+            return GeneratedValueBuiltValueBeforeIssuing.BuiltFromSeveral;
+        if (!(keepUnique ?? value.KeepUnique))
+            return GeneratedValueBuiltValueBeforeIssuing.KeepUniqueOff;
+        if (value.Kind == GeneratedValueBuiltValueKind.BuiltOnAnotherRule)
+            return GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule;
+
+        // On the generated value's own rule and switched on: checked, unless it was described switched on and still not
+        // checked, which leaves only its Connected System being excluded.
+        return value.CheckedBeforeIssuing || !value.KeepUnique
+            ? GeneratedValueBuiltValueBeforeIssuing.Checked
+            : GeneratedValueBuiltValueBeforeIssuing.Excluded;
+    }
+
+    /// <summary>The "Before issuing" column's state.</summary>
+    public static string BeforeIssuingText(GeneratedValueBuiltValueBeforeIssuing outcome) =>
+        outcome == GeneratedValueBuiltValueBeforeIssuing.Checked ? "Checked" : "Not checked";
+
+    /// <summary>
+    /// The "Before issuing" column's detail: where a checked value is checked, or why a value is not.
+    /// </summary>
+    public static string BeforeIssuingDetail(GeneratedValueBuiltValueDescription value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return BeforeIssuingOutcome(value) switch
+        {
+            GeneratedValueBuiltValueBeforeIssuing.Checked => value.ProbedIn.Count == 0
+                ? "JIM's records"
+                : $"JIM's records and {JoinNames(value.ProbedIn)}",
+            GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule =>
+                $"Built on {value.SyncRuleName}, which runs only once the person is in that system.{MoveSuggestion(value)}",
+            GeneratedValueBuiltValueBeforeIssuing.KeepUniqueOff => "Keep unique is off",
+            GeneratedValueBuiltValueBeforeIssuing.BuiltFromSeveral => "Built from more than one generated value",
+            _ => $"Its Connected System is excluded from {value.GeneratedAttributeName}'s checks"
+        };
+    }
 
     /// <summary>The table's text when nothing is built from the generated value.</summary>
     public static string NoBuiltValuesText(string generatedAttributeName) =>
@@ -67,10 +116,31 @@ public static class GeneratedValueBuiltValueWording
     /// <summary>The Attribute Flow's switch label.</summary>
     public static string SwitchLabel(string generatedAttributeName) => $"Keep unique with {generatedAttributeName}";
 
-    /// <summary>What the switch does, as it stands.</summary>
-    public static string SwitchHelpText(bool keepUnique, string generatedAttributeName) => keepUnique
-        ? $"If a target refuses this value as already in use, JIM corrects {generatedAttributeName} and works this value out again from the new one."
-        : $"If a target refuses this value, JIM reports an export error and leaves {generatedAttributeName} unchanged.";
+    /// <summary>
+    /// What the switch does on <paramref name="value"/>, with the switch as it now stands: whether the value is checked
+    /// before the generated value is issued (Generated Value Forms, #2023), and what happens if a target refuses it.
+    /// </summary>
+    public static string SwitchHelpText(GeneratedValueBuiltValueDescription value, bool keepUnique)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var generated = value.GeneratedAttributeName;
+        if (!keepUnique)
+            return $"If a target refuses this value, JIM reports an export error and leaves {generated} unchanged.";
+
+        var corrected = $"JIM corrects {generated} and works this value out again from the new one.";
+        return BeforeIssuingOutcome(value, keepUnique) switch
+        {
+            GeneratedValueBuiltValueBeforeIssuing.Checked =>
+                $"Checked before {generated} is issued: JIM moves on to the next {generated} if this value is already in use. If a target refuses it anyway, {corrected}",
+            GeneratedValueBuiltValueBeforeIssuing.BuiltOnAnotherRule =>
+                $"Not checked before {generated} is issued, because it is built on {value.SyncRuleName}, a different Synchronisation Rule.{MoveSuggestion(value)} If a target refuses it, {corrected}",
+            _ => $"Not checked before {generated} is issued, because its Connected System is excluded from {generated}'s checks. If a target refuses it, {corrected}"
+        };
+    }
+
+    private static string MoveSuggestion(GeneratedValueBuiltValueDescription value) =>
+        value.MoveToSyncRuleName is { } rule ? $" Move it to {rule} to have it checked first." : string.Empty;
 
     /// <summary>Why the switch is not in effect while the generated flow's own Collision Remediation is off.</summary>
     public static string NotInEffectText(string generatedAttributeName) =>

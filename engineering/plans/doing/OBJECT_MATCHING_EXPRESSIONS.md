@@ -1,9 +1,9 @@
 # Object Matching Rules: Match on an Expression
 
-- **Status:** Planned
+- **Status:** Doing (Layer 1, engine and import, in progress)
 - **Issue:** [#2052](https://github.com/TetronIO/JIM/issues/2052)
-- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
-- **Builds on:** [CASE_SENSITIVITY_POLICY.md](doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
+- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
+- **Builds on:** [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
 
 ## Overview
 
@@ -180,7 +180,7 @@ Export:  MVO values --> attribute rule: prefetch or per-object query      --> 0 
 
 ## Implementation Phases
 
-This is a stack on top of [CASE_SENSITIVITY_POLICY.md](doing/CASE_SENSITIVITY_POLICY.md) PR 1. Each layer follows TDD and keeps the build and tests green.
+This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1. Each layer follows TDD and keeps the build and tests green.
 
 ### Layer 1: Engine and import
 
@@ -281,7 +281,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](doing/CASE_SENSITIVITY_PO
 
 ## Dependencies
 
-- [CASE_SENSITIVITY_POLICY.md](doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
+- [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
 - #1750 derived Metaverse attributes, already shipped, for normalising the Metaverse side.
 - No new packages.
 

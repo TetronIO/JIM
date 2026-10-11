@@ -412,6 +412,8 @@ Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the 
 
 Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
 
+Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found, with the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+
 ### Examples
 
 ```powershell title="Preview synchronising an object, including any destructive cascade"
@@ -466,10 +468,10 @@ $preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
 
 ## See also
 
-- [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it) -- what previews are and how to read them
-- [Sync Preview](../configuration/sync-preview.md) -- what `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview` evaluate, including the destructive cascade
-- [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change) -- what a deletion settings preview evaluates
-- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change) -- what a destructive toggle preview evaluates
-- [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype) -- applying a previewed change with `-PreviewActivityId`
-- [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule) -- applying a previewed toggle change with `-PreviewActivityId`
-- [Activities](activities.md) -- the Activity a preview runs as, and the one the change it informed is recorded under
+- [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it): what previews are and how to read them
+- [Sync Preview](../configuration/sync-preview.md): what `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview` evaluate, including the destructive cascade
+- [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change): what a deletion settings preview evaluates
+- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
+- [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype): applying a previewed change with `-PreviewActivityId`
+- [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule): applying a previewed toggle change with `-PreviewActivityId`
+- [Activities](activities.md): the Activity a preview runs as, and the one the change it informed is recorded under

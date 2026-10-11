@@ -222,6 +222,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = Icons.Material.Filled.MoveToInbox,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = Icons.Material.Filled.Archive,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = Icons.Material.Filled.PublishedWithChanges,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] = Icons.Material.Filled.HourglassTop,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = Icons.Material.Filled.SkipNext,
             [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverContributedValue] = Icons.Material.Filled.ChangeCircle,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldTakeOverSameValue] = Icons.Material.Filled.CompareArrows,

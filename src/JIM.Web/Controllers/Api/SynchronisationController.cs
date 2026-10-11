@@ -1275,6 +1275,73 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// List the unresolved references on a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Returns the object's reference values that could not be linked to another Connected System Object, a page at a
+    /// time, each with its likely cause, where the fix lies (JIM's configuration or the Connected System), and the next
+    /// step in words. Likely causes are judged against the Connected System's current Container Scope, so they describe
+    /// the object as it stands now: widening the scope changes the answer the next time it is asked. Values are ordered
+    /// by attribute name, then value.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <param name="search">Optional case-insensitive search over the value and the attribute name.</param>
+    /// <returns>A paginated list of unresolved references with their likely causes.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/unresolved-references", Name = "GetConnectedSystemObjectUnresolvedReferences")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectUnresolvedReference>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectUnresolvedReferencesAsync(
+        int connectedSystemId,
+        Guid csoId,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        _logger.LogTrace("Requested unresolved references for CSO {CsoId} in Connected System {SystemId}", csoId, connectedSystemId);
+
+        var context = await _application.ConnectedSystems.GetUnresolvedReferenceContextAsync(connectedSystemId, csoId);
+        if (context == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
+
+        var window = await _application.ConnectedSystems.GetUnresolvedReferencesRangeAsync(
+            context, (pagination.Page - 1) * pagination.PageSize, pagination.PageSize, search, includeTotalCount: true);
+
+        // The total was asked for, so it is always present; paging cannot work without it.
+        var totalCount = window.TotalResults ?? throw new InvalidOperationException(
+            "The unresolved reference read asked for the total match count and did not receive one.");
+        return Ok(PaginatedResponse<ConnectedSystemObjectUnresolvedReference>.Create(window.Results, totalCount, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a summary of the unresolved references on a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Returns how many of the object's reference values are unresolved, how they split by likely cause, every distinct
+    /// next step with how many values it addresses (most first), and the one change to JIM's configuration that would
+    /// address the most of them (null where every cause lies in the Connected System). Judged against the Connected
+    /// System's current Container Scope.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <returns>The summary of the object's unresolved references.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/unresolved-references/summary", Name = "GetConnectedSystemObjectUnresolvedReferenceSummary")]
+    [ProducesResponseType(typeof(ConnectedSystemObjectUnresolvedReferenceSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectUnresolvedReferenceSummaryAsync(int connectedSystemId, Guid csoId)
+    {
+        _logger.LogTrace("Requested unresolved reference summary for CSO {CsoId} in Connected System {SystemId}", csoId, connectedSystemId);
+
+        var context = await _application.ConnectedSystems.GetUnresolvedReferenceContextAsync(connectedSystemId, csoId);
+        if (context == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
+
+        return Ok(await _application.ConnectedSystems.GetUnresolvedReferenceSummaryAsync(context));
+    }
+
+    /// <summary>
     /// Get a deletion preview for a Connected System
     /// </summary>
     /// <remarks>

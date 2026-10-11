@@ -12,7 +12,7 @@ using JIM.Models.Utility;
 using Serilog;
 namespace JIM.Application.Servers;
 
-public class ActivityServer
+public partial class ActivityServer
 {
     private JimApplication Application { get; }
 
@@ -701,6 +701,57 @@ public class ActivityServer
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemCoreAsync(id);
     }
+
+    /// <summary>
+    /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded,
+    /// each with whether it still exists and, for a Metaverse Object, what is joined to it now. Three reads at most,
+    /// whatever the number of candidates.
+    /// </summary>
+    public async Task<IReadOnlyList<MatchCandidateDetail>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId)
+    {
+        var candidates = await Application.Repository.Activity.GetMatchCandidatesAsync(runProfileExecutionItemId);
+        if (candidates.Count == 0)
+            return [];
+
+        var metaverseObjectIds = CandidateIds(candidates, MatchCandidateKind.MetaverseObject);
+        var connectedSystemObjectIds = CandidateIds(candidates, MatchCandidateKind.ConnectedSystemObject);
+        var existingMetaverseObjects = await Application.Repository.Metaverse.GetExistingMetaverseObjectTypePluralNamesAsync(metaverseObjectIds);
+        var existingConnectedSystemObjectIds = await Application.Repository.ConnectedSystems.GetExistingConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        var joinedByMetaverseObjectId = (await Application.Repository.ConnectedSystems
+                .GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync([.. existingMetaverseObjects.Keys]))
+            .GroupBy(cso => cso.MetaverseObjectId!.Value)
+            .ToDictionary(g => g.Key, g => g
+                .OrderBy(cso => cso.ConnectedSystem?.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cso => cso.NameOrId, StringComparer.OrdinalIgnoreCase)
+                .Select(cso => new MatchCandidateJoinedObject
+                {
+                    ConnectedSystemObjectId = cso.Id,
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemName = cso.ConnectedSystem?.Name,
+                    TypeName = cso.Type?.Name,
+                    DisplayName = cso.Name,
+                    ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName()
+                })
+                .ToList());
+
+        return candidates.Select(candidate => candidate.CandidateKind == MatchCandidateKind.MetaverseObject
+                ? new MatchCandidateDetail
+                {
+                    Candidate = candidate,
+                    Exists = existingMetaverseObjects.ContainsKey(candidate.CandidateId),
+                    MetaverseObjectTypePluralName = existingMetaverseObjects.GetValueOrDefault(candidate.CandidateId),
+                    JoinedObjects = joinedByMetaverseObjectId.TryGetValue(candidate.CandidateId, out var joined) ? joined : []
+                }
+                : new MatchCandidateDetail
+                {
+                    Candidate = candidate,
+                    Exists = existingConnectedSystemObjectIds.Contains(candidate.CandidateId)
+                })
+            .ToList();
+    }
+
+    private static List<Guid> CandidateIds(IEnumerable<ActivityRunProfileExecutionItemMatchCandidate> candidates, MatchCandidateKind kind) =>
+        candidates.Where(c => c.CandidateKind == kind).Select(c => c.CandidateId).Distinct().ToList();
 
     /// <summary>
     /// Walks upward from a Run Profile Execution Item through the causal edges recorded against it, returning

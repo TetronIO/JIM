@@ -104,7 +104,7 @@ public class SyncRepositoryDecimalMatchingTests
     }
 
     [Test]
-    public async Task FindMetaverseObjectUsingMatchingRuleAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_DecimalValuesDifferOnlyInScale_MatchesAsync()
     {
         var mvoType = new MetaverseObjectType { Id = 5 };
         var mvo = new MetaverseObject
@@ -118,20 +118,10 @@ public class SyncRepositoryDecimalMatchingTests
         };
         _repo.SeedMetaverseObject(mvo);
 
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 10.5m }
-            }
-        };
+        var result = await _repo.FindMetaverseObjectIdsByMatchValuesAsync(
+            mvoType.Id, metaverseAttributeId: 10, AttributeDataType.Decimal, [10.5m], caseSensitive: false, take: 2);
 
-        var rule = CreateMatchingRule(sourceAttrId: 1, targetAttrId: 10);
-        var result = await _repo.FindMetaverseObjectUsingMatchingRuleAsync(cso, mvoType, rule);
-
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Id, Is.EqualTo(mvo.Id));
+        Assert.That(result, Is.EqualTo(new[] { mvo.Id }));
     }
 
     [Test]

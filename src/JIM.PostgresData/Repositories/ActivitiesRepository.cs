@@ -17,7 +17,7 @@ using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
 
-public class ActivityRepository : IActivityRepository
+public partial class ActivityRepository : IActivityRepository
 {
     private PostgresDataRepository Repository { get; }
 
@@ -1785,6 +1785,7 @@ public class ActivityRepository : IActivityRepository
         int totalMvoDeleted;
         int totalGeneratedValues;
         int totalGeneratedValuesRemediated;
+        int totalGeneratedValuesWaiting;
 
         if (hasOutcomes)
         {
@@ -1819,6 +1820,7 @@ public class ActivityRepository : IActivityRepository
             // ObjectChangeType equivalent exists for the legacy fallback below.
             totalGeneratedValues = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
             totalGeneratedValuesRemediated = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated);
+            totalGeneratedValuesWaiting = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting);
         }
         else
         {
@@ -1852,6 +1854,7 @@ public class ActivityRepository : IActivityRepository
             // Unique Value Generation (#242): likewise an outcome-only concept, predating this graph's legacy path.
             totalGeneratedValues = 0;
             totalGeneratedValuesRemediated = 0;
+            totalGeneratedValuesWaiting = 0;
         }
 
         // --- Stats that always come from RPEIs ---
@@ -1915,6 +1918,7 @@ public class ActivityRepository : IActivityRepository
             TotalGeneratedValues = totalGeneratedValues,
             TotalGeneratedValueFailures = totalGeneratedValueFailures,
             TotalGeneratedValuesRemediated = totalGeneratedValuesRemediated,
+            TotalGeneratedValuesWaiting = totalGeneratedValuesWaiting,
             TotalGeneratedValuesNeedingDecision = totalGeneratedValuesNeedingDecision,
 
             // Direct creation stats
@@ -2081,6 +2085,16 @@ public class ActivityRepository : IActivityRepository
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .SingleOrDefaultAsync(i => i.Id == id);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemMatchCandidates
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .OrderBy(c => c.Ordinal)
+            .ToListAsync();
     }
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)

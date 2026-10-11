@@ -914,7 +914,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
 }
 
 /* A tab's count badge is absolutely positioned around a zero-width anchor, so it
-   occupies no layout space; when the tab is wider than its 160px min-width the
+   occupies no layout space; when the tab is wider than its 120px min-width the
    badge's right half lands past the tab's padding edge and .mud-ripple's
    overflow:hidden clips it. Reserve the badge's overhang in the tab's width. */
 html[lang] .mud-tab .mud-badge-root.mud-tab-badge {
@@ -3216,6 +3216,14 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     display: inline-flex;
     align-items: center;
     color: var(--mud-palette-warning);
+}
+
+/* An unresolved value with its likely cause beside it (#959): the chip drops below the value when the cell is too
+   narrow for both, rather than squeezing the value onto several lines. */
+.jim-attr-unresolved-with-cause {
+    flex-wrap: wrap;
+    column-gap: 8px;
+    row-gap: 4px;
 }
 
 .jim-attr-multivalue {
@@ -6359,4 +6367,93 @@ td.jim-connection-detail-cell {
 
 .jim-allow-rename-value dd {
     margin: 0;
+}
+
+/* The Unresolved References section (#959), on a Run Profile Execution Item's page and a Connected System Object's
+   page. The head carries the section's tone as an accent bar and a faint wash, as the item page's mocks drew it:
+   red where the run counted the references as the item's error, amber where it left them unresolved without doing
+   so, and plain on the object's own page. Qualified with .mud-paper so MudBlazor's later stylesheet cannot reset
+   the clipping that lets the accent follow the container's corners. */
+.jim-unresolved-references.mud-paper {
+    overflow: hidden;
+}
+
+.jim-unresolved-references-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-unresolved-references-error .jim-unresolved-references-head {
+    border-top: 3px solid var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
+}
+
+.jim-unresolved-references-warning .jim-unresolved-references-head {
+    border-top: 3px solid var(--mud-palette-warning);
+    background: color-mix(in srgb, var(--mud-palette-warning) 7%, transparent);
+}
+
+/* The next steps (#959), grouped by where each is taken: one grid of three columns (how many references, the step,
+   the tab to take it on) shared by both groups, so the columns line up across them. Each cell stretches to its row's
+   height, so the row's divider is one unbroken line, and its content starts at the top: the count chip and the link
+   are one text line tall, so whatever the step's text wraps to, the row reads from its first line rather than floating
+   its ends between lines. The space between columns is the step's own padding, not a grid gap, which would cut the
+   divider into pieces. */
+.jim-unresolved-fixes {
+    display: grid;
+    grid-template-columns: 4rem minmax(0, 1fr) max-content;
+}
+
+.jim-unresolved-fix-group {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0 8px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-unresolved-fix-cell {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+    line-height: 1.5rem;
+}
+
+.jim-unresolved-fix-text {
+    padding-left: 16px;
+    padding-right: 16px;
+    overflow-wrap: anywhere;
+}
+
+/* A flex box rather than a line box, so the chip's top is the cell's padding edge, level with the step's first line. */
+.jim-unresolved-fix-count-cell {
+    display: flex;
+    align-items: flex-start;
+}
+
+.jim-unresolved-fix-remedy {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The count chip sized to one text line and to the widest count likely, so the counts of a group read as a column.
+   Qualified: MudBlazor's own chip sizing loads after this sheet (see "Custom CSS in site.css" in JIM.Web/CLAUDE.md). */
+html[lang] .mud-chip.jim-unresolved-fix-count {
+    height: 1.5rem;
+    min-width: 2.75rem;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-unresolved-fix-action {
+    white-space: nowrap;
+}
+
+.jim-unresolved-fix-more {
+    grid-column: 1 / -1;
+    padding: 8px 0 4px;
 }
