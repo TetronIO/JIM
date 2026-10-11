@@ -31,12 +31,12 @@ BeforeAll {
             Rules               = @{
                 'STR-1' = 'Block'; 'STR-2' = 'Ratchet'; 'STR-3' = 'Block'; 'STR-4' = 'Block'; 'STR-5' = 'Block'
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
-                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'
+                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
-            AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario')
+            AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
             Audiences           = @('evaluator', 'implementer', 'administrator', 'operator', 'automation-author', 'security-assessor')
             PageTypes           = @{
                 'tutorial'        = @{ RequiredHeadings = @('Before you begin', 'What you achieved'); RequiredFrontMatter = @('scenario'); RequiresNumberedSteps = $true }
@@ -587,6 +587,66 @@ Describe 'Test-DocsConformance: conformant and priority pages' {
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match 'ERROR.*STR-7'
         $r.Output | Should -Match 'ERROR.*STR-8.*40-word budget'
+    }
+}
+
+Describe 'Test-DocsConformance: PRI-1 priority pages record the release they were checked against' {
+    BeforeAll {
+        $script:Priority = @{ PriorityPages = @('cs.md'); ConformantPages = @('cs.md') }
+        $script:Version = @{ 'VERSION' = "0.16.0`n" }
+    }
+
+    It 'passes a conformant priority page validated against a released version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Match 'Docs conformance passed'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a conformant priority page that records no validation' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "ERROR.*PRI-1.*no 'validated'"
+    }
+
+    It 'does not yet ask a priority page that is not conformant for a validation' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page) } -ConfigOverrides @{ PriorityPages = @('cs.md') } -OtherFiles $script:Version
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'fails a validation recorded on a page that is not a priority page' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*only a priority page'
+    }
+
+    It 'fails a validation that does not name a release as vX.Y.Z' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = '0.16' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*vX\.Y\.Z'
+    }
+
+    It 'fails a validation against a release later than the current version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.17.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'PRI-1.*v0\.17\.0.*0\.16\.0'
+    }
+
+    It 'accepts a pre-release version' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0-alpha' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'cannot be excused by a marker' {
+        $page = New-Page -Body "<!-- conformance: allow-page PRI-1 `"not checked yet`" -->`n`nA Connected System is an external system JIM synchronises identities with.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = $page } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "PRI-1.*no 'validated'"
     }
 }
 

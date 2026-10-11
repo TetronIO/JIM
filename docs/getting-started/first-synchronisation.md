@@ -4,6 +4,7 @@ description: Synchronise 25 people from an HR file, through the Metaverse, into 
 type: tutorial
 audience: implementer
 scenario: 027-FirstSynchronisation
+validated: v0.16.0
 ---
 
 # Your First Synchronisation
