@@ -656,11 +656,21 @@ internal class LdapConnectorExport
     #region Concurrent execution (async path)
 
     /// <summary>
-    /// Executes Pending Exports asynchronously with configurable concurrency.
+    /// Executes Pending Exports, returning a result for every one of them in the order they were given.
     /// When concurrency is 1, delegates to the sequential <see cref="Execute"/> method.
     /// When concurrency > 1, processes multiple exports concurrently using SemaphoreSlim
     /// while maintaining positional ordering of results.
     /// </summary>
+    /// <remarks>
+    /// As on the sequential path, a batch is never abandoned partway, cancelled or not: every export scheduled runs and
+    /// returns its result, those still waiting for a slot included. JIM records a batch's results only once the
+    /// Connector returns them, so abandoning the waiting exports would return no results at all, losing those of the
+    /// exports already written (a created object's External ID among them), and would leave the batch's Pending
+    /// Exports Executing until the Worker restarts. JIM observes a cancelled run between batches instead.
+    /// </remarks>
+    /// <param name="pendingExports">The batch of Pending Exports to execute.</param>
+    /// <param name="cancellationToken">The run's cancellation, deliberately not observed within the batch (see the
+    /// remarks); it only notes in the log that the batch was finished after the run was cancelled.</param>
     internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync(
         IList<PendingExport> pendingExports,
         CancellationToken cancellationToken)
@@ -676,24 +686,38 @@ internal class LdapConnectorExport
 
         // If concurrency is 1, fall back to synchronous sequential processing
         // for maximum compatibility and simplicity
-        if (_exportConcurrency <= 1)
-            return Execute(pendingExports);
+        var results = _exportConcurrency <= 1
+            ? Execute(pendingExports)
+            : await ExecuteConcurrentlyAsync(pendingExports);
 
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _logger.Information("LdapConnectorExport.ExecuteAsync: The export run was cancelled while this batch of {Count} Pending Exports " +
+                "was under way; the batch was finished so that every result reaches JIM, which stops before the next batch",
+                pendingExports.Count);
+        }
+
+        return results;
+    }
+
+    private async Task<List<ConnectedSystemExportResult>> ExecuteConcurrentlyAsync(IList<PendingExport> pendingExports)
+    {
         // Pre-allocate results array to maintain positional ordering.
         // Each task writes to its own unique index - no shared mutable state between tasks.
         var results = new ConnectedSystemExportResult[pendingExports.Count];
         using var semaphore = new SemaphoreSlim(_exportConcurrency);
 
+        // No cancellation token on the wait or the task: an export waiting for a slot when the run is cancelled still
+        // runs, so the batch returns every result (see the remarks on ExecuteAsync).
         var tasks = new Task[pendingExports.Count];
         for (var i = 0; i < pendingExports.Count; i++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             var index = i; // Capture for closure
             var pendingExport = pendingExports[i];
 
             tasks[i] = Task.Run(async () =>
             {
-                await semaphore.WaitAsync(cancellationToken);
+                await semaphore.WaitAsync();
                 try
                 {
                     results[index] = await ProcessPendingExportAsync(pendingExport);
@@ -707,7 +731,7 @@ internal class LdapConnectorExport
                 {
                     semaphore.Release();
                 }
-            }, cancellationToken);
+            });
         }
 
         await Task.WhenAll(tasks);

@@ -166,19 +166,29 @@ public class LdapConnectorExportAsyncTests
     #region CancellationToken tests
 
     [Test]
-    public void ExecuteAsync_CancellationRequested_ThrowsOperationCancelledExceptionAsync()
+    public async Task ExecuteAsync_CancellationRequested_StillExportsTheWholeBatchAsync()
     {
+        // JIM hands a batch over only before it has seen the cancellation, and records the batch's results only once
+        // they are all returned; it stops between batches. So the Connector never abandons a batch it was given.
         var exports = new List<PendingExport>
         {
-            CreateUpdatePendingExport("CN=Test,DC=test,DC=local")
+            CreateUpdatePendingExport("CN=Test1,DC=test,DC=local"),
+            CreateUpdatePendingExport("CN=Test2,DC=test,DC=local")
         };
+        SetupAsyncModifyResponse(ResultCode.Success);
 
-        var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
 
         var export = CreateExport(concurrency: 4);
-        Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await export.ExecuteAsync(exports, cts.Token));
+        var results = await export.ExecuteAsync(exports, cts.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(2));
+            Assert.That(results.Select(result => result.Success), Is.All.True);
+            _mockExecutor.Verify(e => e.SendRequestAsync(It.IsAny<ModifyRequest>()), Times.Exactly(2));
+        }
     }
 
     #endregion

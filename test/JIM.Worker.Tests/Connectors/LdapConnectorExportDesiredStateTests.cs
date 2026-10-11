@@ -1052,6 +1052,27 @@ public class LdapConnectorExportDesiredStateTests
         }
     }
 
+    [Test]
+    public async Task Export_RunCancelledPartwayThroughAConcurrentBatch_ReturnsEveryResultOfTheBatchAsync()
+    {
+        // Two exports at a time, so six of the eight are still waiting their turn when the first modify cancels the run.
+        // Abandoning them would return no results at all, losing those of the exports already written.
+        var users = Users(8);
+        using var cancellation = new CancellationTokenSource();
+        var directory = new FakeDirectory { AfterModify = _ => cancellation.Cancel() };
+        var export = CreateExport(directory, concurrency: 2, directoryType: LdapDirectoryType.OpenLDAP);
+
+        var results = await export.ExecuteAsync([.. users.Select(user => GroupUpdate(Add("member", user)))], cancellation.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cancellation.IsCancellationRequested, Is.True, "The run was cancelled while the first update was under way");
+            Assert.That(results, Has.Count.EqualTo(8));
+            Assert.That(results.Select(result => result.Success), Is.All.True);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(users));
+        }
+    }
+
     #endregion
 
     #region Helpers
