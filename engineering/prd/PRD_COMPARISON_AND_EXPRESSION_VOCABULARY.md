@@ -5,6 +5,7 @@
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#207](https://github.com/TetronIO/JIM/issues/207) (parent), with sub-issues [#2051](https://github.com/TetronIO/JIM/issues/2051) (case-sensitivity policy), [#2052](https://github.com/TetronIO/JIM/issues/2052) (Phase 1), [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2), [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3), [#2055](https://github.com/TetronIO/JIM/issues/2055) (configuration test harness)
 - **UI mocks:** [Matching Expressions (#207)](https://claude.ai/artifact/U7urHxpx49uGm4EBi5Ckme) (Claude artifact, private to the product owner)
+- **Plans:** [CASE_SENSITIVITY_POLICY.md](../plans/CASE_SENSITIVITY_POLICY.md) (#2051), [OBJECT_MATCHING_EXPRESSIONS.md](../plans/OBJECT_MATCHING_EXPRESSIONS.md) (#2052)
 
 ## Problem Statement
 
@@ -230,7 +231,7 @@ Recorded with the product owner on 2026-10-11.
    - save-time rejection of unknown functions;
    - `NonRepeatableFunctionDetector`.
 7. **Functions mirror operators.**
-   - `StartsWith`, `EndsWith` and `Contains` compare ordinally (a behaviour change for `StartsWith` and `EndsWith`, which compare by culture today) and take an optional `ignoreCase` argument.
+   - `StartsWith`, `EndsWith` and `Contains` take an optional `ignoreCase` argument. They already compare ordinally by then: #2051 makes `StartsWith` and `EndsWith` ordinal when it enforces CA1310.
    - New functions: `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, the regex ones with time limits.
 8. **Multi-valued attributes in expressions.** Every expression context reads a multi-valued attribute the same way, and no expression ever silently uses one value of several (Decision 6).
    - **Today:**
@@ -400,7 +401,9 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 - the in-memory test repository diverging from PostgreSQL;
 - the Object Matching Rule default differing across model, REST API, portal, PowerShell, preview and docs.
 
-**Enforcement:** the .NET analysers CA1307, CA1309 and CA1310 become errors in `src/`.
+**Enforcement:** the .NET analysers CA1309 and CA1310 become errors across the solution, catching non-ordinal and culture-sensitive comparisons. That was 35 sites, 7 of them in `src/`, measured 2026-10-11.
+
+CA1307 is deliberately left off. It raised 197 diagnostics, mostly `char` overloads, URL path-segment checks and EF query predicates, where a `StringComparison` overload would stop the query translating to SQL.
 
 #### Determinism: no arbitrary choices
 
@@ -694,7 +697,7 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 
 - [ ] One policy page with the quick-reference table, and every audited site follows it.
 - [ ] The Object Matching default is the same on every surface.
-- [ ] CA1307, CA1309 and CA1310 are enforced.
+- [ ] CA1309 and CA1310 are enforced.
 
 ## Additional Context
 
