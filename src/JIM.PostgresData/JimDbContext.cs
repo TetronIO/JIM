@@ -1098,6 +1098,13 @@ public class JimDbContext : DbContext
             .HasIndex(e => e.CauseMetaverseObjectId)
             .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
 
+        // The export cycle a confirmation names (#1811): the downward walk reaches a confirming import through it, and
+        // Phase 1's upward walk reaches an export through it. Filtered because most edges name no Pending Export.
+        modelBuilder.Entity<CausalEdge>()
+            .HasIndex(e => e.CausePendingExportId)
+            .HasDatabaseName("IX_CausalEdges_CausePendingExportId")
+            .HasFilter(@"""CausePendingExportId"" IS NOT NULL");
+
         // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
         // so the existing history-retention housekeeping removes preview results with the Activity that owns them;
         // no separate cleanup, and no way for preview data (which holds attribute values) to outlive its retention.

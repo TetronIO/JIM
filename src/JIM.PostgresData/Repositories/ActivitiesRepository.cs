@@ -17,7 +17,7 @@ using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
 
-public class ActivityRepository : IActivityRepository
+public partial class ActivityRepository : IActivityRepository
 {
     private PostgresDataRepository Repository { get; }
 

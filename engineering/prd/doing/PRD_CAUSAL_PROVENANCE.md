@@ -1,12 +1,12 @@
 # Causal Provenance: Full-Graph Understanding
 
-- **Status:** Doing (Phase 1 ✅ delivered under #1223; Phase 2 Consequences in design under #1811; Phase 3 explorer not started)
+- **Status:** Doing (Phase 1 ✅ delivered under #1223; Phase 2 Consequences being built under #1811; Phase 3 explorer not started)
 - **Progress key:** ✅ delivered · 🔶 partly delivered (the gap is named beside it) · ⬜ not started. Phase 1's evidence is in its [plan](../../plans/done/CAUSAL_PROVENANCE.md); Phase 2 is tracked in [#1811](https://github.com/TetronIO/JIM/issues/1811).
 - **Created:** 2026-07-28
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
 - **Plan:** [CAUSAL_PROVENANCE.md](../../plans/done/CAUSAL_PROVENANCE.md)
-- **Phase 2 plan:** [CAUSAL_PROVENANCE_PHASE_2.md](../../plans/CAUSAL_PROVENANCE_PHASE_2.md)
+- **Phase 2 plan:** [CAUSAL_PROVENANCE_PHASE_2.md](../../plans/doing/CAUSAL_PROVENANCE_PHASE_2.md)
 
 ## Problem Statement
 

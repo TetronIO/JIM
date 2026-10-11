@@ -1,9 +1,9 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Planned
+- **Status:** Doing (Phase 2-0 in review as #2071; Phase 2a under way)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
-- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
-- **Phase 1 plan:** [CAUSAL_PROVENANCE.md](done/CAUSAL_PROVENANCE.md)
+- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
+- **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
 - **UI mock:** [Lineage Consequences](https://claude.ai/artifact/BrXDKc81EodFKcAhSvC9WH) (revision 3)
 - **Created:** 2026-10-11
 
@@ -48,7 +48,11 @@ Reviewing a source change today shows what happened to one object in one run, an
 | Synchronisation item that scheduled a deletion | The housekeeping deletion | New edge `MetaverseObjectDeletionScheduleCausedDeletion` (Phase 2-0) | `CauseRunProfileExecutionItemId` exists |
 | Any item | Consequences within its own run | Its outcome tree (Disconnected, MvoDeleted, Deprovision queued, Disconnected from target system), already on the item | n/a |
 
-The walk is breadth-first over **cohorts**, one round trip per level, exactly as Phase 1. A level's frontier is expressed as a SQL predicate over the previous level rather than a materialised id list, so a cohort of 4,218 Groups is counted and grouped in the database and never loaded into the worker. Each cohort carries its count, its earliest and latest occurrence, its attribution tuple, the outcome summary its members share (so "Exported to 4,216" and "Export failed on 2" split into two cohorts), and its first page of members.
+The walk is breadth-first over **cohorts**, one round trip per level, exactly as Phase 1. Each level is one SQL statement: it finds every hop out of the frontier, then counts and groups the results in the database, so a cohort of 4,218 Groups arrives as one row carrying its count, its earliest and latest occurrence, its attribution tuple, the outcome summary its members share (so "Exported to 4,216" and "Export failed on 2" split into two cohorts), and its first page of members. The next level's frontier comes back on the same row as an id array, the only per-member data that leaves the database, capped per level; past the cap the walk says it went further than shown rather than loading more.
+
+(Revised while building 2a: the plan first said the frontier would be a SQL predicate over the previous level rather than an id list. Carrying ids keeps each level a single plain statement that can be tested and explained on its own, where a predicate grows with depth, and the ids are the only thing carried.)
+
+**Waiting branches are consequences, not labels.** A sync item can stage exports to three systems, two of which have run: the item continues, and the third is still waiting. So outstanding work is read as a hop of its own, live, in the same statement: a Pending Export the item staged or executed that still exists (its status gives Waiting for an Export, Waiting for a retry, Needs attention or Waiting for a confirming import), and a deletion the item scheduled that the Metaverse Object still carries (the 2-0 column, so a cancelled schedule is not shown as pending). An item with no hop at all ends as Waiting for a Synchronisation, Nothing followed (an import) or No further consequences.
 
 ### Branch endings
 
@@ -94,7 +98,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 ### Phase 2a: Index and downward reads
 
 - Migration: filtered index on `CausalEdges.CausePendingExportId` (`WHERE "CausePendingExportId" IS NOT NULL`), which also fixes Phase 1's scanning read.
-- Repository reads in `ActivitiesRepository`: edges by cause item ids, confirmation edges by Pending Export ids, the next synchronisation item per Connected System Object after a time, "has a Synchronisation of this system started since", cohort aggregate per level, and cohort member pages. Set-based raw SQL where a level can be large; EF projection where it is bounded.
+- Repository reads in `ActivitiesRepository`, raw SQL: `GetCausalConsequenceLevelAsync` (one level: edge hops by cause item, confirmations via the queueing edges' Pending Export ids, the next synchronisation per Connected System Object or external ID after an import, outstanding Pending Exports, pending scheduled deletions, and the endings of frontier items with no hop, aggregated per cohort with the first member page and the next frontier) and `GetCausalConsequenceCohortMembersAsync` (one cohort's members, paged, with an optional name filter). Enum values are parameters, never literals.
 - `RequiresPostgres` tests for each read, including an `EXPLAIN` assertion that the cause-side reads use their indexes on a seeded table.
 
 ### Phase 2b: Application walk
