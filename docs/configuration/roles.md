@@ -12,7 +12,7 @@ Roles marked **built-in** ship with JIM and cannot be deleted. They can have mem
 
 ## Static membership
 
-A role's static members are the Metaverse Objects (typically `person` objects) explicitly assigned to the role. Membership is established by adding a Metaverse Object as a member, and removed by deleting that membership.
+A role's static members are the Metaverse Objects (typically `User` objects) explicitly assigned to the role. Membership is established by adding a Metaverse Object as a member, and removed by deleting that membership.
 
 API keys carry roles directly rather than via metaverse-object membership. This means rotating a person's role membership doesn't affect already-issued API keys, and revoking an API key doesn't change a person's role membership. Manage the two surfaces independently.
 
@@ -46,7 +46,7 @@ There is no Role management UI yet (Role definition editing arrives with a futur
 
 ## Manage Roles
 
-- **JIM portal**<br /> Roles area of the admin UI
+- **JIM portal**<br /> No Roles area; use PowerShell or the REST API
 - **PowerShell**<br /> [Security cmdlets](../powershell/security.md) (`Get-JIMRole`, `Add-JIMRoleMember`, `Remove-JIMRoleMember`, etc.)
 - **REST API**<br /> Security endpoints in the [interactive API reference](../../api/reference/)
 

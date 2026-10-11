@@ -49,7 +49,7 @@ Get-JIMHealth [-Url <string>] -Live
 Get-JIMHealth -Url "https://jim.example.com"
 ```
 
-```powershell title="Readiness probe for Kubernetes"
+```powershell title="Readiness probe"
 Get-JIMHealth -Url "https://jim.example.com" -Ready
 ```
 
@@ -64,8 +64,8 @@ Get-JIMHealth -Ready
 
 ### Notes
 
-- Use `-Ready` as a Kubernetes readiness probe or load balancer health check; it verifies database connectivity and maintenance mode status.
-- Use `-Live` as a Kubernetes liveness probe; it confirms the process is running.
+- Use `-Ready` as a load balancer or monitoring readiness check; it verifies database connectivity and maintenance mode status.
+- Use `-Live` as a liveness check; it confirms the process is running.
 - The basic health check (no switches) returns the general application health status.
 
 ---
@@ -348,6 +348,6 @@ $result = Reset-JIMSystem -Force
 
 ## See also
 
-- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, service health, factory reset)
+- [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, service health, factory reset)
 - [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means
 - [Connection](connection.md): establishing and managing connections to JIM

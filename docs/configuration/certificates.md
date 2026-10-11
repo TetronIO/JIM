@@ -53,7 +53,7 @@ Open a certificate's history from the Change History action on its row, or retri
 ## Manage Certificates
 
 - **JIM portal**<br /> Certificates area of the admin UI
-- **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `New-JIMCertificate`, `Test-JIMCertificate`, etc.)
+- **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `Add-JIMCertificate`, `Test-JIMCertificate`, etc.)
 - **REST API**<br /> Certificates endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also

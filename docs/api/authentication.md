@@ -21,7 +21,7 @@ Obtain a token via your identity provider's OIDC token endpoint, then include it
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 Tokens are validated against the configured OIDC provider. Standard JWT claims (expiry, audience, issuer) are enforced.
@@ -45,7 +45,7 @@ Include the API key in the `X-Api-Key` header:
 
 ```bash
 curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 ## Examples
@@ -54,14 +54,14 @@ curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
 
 ```bash
 curl -H "Authorization: Bearer eyJhbGciOi..." \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 ### Listing Connected Systems with an API Key
 
 ```bash
 curl -H "X-Api-Key: jim_xxxxxxxxxxxx" \
-  https://jim.example.com/api/v1/connected-systems
+  https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
 ### Using PowerShell
