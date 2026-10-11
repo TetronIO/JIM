@@ -1,6 +1,6 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 in review as #2071; Phases 2a and 2b complete; Phase 2c under way)
+- **Status:** Doing (Phase 2-0 in review as #2071; Phases 2a, 2b and 2d complete; Phase 2c under way)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
@@ -118,7 +118,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 - The page loads consequences after first render, so the panel never waits on the walk.
 - bUnit tests for the view (each ending, members paging, after-this-run rule present or absent), plain tests for the builder (column keying, placement, pills). Screenshots of the five mock moments published as an Artifact for review.
 
-### Phase 2d: REST and PowerShell
+### Phase 2d: REST and PowerShell ✅
 
 - `GET /api/v1/activities/items/{id}/causes` (Phase 1 parity), `GET /api/v1/activities/items/{id}/consequences`, and `GET /api/v1/activities/items/{id}/consequences/cohorts/{cohortKey}/members?page=&pageSize=` returning `PaginatedResponse<T>`. Administrator-only, like the controller. DTOs with `FromModel`, XML docs, controller tests including the route-and-role assertion pattern from `MetaverseControllerConnectionsTests`.
 - OpenAPI generated with `scripts/Generate-OpenApiDoc.ps1` to catch route-binding and schema-depth failures before CI.
