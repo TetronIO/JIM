@@ -121,6 +121,65 @@ public enum UnresolvedReferenceHandling
     Ignore = 2
 }
 
+/// <summary>
+/// Why an imported reference value most likely could not be resolved to a Connected System Object (#959). Worked out
+/// when someone looks, from the Connected System's current Container Scope, and never stored: widening the scope
+/// changes the answer straight away. Not persisted, so the order carries no meaning beyond readability.
+/// </summary>
+public enum UnresolvedReferenceCause
+{
+    /// <summary>
+    /// Nothing with this value has been imported, and the Connected System has no Container Scope to say why: a
+    /// Connector without partitions and containers, or one that cannot say what its containers hold.
+    /// </summary>
+    NotFound = 0,
+
+    /// <summary>
+    /// The value falls within Container Scope, yet nothing with it has been imported: the object may not exist any
+    /// more, its Object Type may not be imported, or it arrived after the last Full Import.
+    /// </summary>
+    NotFoundInScope = 1,
+
+    /// <summary>
+    /// The value falls within a Container that no selection covers.
+    /// </summary>
+    ContainerNotInScope = 2,
+
+    /// <summary>
+    /// The value falls within a Container that Container Scope excludes (#1255).
+    /// </summary>
+    ContainerExcluded = 3,
+
+    /// <summary>
+    /// The value falls within a partition of the Connected System that is not selected.
+    /// </summary>
+    PartitionNotSelected = 4,
+
+    /// <summary>
+    /// The value falls within none of the Connected System's partitions: it names an object in a directory JIM is
+    /// not connected to through this Connected System.
+    /// </summary>
+    OutsideConnectedSystem = 5,
+
+    /// <summary>
+    /// The value matches objects of more than one Object Type, and the attribute does not declare which it references
+    /// (#1285).
+    /// </summary>
+    AmbiguousObjectType = 6
+}
+
+/// <summary>
+/// Where the fix for an unresolved reference lies (#959): in JIM's own configuration, or in the Connected System.
+/// </summary>
+public enum UnresolvedReferenceFixLocation
+{
+    /// <summary>A JIM configuration change resolves it: Container Scope, a partition, or the schema.</summary>
+    Jim = 0,
+
+    /// <summary>The Connected System's own data is the place to look: JIM is configured to see the object, or cannot be.</summary>
+    SourceSystem = 1
+}
+
 public enum ConnectedSystemObjectJoinType
 {
     /// <summary>

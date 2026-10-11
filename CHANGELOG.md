@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
