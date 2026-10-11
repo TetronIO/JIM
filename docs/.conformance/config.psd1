@@ -96,6 +96,7 @@
         'configuration/run-profiles.md'
         'configuration/activities.md'
         'administration/troubleshooting.md'
+        'administration/troubleshooting-synchronisation.md'
         'administration/upgrading.md'
         'administration/backup-recovery.md'
     )
