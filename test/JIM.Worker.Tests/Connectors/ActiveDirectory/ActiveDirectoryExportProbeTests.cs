@@ -137,6 +137,30 @@ public class ActiveDirectoryExportProbeTests
     }
 
     [Test]
+    public async Task Export_RemovingAMemberTheGroupHeldOnceAndHasLost_RemovesTheOthersAsync()
+    {
+        // Samba AD keeps the link of a member taken out of a group, and answers the removal of that member again with
+        // "Attribute member already deleted for target GUID" rather than with the "doesn't exist" it gives for a member
+        // the group never held. Both mean the member is already gone.
+        var lab = ActiveDirectoryLab.Require();
+        using var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger);
+        var contacts = ActiveDirectoryLab.EnsureContacts(admin, lab, 3);
+        var groupDn = ActiveDirectoryLab.EnsureGroup(admin, lab, "JIM Probe Lost Member Group", "jim-probe-lost-member", [contacts[0], contacts[1], contacts[2]]);
+        EnsureNotMembers(admin, groupDn, contacts[0]);
+
+        var results = await ExportThroughTheConnectorAsync(lab, MembershipChange(groupDn,
+            (PendingExportAttributeChangeType.Remove, contacts[0]), (PendingExportAttributeChangeType.Remove, contacts[1])));
+
+        var members = ActiveDirectoryLab.ReadAllValues(admin, groupDn, "member");
+        Assert.That(results.Single().Success, Is.True, $"The directory said: {results.Single().ErrorMessage}");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(members, Does.Not.Contain(contacts[1]).IgnoreCase);
+            Assert.That(members, Does.Contain(contacts[2]).IgnoreCase);
+        }
+    }
+
+    [Test]
     public async Task Export_AddingAMemberUnderANewCaseWhoseOldSpellingIsAlreadyGone_AddsTheMemberAsync()
     {
         // The export removes a member's old spelling and adds the new one, but the group no longer holds the member at

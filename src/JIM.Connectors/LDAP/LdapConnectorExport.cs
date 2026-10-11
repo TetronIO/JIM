@@ -1781,6 +1781,10 @@ internal class LdapConnectorExport
     // entryAlreadyExists for the add of a member the group already holds.
     private const string SambaMemberNotPresentWording = "doesn't exist for target GUID";
 
+    // Samba AD's words when the group held the member once and has since lost it, under the same code: it keeps the
+    // removed link and answers "Attribute member already deleted for target GUID <guid>" from it.
+    private const string SambaMemberAlreadyRemovedWording = "already deleted for target GUID";
+
     // The attribute Active Directory and Samba AD hold group membership in, and the only one whose entryAlreadyExists
     // and unwillingToPerform answers are read as "already there" or "already gone": entryAlreadyExists is also how
     // they report an account name in use, which is a genuine failure.
@@ -1931,7 +1935,8 @@ internal class LdapConnectorExport
     /// and noSuchAttribute (16) for a value already absent, on any attribute, and Active Directory does the same for
     /// most attributes. For group membership, Active Directory and Samba AD answer entryAlreadyExists (68) for a member
     /// already present, and unwillingToPerform (53) for one already absent, naming the reason (Active Directory's
-    /// ERROR_MEMBER_NOT_IN_GROUP code, Samba AD's "doesn't exist for target GUID"). Both codes mean something else
+    /// ERROR_MEMBER_NOT_IN_GROUP code, Samba AD's "doesn't exist for target GUID", or "already deleted for target GUID"
+    /// for a member the group held once). Both codes mean something else
     /// elsewhere (entryAlreadyExists is also an account name in use; unwillingToPerform also refuses to take a member
     /// out of its primary group), so they are read this way only for the AD family's member attribute, and
     /// unwillingToPerform only when the directory gave that reason.
@@ -1961,7 +1966,8 @@ internal class LdapConnectorExport
     {
         var message = $"{response.ErrorMessage} {rejection.Message}";
         return message.Contains(ActiveDirectoryMemberNotInGroupCode, StringComparison.OrdinalIgnoreCase) ||
-               message.Contains(SambaMemberNotPresentWording, StringComparison.OrdinalIgnoreCase);
+               message.Contains(SambaMemberNotPresentWording, StringComparison.OrdinalIgnoreCase) ||
+               message.Contains(SambaMemberAlreadyRemovedWording, StringComparison.OrdinalIgnoreCase);
     }
 
     private LdapModifyBisection BeginBisection(ModifyRequest rejected, string dn, IReadOnlySet<string> singleValuedAttributes, DirectoryOperationException rejection)

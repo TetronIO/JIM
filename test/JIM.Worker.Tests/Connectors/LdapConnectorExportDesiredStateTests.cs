@@ -38,6 +38,10 @@ public class LdapConnectorExportDesiredStateTests
     // Modify attached, in its own words rather than Active Directory's code.
     private const string SambaMemberNotPresent = "Attribute member doesn't exist for target GUID df8c9ffe-ae21-492c-8e77-ea8833e35f6a";
 
+    // And, in other words, for the removal of a member the group held once and has since lost: Samba keeps the removed
+    // link, and answers from it.
+    private const string SambaMemberAlreadyRemoved = "Attribute member already deleted for target GUID 06a38326-feac-4cef-bde2-1792c97fcf52";
+
     // ERROR_MEMBERS_PRIMARY_GROUP: the member cannot be removed because this is its primary group. A genuine refusal.
     private const string ActiveDirectoryMembersPrimaryGroup = "0000055E: SvcErr: DSID-031A1254, problem 5003 (WILL_NOT_PERFORM), data 0";
 
@@ -427,6 +431,8 @@ public class LdapConnectorExportDesiredStateTests
 
     [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberNotPresent, true)]
     [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberNotPresent, false)]
+    [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberAlreadyRemoved, true)]
+    [TestCase(nameof(LdapDirectoryType.SambaAD), SambaMemberAlreadyRemoved, false)]
     [TestCase(nameof(LdapDirectoryType.ActiveDirectory), ActiveDirectoryMemberNotInGroup, false)]
     public async Task Export_ActiveDirectoryFamilyAnswersMemberNotInGroup_RemovesTheOtherMembersAsync(
         string directoryTypeName, string message, bool advertisesPermissiveModify)
