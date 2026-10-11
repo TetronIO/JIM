@@ -433,6 +433,17 @@ public interface ISyncRepository
         int take);
 
     /// <summary>
+    /// How many distinct Metaverse Objects <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> would find with no
+    /// limit (#2052). Asked only when an ambiguous match finds more candidates than an Activity item lists.
+    /// </summary>
+    Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive);
+
+    /// <summary>
     /// Loads a Metaverse Object found by <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/>, with everything
     /// joining it needs.
     /// </summary>

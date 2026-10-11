@@ -166,6 +166,12 @@ public interface IMetaverseRepository
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     /// <summary>
+    /// The Metaverse Object Type plural name of each given Metaverse Object that still exists, keyed by its id (#2052):
+    /// what tells whether it exists, and what a link to it needs. An id that no longer exists is absent.
+    /// </summary>
+    public Task<Dictionary<Guid, string>> GetExistingMetaverseObjectTypePluralNamesAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
     /// Gets every value a Metaverse Object holds for the given attributes (#348), uncapped, so scoping can be explained
     /// against exactly the values synchronisation compares: a capped multi-valued load could change which value comes
     /// first. Values carry their scalar fields, attribute id and asserted-null flag only.
@@ -362,6 +368,12 @@ public interface IMetaverseRepository
     /// <param name="caseSensitive">For Text, whether a value must match case exactly.</param>
     /// <param name="take">The most ids to return, in id order.</param>
     public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take);
+
+    /// <summary>
+    /// How many distinct Metaverse Objects <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> would find with no
+    /// limit (#2052).
+    /// </summary>
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive);
 
     /// <summary>
     /// Deletes a Metaverse Object from the database.

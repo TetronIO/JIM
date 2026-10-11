@@ -2256,8 +2256,9 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.AmbiguousMatch,
-                    Detail = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object; a synchronisation would fail it with an AmbiguousMatch error. Matching MVO IDs: {string.Join(", ", ex.Matches)}",
-                    ConnectedSystemId = cso.ConnectedSystemId
+                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    MatchCandidates = [.. ex.Candidates]
                 });
                 return null;
             }

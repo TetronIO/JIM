@@ -1259,6 +1259,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = joinEx.ErrorType;
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
+            runProfileExecutionItem.MatchCandidates = [.. joinEx.MatchCandidates];
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {CsoId}: {Message}",
@@ -6112,11 +6113,11 @@ public abstract class SyncTaskProcessorBase
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
-            throw new SyncJoinException(
-                ActivityRunProfileExecutionItemErrorType.AmbiguousMatch,
-                $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
-                $"An MVO can only be joined to a single CSO per Connected System. " +
-                $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}");
+            // The candidates are recorded with the item, so the message describes the collision rather than listing ids.
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, ObjectMatchingServer.DescribeAmbiguity(ex))
+            {
+                MatchCandidates = ex.Candidates
+            };
         }
     }
 

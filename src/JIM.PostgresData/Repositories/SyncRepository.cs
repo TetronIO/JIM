@@ -202,6 +202,10 @@ public partial class SyncRepository : ISyncRepository
         int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
         => _repo.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
 
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+        => _repo.Metaverse.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
+
     public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
 

@@ -137,7 +137,7 @@ Object Matching Rules define how a Connected System Object is matched to an exis
 | `employeeId` | `Employee ID` | Match on employee identifier |
 | `mail` | `Email Address` | Match on email address |
 
-JIM evaluates the matching rules in order and uses the first match found. You can configure multiple matching rules as a fallback strategy:
+JIM tries the matching rules in order; a rule with no value, or no match, passes to the next. Configure several as a fallback strategy:
 
 1. First, try to match on `employeeId` (most reliable)
 2. If no match, try `mail` (secondary)
@@ -149,9 +149,10 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 
 | Outcome | Description |
 |---------|-------------|
-| **Joined** | Exactly one matching MVO found; the CSO is linked to it |
-| **No match** | No matching MVO found; projection may create one |
-| **Multiple matches** | More than one MVO matches; an error is raised (ambiguous join) |
+| **Joined** | Exactly one Metaverse Object matches; the connection records the rule and value |
+| **No match** | No rule matches; projection may create one |
+| **Ambiguous Match** | The rule's values, every value of a multi-valued attribute counting, match several Metaverse Objects; the Activity item lists them, and nothing joins or projects |
+| **Object Matching Rule Failed** | The rule cannot be worked out for the object; nothing joins or projects, and no later rule is tried |
 
 ### Simple vs advanced matching mode
 

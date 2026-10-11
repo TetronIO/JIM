@@ -136,6 +136,24 @@ public class MetaverseMatchValueLookupDatabaseTests
     }
 
     [Test]
+    public async Task CountMetaverseObjectsByMatchValuesAsync_CountsEveryDistinctMatchOfTheTypeAndNoOtherAsync()
+    {
+        var seeded = await SeedAsync();
+        var held = await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "duplicate");
+        await AddValueAsync(held, seeded.EmployeeId, av => av.StringValue = "DUPLICATE-2");
+        for (var i = 0; i < 2; i++)
+            await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "Duplicate");
+        await AddMvoAsync(seeded.Group, seeded.EmployeeId, av => av.StringValue = "duplicate");
+        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "unrelated");
+
+        await using var ctx = NewContext();
+        var count = await new PostgresDataRepository(ctx).Metaverse.CountMetaverseObjectsByMatchValuesAsync(
+            seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, ["duplicate", "duplicate-2"], caseSensitive: false);
+
+        Assert.That(count, Is.EqualTo(3), "an identity holding both values counts once; the Group and the unrelated value not at all");
+    }
+
+    [Test]
     public async Task FindMetaverseObjectIdsByMatchValuesAsync_Number_FindsTheValueAsync()
     {
         var seeded = await SeedAsync();
@@ -180,19 +198,32 @@ public class MetaverseMatchValueLookupDatabaseTests
         Assert.That(ids, Is.EqualTo(new[] { mvo.Id }));
     }
 
-    [TestCase(false, "IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue")]
-    [TestCase(true, "IX_MetaverseObjectAttributeValues_AttributeId_StringValue")]
-    public async Task FindMetaverseObjectIdsByMatchValuesAsync_TextLookup_UsesTheAttributeValueIndexAsync(bool caseSensitive, string expectedIndex)
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_TextLookup_SeeksTheValueThroughAnIndexAsync(bool caseSensitive)
     {
-        // The lookup runs once per object on the synchronisation hot path, so it must be indexable. Sequential scans
-        // are switched off so the plan shows whether the index CAN be used; a tiny table would otherwise always scan.
+        // The lookup runs once per object on the synchronisation hot path, so it must be indexable. The plan is read
+        // against analysed statistics for a populated attribute: on a near-empty table the planner chooses between
+        // indexes from whatever statistics earlier tests left behind, so which one it names depends on test order.
         var seeded = await SeedAsync();
         await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "E100");
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
-        await using (var disable = new NpgsqlCommand("SET enable_seqscan = off", connection))
-            await disable.ExecuteNonQueryAsync();
+        await using (var populate = new NpgsqlCommand("""
+            INSERT INTO "MetaverseObjects" ("Id", "Created", "TypeId", "Status", "DeletionInitiatedByType", "Origin")
+            SELECT md5('mvo' || n)::uuid, now(), @typeId, 0, 0, 0 FROM generate_series(1, 5000) AS n;
+            INSERT INTO "MetaverseObjectAttributeValues" ("Id", "AttributeId", "MetaverseObjectId", "StringValue")
+            SELECT md5('av' || n)::uuid, @attributeId, md5('mvo' || n)::uuid, 'E' || (100000 + n) FROM generate_series(1, 5000) AS n;
+            ANALYZE "MetaverseObjects";
+            ANALYZE "MetaverseObjectAttributeValues";
+            SET enable_seqscan = off;
+            """, connection))
+        {
+            populate.Parameters.AddWithValue("typeId", seeded.Person.Id);
+            populate.Parameters.AddWithValue("attributeId", seeded.EmployeeId.Id);
+            await populate.ExecuteNonQueryAsync();
+        }
 
         await using var explain = new NpgsqlCommand(
             "EXPLAIN " + MetaverseRepository.BuildMatchValueLookupSql(AttributeDataType.Text, caseSensitive), connection);
@@ -205,7 +236,14 @@ public class MetaverseMatchValueLookupDatabaseTests
                 plan.Add(reader.GetString(0));
         }
 
-        Assert.That(string.Join("\n", plan), Does.Contain(expectedIndex));
+        // The value must drive an index condition. Matched by a filter instead, the scan reads every value the
+        // attribute holds before discarding them, whichever index it walks.
+        var planText = string.Join("\n", plan);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("StringValue")), Is.True, planText);
+            Assert.That(plan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("StringValue\" =") || line.Contains("lower(")), Is.False, planText);
+        }
     }
 
     private async Task<IReadOnlyList<Guid>> FindAsync(MetaverseObjectType type, MetaverseAttribute attribute, AttributeDataType valueType,

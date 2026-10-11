@@ -1834,6 +1834,19 @@ public class MetaverseRepository : IMetaverseRepository
         }).ToList();
     }
 
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, string>> GetExistingMetaverseObjectTypePluralNamesAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mvo => metaverseObjectIds.Contains(mvo.Id))
+            .Select(mvo => new { mvo.Id, mvo.Type.PluralName })
+            .ToDictionaryAsync(mvo => mvo.Id, mvo => mvo.PluralName);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         // Materialise the full entity so Include chains are honoured (Include is ignored
@@ -3066,18 +3079,45 @@ public class MetaverseRepository : IMetaverseRepository
     /// <c>EXPLAIN</c> exactly what runs.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Equality only, never <c>LIKE</c>/<c>ILIKE</c>, so <c>%</c>, <c>_</c> and <c>\</c> in a value are literal. The
-    /// case-insensitive form lowers both sides with PostgreSQL's own <c>lower()</c> (the right-hand side once, as an
-    /// initplan), so .NET and PostgreSQL never disagree about a non-ASCII letter, and the left-hand side matches the
-    /// <c>IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue</c> expression index exactly; its
-    /// <c>"StringValue" IS NOT NULL</c> repeats that index's filter so the planner can use it.
+    /// case-insensitive form lowers both sides with PostgreSQL's own <c>lower()</c>, so .NET and PostgreSQL never
+    /// disagree about a non-ASCII letter. It joins the sought values rather than comparing against an array built by a
+    /// subquery, which would hide them from the planner; joined, each value seeks the
+    /// <c>IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue</c> expression index, whose
+    /// <c>"StringValue" IS NOT NULL</c> filter is repeated so the planner can use it.
+    /// </para>
+    /// <para>
+    /// The matches are found first, in a materialised CTE, and only then ordered and limited. Ordering and limiting
+    /// the scan itself invites an ordered walk of the attribute's every value in the hope of stopping early, which
+    /// never happens when nothing matches: the common case before a projection, so a full scan per object.
+    /// </para>
     /// </remarks>
-    internal static string BuildMatchValueLookupSql(AttributeDataType valueType, bool caseSensitive)
+    internal static string BuildMatchValueLookupSql(AttributeDataType valueType, bool caseSensitive) => $"""
+        WITH matched AS MATERIALIZED (
+            SELECT DISTINCT av."MetaverseObjectId"
+            {MatchValueLookupFromWhere(valueType, caseSensitive)}
+        )
+        SELECT "MetaverseObjectId" FROM matched
+        ORDER BY "MetaverseObjectId"
+        LIMIT @take
+        """;
+
+    /// <summary>The count form of <see cref="BuildMatchValueLookupSql"/>, sharing its filter exactly.</summary>
+    internal static string BuildMatchValueCountSql(AttributeDataType valueType, bool caseSensitive) => $"""
+        SELECT COUNT(DISTINCT av."MetaverseObjectId")
+        {MatchValueLookupFromWhere(valueType, caseSensitive)}
+        """;
+
+    private static string MatchValueLookupFromWhere(AttributeDataType valueType, bool caseSensitive)
     {
+        var soughtJoin = valueType == AttributeDataType.Text && !caseSensitive
+            ? @"JOIN unnest(@values) AS sought(value) ON lower(av.""StringValue"") = lower(sought.value)"
+            : string.Empty;
         var comparison = valueType switch
         {
             AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = ANY(@values)",
-            AttributeDataType.Text => @"av.""StringValue"" IS NOT NULL AND LOWER(av.""StringValue"") = ANY(ARRAY(SELECT LOWER(v) FROM unnest(@values) AS v))",
+            AttributeDataType.Text => @"av.""StringValue"" IS NOT NULL",
             AttributeDataType.Number => @"av.""IntValue"" = ANY(@values)",
             AttributeDataType.LongNumber => @"av.""LongValue"" = ANY(@values)",
             AttributeDataType.Decimal => @"av.""DecimalValue"" = ANY(@values)",
@@ -3086,15 +3126,28 @@ public class MetaverseRepository : IMetaverseRepository
         };
 
         return $"""
-            SELECT DISTINCT av."MetaverseObjectId"
             FROM "MetaverseObjectAttributeValues" AS av
             JOIN "MetaverseObjects" AS mo ON mo."Id" = av."MetaverseObjectId"
+            {soughtJoin}
             WHERE av."AttributeId" = @attributeId
               AND mo."TypeId" = @typeId
               AND {comparison}
-            ORDER BY av."MetaverseObjectId"
-            LIMIT @take
             """;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+    {
+        if (values.Count == 0)
+            return 0;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(BuildMatchValueCountSql(valueType, caseSensitive), connection,
+            (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+        AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, values, take: 0);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>

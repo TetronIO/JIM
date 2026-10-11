@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.InMemoryData;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -24,6 +25,7 @@ public class ObjectMatchingImportTests
     private static readonly MetaverseObjectType Person = new() { Id = 1, Name = "Person", PluralName = "People" };
     private static readonly MetaverseAttribute EmployeeId = new() { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text };
     private static readonly MetaverseAttribute Email = new() { Id = 101, Name = "Email", Type = AttributeDataType.Text };
+    private static readonly MetaverseAttribute DisplayName = new() { Id = 102, Name = "Display Name", Type = AttributeDataType.Text };
     private static readonly ConnectedSystemObjectTypeAttribute EmployeeNumber = new() { Id = 10, Name = "employeeNumber", Type = AttributeDataType.Text };
     private static readonly ConnectedSystemObjectTypeAttribute Mail = new() { Id = 11, Name = "mail", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued };
 
@@ -80,7 +82,7 @@ public class ObjectMatchingImportTests
             _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(Cso((EmployeeNumber, "48213")), [failing, fallback]));
 
         Assert.That(ex!.Rule, Is.SameAs(failing), "a later rule must not be tried once a rule has failed");
-        Assert.That(ex.Message, Does.Contain("Employee ID"));
+        Assert.That(ex!.Message, Does.Contain("Employee ID"));
     }
 
     [Test]
@@ -109,8 +111,45 @@ public class ObjectMatchingImportTests
             _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(Cso((Mail, "a@corp.example"), (Mail, "b@corp.example")), [rule]));
 
         Assert.That(ex!.Matches, Is.EquivalentTo(new[] { first.Id, second.Id }));
-        Assert.That(ex.Rule, Is.SameAs(rule));
-        Assert.That(ex.MatchValues, Is.EquivalentTo(new object[] { "a@corp.example", "b@corp.example" }));
+        Assert.That(ex!.Rule, Is.SameAs(rule));
+        Assert.That(ex!.MatchValues, Is.EquivalentTo(new object[] { "a@corp.example", "b@corp.example" }));
+    }
+
+    [Test]
+    public void FindMatchingMetaverseObjectAsync_Ambiguous_ListsEachCandidateByNameWithTheValueItMatchedOnAsync()
+    {
+        var zoe = SeedMvo((Email, "b@corp.example"), (DisplayName, "Zoe Bloggs"));
+        var ann = SeedMvo((Email, "a@corp.example"), (DisplayName, "Ann Bloggs"));
+        var rule = AttributeRule(Mail, Email);
+
+        var ex = Assert.ThrowsAsync<MultipleMatchesException>(() =>
+            _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(Cso((Mail, "a@corp.example"), (Mail, "b@corp.example")), [rule]));
+
+        var candidates = ex!.Candidates;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates.Select(c => c.CandidateId), Is.EqualTo(new[] { ann.Id, zoe.Id }), "ordered by display name, so every run lists them alike");
+            Assert.That(candidates.Select(c => c.Ordinal), Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(candidates.Select(c => c.DisplayNameSnapshot), Is.EqualTo(new[] { "Ann Bloggs", "Zoe Bloggs" }));
+            Assert.That(candidates.Select(c => c.MatchedValue), Is.EqualTo(new[] { "a@corp.example", "b@corp.example" }));
+            Assert.That(candidates.All(c => c.CandidateKind == MatchCandidateKind.MetaverseObject), Is.True);
+            Assert.That(candidates.All(c => c.TypeNameSnapshot == "Person"), Is.True);
+            Assert.That(candidates.All(c => c.CandidateTotal == 2), Is.True);
+            Assert.That(candidates.All(c => c.ObjectMatchingRuleDescriptionSnapshot == "Email equals mail"), Is.True);
+        }
+    }
+
+    [Test]
+    public void FindMatchingMetaverseObjectAsync_MoreThanTenCandidates_ListsTenAndCountsThemAllAsync()
+    {
+        for (var i = 0; i < 12; i++)
+            SeedMvo((Email, "shared@corp.example"), (DisplayName, $"Person {i:00}"));
+
+        var ex = Assert.ThrowsAsync<MultipleMatchesException>(() =>
+            _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(Cso((Mail, "shared@corp.example")), [AttributeRule(Mail, Email)]));
+
+        Assert.That(ex!.Candidates, Has.Count.EqualTo(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded));
+        Assert.That(ex!.Candidates.All(c => c.CandidateTotal == 12), Is.True);
     }
 
     [Test]

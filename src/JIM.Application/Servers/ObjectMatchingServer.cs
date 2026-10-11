@@ -4,6 +4,7 @@
 using System.Globalization;
 using JIM.Application.Expressions;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -97,17 +98,19 @@ public class ObjectMatchingServer
                 resolution.ValueType,
                 resolution.Values,
                 matchingRule.CaseSensitive,
-                take: 2);
+                take: ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1);
 
             if (ids.Count == 0)
                 continue;
 
             if (ids.Count > 1)
             {
+                var candidates = await DescribeCandidatesAsync(repository, metaverseObjectType.Id, matchingRule, resolution, ids);
                 throw new MultipleMatchesException("Multiple Metaverse Objects were found to match the source attribute.", [.. ids])
                 {
                     Rule = matchingRule,
-                    MatchValues = resolution.Values
+                    MatchValues = resolution.Values,
+                    Candidates = candidates
                 };
             }
 
@@ -124,6 +127,85 @@ public class ObjectMatchingServer
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The candidates an ambiguous match lists on its Activity item (#2052), so the administrator can open each one
+    /// rather than read a count. At most <see cref="ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/> are
+    /// listed, ordered by display name; the full total is counted only when the lookup found more than that.
+    /// </summary>
+    private static async Task<IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate>> DescribeCandidatesAsync(
+        ISyncRepository repository,
+        int metaverseObjectTypeId,
+        ObjectMatchingRule rule,
+        MatchValueResolution resolution,
+        IReadOnlyList<Guid> ids)
+    {
+        var total = ids.Count > ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded
+            ? await repository.CountMetaverseObjectsByMatchValuesAsync(
+                metaverseObjectTypeId, rule.TargetMetaverseAttribute!.Id, resolution.ValueType, resolution.Values, rule.CaseSensitive)
+            : ids.Count;
+
+        var listed = await repository.GetMetaverseObjectsByIdsNoTrackingAsync(ids.Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded));
+        var description = DescribeRule(rule);
+        return listed
+            .OrderBy(mvo => mvo.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(mvo => mvo.Id)
+            .Select((mvo, ordinal) => new ActivityRunProfileExecutionItemMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.MetaverseObject,
+                CandidateId = mvo.Id,
+                DisplayNameSnapshot = mvo.Name,
+                TypeNameSnapshot = mvo.Type?.Name,
+                MatchedValue = DescribeMatchedValues(mvo, rule, resolution),
+                ObjectMatchingRuleId = rule.Id == 0 ? null : rule.Id,
+                ObjectMatchingRuleDescriptionSnapshot = description,
+                Ordinal = ordinal,
+                CandidateTotal = total
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The error an ambiguous match records (#2052): how many identities the object matched, on what, and why that
+    /// stops it. The candidates themselves travel separately, so the message does not list ids.
+    /// </summary>
+    /// <param name="ambiguity">The ambiguous match.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static string DescribeAmbiguity(MultipleMatchesException ambiguity, bool previewing = false)
+    {
+        const int maxValuesShown = 10;
+        var total = ambiguity.Candidates.Count > 0 ? ambiguity.Candidates[0].CandidateTotal : ambiguity.Matches.Count;
+        var on = string.Empty;
+        if (ambiguity.Rule != null)
+        {
+            var values = ambiguity.MatchValues
+                .Take(maxValuesShown)
+                .Select(value => $"\"{Convert.ToString(value, CultureInfo.InvariantCulture)}\"")
+                .ToList();
+            if (ambiguity.MatchValues.Count > maxValuesShown)
+                values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
+            on = $" on {DescribeRule(ambiguity.Rule)} ({string.Join(", ", values)})";
+        }
+
+        var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
+        return $"This object matches {total} Metaverse Objects{on}, so {outcome}. " +
+               "A Connected System Object can join only one Metaverse Object: correct the data, or the Object Matching Rule, " +
+               "so that its values identify one.";
+    }
+
+    /// <summary>
+    /// What a rule compares, for example "Employee ID equals employeeNumber", or the expression in place of the
+    /// attribute name when the rule computes its value.
+    /// </summary>
+    internal static string DescribeRule(ObjectMatchingRule rule)
+    {
+        var source = rule.Sources.OrderBy(s => s.Order).FirstOrDefault();
+        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
+            ? source?.ConnectedSystemAttribute?.Name
+            : source.Expression;
+        var target = rule.TargetMetaverseAttribute?.Name ?? rule.TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
+        return $"{target} equals {sourceText}";
     }
 
     /// <summary>

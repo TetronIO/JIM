@@ -46,6 +46,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
     private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
+    private readonly Dictionary<Guid, ActivityRunProfileExecutionItemMatchCandidate> _matchCandidates = new();
 
     /// <summary>
     /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
@@ -1388,6 +1389,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(ids);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountMetaverseObjectsByMatchValuesAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive) =>
+        (await FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, int.MaxValue)).Count;
+
     // Virtual so tests can simulate the identity split a real EF load produces (the SamePageJoinConflict
     // page-flush regression coverage): production's matching load and an already-loaded CSO's own
     // MetaverseObject navigation are separate database round trips, so a CSO obsoleted earlier in the same
@@ -2168,6 +2174,16 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
 
+            // Drain the ambiguous match candidate buffer (#2052), as the production flush does.
+            foreach (var candidate in rpei.MatchCandidates)
+            {
+                if (candidate.Id == Guid.Empty)
+                    candidate.Id = Guid.NewGuid();
+                candidate.ActivityRunProfileExecutionItemId = rpei.Id;
+                _matchCandidates[candidate.Id] = candidate;
+            }
+            rpei.MatchCandidates.Clear();
+
             // Drain the causal edge buffer (#1223), matching the production flush: outcome ids exist only now,
             // so the edge's transient outcome reference is resolved here, and the buffer is emptied once written
             // so a later flush of the same RPEI cannot duplicate it.
@@ -2216,6 +2232,11 @@ public class SyncRepository : ISyncRepository
     /// The causal edges recorded so far, for test assertions.
     /// </summary>
     public IReadOnlyCollection<CausalEdge> CausalEdges => _causalEdges.Values;
+
+    /// <summary>
+    /// The ambiguous match candidates recorded so far (#2052), for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates => _matchCandidates.Values;
 
     private static void AssignSyncOutcomeIds(
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)

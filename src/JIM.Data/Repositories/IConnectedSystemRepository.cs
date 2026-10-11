@@ -625,6 +625,18 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync"/>, for several Metaverse Objects in one
+    /// read: what an ambiguous match's candidate identities are joined to (#2052).
+    /// </summary>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to find joined Connected System Objects for.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Which of the given Connected System Object ids still exist (#2052).
+    /// </summary>
+    public Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets the enabled Synchronisation Rules of a Metaverse Object Type, in both directions, with what explaining a
     /// Metaverse Object's connections needs (#348): the Connected System's name and status, the Connected System Object
     /// Type's name, whether the rule provisions, and the complete scoping criteria tree at whatever depth it was built,

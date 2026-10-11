@@ -129,6 +129,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int take)
         => _inner.FindMetaverseObjectIdsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take);
 
+    public Task<int> CountMetaverseObjectsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
+        => _inner.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
+
     public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         => _inner.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
 

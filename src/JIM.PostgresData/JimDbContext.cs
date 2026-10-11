@@ -24,6 +24,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
     public virtual DbSet<CausalEdge> CausalEdges { get; set; } = null!;
+    public virtual DbSet<ActivityRunProfileExecutionItemMatchCandidate> ActivityRunProfileExecutionItemMatchCandidates { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
     public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
@@ -1111,6 +1112,20 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<CausalEdge>()
             .HasIndex(e => e.CauseMetaverseObjectId)
             .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
+
+        // Ambiguous match candidates (#2052): cascade with the Activity item that reports them, as a causal edge's
+        // effect side does; the candidate itself is snapshot scalars with no foreign key, so a candidate deleted to
+        // resolve the ambiguity still reads. Read by item, so indexed by item.
+        modelBuilder.Entity<ActivityRunProfileExecutionItemMatchCandidate>()
+            .HasOne(c => c.ActivityRunProfileExecutionItem)
+            .WithMany()
+            .HasForeignKey(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("FK_MatchCandidates_ActivityRunProfileExecutionItems");
+
+        modelBuilder.Entity<ActivityRunProfileExecutionItemMatchCandidate>()
+            .HasIndex(c => c.ActivityRunProfileExecutionItemId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItemMatchCandidates_RpeiId");
 
         // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
         // so the existing history-retention housekeeping removes preview results with the Activity that owns them;

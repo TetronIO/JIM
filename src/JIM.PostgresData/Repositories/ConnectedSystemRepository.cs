@@ -5703,6 +5703,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // As the single-object read above, only the values that identify an object, plus the ones that name it, so each
+        // joined object reads as the rest of the portal names it (ConnectedSystemObject.Name) rather than by its id alone.
+        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLowerInvariant()).ToList();
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.ConnectedSystem)
+            .Include(cso => cso.AttributeValues.Where(av =>
+                    av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId || nameAttributes.Contains(av.Attribute.Name.ToLower())))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId != null && metaverseObjectIds.Contains(cso.MetaverseObjectId.Value))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        return (await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => connectedSystemObjectIds.Contains(cso.Id))
+            .Select(cso => cso.Id)
+            .ToListAsync()).ToHashSet();
+    }
+
+    /// <inheritdoc />
     public async Task<List<SyncRule>> GetSyncRulesForScopingExplanationAsync(int metaverseObjectTypeId)
     {
         // A projection rather than includes: the page needs a few columns of the rule, its Connected System and its
