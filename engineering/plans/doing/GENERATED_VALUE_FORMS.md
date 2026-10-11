@@ -1,6 +1,6 @@
 # Generated Value Forms - Implementation Plan
 
-- **Status:** Doing (Phase 1 in progress)
+- **Status:** Doing (Phase 1 complete; Phases 2 and 3 to follow)
 - **Created:** 2026-10-11
 - **Issue:** [#2023](https://github.com/TetronIO/JIM/issues/2023) (absorbs [#2014](https://github.com/TetronIO/JIM/issues/2014))
 - **PRD:** [PRD_GENERATED_VALUE_FORMS.md](../../prd/doing/PRD_GENERATED_VALUE_FORMS.md)
@@ -91,13 +91,13 @@ Two appended `SyncOutcomeType` members, `GeneratedValueWaiting` and `GeneratedVa
 
 ## Phases
 
-### Phase 1: Shared resolver, Keep unique switch, anchoring (closes #2014)
+### Phase 1: Shared resolver, Keep unique switch, anchoring (closes #2014) ✅
 
 1. Characterisation tests pinning today's attribution; extract the resolver with forward-view tests.
 2. Attribution honours the switch.
 3. Anchoring and the decision server's participating systems widened to every value built from the generated value. Values written by an export expression are not anchored yet: they are evaluated against the Metaverse Object in Phase 3, which is when anchoring can read them.
 4. Model, migration, change history, settings path, held-decision release; `RequiresPostgres` tests.
-5. REST, PowerShell, portal (UI mock approved first), docs, changelog. The provisioning scoping advice (D5) ships with Phase 3, where waiting first appears.
+5. REST, PowerShell, portal (UI mock approved first), docs, changelog. The provisioning scoping advice (D5) ships with Phase 3, where waiting first appears. Also added at review: the Attribute Flow tab's Mapping Type filter gains Derived, so derived flows and generated values can be shown together or apart.
 
 ### Phase 2: One probe search per Connected System and route
 
