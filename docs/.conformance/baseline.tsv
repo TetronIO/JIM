@@ -7,7 +7,6 @@ LANG-3	administration/security-audit-events.md	1
 LANG-3	concepts/architecture.md	5
 LANG-3	concepts/attribute-priority.md	1
 LANG-3	concepts/expressions.md	2
-LANG-3	configuration/activities.md	4
 LANG-3	configuration/api-keys.md	1
 LANG-3	configuration/certificates.md	1
 LANG-3	configuration/configuration-changes.md	2
@@ -40,7 +39,6 @@ LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
 LANG-3	reference/glossary.md	1
-LANG-4	configuration/activities.md	1
 LANG-4	configuration/connected-systems.md	9
 LANG-4	configuration/synchronisation-rules.md	24
 LANG-4	connectors/index.md	3
@@ -52,7 +50,6 @@ LANG-7	administration/configuration.md	1
 LANG-7	administration/preview-features.md	2
 LANG-7	concepts/attribute-priority.md	6
 LANG-7	concepts/expressions.md	2
-LANG-7	configuration/activities.md	2
 LANG-7	configuration/connected-systems.md	5
 LANG-7	configuration/data-flow.md	1
 LANG-7	configuration/metaverse.md	2
@@ -87,7 +84,6 @@ STR-2	concepts/case-sensitivity.md	4
 STR-2	concepts/expressions.md	4
 STR-2	concepts/object-naming.md	4
 STR-2	concepts/passwords.md	4
-STR-2	configuration/activities.md	3
 STR-2	configuration/api-keys.md	3
 STR-2	configuration/certificates.md	3
 STR-2	configuration/configuration-changes.md	4
