@@ -251,11 +251,34 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
+## Installer
+
+`setup.sh` asks a question only when its answer is not already in its environment, so an installation can run unattended. Set the variables below, the identity provider's settings under [SSO / Authentication](#sso-authentication), and any database, port, proxy or API key settings from the sections above, and the installer asks nothing it already knows. Where a description names a flag, the flag does the same as the variable.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JIM_INSTALL_DIR` | The folder JIM is installed in | `/opt/jim` when run as root, otherwise `./jim` |
+| `JIM_SETUP_RUNTIME` | `docker` or `podman`; the same as `--runtime` | The one installed; asks if both are |
+| `JIM_SETUP_DB_MODE` | `bundled` for the bundled PostgreSQL, or `external` for your own server (with `JIM_DB_HOSTNAME`) | Asks |
+| `JIM_SETUP_TLS_MODE` | `generate` to create a certificate authority and a server certificate, or `provided` to install your organisation's certificate | Asks |
+| `JIM_SETUP_TLS_NAMES` | The DNS names and IP addresses users reach JIM at, comma-separated, for a generated certificate | Asks, suggesting this host's name and address |
+| `JIM_SETUP_TLS_CERT_FILE` | Your organisation's PEM certificate, followed by any intermediate CA certificates. Required with `provided` | |
+| `JIM_SETUP_TLS_KEY_FILE` | The certificate's unencrypted PEM private key. Required with `provided` | |
+| `JIM_SETUP_AUTO_START` | `true` to start JIM without asking | Asks |
+| `JIM_SETUP_PODMAN_ROOTLESS` | `true` to run JIM rootless on Podman; the same as `--rootless` | `false` |
+| `JIM_SETUP_PODMAN_ACCOUNT` | The account that runs JIM rootless, with `--rootless` | `jim` |
+| `JIM_SETUP_OPEN_FIREWALL` | `true` or `false`: open the HTTPS port in firewalld, when it is running. Podman only | Asks |
+| `JIM_SETUP_FIX_APPARMOR` | `true` or `false`: on a host whose AppArmor profiles for Podman stop JIM's containers using the network, or stop their processes signalling one another (Ubuntu 24.04), add the rules JIM needs. Podman only | Asks |
+| `JIM_SETUP_BACKUP_CONFIRMED` | `true`, with `--upgrade`: the database and encryption keys are backed up, so the upgrade does not ask | Asks, and an answer of no cancels the upgrade |
+
+---
+
 ## Performance Tuning
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
 | `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count  |
+| `JIM_CACHE_WARM_PARALLELISM` | How many Connected Systems the Worker loads into its lookup cache at once when it starts, before it takes any work. Higher values shorten start-up when there are many Connected Systems, at the cost of more database queries at once. A Connected System whose cache fails to load fills it as work needs it. | `3` |
 
 !!! info
     The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required; it is set automatically.
