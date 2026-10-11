@@ -653,6 +653,129 @@ public class LdapConnectorExportDesiredStateTests
         }
     }
 
+    [TestCase(1, TestName = "Export_CaseVariantWhoseOldSpellingIsAlreadyGone_FallbackKeepsTheNewSpelling(sequential)")]
+    [TestCase(4, TestName = "Export_CaseVariantWhoseOldSpellingIsAlreadyGone_FallbackKeepsTheNewSpelling(concurrent)")]
+    public async Task Export_CaseVariantWhoseOldSpellingIsAlreadyGone_FallbackKeepsTheNewSpellingAsync(int concurrency)
+    {
+        // The old primary has already gone, so the directory refuses the whole modify and the fallback applies it in
+        // parts. Nothing the directory holds matches the new-case alias, so its add is accepted; a delete of the old
+        // spelling sent after it matches it, compared without regard to case, and takes it away.
+        var directory = new FakeDirectory().With("proxyAddresses", JaneSmithPrimary);
+        var export = CreateExport(directory, concurrency, directoryType: LdapDirectoryType.OpenLDAP);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate(Add("proxyAddresses", JaneDoeAlias), Remove("proxyAddresses", JaneDoePrimary))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("proxyAddresses"), Is.EquivalentTo(new[] { JaneSmithPrimary, JaneDoeAlias }));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1), "Only the old primary was already in its desired state");
+        }
+    }
+
+    [Test]
+    public async Task Export_CaseVariantWhileASingleValuedAddOpensTheFallback_DirectoryHonoursPermissiveModify_KeepsTheCaseVariantAsync()
+    {
+        // The directory holds Intern, not the Contractor the export replaces, so the add of Employee is refused and the
+        // whole modify with it. In parts, under Permissive Modify, an add of the alias sent ahead of the delete of the
+        // old primary is skipped as already present, and that delete then takes the address away.
+        var directory = new FakeDirectory { HonoursPermissiveModify = true, SingleValuedAttributes = { "employeeType" } }
+            .With("proxyAddresses", JaneDoePrimary)
+            .With("employeeType", "Intern");
+        var export = CreateExport(directory, advertisesPermissiveModify: true);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"],
+                Add("proxyAddresses", JaneSmithPrimary), Add("proxyAddresses", JaneDoeAlias), Remove("proxyAddresses", JaneDoePrimary),
+                Add("employeeType", "Employee"), Remove("employeeType", "Contractor"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False, "The directory holds a different value from the one the export replaces");
+            Assert.That(directory.ValuesOf("proxyAddresses"), Is.EquivalentTo(new[] { JaneSmithPrimary, JaneDoeAlias }));
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Intern" }));
+        }
+    }
+
+    [Test]
+    public async Task Export_SambaMemberAddedUnderANewCaseWhoseOldSpellingIsAlreadyGone_AddsTheMemberAsync()
+    {
+        // As a Samba AD domain controller answers it (ActiveDirectoryExportProbeTests): the group no longer holds Alice, so
+        // the removal of her old spelling is refused and the modify applied in parts. An add of her new spelling sent on
+        // its own first is accepted, and the removal of the old spelling then takes her away again.
+        var aliceUnderANewCase = Alice.ToLowerInvariant();
+        var directory = new FakeDirectory
+        {
+            ValuePresentCode = ResultCode.EntryAlreadyExists,
+            ValuePresentMessage = SambaMemberAlreadyPresent,
+            ValueAbsentCode = ResultCode.UnwillingToPerform,
+            ValueAbsentMessage = SambaMemberNotPresent
+        }.With("member", Bob);
+        var export = CreateExport(directory, advertisesPermissiveModify: true, directoryType: LdapDirectoryType.SambaAD);
+
+        var results = await export.ExecuteAsync([GroupUpdate(Remove("member", Alice), Add("member", aliceUnderANewCase))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { aliceUnderANewCase, Bob }));
+        }
+    }
+
+    [TestCase(1, TestName = "Export_SambaMemberKeptUnderANewCaseWhileAnotherIsAlreadyGone_KeepsTheMember(sequential)")]
+    [TestCase(4, TestName = "Export_SambaMemberKeptUnderANewCaseWhileAnotherIsAlreadyGone_KeepsTheMember(concurrent)")]
+    public async Task Export_SambaMemberKeptUnderANewCaseWhileAnotherIsAlreadyGone_KeepsTheMemberAsync(int concurrency)
+    {
+        // Samba AD refuses the removal of a member the group does not hold even under Permissive Modify, so the modify is
+        // applied in parts. Where the directory honours the control for adds, the add of Alice under her new case, sent on
+        // its own ahead of the delete of her old spelling, is skipped as already present, and that delete then takes her
+        // out of the group.
+        var aliceUnderANewCase = Alice.ToLowerInvariant();
+        var directory = new FakeDirectory
+        {
+            HonoursPermissiveModify = true,
+            PermissiveModifyCoversDeletes = false,
+            ValuePresentCode = ResultCode.EntryAlreadyExists,
+            ValuePresentMessage = SambaMemberAlreadyPresent,
+            ValueAbsentCode = ResultCode.UnwillingToPerform,
+            ValueAbsentMessage = SambaMemberNotPresent
+        }.With("member", Alice, Bob);
+        var export = CreateExport(directory, concurrency, advertisesPermissiveModify: true, directoryType: LdapDirectoryType.SambaAD);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate(Remove("member", Dave), Remove("member", Alice), Add("member", aliceUnderANewCase))], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { aliceUnderANewCase, Bob }));
+        }
+    }
+
+    [Test]
+    public async Task Export_GroupThatMustHaveAMemberKeepingOneUnderANewCaseWhileAnotherIsAlreadyGone_IsNeverLeftEmptyAsync()
+    {
+        // groupOfNames must always hold a member, and this directory refuses any modify that would leave it without one,
+        // so success means the group was never emptied. Old is kept under a new case, Alice leaves, and Bob has already
+        // gone, so the whole modify is refused and applied in parts.
+        const string old = "CN=Old,OU=Users,DC=test,DC=local";
+        var oldUnderANewCase = old.ToLowerInvariant();
+        var directory = new FakeDirectory { AttributeThatMustHaveAValue = "member" }.With("member", old, Alice);
+        var export = CreateExport(directory, directoryType: LdapDirectoryType.OpenLDAP);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate(Remove("member", old), Remove("member", Alice), Remove("member", Bob), Add("member", oldUnderANewCase))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(new[] { oldUnderANewCase }));
+        }
+    }
+
     #endregion
 
     #region A single-valued attribute changed by an add and a remove
@@ -718,6 +841,78 @@ public class LdapConnectorExportDesiredStateTests
         }
     }
 
+    [TestCase(nameof(LdapDirectoryType.ActiveDirectory))]
+    [TestCase(nameof(LdapDirectoryType.SambaAD))]
+    [TestCase(nameof(LdapDirectoryType.Generic))]
+    public async Task Export_SingleValuedAttributeHoldingAnotherValue_ActiveDirectoryFamilyAnswersValueExists_FailsTheExportAsync(string directoryTypeName)
+    {
+        // Active Directory and Samba AD answer attributeOrValueExists for an add to a single-valued attribute holding any
+        // value, so the answer never says the value held is the one asked for. An unrecognised directory is treated the
+        // same way, as the cautious reading.
+        var directory = new FakeDirectory { SingleValuedAttributes = { "employeeType" } }.With("employeeType", "Intern");
+        var export = CreateExport(directory, directoryType: Enum.Parse<LdapDirectoryType>(directoryTypeName));
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"], Add("employeeType", "Employee"), Add("description", "Staff"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False, "The directory holds a different value from the one the export asked for");
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Intern" }));
+        }
+    }
+
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP))]
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389))]
+    public async Task Export_SingleValuedAttributeAlreadyHoldingTheValue_RfcDirectory_CountsAsAchievedAsync(string directoryTypeName)
+    {
+        // OpenLDAP and 389 Directory Server answer attributeOrValueExists for an add to a single-valued attribute only
+        // when it holds that very value; a different value is a constraint violation. So the answer means what it says.
+        var directory = new FakeDirectory
+        {
+            SingleValuedAttributes = { "employeeType" },
+            SingleValuedConflictCode = ResultCode.ConstraintViolation,
+            SingleValuedConflictMessage = "attribute 'employeeType' cannot have multiple values"
+        }.With("employeeType", "Employee");
+        var export = CreateExport(directory, directoryType: Enum.Parse<LdapDirectoryType>(directoryTypeName));
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"], Add("employeeType", "Employee"), Add("description", "Staff"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Employee" }));
+            Assert.That(directory.ValuesOf("description"), Is.EquivalentTo(new[] { "Staff" }));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1));
+        }
+    }
+
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP))]
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389))]
+    public async Task Export_SingleValuedAttributeHoldingAnotherValue_RfcDirectory_FailsTheExportAsync(string directoryTypeName)
+    {
+        var directory = new FakeDirectory
+        {
+            SingleValuedAttributes = { "employeeType" },
+            SingleValuedConflictCode = ResultCode.ConstraintViolation,
+            SingleValuedConflictMessage = "attribute 'employeeType' cannot have multiple values"
+        }.With("employeeType", "Intern");
+        var export = CreateExport(directory, directoryType: Enum.Parse<LdapDirectoryType>(directoryTypeName));
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"], Add("employeeType", "Employee"), Remove("employeeType", "Contractor"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.False);
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Intern" }));
+        }
+    }
+
     #endregion
 
     #region Finding the values already in place by halving
@@ -764,9 +959,38 @@ public class LdapConnectorExportDesiredStateTests
         }
     }
 
-    [TestCase(1, TestName = "Export_RunCancelledWhileTheFallbackIsUnderway_StopsBetweenRequests(sequential)")]
-    [TestCase(4, TestName = "Export_RunCancelledWhileTheFallbackIsUnderway_StopsBetweenRequests(concurrent)")]
-    public async Task Export_RunCancelledWhileTheFallbackIsUnderway_StopsBetweenRequestsAsync(int concurrency)
+    [Test]
+    public async Task Export_MembersKeptUnderANewCaseOneOfWhomIsAlreadyGone_HalvesBetweenPairsNeverWithinOneAsync()
+    {
+        // Eight members are kept under a new case and the old spelling of one has already gone, so the directory refuses
+        // the request carrying the pairs. Halving splits it between pairs, so every new spelling still follows the removal
+        // of its old one, and the group, which must hold a member, is never emptied.
+        var members = Users(8);
+        var underANewCase = members.Select(member => member.ToLowerInvariant()).ToArray();
+        var directory = new FakeDirectory { AttributeThatMustHaveAValue = "member" }.With("member", members[..7]);
+        var export = CreateExport(directory, directoryType: LdapDirectoryType.OpenLDAP);
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdate([.. members.Select(member => Remove("member", member)), .. underANewCase.Select(member => Add("member", member))])],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(underANewCase));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1), "Only the eighth member's old spelling was already gone");
+            Assert.That(directory.ModifyRequests, Has.Count.LessThanOrEqualTo(9),
+                "The refused modify, two halves at each of three levels, then the last pair's removal and add apart");
+        }
+    }
+
+    #endregion
+
+    #region A cancelled run does not abandon a batch partway
+
+    [TestCase(1, TestName = "Export_RunCancelledWhileTheFallbackIsUnderway_CompletesTheUpdate(sequential)")]
+    [TestCase(4, TestName = "Export_RunCancelledWhileTheFallbackIsUnderway_CompletesTheUpdate(concurrent)")]
+    public async Task Export_RunCancelledWhileTheFallbackIsUnderway_CompletesTheUpdateAsync(int concurrency)
     {
         var users = Users(64);
         using var cancellation = new CancellationTokenSource();
@@ -780,9 +1004,46 @@ public class LdapConnectorExportDesiredStateTests
         }.With("member", users[39]);
         var export = CreateExport(directory, concurrency, directoryType: LdapDirectoryType.OpenLDAP);
 
-        Assert.That(async () => await export.ExecuteAsync([GroupUpdate([.. users.Select(user => Add("member", user))])], cancellation.Token),
-            Throws.InstanceOf<OperationCanceledException>());
-        Assert.That(directory.ModifyRequests, Has.Count.EqualTo(3), "The request answered when the run was cancelled is the last one sent");
+        var results = await export.ExecuteAsync([GroupUpdate([.. users.Select(user => Add("member", user))])], cancellation.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(users));
+        }
+    }
+
+    [Test]
+    public async Task Export_RunCancelledPartwayThroughASequentialBatch_ReturnsEveryResultOfTheBatchAsync()
+    {
+        // JIM records a batch's results only once the Connector returns them, so a batch abandoned partway would lose
+        // the result of every export it had already completed, the External ID of a created object among them.
+        const string entryUuid = "4f0a5b1c-2d3e-4f50-8a9b-0c1d2e3f4a5b";
+        using var cancellation = new CancellationTokenSource();
+        var directory = new FakeDirectory
+        {
+            EntryUuid = entryUuid,
+            AfterModify = sent =>
+            {
+                if (sent == 1)
+                    cancellation.Cancel();
+            }
+        };
+        var export = CreateExport(directory, batchSize: 10, directoryType: LdapDirectoryType.OpenLDAP);
+        var members = Users(15);
+
+        var results = await export.ExecuteAsync(
+            [GroupCreate(members), GroupUpdate(Add("member", members[0]), Add("member", Carol)), GroupUpdate(Remove("member", Dave), Add("member", Bob))],
+            cancellation.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cancellation.IsCancellationRequested, Is.True, "The run was cancelled while the create was under way");
+            Assert.That(results, Has.Count.EqualTo(3));
+            Assert.That(results.Select(result => result.Success), Is.All.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo(entryUuid), "The created object's External ID reaches JIM");
+            Assert.That(directory.ValuesOf("member"), Is.EquivalentTo(members.Append(Carol).Append(Bob)));
+        }
     }
 
     #endregion
@@ -921,6 +1182,15 @@ public class LdapConnectorExportDesiredStateTests
         public ResultCode ValueAbsentCode { get; init; } = ResultCode.NoSuchAttribute;
         public string ValueAbsentMessage { get; init; } = "modify/delete: member: no such value";
 
+        /// <summary>
+        /// Whether Permissive Modify, where honoured, also covers the delete of a value already absent. Samba AD refuses the
+        /// removal of a member the group does not hold even with it.
+        /// </summary>
+        public bool PermissiveModifyCoversDeletes { get; init; } = true;
+
+        /// <summary>The entryUUID a search of the entry returns, or null to return no entry.</summary>
+        public string? EntryUuid { get; init; }
+
         /// <summary>A genuine refusal for a particular value, or null to let it through.</summary>
         public Func<DirectoryAttributeModification, string?, DirectoryOperationException?>? RefuseValue { get; init; }
 
@@ -931,11 +1201,19 @@ public class LdapConnectorExportDesiredStateTests
         public Dictionary<string, string> ClassRequiredByAttribute { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Attributes that hold one value at most. As Active Directory and Samba AD do, an add to one that already holds
-        /// a value is refused with attributeOrValueExists, Permissive Modify or not, at the point in the modify it
-        /// arrives: a delete earlier in the same request makes room for it, one later does not.
+        /// Attributes that hold one value at most. An add to one that already holds a different value is refused with
+        /// <see cref="SingleValuedConflictCode"/>, Permissive Modify or not, at the point in the modify it arrives: a
+        /// delete earlier in the same request makes room for it, one later does not.
         /// </summary>
         public HashSet<string> SingleValuedAttributes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// How an add to a single-valued attribute holding a different value is refused: attributeOrValueExists by
+        /// default, as Active Directory and Samba AD answer it; OpenLDAP and 389 Directory Server answer constraintViolation.
+        /// </summary>
+        public ResultCode SingleValuedConflictCode { get; init; } = ResultCode.AttributeOrValueExists;
+
+        public string SingleValuedConflictMessage { get; init; } = "00002083: AtrErr: problem 1006 (ATT_OR_VALUE_EXISTS)";
 
         /// <summary>Called after each modify is answered, with how many have been sent so far.</summary>
         public Action<int>? AfterModify { get; init; }
@@ -957,7 +1235,9 @@ public class LdapConnectorExportDesiredStateTests
             ModifyRequest modify => Modify(modify),
             AddRequest add => Add(add),
             ModifyDNRequest => LdapTestResponses.Create<ModifyDNResponse>(ResultCode.Success),
-            SearchRequest => LdapTestResponses.EmptySearchResponse(),
+            SearchRequest search => EntryUuid == null
+                ? LdapTestResponses.EmptySearchResponse()
+                : LdapTestResponses.SearchResponseWith(search.DistinguishedName, ("entryUUID", EntryUuid)),
             _ => throw new NotSupportedException($"The fake directory does not answer {request.GetType().Name}")
         };
 
@@ -1030,10 +1310,11 @@ public class LdapConnectorExportDesiredStateTests
             {
                 if (modification.Operation == DirectoryAttributeOperation.Add && SingleValuedAttributes.Contains(modification.Name) &&
                     current.Count > 0 && !current.Contains(value))
-                    throw Rejection(ResultCode.AttributeOrValueExists, $"00002083: AtrErr: problem 1006 (ATT_OR_VALUE_EXISTS), Att ({modification.Name})");
+                    throw Rejection(SingleValuedConflictCode, SingleValuedConflictMessage);
                 if (!permissive && modification.Operation == DirectoryAttributeOperation.Add && current.Contains(value))
                     throw Rejection(ValuePresentCode, ValuePresentMessage);
-                if (!permissive && modification.Operation == DirectoryAttributeOperation.Delete && !current.Contains(value))
+                if (!(permissive && PermissiveModifyCoversDeletes) && modification.Operation == DirectoryAttributeOperation.Delete &&
+                    !current.Contains(value))
                     throw Rejection(ValueAbsentCode, ValueAbsentMessage);
                 if (RefuseValue?.Invoke(modification, value) is { } refusal)
                     throw refusal;

@@ -20,35 +20,42 @@ namespace JIM.Connectors.LDAP;
 /// </para>
 /// <para>
 /// <b>Order.</b> Atomically, a directory checks the entry against its schema once, after every change; in parts, it
-/// checks after each. So object classes being added go first and those being removed go last, every replacement goes
-/// together in one request, and each attribute's values are added before any are deleted, so an attribute an entry
-/// must hold (groupOfNames' member) never passes through empty on its way from the old values to the new.
+/// checks after each. So object classes being added go first and those being removed go last, and every replacement
+/// goes together in one request. A value deleted and added again under a spelling the directory may treat as the same
+/// (the key <see cref="LdapValueCollisionKey"/> gives: <c>SMTP:jane.doe@x</c> and <c>smtp:jane.doe@x</c>, or a member's
+/// Distinguished Name in a new case) goes next, its delete and its add in one request, delete first, because the
+/// directory compares values with its own matching rule: an add sent alone first is accepted where nothing matches it,
+/// or skipped under Permissive Modify where the old spelling still does, and the delete of the old spelling then takes
+/// the value away. Every other value is added before any is deleted, so an attribute an entry must hold
+/// (groupOfNames' member) never passes through empty on its way from the old values to the new.
 /// </para>
 /// <para>
-/// <b>Halving.</b> Each attribute's adds, and separately its deletes, are sent as one request. A part the directory
-/// refuses as already in place is split in two and each half sent; only a half refused again is split further. One
-/// value refused on its own is in place. For k such values among n, that is about 2k log2(n) requests, where sending
-/// every value alone took n: on OpenLDAP every accepted modify of a large group rewrites the entry and, with the
-/// accesslog's logold, logs every old member, so one stale member among a thousand used to cost 999 heavy writes.
-/// A refused modify that carried nothing but one attribute's adds or deletes has already been answered for that part
-/// as a whole, so it is split straight away rather than sent again.
+/// <b>Halving.</b> An attribute's pairs go as one request, as do its other adds, and separately its other deletes. A
+/// part the directory refuses as already in place is split in two and each half sent; only a half refused again is
+/// split further. Pairs are split between keys, never within one, so no add is ever sent ahead of the delete it pairs
+/// with; one pair refused on its own is sent as its delete, then its add. One value refused on its own is in place.
+/// For k such values among n, that is about 2k log2(n) requests, where sending every value alone took n: on OpenLDAP
+/// every accepted modify of a large group rewrites the entry and, with the accesslog's logold, logs every old member,
+/// so one stale member among a thousand used to cost 999 heavy writes. A part that is exactly the refused modify has
+/// already been answered as a whole, so it is split straight away rather than sent again.
 /// </para>
 /// <para>
-/// <b>An add refused as already present is not always done.</b> The directory compares values with its own matching
-/// rule: <c>smtp:jane.doe@x</c> is "already present" in a proxyAddresses holding <c>SMTP:jane.doe@x</c>, and if the
-/// same export deletes <c>SMTP:jane.doe@x</c>, counting the add as done would lose the address. So while the refused
-/// modify also deletes values of that attribute, such an add is held back and sent again after those deletes, and is
-/// done only if the directory refuses it as already present once more. And where the Connected System's schema says
-/// the attribute is single-valued (a multi-valued Metaverse attribute flowing to it, #435), Active Directory and
-/// Samba AD refuse an add with the same answer when the attribute holds any other value, so a refused add there says
-/// nothing about which value is held and is never treated as done: the export fails, as it did before the fallback
-/// existed. A delete refused as already absent is always done.
+/// <b>An add refused as already present is not always done.</b> While deletes of that attribute are still to come, the
+/// value present may be one of those they remove, compared as the directory compares it, so such an add is held back,
+/// sent again after those deletes, and is done only if the directory refuses it as already present once more. And
+/// where the Connected System's schema says the attribute is single-valued (a multi-valued Metaverse attribute flowing
+/// to it, #435), Active Directory and Samba AD refuse an add with the same answer when the attribute holds any other
+/// value, so a refused add there says nothing about which value is held and is never treated as done: the export fails,
+/// as it did before the fallback existed. An unrecognised directory is read the same way, as the cautious reading.
+/// OpenLDAP and 389 Directory Server give that answer only when the attribute holds that very value (a different one
+/// is a constraint violation), so there it means what it says. A delete refused as already absent is always done.
 /// </para>
 /// </remarks>
 internal sealed class LdapModifyBisection
 {
     private readonly string _dn;
     private readonly IReadOnlySet<string> _singleValuedAttributes;
+    private readonly bool _singleValuedAddRefusalNamesNoValue;
     private readonly HashSet<string> _attributesWithDeletes;
     private readonly Func<DirectoryOperationException, DirectoryAttributeModification, bool> _meansAlreadyInDesiredState;
     private readonly Queue<Func<IEnumerable<Step>>> _phases;
@@ -67,34 +74,45 @@ internal sealed class LdapModifyBisection
     /// <param name="refused">The modify the directory refused as a whole.</param>
     /// <param name="singleValuedAttributes">The attributes the Connected System's schema says hold one value at most,
     /// compared without regard to case.</param>
+    /// <param name="directoryType">The kind of directory, which decides what a refused add to a single-valued attribute
+    /// says about the value it holds.</param>
     /// <param name="meansAlreadyInDesiredState">Whether a refusal says the value of a modification is already where the
     /// export wants it; the directory's own codes differ.</param>
     internal LdapModifyBisection(
         ModifyRequest refused,
         IReadOnlySet<string> singleValuedAttributes,
+        LdapDirectoryType directoryType,
         Func<DirectoryOperationException, DirectoryAttributeModification, bool> meansAlreadyInDesiredState)
     {
         _dn = refused.DistinguishedName;
         _singleValuedAttributes = singleValuedAttributes;
+        _singleValuedAddRefusalNamesNoValue =
+            directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD or LdapDirectoryType.Generic;
         _meansAlreadyInDesiredState = meansAlreadyInDesiredState;
 
         var modifications = refused.Modifications.Cast<DirectoryAttributeModification>().ToList();
         var valueChanges = modifications.Where(IsValueChange).ToList();
         ValueChanges = valueChanges.Sum(ValueCount);
-        _attributesWithDeletes = valueChanges
+
+        var (pairs, unpaired) = SeparatePairs(valueChanges);
+        _attributesWithDeletes = unpaired
             .Where(modification => modification.Operation == DirectoryAttributeOperation.Delete)
             .Select(modification => modification.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // The refused modify has already answered for a part that carries exactly what it carried: one attribute's adds
+        // or deletes, or one attribute's pairs and nothing else.
         var answeredAsAWhole = modifications.Count == 1;
+        var pairsAnsweredAsAWhole = pairs.Count == 1 && unpaired.Count == 0 && valueChanges.Count == modifications.Count;
         _phases = new Queue<Func<IEnumerable<Step>>>(
         [
-            () => Parts(modifications, DirectoryAttributeOperation.Add, objectClasses: true, answeredAsAWhole),
+            () => Parts(unpaired, DirectoryAttributeOperation.Add, objectClasses: true, answeredAsAWhole),
             () => Replacements(modifications),
-            () => Parts(modifications, DirectoryAttributeOperation.Add, objectClasses: false, answeredAsAWhole),
-            () => Parts(modifications, DirectoryAttributeOperation.Delete, objectClasses: false, answeredAsAWhole),
+            () => pairs.Select(pair => new Step(pair, SentAgain: false, pairsAnsweredAsAWhole, IsPair: true)),
+            () => Parts(unpaired, DirectoryAttributeOperation.Add, objectClasses: false, answeredAsAWhole),
+            () => Parts(unpaired, DirectoryAttributeOperation.Delete, objectClasses: false, answeredAsAWhole),
             () => HeldBack(objectClasses: false),
-            () => Parts(modifications, DirectoryAttributeOperation.Delete, objectClasses: true, answeredAsAWhole),
+            () => Parts(unpaired, DirectoryAttributeOperation.Delete, objectClasses: true, answeredAsAWhole),
             () => HeldBack(objectClasses: true)
         ]);
     }
@@ -124,6 +142,12 @@ internal sealed class LdapModifyBisection
 
         while (TryDequeue(out var step))
         {
+            if (step.AnsweredAsAWhole && step.IsPair)
+            {
+                SplitPairs(step);
+                continue;
+            }
+
             if (step.AnsweredAsAWhole && step.ValueGroup is { Count: > 1 })
             {
                 SplitIntoHalves(step);
@@ -148,12 +172,15 @@ internal sealed class LdapModifyBisection
 
     /// <summary>
     /// Whether this refusal of the request <see cref="TryTakeNext"/> gave can be resolved by the plan: the request
-    /// carried one attribute's adds or deletes, the directory says a value among them is already in place, and, for a
-    /// lone add, the rules for adds (see the remarks on this class) allow it. Changes nothing, so it is safe in an
+    /// carried one attribute's pairs, adds or deletes, the directory says a value among them is already in place, and,
+    /// for a lone add, the rules for adds (see the remarks on this class) allow it. Changes nothing, so it is safe in an
     /// exception filter; a refusal it does not accept fails the export.
     /// </summary>
     internal bool IsAlreadyInDesiredState(DirectoryOperationException refusal)
     {
+        if (_current is { IsPair: true } pairs)
+            return pairs.Modifications.Any(modification => _meansAlreadyInDesiredState(refusal, modification));
+
         if (_current is not { ValueGroup: { } part } step || !_meansAlreadyInDesiredState(refusal, part))
             return false;
 
@@ -162,11 +189,17 @@ internal sealed class LdapModifyBisection
 
     /// <summary>
     /// The directory refused the request <see cref="TryTakeNext"/> gave in a way <see cref="IsAlreadyInDesiredState"/>
-    /// accepted: halve it, hold back a lone add to send again after the deletes, or count a lone value as in place.
+    /// accepted: split it, hold back a lone add to send again after the deletes, or count a lone value as in place.
     /// </summary>
     internal void RefusedAsAlreadyInDesiredState()
     {
         var step = TakeCurrent();
+        if (step.IsPair)
+        {
+            SplitPairs(step);
+            return;
+        }
+
         var part = step.ValueGroup ?? throw new InvalidOperationException("Only a request carrying one attribute's values can be refused as already in place.");
 
         if (part.Count > 1)
@@ -198,14 +231,14 @@ internal sealed class LdapModifyBisection
         return step != null;
     }
 
-    // An add refused as present before the deletes of its attribute have been sent: the value present may be one of
-    // those the deletes remove, compared as the directory compares it, so it is sent again once they have gone.
+    // An add refused as present before the deletes sent apart from their pairs have gone: the value present may be one
+    // of those the deletes remove, compared as the directory compares it, so it is sent again once they have gone.
     private bool MustBeSentAgainAfterTheDeletes(Step step, DirectoryAttributeModification part) =>
         part.Operation == DirectoryAttributeOperation.Add && !step.SentAgain && _attributesWithDeletes.Contains(part.Name);
 
-    // A single-valued attribute refuses an add as present whenever it holds a value, whichever value that is.
+    // Where a refused add to a single-valued attribute names no value, the attribute may hold another one.
     private bool MayHoldAnotherValue(DirectoryAttributeModification part) =>
-        part.Operation == DirectoryAttributeOperation.Add && _singleValuedAttributes.Contains(part.Name);
+        _singleValuedAddRefusalNamesNoValue && part.Operation == DirectoryAttributeOperation.Add && _singleValuedAttributes.Contains(part.Name);
 
     private void SplitIntoHalves(Step step)
     {
@@ -213,6 +246,48 @@ internal sealed class LdapModifyBisection
         var half = part.Count / 2;
         _queue.AddFirst(new Step([Slice(part, half, part.Count)], step.SentAgain, AnsweredAsAWhole: false));
         _queue.AddFirst(new Step([Slice(part, 0, half)], step.SentAgain, AnsweredAsAWhole: false));
+    }
+
+    /// <summary>
+    /// Splits one attribute's pairs between keys, each half still a delete followed by an add; a lone pair becomes its
+    /// delete, then its add, so the add never reaches the directory ahead of the delete it pairs with.
+    /// </summary>
+    private void SplitPairs(Step step)
+    {
+        var (delete, add) = (step.Modifications[0], step.Modifications[1]);
+        var deletesByKey = LdapValueCollisionKey.Group(Values(delete));
+        var addsByKey = LdapValueCollisionKey.Group(Values(add));
+        var keys = deletesByKey.Keys.ToList();
+        if (keys.Count == 0)
+            throw new InvalidOperationException("A request carrying pairs must delete at least one value.");
+
+        if (keys.Count == 1)
+        {
+            _queue.AddFirst(new Step([add], SentAgain: false, AnsweredAsAWhole: false));
+            _queue.AddFirst(new Step([delete], SentAgain: false, AnsweredAsAWhole: false));
+            return;
+        }
+
+        var half = keys.Count / 2;
+        _queue.AddFirst(PairsFor(delete.Name, keys.Skip(half), deletesByKey, addsByKey));
+        _queue.AddFirst(PairsFor(delete.Name, keys.Take(half), deletesByKey, addsByKey));
+    }
+
+    private static Step PairsFor(
+        string attributeName,
+        IEnumerable<string> keys,
+        Dictionary<string, List<object?>> deletesByKey,
+        Dictionary<string, List<object?>> addsByKey)
+    {
+        var keyList = keys.ToList();
+        return new Step(
+            [
+                NewModification(attributeName, DirectoryAttributeOperation.Delete, keyList.SelectMany(key => deletesByKey[key])),
+                NewModification(attributeName, DirectoryAttributeOperation.Add, keyList.SelectMany(key => addsByKey[key]))
+            ],
+            SentAgain: false,
+            AnsweredAsAWhole: false,
+            IsPair: true);
     }
 
     private void HoldBack(DirectoryAttributeModification part)
@@ -232,6 +307,59 @@ internal sealed class LdapModifyBisection
         _heldBack
             .Where(modification => IsObjectClass(modification) == objectClasses)
             .Select(modification => new Step([modification], SentAgain: true, AnsweredAsAWhole: false));
+
+    /// <summary>
+    /// Takes out of the refused modify's value changes each value deleted and added again under the same key, one pair
+    /// modification (a delete, then an add) per attribute that has any, and returns what is left in the order it stood.
+    /// A delete of a whole attribute names no value, so it pairs with nothing.
+    /// </summary>
+    private static (List<DirectoryAttributeModification[]> Pairs, List<DirectoryAttributeModification> Unpaired) SeparatePairs(
+        List<DirectoryAttributeModification> valueChanges)
+    {
+        var pairedKeysByAttribute = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var attributeChanges in valueChanges.GroupBy(modification => modification.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var deleteKeys = LdapValueCollisionKey.Group(attributeChanges
+                .Where(modification => modification.Operation == DirectoryAttributeOperation.Delete)
+                .SelectMany(Values)).Keys;
+            var addKeys = LdapValueCollisionKey.Group(attributeChanges
+                .Where(modification => modification.Operation == DirectoryAttributeOperation.Add)
+                .SelectMany(Values)).Keys;
+
+            var pairedKeys = deleteKeys.Where(addKeys.Contains).ToHashSet(LdapValueCollisionKey.Comparer);
+            if (pairedKeys.Count > 0)
+                pairedKeysByAttribute[attributeChanges.Key] = pairedKeys;
+        }
+
+        var pairs = new Dictionary<string, (List<object?> Deletes, List<object?> Adds, string Name)>(StringComparer.OrdinalIgnoreCase);
+        var unpaired = new List<DirectoryAttributeModification>();
+        foreach (var modification in valueChanges)
+        {
+            if (modification.Count == 0 || !pairedKeysByAttribute.TryGetValue(modification.Name, out var pairedKeys))
+            {
+                unpaired.Add(modification);
+                continue;
+            }
+
+            if (!pairs.TryGetValue(modification.Name, out var pair))
+            {
+                pair = ([], [], modification.Name);
+                pairs[modification.Name] = pair;
+            }
+
+            var values = Values(modification).ToLookup(value => LdapValueCollisionKey.Of(value) is { } key && pairedKeys.Contains(key));
+            (modification.Operation == DirectoryAttributeOperation.Delete ? pair.Deletes : pair.Adds).AddRange(values[true]);
+
+            if (values[false].Any())
+                unpaired.Add(NewModification(modification.Name, modification.Operation, values[false]));
+        }
+
+        return ([.. pairs.Values.Select(pair => new[]
+        {
+            NewModification(pair.Name, DirectoryAttributeOperation.Delete, pair.Deletes),
+            NewModification(pair.Name, DirectoryAttributeOperation.Add, pair.Adds)
+        })], unpaired);
+    }
 
     private static IEnumerable<Step> Parts(
         List<DirectoryAttributeModification> modifications,
@@ -257,21 +385,29 @@ internal sealed class LdapModifyBisection
     // A delete naming no values removes the attribute whole, and is one change.
     private static int ValueCount(DirectoryAttributeModification modification) => Math.Max(modification.Count, 1);
 
-    private static DirectoryAttributeModification Slice(DirectoryAttributeModification modification, int start, int end)
+    private static IEnumerable<object?> Values(DirectoryAttribute attribute) =>
+        Enumerable.Range(0, attribute.Count).Select(i => attribute[i]);
+
+    private static DirectoryAttributeModification NewModification(string name, DirectoryAttributeOperation operation, IEnumerable<object?> values)
     {
-        var slice = new DirectoryAttributeModification { Name = modification.Name, Operation = modification.Operation };
-        for (var i = start; i < end; i++)
-            AddValue(slice, modification[i]);
-        return slice;
+        var modification = new DirectoryAttributeModification { Name = name, Operation = operation };
+        foreach (var value in values)
+            AddValue(modification, value);
+        return modification;
     }
+
+    private static DirectoryAttributeModification Slice(DirectoryAttributeModification modification, int start, int end) =>
+        NewModification(modification.Name, modification.Operation, Values(modification).Skip(start).Take(end - start));
 
     private static DirectoryAttributeModification CopyOf(DirectoryAttributeModification modification) =>
         Slice(modification, 0, modification.Count);
 
-    private static void AddValue(DirectoryAttribute attribute, object value)
+    private static void AddValue(DirectoryAttribute attribute, object? value)
     {
         switch (value)
         {
+            case null:
+                break;
             case byte[] bytes:
                 attribute.Add(bytes);
                 break;
@@ -287,14 +423,16 @@ internal sealed class LdapModifyBisection
     /// <summary>
     /// One request of the plan.
     /// </summary>
-    /// <param name="Modifications">What it carries: every replacement together, or one attribute's adds or deletes.</param>
+    /// <param name="Modifications">What it carries: every replacement together, one attribute's adds or deletes, or one
+    /// attribute's pairs (a delete, then an add).</param>
     /// <param name="SentAgain">Whether it carries adds held back until the deletes of their attribute had gone.</param>
     /// <param name="AnsweredAsAWhole">Whether the refused modify carried exactly this, so the directory has already
     /// refused it.</param>
-    private sealed record Step(DirectoryAttributeModification[] Modifications, bool SentAgain, bool AnsweredAsAWhole)
+    /// <param name="IsPair">Whether it carries one attribute's values deleted and added again under the same key.</param>
+    private sealed record Step(DirectoryAttributeModification[] Modifications, bool SentAgain, bool AnsweredAsAWhole, bool IsPair = false)
     {
         /// <summary>
-        /// The one attribute's adds or deletes this step carries, or null for the replacements.
+        /// The one attribute's adds or deletes this step carries, or null for the replacements and for pairs.
         /// </summary>
         public DirectoryAttributeModification? ValueGroup =>
             Modifications is [{ Operation: DirectoryAttributeOperation.Add or DirectoryAttributeOperation.Delete } only] ? only : null;

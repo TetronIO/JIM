@@ -137,6 +137,59 @@ public class ActiveDirectoryExportProbeTests
     }
 
     [Test]
+    public async Task Export_AddingAMemberUnderANewCaseWhoseOldSpellingIsAlreadyGone_AddsTheMemberAsync()
+    {
+        // The export removes a member's old spelling and adds the new one, but the group no longer holds the member at
+        // all. Samba AD refuses the removal of an absent member even under Permissive Modify, so the connector applies the
+        // change in parts. The directory resolves a member name without regard to case, so an add of the new spelling sent
+        // on its own first is accepted, and the removal of the old spelling sent after it takes the member away again.
+        var lab = ActiveDirectoryLab.Require();
+        using var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger);
+        var contacts = ActiveDirectoryLab.EnsureContacts(admin, lab, 2);
+        var groupDn = ActiveDirectoryLab.EnsureGroup(admin, lab, "JIM Probe Member Respelt Group", "jim-probe-member-respelt", [contacts[1]]);
+        EnsureNotMembers(admin, groupDn, contacts[0]);
+
+        var results = await ExportThroughTheConnectorAsync(lab, MembershipChange(groupDn,
+            (PendingExportAttributeChangeType.Remove, contacts[0]), (PendingExportAttributeChangeType.Add, contacts[0].ToLowerInvariant())));
+
+        var members = ActiveDirectoryLab.ReadAllValues(admin, groupDn, "member");
+        Assert.That(results.Single().Success, Is.True, $"The directory said: {results.Single().ErrorMessage}");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(members, Does.Contain(contacts[0]).IgnoreCase, "The member the export adds under a new case is in the group");
+            Assert.That(members, Does.Contain(contacts[1]).IgnoreCase);
+        }
+    }
+
+    [Test]
+    public async Task Export_KeepingAMemberUnderANewCaseWhileRemovingOneAlreadyAbsent_KeepsTheMemberAsync()
+    {
+        // Samba AD refuses the removal of a member the group does not hold even under Permissive Modify, so the connector
+        // applies the change in parts, and the member kept under a new case must survive the removal of its old spelling.
+        // Samba refuses the add of the new spelling outright (entryAlreadyExists) rather than skipping it, so against Samba
+        // this passes whichever is sent first; a directory that skips it is covered in
+        // LdapConnectorExportDesiredStateTests. This guards that the pair, sent together, is accepted.
+        var lab = ActiveDirectoryLab.Require();
+        using var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger);
+        var contacts = ActiveDirectoryLab.EnsureContacts(admin, lab, 3);
+        var groupDn = ActiveDirectoryLab.EnsureGroup(admin, lab, "JIM Probe Member Case Group", "jim-probe-member-case", [contacts[0], contacts[1]]);
+        EnsureNotMembers(admin, groupDn, contacts[2]);
+
+        var results = await ExportThroughTheConnectorAsync(lab, MembershipChange(groupDn,
+            (PendingExportAttributeChangeType.Remove, contacts[2]), (PendingExportAttributeChangeType.Remove, contacts[0]),
+            (PendingExportAttributeChangeType.Add, contacts[0].ToLowerInvariant())));
+
+        var members = ActiveDirectoryLab.ReadAllValues(admin, groupDn, "member");
+        Assert.That(results.Single().Success, Is.True, $"The directory said: {results.Single().ErrorMessage}");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(members, Does.Contain(contacts[0]).IgnoreCase, "The member kept under a new case is still in the group");
+            Assert.That(members, Does.Contain(contacts[1]).IgnoreCase);
+            Assert.That(members, Does.Not.Contain(contacts[2]).IgnoreCase);
+        }
+    }
+
+    [Test]
     public async Task Export_ChangingTheCaseOfAProxyAddress_KeepsTheAddressAsync()
     {
         // Active Directory compares proxyAddresses without regard to case, so under Permissive Modify an add of the new
