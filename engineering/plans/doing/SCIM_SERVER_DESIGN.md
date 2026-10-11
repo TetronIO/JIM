@@ -81,7 +81,14 @@ The universal SCIM credential is a static token sent as `Authorization: Bearer <
 
 ### D4. A second authentication method is deferred until a customer needs it
 
-> **Awaiting product owner decision.** This section records the recommendation; confirm or change it before Phase 4.
+Decided 11 October 2026: v1 ships the scoped key (D3) only; a second method is built when a customer needs one, with B (then C) as the preferred next step.
+
+Why the scoped key is sufficient, not a stopgap:
+
+- **It is what SCIM servers offer.** Of 14 SCIM service providers surveyed (AWS IAM Identity Center, Atlassian, GitHub Enterprise, Google Workspace, Cloudflare, Zscaler, Databricks, Snowflake, Salesforce, Zoom, Slack, Dropbox and others), about 10 accept a static token generated in their admin UI. None requires a token endpoint for a custom integration; client credentials appear only as an extra on platforms that already run an OAuth server, and the remaining OAuth-only services reuse their platform's existing OAuth through an interactive admin consent in the identity provider's gallery app.
+- **It is what SCIM clients can all send.** Entra ID (cloud, and its on-premises provisioning agent), Okta (custom apps and its on-premises agent), PingOne, PingFederate, OneLogin, JumpCloud, the Keycloak outbound plugins and JIM's own SCIM 2.0 Client Connector all support it. For OneLogin, JumpCloud and the Entra on-premises agent it is the only documented method, so it is essential for a JIM that is not reachable from the internet.
+- **What it cannot do:** a listing in the Entra app gallery (new gallery apps need client credentials or federation), and customers whose policy forbids long-lived secrets. Google Workspace cannot push to any custom SCIM service provider, whatever JIM supports.
+- **RFC 7644** names Bearer tokens as common practice and requires them to have a limited lifetime, which the mandatory expiry in D3 satisfies.
 
 The original design's "Federated Identity Credential" (the client presenting its own IdP-signed JWT on SCIM calls) is dropped: no mainstream SCIM client does this. The options for a second method, assessed in the October review:
 
@@ -91,7 +98,7 @@ The original design's "Federated Identity Credential" (the client presenting its
 | B. JIM-hosted token endpoint | OAuth 2.0 client credentials against a token endpoint JIM hosts per Connected System; short-lived opaque access tokens stored hashed like API keys | Cloud identity providers using client credentials without an internet-facing third-party issuer; required for new Entra gallery apps |
 | C. Entra Workload Identity Federation | An extra way into B's token endpoint: Entra presents a signed assertion instead of a secret; JIM validates it against Microsoft's published keys (outbound internet) | Secretless authentication from Entra; Microsoft's recommended method for gallery apps |
 
-Most large SCIM services accept only static tokens, so v1 ships with D3 alone. When a customer needs more, choose by their driver; if one has to be chosen in advance, B (then C) is preferred, because Entra is the most likely source of pushes and its secretless route runs through a token endpoint JIM hosts. Whichever is built must be its own authentication path, kept apart from the SSO JWT pipeline: that pipeline trusts one site-wide issuer and resolves every token to a person, which a SCIM client must never become.
+When a customer needs more, choose by their driver; B (then C) is the preferred default, because Entra is the most likely source of pushes and its secretless route runs through a token endpoint JIM hosts, whereas A only works when the identity provider can reach the customer's token issuer (for a cloud identity provider, an internet-facing issuer). Whichever is built must be its own authentication path, kept apart from the SSO JWT pipeline: that pipeline trusts one site-wide issuer and resolves every token to a person, which a SCIM client must never become.
 
 ### D5. Pushed passwords are refused in v1
 
