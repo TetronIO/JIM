@@ -48,7 +48,7 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @(notInEffect
                     ? GeneratedValueBuiltValueWording.NotInEffectText(described.GeneratedAttributeName)
-                    : GeneratedValueBuiltValueWording.SwitchHelpText(Mapping.KeepUnique, described.GeneratedAttributeName))
+                    : GeneratedValueBuiltValueWording.SwitchHelpText(described, Mapping.KeepUnique))
             </MudText>
         }
     </MudPaper>

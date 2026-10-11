@@ -66,6 +66,26 @@ public class GeneratedValueBuiltValueDto
     /// <summary>Every Connected System attribute the value is written to unchanged.</summary>
     public List<GeneratedValueBuiltValueTargetDto> ExportedTo { get; set; } = new();
 
+    /// <summary>
+    /// Whether the value is checked before the generated value is issued: built on the generated flow's own
+    /// Synchronisation Rule with <see cref="KeepUnique"/> on, and bound for a Connected System the generated value's
+    /// exclusions leave in. A candidate whose value is already held is passed over. False for a value that is only
+    /// corrected after a refusal, or neither.
+    /// </summary>
+    public bool CheckedBeforeIssuing { get; set; }
+
+    /// <summary>
+    /// The Connected Systems the value is probed in before the generated value is issued, besides JIM's own records, by
+    /// name; empty when it is not checked, or checked against JIM's records alone.
+    /// </summary>
+    public List<string> ProbedIn { get; set; } = new();
+
+    /// <summary>
+    /// For a value built on another Synchronisation Rule whose Attribute Flow reads only Metaverse attributes, the
+    /// generated flow's own rule: moving the flow there would have the value checked before issuing. Null otherwise.
+    /// </summary>
+    public string? MoveToSyncRuleName { get; set; }
+
     /// <summary>Creates the DTO from the read model.</summary>
     public static GeneratedValueBuiltValueDto FromModel(GeneratedValueBuiltValueDescription model) => new()
     {
@@ -81,6 +101,9 @@ public class GeneratedValueBuiltValueDto
         Kind = model.Kind,
         KeepUnique = model.KeepUnique,
         CollisionRemediation = model.CollisionRemediation,
-        ExportedTo = model.ExportedTo.Select(GeneratedValueBuiltValueTargetDto.FromModel).ToList()
+        ExportedTo = model.ExportedTo.Select(GeneratedValueBuiltValueTargetDto.FromModel).ToList(),
+        CheckedBeforeIssuing = model.CheckedBeforeIssuing,
+        ProbedIn = model.ProbedIn.ToList(),
+        MoveToSyncRuleName = model.MoveToSyncRuleName
     };
 }

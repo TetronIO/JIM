@@ -51,7 +51,12 @@ public enum SyncPreviewMessageCode
     DerivedFlowCycle,
     /// <summary>An Object Matching Rule could not be worked out for the object (#2052); the real sync would neither
     /// join nor project it, and would record an ObjectMatchingRuleFailed error naming the rule and the fault.</summary>
-    ObjectMatchingRuleFailed
+    ObjectMatchingRuleFailed,
+    /// <summary>Generated Value Forms (#2023): the generated value would be held back because a value built from it
+    /// needs another input the object has no value for yet, so the candidate's values cannot be worked out and checked.
+    /// Not a failure: the real synchronisation generates nothing for the attribute this time, and generates the value
+    /// once the input arrives. The detail names each input and the value that needs it.</summary>
+    GeneratedValueWaiting
 }
 
 /// <summary>

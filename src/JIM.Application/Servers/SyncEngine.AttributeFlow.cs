@@ -255,7 +255,7 @@ public partial class SyncEngine
     /// contributor, #91) as still present, so an identical surviving contribution would neither re-add the value nor
     /// take over its provenance, and the value would be silently cleared when the pending removals are applied.
     /// </summary>
-    private static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
+    internal static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
         => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
 
     /// <summary>
@@ -308,7 +308,7 @@ public partial class SyncEngine
     /// identifies the owning rule. Returns null when nothing owns the attribute or the value is internally managed
     /// (no contributing rule stamped).
     /// </summary>
-    private static int? FindEffectiveIncumbentSyncRuleId(MetaverseObject mvo, int attributeId)
+    internal static int? FindEffectiveIncumbentSyncRuleId(MetaverseObject mvo, int attributeId)
     {
         var pendingGeneration = mvo.PendingGeneratedValues.LastOrDefault(p => p.AttributeId == attributeId);
         if (pendingGeneration != null)
@@ -784,6 +784,7 @@ public partial class SyncEngine
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId,
                 SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
                 BaseValue = null,
                 BaseUnavailable = false
             });
@@ -812,6 +813,7 @@ public partial class SyncEngine
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId,
                 SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
                 BaseValue = null,
                 BaseUnavailable = true
             });
@@ -845,6 +847,7 @@ public partial class SyncEngine
             ContributedBySystemId = contributingSystemId,
             ContributedBySyncRuleId = contributingSyncRuleId,
             SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
             BaseValue = processed,
             BaseUnavailable = processed == null
         });

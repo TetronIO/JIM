@@ -68,6 +68,8 @@ There is no single preview covering every source at once: a Full Synchronisation
 
 Sync Preview evaluates the object against data already in the metaverse; it does not run an import first, so a source-system change that has not been imported yet is invisible to it. Nothing here carries a **Pending Export** id, either: because nothing is staged, there is nothing yet to look up on the [Pending Exports](connected-systems.md#pending-exports) list. Both are true of every preview: the panel describes what synchronising **now** would do, not what synchronising **after everything currently pending elsewhere finishes** would do.
 
+A [generated value](synchronisation-rules.md#generated-values) is checked, with the [values built from it](synchronisation-rules.md#values-built-from-a-generated-value), against JIM's own records only: the preview never contacts a Connected System. It shows the candidates the run would pass over and any value it would hold back for an input, and names the Connected Systems the run would also probe for the generated value and each value built from it. A target account JIM has not imported can still make the run choose a different value.
+
 ## REST and PowerShell
 
 Sync Preview is available over every surface:
