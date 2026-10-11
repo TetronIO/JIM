@@ -2012,6 +2012,100 @@ try {
                 throw "LeaverCohort failed: $($validationFailures.Count) validation failure(s) across $groupsWithFailures group(s). See details above."
             }
 
+            # Step 7.11: The same cascade read back through the downward walk (#1811). From a cohort member's import,
+            # what it went on to cause must reach the Synchronisation that deleted their Metaverse Object, the deletion of
+            # their Target account, their removal from exactly the Groups the baseline put them in, each export, and the
+            # import that confirmed it; and every branch must have run to its end. Sampled, so it costs a few reads at any
+            # template size.
+            Write-Host "  Validating the downward walk from cohort members' imports..." -ForegroundColor Gray
+            $walkFailures = [System.Collections.Generic.List[string]]::new()
+            $walkSamples = @(Get-JIMActivity -Id $preImport.activityId -ExecutionItems | Select-Object -First 3)
+            if ($walkSamples.Count -eq 0) {
+                throw "LeaverCohort downward walk: the pre-boundary Delta Import recorded no execution items to walk from"
+            }
+            foreach ($importItem in $walkSamples) {
+                $uidSearch = Invoke-LDAPSearch `
+                    -ContainerName $sourceConfig.ContainerName `
+                    -Server "localhost" `
+                    -Port $sourceConfig.LdapSearchPort `
+                    -Scheme $sourceConfig.LdapSearchScheme `
+                    -BaseDN $sourceConfig.UserContainer `
+                    -BindDN $sourceConfig.BindDN `
+                    -BindPassword $sourceConfig.BindPassword `
+                    -Filter "($($sourceConfig.ExternalIdAttr)=$($importItem.ExternalIdValue))" `
+                    -Attributes @("uid")
+                $uid = if ($uidSearch -match '(?m)^uid:\s*(.+)$') { $matches[1].Trim() } else { $null }
+                if (-not $uid -or -not $cohortUids.Contains($uid)) {
+                    $walkFailures.Add("import item $($importItem.Id) ($($importItem.DisplayName)) does not belong to a cohort member")
+                    continue
+                }
+
+                $label = "$uid's import"
+                $expectedGroups = @($verificationGroups | Where-Object { $groupBaselines[$_].CohortInGroup -contains $uid })
+                $rows = @(Get-JIMActivityExecutionItem -Id $importItem.Id -Consequences)
+
+                $synchronisations = @($rows | Where-Object { $_.Level -eq 1 -and $_.HopKind -eq 'NextSynchronisation' })
+                if ($synchronisations.Count -ne 1) {
+                    $walkFailures.Add("${label}: reached $($synchronisations.Count) Synchronisation cohort(s) at level 1, expected 1")
+                }
+
+                $removals = @($rows | Where-Object { $_.EdgeType -eq 'MetaverseObjectDeletionCausedReferenceRemoval' })
+                $removalCount = [int](($removals | Measure-Object -Property Count -Sum).Sum)
+                if (($verifyAllGroups -and $removalCount -ne $expectedGroups.Count) -or (-not $verifyAllGroups -and $removalCount -lt $expectedGroups.Count)) {
+                    $walkFailures.Add("${label}: the walk removed them from $removalCount Group(s); the baseline has them in $($expectedGroups.Count)")
+                }
+                elseif ($verifyAllGroups -and $removals.Count -eq 1) {
+                    # The cohort's members are the Groups themselves, paged by its key exactly as the portal pages them.
+                    $removedFrom = @(Get-JIMCausalCohortMember -ExecutionItemId $importItem.Id -CohortKey $removals[0].CohortKey -All)
+                    $memberNames = @($removedFrom | ForEach-Object { $_.DisplayName } | Sort-Object)
+                    $expectedNames = @($expectedGroups | Sort-Object)
+                    if (($memberNames -join '|') -ne ($expectedNames -join '|')) {
+                        $walkFailures.Add("${label}: the removal cohort names [$($memberNames -join ', ')]; the baseline has [$($expectedNames -join ', ')]")
+                    }
+
+                    # And back up again: what caused one of those removals must lead to this same import, so the two
+                    # directions describe one cascade rather than two that happen to agree in shape.
+                    if ($removedFrom.Count -gt 0) {
+                        $causeRows = @(Get-JIMActivityExecutionItem -Id $removedFrom[0].RunProfileExecutionItemId -Causes)
+                        $backToImport = @($causeRows | Where-Object {
+                            $_.SourceImportChangeType -and $_.ConnectedSystem -eq $sourceSystemName -and $_.Members -contains $importItem.DisplayName })
+                        if ($causeRows.Count -eq 0 -or -not ($causeRows | Where-Object { $_.Level -eq 1 -and $_.EdgeType -eq 'MetaverseObjectDeletionCausedReferenceRemoval' })) {
+                            $walkFailures.Add("${label}: walking up from $($removedFrom[0].DisplayName)'s removal did not reach the deletion that caused it")
+                        }
+                        elseif ($backToImport.Count -eq 0) {
+                            $walkFailures.Add("${label}: walking up from $($removedFrom[0].DisplayName)'s removal did not lead back to this import in $sourceSystemName")
+                        }
+                    }
+                }
+
+                $queueing = @($rows | Where-Object { $_.EdgeType -eq 'PendingExportQueueingCausedExportExecution' })
+                $accountDeletions = [int](($queueing | Where-Object { $_.ReasonCode -eq 'ExportDeleteStaged' } | Measure-Object -Property Count -Sum).Sum)
+                $groupExports = [int](($queueing | Where-Object { $_.ReasonCode -eq 'ExportUpdateStaged' } | Measure-Object -Property Count -Sum).Sum)
+                if ($accountDeletions -ne 1) {
+                    $walkFailures.Add("${label}: reached $accountDeletions account deletion export(s), expected 1")
+                }
+                if ($groupExports -ne $removalCount) {
+                    $walkFailures.Add("${label}: reached $groupExports Group export(s) for $removalCount removal(s)")
+                }
+
+                $confirmed = [int](($rows | Where-Object { $_.HopKind -eq 'Confirmation' -and $_.Ending -eq 'Confirmed' } | Measure-Object -Property Count -Sum).Sum)
+                if ($confirmed -ne $removalCount + 1) {
+                    $walkFailures.Add("${label}: $confirmed export(s) confirmed, expected $($removalCount + 1) (the account and each Group)")
+                }
+
+                $open = @($rows | Where-Object { $_.Ending -match '^(Waiting|NeedsAttention|DeletionScheduled|FurtherThanShown)' })
+                if ($open.Count -gt 0) {
+                    $walkFailures.Add("${label}: $($open.Count) branch(es) have not run to their end: $(($open | ForEach-Object { "$($_.HopKind) $($_.Ending)" }) -join '; ')")
+                }
+
+                Write-Host "    $label reached 1 Synchronisation, 1 account deletion and $removalCount Group removal(s), all confirmed, and leads back up from a removal" -ForegroundColor Gray
+            }
+            if ($walkFailures.Count -gt 0) {
+                foreach ($failure in $walkFailures) { Write-Host "    - $failure" -ForegroundColor Red }
+                throw "LeaverCohort downward walk failed: $($walkFailures.Count) failure(s). See details above."
+            }
+            Write-Host "    OK The walks reach every consequence of $($walkSamples.Count) cohort member(s)' imports, in both directions" -ForegroundColor Green
+
             Write-Host ""
             Write-Host "✓ LeaverCohort test completed successfully" -ForegroundColor Green
             Write-Host "  Reconciler-driven leaver deprovisioning fanned $actualTotalRemovals membership removals out to the Target directory" -ForegroundColor Gray

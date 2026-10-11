@@ -1,8 +1,8 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 merged as #2071; Phases 2a, 2b, 2c and 2d complete; Phase 2e next)
+- **Status:** Done (Phase 2-0 merged as #2071; Phases 2a to 2e delivered under #1811)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
-- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
+- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/done/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
 - **UI mock:** [Lineage Consequences](https://claude.ai/artifact/BrXDKc81EodFKcAhSvC9WH) (revision 3)
 - **Created:** 2026-10-11
@@ -124,7 +124,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 - OpenAPI generated with `scripts/Generate-OpenApiDoc.ps1` to catch route-binding and schema-depth failures before CI.
 - PowerShell: `Get-JIMActivityExecutionItem -Causes` and `-Consequences` (new parameter sets, flattened to one row per cohort with Level, Change, Count, Object, Connected System, Run, Ending), and `Get-JIMCausalCohortMember -ExecutionItemId -CohortKey [-All]` through `Invoke-JIMPagedFetch`. Pester tests on the requests built and the pipeline binding.
 
-### Phase 2e: Documentation, integration and close-out
+### Phase 2e: Documentation, integration and close-out ✅
 
 - `docs/configuration/activities.md`: a "What it went on to cause" section beside "Why it happened", the ending states, and Check again. `docs/powershell/activities.md`: the new parameters and cmdlet, with Output tables checked against the DTOs.
 - `CHANGELOG.md` ✨ entry.
@@ -135,6 +135,15 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 ### Phase ordering
 
 2-0 is its own layer and lands first. 2a then 2b are sequential. 2c and 2d both need 2b and can overlap. 2e needs all of them.
+
+## Delivery notes
+
+Agreed with the product owner at the runtime review of Phase 2c (2026-10-11), and recorded here because they depart from the mock:
+
+- The objects a cascade reaches are separate objects stacked in their side's column, not columns of their own. The Lineage keeps one column per side of the Metaverse so the canvas stays at most four columns wide however many Connected Systems a cascade reaches.
+- A Synchronisation's Disconnected outcome sits on the Metaverse Object, where that item's own Lineage places it, so one event never appears in two places depending on which item is opened.
+- An import that only confirmed an export ends with no further consequences rather than following the import-to-Synchronisation hop, which the approved mock's confirming-import entry point required and the first runtime pass showed was missing.
+- The documentation moved to its own Causality page: the Activities page was over its word budget, and the standard's remedy is a split rather than a trim.
 
 ## Success Criteria
 
