@@ -104,10 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 - 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
 - 🐛 Deleting a Metaverse Object now reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**; previously the deletion recorded nothing about those accounts, so one JIM no longer manages looked untouched. (#1811)
+- 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
 
 ### Performance
 
 - ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
+- ⚡ JIM now checks an LDAP directory for a generated value already in use with one search covering every attribute the value is bound for there (plus one of the Global Catalog for forest-wide attributes), rather than one search per attribute. (#2023)
 
 ## [0.16.0] - 2026-09-29
 
