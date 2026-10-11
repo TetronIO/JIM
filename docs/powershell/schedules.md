@@ -136,12 +136,12 @@ New-JIMSchedule [-Name] <String>
 | `TriggerType` | `String` | Yes | | The trigger mechanism: `Cron` or `Manual`. |
 | `PatternType` | `String` | No | `SpecificTimes` | The scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
 | `DaysOfWeek` | `Int32[]` | No | | Days the schedule runs. Values 0 (Sunday) through 6 (Saturday). |
-| `RunTimes` | `String[]` | No | | Specific times to run, in 24-hour format (e.g. `"06:00"`, `"12:00"`). Used with `SpecificTimes` pattern. |
-| `IntervalValue` | `Int32` | No | | The interval frequency, from 1 to 59. Used with `Interval` pattern. |
+| `RunTimes` | `String[]` | No | | Specific times to run, in 24-hour format (e.g. `"06:00"`, `"12:00"`). Used with `SpecificTimes` pattern. Every time must be at the same minute past the hour (`"06:30"` and `"18:30"`, not `"06:00"` and `"18:30"`), because a Schedule holds one cron expression; use a `Custom` pattern for times that differ. |
+| `IntervalValue` | `Int32` | No | | The interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. Used with `Interval` pattern. |
 | `IntervalUnit` | `String` | No | `Hours` | The interval unit: `Hours` or `Minutes`. |
-| `IntervalWindowStart` | `String` | No | | Start of the interval window in 24-hour format (e.g. `"08:00"`). |
+| `IntervalWindowStart` | `String` | No | | Start of the interval window in 24-hour format (e.g. `"08:00"`). Applies to an hourly interval; give `IntervalWindowEnd` with it. |
 | `IntervalWindowEnd` | `String` | No | | End of the interval window in 24-hour format (e.g. `"18:00"`). |
-| `CronExpression` | `String` | No | | A cron expression for `Custom` pattern or `Cron` trigger type (e.g. `"0 6 * * 1-5"`). |
+| `CronExpression` | `String` | No | | The cron expression for a `Custom` pattern (e.g. `"0 6 * * 1-5"`). For `SpecificTimes` and `Interval`, JIM builds the expression from the pattern, exactly as the Schedule editor in the portal does. |
 | `Enabled` | `Switch` | No | | Enables the schedule immediately upon creation. |
 | `OnStepFailure` | `String` | No | `Stop` | What the Schedule does when a step fails: `Stop` or `Continue`. Steps follow it unless they have a setting of their own. See [When a step fails](#when-a-step-fails). |
 | `ChangeReason` | `String` | No | | A reason for the change, recorded in the Schedule's change history. |
@@ -238,11 +238,11 @@ Set-JIMSchedule -Id <Guid>
 | `PatternType` | `String` | No | No | Updated scheduling pattern: `SpecificTimes`, `Interval`, or `Custom`. |
 | `DaysOfWeek` | `Int32[]` | No | No | Updated days of the week (0-6). |
 | `RunTimes` | `String[]` | No | No | Updated run times in 24-hour format. |
-| `IntervalValue` | `Int32` | No | No | Updated interval frequency (1-59). |
+| `IntervalValue` | `Int32` | No | No | Updated interval frequency: 1 to 23 for `Hours`, 1 to 59 for `Minutes`. |
 | `IntervalUnit` | `String` | No | No | Updated interval unit: `Hours` or `Minutes`. |
 | `IntervalWindowStart` | `String` | No | No | Updated interval window start time. |
 | `IntervalWindowEnd` | `String` | No | No | Updated interval window end time. |
-| `CronExpression` | `String` | No | No | Updated cron expression. |
+| `CronExpression` | `String` | No | No | Updated cron expression, for a `Custom` pattern. For `SpecificTimes` and `Interval`, JIM rebuilds the expression from the pattern, so changing `RunTimes` or the interval retimes the Schedule. |
 | `OnStepFailure` | `String` | No | No | What the Schedule does when a step fails: `Stop` or `Continue`. Omit to leave it unchanged. A built-in Schedule, such as Temporal Scope Reconciliation, always stops; JIM refuses a change to it. See [When a step fails](#when-a-step-fails). |
 | `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. Give each step its failure setting as `OnFailure`: a step object that carries `OnFailure` ignores its `ContinueOnFailure`, so to change one step's setting, use [`Set-JIMScheduleStep`](#set-jimschedulestep) or change the step's `OnFailure`. |
 | `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
