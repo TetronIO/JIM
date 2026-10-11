@@ -1,6 +1,6 @@
 # Public Documentation Standard
 
-- **Status:** Doing (Phase 0 complete: factual corrections, and link and example checks at pull request time)
+- **Status:** Doing (Phases 0 and 1 complete: factual corrections, link and example checks, the standard, and the conformance check with its baseline)
 - **Created:** 2026-10-11
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
@@ -113,7 +113,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 12. One PowerShell orchestrator (proposed `scripts/Test-DocsConformance.ps1`) runs every check, locally and in CI, inside the existing required `changelog-lint` job so that no new required status check is needed. Each rule has Pester tests with passing and failing fixtures.
 13. Rules are tiered:
-    - **Blocking:** internal links and anchors; built-site links (including the Scalar reference); front matter parses and has the required keys; one H1 and no skipped levels; fenced code declares a language; every page is in the nav; no stub pages in the nav; no em dashes or American spellings; cmdlet parameter aliases (exists today) and unknown cmdlets or parameters in examples; REST routes in examples exist in the OpenAPI document; coverage checks (below); issue numbers on customer pages; every docs URL in product source resolves to a page and anchor; an over-budget page does not grow (requirement 29); a tutorial names an existing scenario and its portal labels exist (requirements 34 and 35).
+    - **Blocking:** internal links and anchors; built-site links (including the Scalar reference); front matter parses and has the required keys; one H1 and no skipped levels; fenced code declares a language; every page is in the nav; no stub pages in the nav; no em dashes or American spellings; cmdlet parameter aliases (exists today) and unknown cmdlets or parameters in examples; REST routes in examples exist in the OpenAPI document; coverage checks (below); issue numbers on customer pages; every docs URL in product source resolves to a page and anchor; an over-budget page does not grow (requirement 29, from Phase 5); a tutorial names an existing scenario and its portal labels exist (requirements 34 and 35).
     - **Ratcheted** (blocking for new occurrences, baselined for existing ones): Title Case domain nouns, required front matter keys, title = H1 = nav label, page-type shape, Mermaid text alternatives, glossary coverage.
     - **Warnings** (annotations, never fail): abbreviations in prose, time-relative words, future promises, minimisers ("simply", "just"), Latin abbreviations, size budget, opening paragraph. A warning is promoted to blocking once its baseline is zero and it has run a release without a false positive. On a priority page every warning is blocking (requirement 39).
     - **Rubric only** (advisory review plus human): audience fit, voice, implementation nouns, "what survives", failure plus remedy, Diátaxis purity, one home per fact, claims about source.
@@ -150,7 +150,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 27. **Integrate, don't append.** A change to documented behaviour rewrites the page so it reads as though the new behaviour had always been true. Superseded sentences are replaced or deleted, never qualified ("previously ... now ..."). New material goes where the page type puts it: a new task under the tasks, a new setting in the settings table, a new failure in troubleshooting. Release history goes in the changelog and `administration/upgrading.md`, and nowhere else.
 28. **Find what is now wrong before writing what is new.** Before adding anything, the author searches `docs/` for the statements the change makes false and rewrites them (the existing "Document shipped behaviour" rule, given an ID). The coupling check proves *a* page changed; this rule is about the *right* page.
-29. **An over-budget page cannot grow.** A pull request may not increase the word count of a page that was over its size budget on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch rather than a baseline file, so trimming a large page never needs a baseline update. An exception marker with a reason allows an urgent safety note.
+29. **An over-budget page cannot grow.** A pull request may not increase the word count of a page that was over its size budget on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch rather than a baseline file, so trimming a large page never needs a baseline update. No exception marker can excuse it: a marker would excuse nothing once the growth merged, and then fail every later pull request. The check warns until the pages already over budget are split, and blocks from Phase 5 (decision 9).
 30. **Prompted where the change is made.** The pull request template's Documentation section asks which existing statements the change made wrong and where new material went. The advisory review reads the docs diff for appended release-note voice and for superseded text left standing beside its replacement.
 
 #### The tested tutorial
@@ -194,7 +194,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 **Given**: an author adds `docs/configuration/generated-values.md` with no `type:` in its front matter
 **When**: the pull request runs `changelog-lint`
-**Then**: it fails with `STR-1: front matter has no 'type' (docs/configuration/generated-values.md:1)` and a link to the rule; new files have no baseline allowance
+**Then**: it fails with `STR-2: front matter has no 'type' (docs/configuration/generated-values.md:1)` and a link to the rule; new files have no baseline allowance
 
 ### Scenario 2: Editing a large legacy page without adding debt
 
@@ -282,7 +282,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 ## Decisions
 
-Decided by the product owner on 2026-10-11, each as recommended in the draft.
+Decided by the product owner on 2026-10-11: the first eight as recommended in the draft, the ninth after the conformance check first ran against real pull requests.
 
 1. **The specification lives in `engineering/DOCUMENTATION_STANDARD.md`.** Its readers are JIM's authors, human and Claude, not customers. A public page under `docs/` would only help outside contributors, and would itself have to conform.
 2. **Tooling: lychee is approved; Vale and markdownlint-cli2 are not adopted.** lychee (Apache-2.0 or MIT; a single static binary, pinned by version and SHA-256) checks links in the built site, including the one broken link MkDocs cannot see. Vale was rejected because the mechanical style rules it would enforce are already 99% met, its Markdown parser skips indented content after a blank line (every admonition body, about 109 lines in 20 files, exactly where warnings live), and the stock style packages raised 38,998 alerts that mostly contradict JIM's own conventions; PowerShell rules driven by the vocabulary file cover the same ground without the blind spot. markdownlint-cli2 was rejected for its 81 npm packages and high false-positive rate on MkDocs syntax.
@@ -292,6 +292,7 @@ Decided by the product owner on 2026-10-11, each as recommended in the draft.
 6. **The generator's end of support is its own issue,** [#2058](https://github.com/TetronIO/JIM/issues/2058), filed 2026-10-11.
 7. **The priority pages are the 15 in requirement 36,** chosen along the reader's journey from evaluating to recovering. The list stays short on purpose: every page on it costs a re-validation each release, so a page belongs on it only if an administrator who cannot use it would stall or lose trust in JIM.
 8. **The tutorial synchronises an HR file in, through the Metaverse, out to a second file,** using the File Connector only. It needs no directory, works air-gapped and on any evaluation install, and is the cheapest to keep passing. A directory target (Active Directory or LDAP) is what most customers actually want, but it cannot be assumed on an evaluation install; it is better as a second, how-to-style guide once the first tutorial exists.
+9. **An over-budget page growing warns until the over-budget pages are split, then blocks.** Eleven pages were over budget when the check first ran, including the Synchronisation Rules, Connected Systems and PowerShell pages that most features document into; replayed against `main`, a blocking check failed the first Generated Value Forms pull request on both Synchronisation Rules pages. Blocking before those pages are split would fail most feature pull requests, or push authors to cut useful text to make room. The pages are split as the priority wave and folder migrations reach them, and requirement 29 blocks from Phase 5.
 
 ## Acceptance Criteria
 

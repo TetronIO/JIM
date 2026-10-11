@@ -2,7 +2,7 @@
 title: Deployment
 ---
 
-# Deployment Guide
+# Deployment
 
 This guide covers deploying JIM to a production environment, with Docker or Podman, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance. For what is particular to Podman, including rootless installations, see [Running on Podman](podman.md).
 

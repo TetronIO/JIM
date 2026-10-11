@@ -1,4 +1,4 @@
-# Configuration changes
+# Configuration Changes
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
 

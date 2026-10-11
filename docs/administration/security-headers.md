@@ -27,7 +27,7 @@ JIM does not overwrite it; the more specific value wins.
 JIM's Content Security Policy (CSP) is currently in **stage one**: a restrictive, same-origin-only policy
 compatible with Blazor Server and MudBlazor as they stand today.
 
-```
+```text
 default-src 'self';
 script-src 'self' 'unsafe-inline';
 style-src 'self' 'unsafe-inline';

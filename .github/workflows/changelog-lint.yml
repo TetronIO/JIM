@@ -32,8 +32,14 @@ name: changelog-lint
 #      nothing checked the docs before merge, and a broken anchor rendered as a
 #      working link that went nowhere - see Test-DocsSite.ps1 (#1454). It
 #      short-circuits unless the PR touched a docs source.
+#   7. Docs conformance: every page is checked against the mechanical rules of
+#      engineering/DOCUMENTATION_STANDARD.md (front matter, one name per page,
+#      heading structure, code languages, stubs, page shape, accessibility, and
+#      no growth on an over-budget page), with a shrink-only baseline so
+#      existing debt can only fall - see Test-DocsConformance.ps1 (#1454). It
+#      reads Markdown sources only, so it is cheap enough to run on every PR.
 #
-# All six run in this single job so they are enforced via the existing
+# All seven run in this single job so they are enforced via the existing
 # required "changelog-lint" status, without registering further required checks
 # in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
@@ -75,6 +81,17 @@ jobs:
           pwsh -File ./scripts/Lint-DocsCoupling.ps1
       - name: Lint PowerShell doc examples for parameter alias misuse
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
+      - name: Check docs conformance with the documentation standard
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Warnings are listed (and annotated) only for the pages this PR changed;
+          # errors always are. BASE_SHA is what an over-budget page's size is
+          # compared against (MNT-3).
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          export CHANGED_FILES
+          pwsh -File ./scripts/Test-DocsConformance.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
       - name: Check concept diagrams (label cuts and lightbox framing)

@@ -1,5 +1,5 @@
 ---
-title: SSO Setup - AD FS
+title: "SSO Setup: AD FS"
 ---
 
 # SSO Setup: AD FS
