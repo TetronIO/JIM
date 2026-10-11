@@ -228,9 +228,11 @@ jobs:
   # A job here rather than a workflow of its own, because the jim-prerelease runner group admits exactly this file. It
   # cannot hold up a release: the gate reads the jim-pre-release commit status, which the job above has already posted.
   #
-  # The host, once (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries (`npx playwright install-deps
-  # chromium`, as root); the 20+ GB the Scale100k50Groups template needs; the Scale100k50Groups OpenLDAP snapshot, which
-  # the first run builds and keeps. The jim-automation app needs Contents and Pull requests write on junctional.io.
+  # The host, once (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries, from
+  # scripts/toolchain/install-playwright-for-runner.sh (re-run it with the new pin when PLAYWRIGHT_MCP_VERSION in
+  # .devcontainer/setup.sh moves); the 20+ GB the Scale100k50Groups template needs; the Scale100k50Groups OpenLDAP
+  # snapshot, which the first run builds and keeps. The jim-automation app needs Contents and Pull requests write on
+  # junctional.io.
   jim-screenshots:
     name: jim-screenshots
     needs: jim-pre-release
