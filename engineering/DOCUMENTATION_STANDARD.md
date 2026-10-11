@@ -70,7 +70,7 @@ A rule that is wrong for one place is excused in that place, with a reason the n
 <!-- conformance: allow-page STR-2 "typed in the folder migration" -->
 ```
 
-`allow` covers the marker's own line and the next non-blank line; `allow-page` covers the whole page. A marker with no reason, naming an unknown rule, or suppressing nothing fails (EXC-1), so exceptions cannot outlive their cause. EXC-1 itself cannot be suppressed.
+`allow` covers the marker's own line and the next non-blank line; `allow-page` covers the whole page. A marker with no reason, naming an unknown rule, or suppressing nothing fails (EXC-1), so exceptions cannot outlive their cause. Neither EXC-1 nor MNT-3 can be suppressed: MNT-3 compares with the base branch, so a marker excusing growth would suppress nothing once the growth merged, and fail every later pull request.
 
 ### Conformant pages, priority pages, promotion
 

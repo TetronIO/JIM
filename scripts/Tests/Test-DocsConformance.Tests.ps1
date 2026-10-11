@@ -395,6 +395,17 @@ Describe 'Test-DocsConformance: MNT-3 an over-budget page cannot grow' {
         $crossed = New-GitFixture -BasePage (New-Page -Body (('word ' * 10) + "`n")) -HeadPage (New-Page -Body (('word ' * 90) + "`n"))
         (Invoke-Conformance -Fixture $crossed -ExtraArgs @('-BaseRef', $crossed.BaseSha)).ExitCode | Should -Be 0
     }
+
+    It 'refuses an exception marker for MNT-3, which would outlive the change it excused' {
+        # MNT-3 compares with the base branch, so once the growth merges the marker suppresses
+        # nothing, and every later pull request would fail on it.
+        $marker = "<!-- conformance: allow-page MNT-3 `"the feature needs the room`" -->`n"
+        $f = New-GitFixture -BasePage (New-Page -Body (('word ' * 80) + "`n")) -HeadPage (New-Page -Body ($marker + ('word ' * 95) + "`n"))
+        $r = Invoke-Conformance -Fixture $f -ExtraArgs @('-BaseRef', $f.BaseSha)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'MNT-3.*grew from \d+ to \d+ words'
+        $r.Output | Should -Match 'EXC-1.*MNT-3.*cannot be excused'
+    }
 }
 
 Describe 'Test-DocsConformance: accessibility (A11Y-1, A11Y-2)' {

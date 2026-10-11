@@ -55,6 +55,9 @@
       <!-- conformance: allow-page STR-2 "typed in the folder migration" -->
           suppresses the named rule(s) for the whole page
 
+    No marker can excuse EXC-1, or MNT-3: a marker for growth would suppress
+    nothing once the growth merged, and fail every later pull request.
+
     In GitHub Actions, errors and listed warnings are also written as
     annotations on the pull request diff, and a per-rule table is appended to
     the job summary. Warnings are listed only for pages the pull request
@@ -131,6 +134,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'EXC-1')
+# Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
+# branch, so once the growth it excused merges, its marker suppresses nothing and fails every
+# later pull request.
+$script:UnmarkableRules = @('EXC-1', 'MNT-3')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
 
@@ -793,7 +800,7 @@ foreach ($file in $files) {
     $kept = foreach ($finding in $raw) {
         $suppressed = $false
         foreach ($m in $page.Markers) {
-            if ($finding.Rule -notin $m.Rules -or [string]::IsNullOrWhiteSpace($m.Reason)) { continue }
+            if ($finding.Rule -notin $m.Rules -or $finding.Rule -in $script:UnmarkableRules -or [string]::IsNullOrWhiteSpace($m.Reason)) { continue }
             if ($m.Kind -eq 'allow-page' -or $finding.Line -eq $m.Line -or $finding.Line -eq $m.TargetLine) {
                 $m.Used = $true
                 $suppressed = $true
@@ -807,7 +814,11 @@ foreach ($file in $files) {
         }
         foreach ($m in $page.Markers) {
             $unknown = @($m.Rules | Where-Object { $_ -notin $script:KnownRules -or $_ -eq 'EXC-1' })
-            if ($unknown) {
+            $unmarkable = @($m.Rules | Where-Object { $_ -in $script:UnmarkableRules -and $_ -ne 'EXC-1' })
+            if ($unmarkable) {
+                New-Finding 'EXC-1' $m.Line "the exception marker names $($unmarkable -join ', '), which cannot be excused by a marker; split the page, or rewrite what the change superseded so it does not grow."
+            }
+            elseif ($unknown) {
                 New-Finding 'EXC-1' $m.Line "the exception marker names '$($unknown -join "', '")', which is not a rule it can suppress."
             }
             elseif ([string]::IsNullOrWhiteSpace($m.Reason)) {
