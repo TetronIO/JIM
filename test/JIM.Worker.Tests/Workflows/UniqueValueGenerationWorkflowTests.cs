@@ -518,6 +518,33 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task FullSync_SequenceAcrossRunsThatEachIssueOneNumber_IssuesConsecutiveNumbersAsync()
+    {
+        // Each run reserves a block of numbers; what it does not draw is handed back when it ends (#2044), so joiners
+        // arriving one per run get consecutive numbers rather than one a block apart.
+        var ctx = await SetUpSequenceGenerationAsync(sequenceStart: 100);
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        await SeedHrCsoAsync(ctx, "Ada", "Lovelace", "E2");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        await SeedHrCsoAsync(ctx, "Grace", "Hopper", "E3");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        var numbers = SyncRepo.MetaverseObjects.Values
+            .Select(m => m.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId)?.IntValue)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .OrderBy(v => v)
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(numbers, Is.EqualTo(new[] { 100, 101, 102 }));
+            Assert.That(SyncRepo.GeneratedValueSequences.Values.Single().NextValue, Is.EqualTo(103), "the counter stands at the next number to issue");
+        }
+    }
+
     #endregion
 
     #region No adoption: a value already held elsewhere is never taken over (product-owner decisions)

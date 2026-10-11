@@ -60,6 +60,23 @@ public class UniqueValueCandidateTests
         Assert.That(result, Is.EqualTo("joe.bloggs"));
     }
 
+    [TestCase("EMP", "-", "EMP-", "")]
+    [TestCase("joe.bloggs@example.com", ".", "joe.bloggs.", "@example.com")]
+    [TestCase("a@b@c", null, "a", "@b@c")]
+    [TestCase(null, "-", "", "")]
+    [TestCase("", "-", "", "")]
+    public void SplitPlacement_ReturnsTheTextPlacePutsEitherSideOfTheToken(string? baseValue, string? separator, string prefix, string suffix)
+    {
+        var split = UniqueValueCandidates.SplitPlacement(baseValue, separator);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(split, Is.EqualTo((prefix, suffix)));
+            Assert.That(UniqueValueCandidates.Place(baseValue, "42", separator), Is.EqualTo(split.Prefix + "42" + split.Suffix),
+                "a held value is read back with the same split Place wrote it with");
+        }
+    }
+
     // ---- Only-if-taken candidate sequencing (FR 23) ----
 
     [Test]

@@ -504,6 +504,152 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(highest, Is.Null);
     }
 
+    // ---- Held sequence runs (#2031) ----
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_TextRunAcrossEveryStore_ReturnsWhereItEndsAndWhoHoldsEachNumberAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondMvoId = await CreateSecondMvoAsync(estate);
+        await JoinCsoToMvoAsync(estate);
+
+        await AddMvoStringValueAsync(estate.MvoId, estate.MvTextAttributeId, "EMP-001000");
+        await AddMvoStringValueAsync(secondMvoId, estate.MvTextAttributeId, "emp-001001");
+        await AddMvoStringValueAsync(secondMvoId, estate.MvTextAttributeId, "EMP-1006"); // Not how the sequence writes 1006.
+        await using (var ctx = NewContext())
+        {
+            await NewSyncRepository(ctx).CreateGeneratedValueAssignmentsAsync([ImportAssignment(estate, "EMP-001002")]);
+            ctx.RetiredGeneratedValues.Add(new RetiredGeneratedValue
+            {
+                MetaverseAttributeId = estate.MvTextAttributeId, Value = "EMP-001003", NormalisedValue = "emp-001003",
+                RetiredAt = DateTime.UtcNow, Reason = RetiredGeneratedValueReason.ObjectDeleted
+            });
+            await ctx.SaveChangesAsync();
+        }
+        await AddCsoTextValueAsync(estate.CsoId, estate.CsTextAttributeId, "Emp-001004");
+
+        await using var readCtx = NewContext();
+        var run = await NewSyncRepository(readCtx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId,
+            From = 1000,
+            Increment = 1,
+            NumericTarget = false,
+            Prefix = "emp-",
+            FixedWidth = 6,
+            ConnectorSpaceAttributeIds = [estate.CsTextAttributeId]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1005), "1000 to 1004 are each held somewhere; 1006 is not written as the sequence writes it");
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(1000, SequenceNumberHolderKind.AttributeValue, estate.MvoId, null),
+                new SequenceNumberHolder(1001, SequenceNumberHolderKind.AttributeValue, secondMvoId, null),
+                new SequenceNumberHolder(1002, SequenceNumberHolderKind.Assignment, estate.MvoId, null),
+                new SequenceNumberHolder(1003, SequenceNumberHolderKind.Retired, null, null),
+                new SequenceNumberHolder(1004, SequenceNumberHolderKind.ConnectorSpace, estate.CsoId, estate.MvoId)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_FromIsFree_ReturnsItWithNoHoldersAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await AddMvoStringValueAsync(estate.MvoId, estate.MvTextAttributeId, "EMP-001001");
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId, From = 1000, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1000));
+            Assert.That(run.Holders, Is.Empty, "1001 is held, but it is above the first free number, so it is no part of a run starting at 1000");
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_NumericTarget_ReadsIntAndLongValuesInTheSequencesOwnStepAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondMvoId = await CreateSecondMvoAsync(estate);
+        await AddMvoNumberValueAsync(estate.MvoId, estate.MvNumberAttributeId, intValue: 10);
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, longValue: 20);
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, intValue: 25); // Not a step of 10 from 10.
+        await AddMvoNumberValueAsync(secondMvoId, estate.MvNumberAttributeId, longValue: 30);
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvNumberAttributeId, From = 10, Increment = 10, NumericTarget = true
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(40));
+            Assert.That(run.Holders.Select(h => h.Number), Is.EqualTo(new long[] { 10, 20, 30 }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_RunLongerThanTheIndexedWindow_FindsWhereItEndsAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var runLength = SyncRepository.SequenceHeldRunWindow + 5;
+        await using (var seedCtx = NewContext())
+        {
+            foreach (var n in Enumerable.Range(1, runLength))
+            {
+                var value = new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.MvTextAttributeId, StringValue = $"EMP-{n:000000}" };
+                seedCtx.MetaverseObjectAttributeValues.Add(value);
+                seedCtx.Entry(value).Property("MetaverseObjectId").CurrentValue = estate.MvoId;
+            }
+            await seedCtx.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = estate.MvTextAttributeId, From = 1, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(runLength + 1), "the first window is held from end to end, so every value is read to find the end");
+            Assert.That(run.Holders, Has.Count.EqualTo(runLength));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_ExportMode_ReadsTheConnectedSystemAttributesValuesAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var secondCsoId = await CreateCsoAsync(estate, ConnectedSystemObjectStatus.Normal);
+        await AddCsoTextValueAsync(estate.CsoId, estate.CsTextAttributeId, "u100");
+        await AddCsoTextValueAsync(secondCsoId, estate.CsTextAttributeId, "U101");
+
+        await using var ctx = NewContext();
+        var run = await NewSyncRepository(ctx).GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            ConnectedSystemObjectTypeAttributeId = estate.CsTextAttributeId, From = 100, Increment = 1, NumericTarget = false, Prefix = "u"
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(102));
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(100, SequenceNumberHolderKind.AttributeValue, estate.CsoId, null),
+                new SequenceNumberHolder(101, SequenceNumberHolderKind.AttributeValue, secondCsoId, null)
+            }));
+        }
+    }
+
     // ---- Block reservation ----
 
     [Test]
@@ -514,7 +660,7 @@ public class GeneratedValueRepositoryDatabaseTests
         await using var ctx = NewContext();
         var repo = NewSyncRepository(ctx);
 
-        var first = await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 500, count: 10, increment: 1);
+        var first = (await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 500, count: 10, increment: 1)).First;
         Assert.That(first, Is.EqualTo(500));
 
         var sequence = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
@@ -531,7 +677,7 @@ public class GeneratedValueRepositoryDatabaseTests
 
         // The counter is now at 520; a reservation with a far lower floor must still continue from 520.
         await using var ctx2 = NewContext();
-        var next = await NewSyncRepository(ctx2).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 1, increment: 1);
+        var next = (await NewSyncRepository(ctx2).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 1, increment: 1)).First;
         Assert.That(next, Is.EqualTo(520), "the counter only ever moves forward (plan decision 3)");
     }
 
@@ -551,8 +697,8 @@ public class GeneratedValueRepositoryDatabaseTests
         var taskB = repoB.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 25, increment: 1);
         await Task.WhenAll(taskA, taskB);
 
-        var firstA = taskA.Result;
-        var firstB = taskB.Result;
+        var firstA = taskA.Result.First;
+        var firstB = taskB.Result.First;
 
         var rangeA = Enumerable.Range(0, 25).Select(i => firstA + i).ToHashSet();
         var rangeB = Enumerable.Range(0, 25).Select(i => firstB + i).ToHashSet();
@@ -574,6 +720,103 @@ public class GeneratedValueRepositoryDatabaseTests
 
         var updated = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
         Assert.That(updated?.AssignedCount, Is.EqualTo(4));
+    }
+
+    // ---- Handing back unused numbers (#2044) ----
+
+    [Test]
+    public async Task ReserveGeneratedValueSequenceBlockAsync_ReportsTheCounterAndItsLastMoveAfterReservingAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 5, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 100, estate.ImportMappingId);
+
+        await using var readCtx = NewContext();
+        var repo = NewSyncRepository(readCtx);
+        var block = await repo.ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 10, increment: 1);
+        var unmoved = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var neverMoved = await repo.ReserveGeneratedValueSequenceBlockAsync(unmoved.MvNumberAttributeId, null, floor: 1, count: 10, increment: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(block.First, Is.EqualTo(100));
+            Assert.That(block.CounterAfter, Is.EqualTo(110));
+            Assert.That(block.CounterMovedStamp, Is.Not.Null, "the raise stamped the counter's last move");
+            Assert.That(neverMoved.CounterMovedStamp, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingMovedTheCounter_MovesItBackWithoutStampingAMoveAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 5, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 100, estate.ImportMappingId);
+
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        DateTime? movedAtBefore;
+        await using (var ctx = NewContext())
+            movedAtBefore = (await NewSyncRepository(ctx).GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.LastMovedAt;
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 103);
+        var sequence = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.True);
+            Assert.That(sequence!.NextValue, Is.EqualTo(103));
+            Assert.That(sequence.LastMovedAt, Is.EqualTo(movedAtBefore), "handing back is not an administrator move");
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AnotherReservationSince_LeavesTheCounterAloneAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False);
+            Assert.That((await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.NextValue, Is.EqualTo(201));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AdministratorMovedTheCounterSinceEvenBackToTheSamePlace_LeavesItAloneAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        GeneratedValueSequenceBlock block;
+        await using (var ctx = NewContext())
+            block = await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 100, increment: 1);
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ResetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null, newValue: 101, estate.ImportMappingId);
+
+        await using var handBackCtx = NewContext();
+        var repo = NewSyncRepository(handBackCtx);
+        var returned = await repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(estate.MvNumberAttributeId, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False, "the counter reads 101 as it did, but an administrator put it there");
+            Assert.That((await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null))!.NextValue, Is.EqualTo(101));
+        }
     }
 
     // ---- Save-time counter moves (Phase 3, #242) ----

@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.InMemoryData.Tests;
@@ -330,7 +331,7 @@ public class SyncRepositoryGeneratedValueTests
     [Test]
     public async Task ReserveGeneratedValueSequenceBlockAsync_FirstReservation_SeedsAtFloorAndReturnsItAsync()
     {
-        var first = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1);
+        var first = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1)).First;
 
         Assert.That(first, Is.EqualTo(100));
 
@@ -342,7 +343,7 @@ public class SyncRepositoryGeneratedValueTests
     public async Task ReserveGeneratedValueSequenceBlockAsync_SecondReservation_ContinuesFromTheCounterAsync()
     {
         await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 5, increment: 1);
-        var second = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 3, increment: 1);
+        var second = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 3, increment: 1)).First;
 
         Assert.That(second, Is.EqualTo(105));
     }
@@ -354,7 +355,7 @@ public class SyncRepositoryGeneratedValueTests
 
         // The counter is now at 110; a reservation with a lower floor must still continue from 110, not drop
         // back to the floor (plan decision 3: the counter only ever moves forward).
-        var next = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 1, increment: 1);
+        var next = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 1, increment: 1)).First;
 
         Assert.That(next, Is.EqualTo(110));
     }
@@ -362,10 +363,10 @@ public class SyncRepositoryGeneratedValueTests
     [Test]
     public async Task ReserveGeneratedValueSequenceBlockAsync_HonoursIncrement_ReturnedBlockStepsByIncrementAsync()
     {
-        var first = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 4, increment: 10);
+        var first = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 4, increment: 10)).First;
         Assert.That(first, Is.EqualTo(0));
 
-        var second = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 1, increment: 10);
+        var second = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 0, count: 1, increment: 10)).First;
         Assert.That(second, Is.EqualTo(40));
     }
 
@@ -375,7 +376,7 @@ public class SyncRepositoryGeneratedValueTests
         var results = new long[20];
         var tasks = Enumerable.Range(0, 20).Select(async i =>
         {
-            results[i] = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+            results[i] = (await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1)).First;
         });
 
         await Task.WhenAll(tasks);
@@ -460,6 +461,148 @@ public class SyncRepositoryGeneratedValueTests
         Assert.That(result, Is.EqualTo(150));
         var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
         Assert.That(sequence?.NextValue, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ReserveGeneratedValueSequenceBlockAsync_ReportsTheCounterAndItsLastMoveAfterReservingAsync()
+    {
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+        await _repo.RaiseGeneratedValueSequenceIfHigherAsync(1, null, newStart: 100, syncRuleMappingId: 7);
+
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 10, increment: 1);
+        var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(block.First, Is.EqualTo(100));
+            Assert.That(block.CounterAfter, Is.EqualTo(110));
+            Assert.That(block.CounterMovedStamp, Is.EqualTo(sequence!.LastMovedAt!.Value.Ticks));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingMovedTheCounter_MovesItBackAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.True);
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(4));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AnotherReservationSince_LeavesTheCounterAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False);
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(201));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_AdministratorMovedTheCounterSinceEvenBackToTheSamePlace_LeavesItAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 100, increment: 1);
+        await _repo.ResetGeneratedValueSequenceAsync(1, null, newValue: 101, syncRuleMappingId: 7);
+
+        var returned = await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: 4);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.False, "the counter reads 101 as it did, but an administrator put it there");
+            Assert.That((await _repo.GetGeneratedValueSequenceAsync(1, null))!.NextValue, Is.EqualTo(101));
+        }
+    }
+
+    [Test]
+    public async Task ReturnUnusedGeneratedValueSequenceNumbersAsync_NothingUndrawn_LeavesTheCounterAloneAsync()
+    {
+        var block = await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+
+        Assert.That(await _repo.ReturnUnusedGeneratedValueSequenceNumbersAsync(1, null, block, firstUnused: block.CounterAfter), Is.False);
+    }
+
+    #endregion
+
+    #region GetSequenceHeldRunAsync (#2031)
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_TextRunAcrossEveryStore_ReturnsWhereItEndsAndWhoHoldsEachNumberAsync()
+    {
+        var ownerId = SeedMvoWithStringValue(attributeId: 1, value: "EMP-001000");
+        var otherId = SeedMvoWithStringValue(attributeId: 1, value: "emp-001001");
+        SeedMvoWithStringValue(attributeId: 1, value: "EMP-1006"); // Not how the sequence writes 1006.
+        _repo.SeedGeneratedValueAssignment(NewMetaverseAssignment(1, ownerId, "EMP-001002"));
+        _repo.SeedRetiredGeneratedValue(new RetiredGeneratedValue
+        {
+            MetaverseAttributeId = 1, Value = "EMP-001003", NormalisedValue = "emp-001003", RetiredAt = DateTime.UtcNow, Reason = RetiredGeneratedValueReason.ObjectDeleted
+        });
+        var account = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = ownerId,
+            AttributeValues = [new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = 7, StringValue = "Emp-001004" }]
+        };
+        _repo.SeedConnectedSystemObject(account);
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery
+        {
+            MetaverseAttributeId = 1, From = 1000, Increment = 1, NumericTarget = false, Prefix = "emp-", FixedWidth = 6, ConnectorSpaceAttributeIds = [7]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1005));
+            Assert.That(run.Holders, Is.EquivalentTo(new[]
+            {
+                new SequenceNumberHolder(1000, SequenceNumberHolderKind.AttributeValue, ownerId, null),
+                new SequenceNumberHolder(1001, SequenceNumberHolderKind.AttributeValue, otherId, null),
+                new SequenceNumberHolder(1002, SequenceNumberHolderKind.Assignment, ownerId, null),
+                new SequenceNumberHolder(1003, SequenceNumberHolderKind.Retired, null, null),
+                new SequenceNumberHolder(1004, SequenceNumberHolderKind.ConnectorSpace, account.Id, ownerId)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_NumericTarget_ReadsIntAndLongValuesInTheSequencesOwnStepAsync()
+    {
+        SeedMvoWithIntValue(attributeId: 2, value: 10);
+        SeedMvoWithLongValue(attributeId: 2, value: 20);
+        SeedMvoWithIntValue(attributeId: 2, value: 25); // Not a step of 10 from 10.
+        SeedMvoWithLongValue(attributeId: 2, value: 30);
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery { MetaverseAttributeId = 2, From = 10, Increment = 10, NumericTarget = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(40));
+            Assert.That(run.Holders.Select(h => h.Number), Is.EqualTo(new long[] { 10, 20, 30 }));
+        }
+    }
+
+    [Test]
+    public async Task GetSequenceHeldRunAsync_FromIsFree_ReturnsItWithNoHoldersAsync()
+    {
+        SeedMvoWithStringValue(attributeId: 3, value: "1001");
+
+        var run = await _repo.GetSequenceHeldRunAsync(new SequenceSkipQuery { MetaverseAttributeId = 3, From = 1000, Increment = 1, NumericTarget = false });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.FirstFreeNumber, Is.EqualTo(1000));
+            Assert.That(run.Holders, Is.Empty);
+        }
     }
 
     #endregion

@@ -81,6 +81,13 @@ internal sealed class CollisionRemediationRun
     public void Complete() => Options.Reservations.ReleaseAll(Options.ReservationOwnerId);
 
     /// <summary>
+    /// Hands back the sequence numbers this run reserved for corrected values and never drew (#2044). Call once the
+    /// export run has finished, before <see cref="Complete"/>.
+    /// </summary>
+    public Task<long> ReturnUnusedSequenceNumbersAsync(ISyncRepository repository) =>
+        new UniqueValueGenerationServer(repository).ReturnUnusedSequenceNumbersAsync(Options);
+
+    /// <summary>
     /// Decides what a "value already in use" rejection of <paramref name="export"/> means (see the type summary), and
     /// carries the decision out through <paramref name="repository"/>. Returns null when the rejection is to be reported
     /// as an ordinary export error, in which case nothing has been changed.

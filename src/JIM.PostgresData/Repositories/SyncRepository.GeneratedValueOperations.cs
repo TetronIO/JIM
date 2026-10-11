@@ -346,8 +346,164 @@ public partial class SyncRepository
         return await _context.Database.SqlQueryRaw<long?>(sql, attributeId).SingleAsync();
     }
 
+    /// <summary>
+    /// How many numbers <see cref="GetSequenceHeldRunAsync"/> first checks through the stores' value indexes before it
+    /// reads every value the attribute holds: enough that an isolated collision, or a short run, never costs a scan of
+    /// a large attribute, while a run longer than this costs one window and one scan, not a window per thousand.
+    /// </summary>
+    internal const int SequenceHeldRunWindow = 1000;
+
     /// <inheritdoc />
-    public async Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+    public async Task<SequenceHeldRun> GetSequenceHeldRunAsync(SequenceSkipQuery query)
+    {
+        ValidateExactlyOneAttributeReference(query.MetaverseAttributeId, query.ConnectedSystemObjectTypeAttributeId);
+
+        // Most runs are short (a collision or two), so look the next window of numbers up by value first: an index
+        // probe per store, whatever the attribute's size. Only a window held from end to end, which is what a long
+        // run looks like, needs every value the attribute holds read to find where the run ends.
+        var windowNumbers = Enumerable.Range(0, SequenceHeldRunWindow).Select(k => query.From + (long)k * query.Increment).ToArray();
+        var windowed = await ReadSequenceHeldRunAsync(query, windowNumbers);
+        if (windowed.FirstFreeNumber < query.From + (long)SequenceHeldRunWindow * query.Increment)
+            return windowed;
+
+        return await ReadSequenceHeldRunAsync(query, window: null);
+    }
+
+    /// <summary>
+    /// The run of held numbers from <see cref="SequenceSkipQuery.From"/> and its holders, reading only holdings of the
+    /// numbers in <paramref name="window"/> (through the value indexes) when one is given, or every holding of the
+    /// attribute when not. With a window, a run reaching the window's end is reported as ending there, which the caller
+    /// reads as "longer than the window".
+    /// </summary>
+    private async Task<SequenceHeldRun> ReadSequenceHeldRunAsync(SequenceSkipQuery query, long[]? window)
+    {
+        var importMode = query.MetaverseAttributeId.HasValue;
+        var valueTable = importMode ? "MetaverseObjectAttributeValues" : "ConnectedSystemObjectAttributeValues";
+        var valueObjectColumn = importMode ? "MetaverseObjectId" : "ConnectedSystemObjectId";
+        var attributeColumn = importMode ? "MetaverseAttributeId" : "ConnectedSystemObjectTypeAttributeId";
+
+        // Window filters, written to match the expression indexes the gates already use (LOWER("StringValue"),
+        // "NormalisedValue", LOWER("NormalisedValue")); empty when reading everything.
+        var hasWindow = window != null;
+        var textFilter = hasWindow ? @" AND LOWER(v.""StringValue"") = ANY(@windowValues)" : string.Empty;
+        var numberFilter = hasWindow ? @" AND (v.""IntValue"" = ANY(@windowNumbers) OR v.""LongValue"" = ANY(@windowNumbers))" : string.Empty;
+        var assignmentFilter = hasWindow ? @" AND a.""NormalisedValue"" = ANY(@windowValues)" : string.Empty;
+        var retiredFilter = hasWindow ? @" AND LOWER(r.""NormalisedValue"") = ANY(@windowValues)" : string.Empty;
+
+        // Every store the uniqueness gates read, each row a holding: (text or number, kind, holder, joined Metaverse
+        // Object). Text is parsed below exactly as SequenceSkipQuery.TryParseHeldNumber parses it; a numeric target's
+        // own values are read as numbers, as the numeric gates read them. The statement is assembled from fixed
+        // fragments only; every value is a parameter.
+        var textSources = new List<string>
+        {
+            $@"SELECT a.""NormalisedValue"" AS t, {(int)SequenceNumberHolderKind.Assignment} AS kind, a.""{valueObjectColumn}"" AS object_id, NULL::uuid AS mvo_id
+               FROM ""GeneratedValueAssignments"" a WHERE a.""{attributeColumn}"" = @attributeId{assignmentFilter}",
+            $@"SELECT LOWER(r.""NormalisedValue""), {(int)SequenceNumberHolderKind.Retired}, NULL::uuid, NULL::uuid
+               FROM ""RetiredGeneratedValues"" r WHERE r.""{attributeColumn}"" = @attributeId{retiredFilter}"
+        };
+        var numberSources = new List<string>();
+
+        var sources = new List<(SequenceNumberHolderKind Kind, string Holder, string From)>
+        {
+            (SequenceNumberHolderKind.AttributeValue, $@"v.""{valueObjectColumn}"", NULL::uuid",
+                $@"FROM ""{valueTable}"" v WHERE v.""AttributeId"" = @attributeId")
+        };
+        if (importMode && query.ConnectorSpaceAttributeIds.Count > 0)
+        {
+            sources.Add((SequenceNumberHolderKind.ConnectorSpace, @"v.""ConnectedSystemObjectId"", cso.""MetaverseObjectId""",
+                @"FROM ""ConnectedSystemObjectAttributeValues"" v
+                  JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = v.""ConnectedSystemObjectId""
+                  WHERE v.""AttributeId"" = ANY(@connectorSpaceAttributeIds)"));
+        }
+
+        foreach (var (kind, holder, from) in sources)
+        {
+            if (query.NumericTarget)
+                numberSources.Add($@"SELECT COALESCE(v.""IntValue""::bigint, v.""LongValue"") AS n, {(int)kind} AS kind, {holder} {from} AND (v.""IntValue"" IS NOT NULL OR v.""LongValue"" IS NOT NULL){numberFilter}");
+            else
+                textSources.Add($@"SELECT LOWER(v.""StringValue""), {(int)kind}, {holder} {from} AND v.""StringValue"" IS NOT NULL{textFilter}");
+        }
+
+        // A held value counts only when it carries the prefix and suffix around a run of digits written exactly as
+        // the sequence writes that number; the CASE guards the cast, since PostgreSQL may evaluate a cast before an
+        // unrelated filter in the same WHERE. The first free number is From itself when nothing holds it, otherwise
+        // the number after the end of the run starting at From: a run's members are exactly Increment apart, so the
+        // first held number whose successor is not the next step is where it ends. "candidates" is referenced twice
+        // and so materialised once.
+        var sql = $@"
+            WITH texts AS ({string.Join(" UNION ALL ", textSources)}),
+            tokens AS (
+                SELECT kind, object_id, mvo_id, substr(t, @prefixLength + 1, char_length(t) - @prefixLength - @suffixLength) AS token
+                FROM texts
+                WHERE char_length(t) > @prefixLength + @suffixLength AND left(t, @prefixLength) = @prefix AND right(t, @suffixLength) = @suffix
+            ),
+            parsed AS (
+                SELECT kind, object_id, mvo_id, token,
+                       CASE WHEN token ~ '^[0-9]+$' AND char_length(token) <= 18 THEN token::bigint END AS n
+                FROM tokens
+            ),
+            holdings AS (
+                SELECT n, kind, object_id, mvo_id FROM parsed
+                WHERE n IS NOT NULL
+                  AND token = CASE WHEN @fixedWidth IS NOT NULL AND char_length(n::text) <= @fixedWidth THEN lpad(n::text, @fixedWidth, '0') ELSE n::text END
+                {string.Concat(numberSources.Select(source => " UNION ALL " + source))}
+            ),
+            candidates AS (SELECT n, kind, object_id, mvo_id FROM holdings WHERE n >= @from AND (n - @from) % @increment = 0),
+            held AS (SELECT DISTINCT n FROM candidates),
+            run_end AS (
+                SELECT COALESCE(
+                    (SELECT @from WHERE NOT EXISTS (SELECT 1 FROM held WHERE n = @from)),
+                    (SELECT w.n + @increment FROM (SELECT n, lead(n) OVER (ORDER BY n) AS next FROM held) w
+                     WHERE w.next IS NULL OR w.next <> w.n + @increment ORDER BY w.n LIMIT 1)) AS first_free
+            )
+            SELECT r.first_free, c.n, c.kind, c.object_id, c.mvo_id
+            FROM run_end r LEFT JOIN candidates c ON c.n < r.first_free
+            ORDER BY c.n";
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        var fixedWidthParam = BulkSqlHelpers.NullableParam(query.FixedWidth, NpgsqlTypes.NpgsqlDbType.Integer);
+        fixedWidthParam.ParameterName = "fixedWidth";
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("attributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = query.MetaverseAttributeId ?? query.ConnectedSystemObjectTypeAttributeId!.Value });
+        command.Parameters.Add(new NpgsqlParameter("connectorSpaceAttributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer) { Value = query.ConnectorSpaceAttributeIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("prefix", NpgsqlTypes.NpgsqlDbType.Text) { Value = query.Prefix });
+        command.Parameters.Add(new NpgsqlParameter("suffix", NpgsqlTypes.NpgsqlDbType.Text) { Value = query.Suffix });
+        command.Parameters.Add(new NpgsqlParameter("prefixLength", NpgsqlTypes.NpgsqlDbType.Integer) { Value = query.Prefix.Length });
+        command.Parameters.Add(new NpgsqlParameter("suffixLength", NpgsqlTypes.NpgsqlDbType.Integer) { Value = query.Suffix.Length });
+        command.Parameters.Add(fixedWidthParam);
+        command.Parameters.Add(new NpgsqlParameter("from", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = query.From });
+        command.Parameters.Add(new NpgsqlParameter("increment", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = (long)query.Increment });
+        if (window != null)
+        {
+            command.Parameters.Add(new NpgsqlParameter("windowValues", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text) { Value = window.Select(query.WriteNumber).ToArray() });
+            command.Parameters.Add(new NpgsqlParameter("windowNumbers", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Bigint) { Value = window });
+        }
+
+        long? firstFree = null;
+        var holders = new List<SequenceNumberHolder>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            firstFree ??= reader.GetInt64(0);
+            if (reader.IsDBNull(1))
+                continue;
+
+            holders.Add(new SequenceNumberHolder(
+                reader.GetInt64(1),
+                (SequenceNumberHolderKind)reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                reader.IsDBNull(4) ? null : reader.GetGuid(4)));
+        }
+
+        return new SequenceHeldRun(firstFree ?? query.From, holders);
+    }
+
+    /// <inheritdoc />
+    public async Task<GeneratedValueSequenceBlock> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
     {
         ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
@@ -371,7 +527,9 @@ public partial class SyncRepository
 
         // The atomic advance: the counter only ever moves forward (GREATEST against both the flow's floor and
         // the counter's own position), and RETURNING hands back the first number of the block just reserved
-        // ("NextValue" after this UPDATE, minus the block just added, is exactly where the block started). Two
+        // ("NextValue" after this UPDATE, minus the block just added, is exactly where the block started), the
+        // counter itself, and its last administrator move as whole microseconds (exact, unlike a timestamp
+        // round-tripped through a parameter), which a hand-back of the unused tail compares (#2044). Two
         // concurrent reservations against the same attribute serialise on this row's lock, so the second one's
         // GREATEST always sees the first one's advance rather than a stale value.
         //
@@ -385,7 +543,7 @@ public partial class SyncRepository
             SET "NextValue" = GREATEST("NextValue", @floor) + @count * @increment, "LastUpdated" = now()
             WHERE "MetaverseAttributeId" IS NOT DISTINCT FROM @metaverseAttributeId
               AND "ConnectedSystemObjectTypeAttributeId" IS NOT DISTINCT FROM @connectedSystemObjectTypeAttributeId
-            RETURNING "NextValue" - @count * @increment
+            RETURNING "NextValue" - @count * @increment, "NextValue", (extract(epoch FROM "LastMovedAt") * 1000000)::bigint
             """;
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
@@ -404,7 +562,52 @@ public partial class SyncRepository
         command.Parameters.Add(metaverseAttributeIdParam);
         command.Parameters.Add(connectedSystemObjectTypeAttributeIdParam);
 
-        return (long)(await command.ExecuteScalarAsync())!;
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            throw new InvalidOperationException("Reserving a sequence block updated no counter row, although the insert before it guarantees one exists.");
+
+        return new GeneratedValueSequenceBlock(reader.GetInt64(0), reader.GetInt64(1), reader.IsDBNull(2) ? null : reader.GetInt64(2));
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ReturnUnusedGeneratedValueSequenceNumbersAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, GeneratedValueSequenceBlock block, long firstUnused)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (firstUnused >= block.CounterAfter)
+            return false;
+
+        // One compare-and-swap: the counter moves back only while it stands exactly where the reservation left it and
+        // its last administrator move is the one the reservation saw, so a later reservation by another run, or a
+        // raised start or Start again in the meantime, leaves it alone. "LastMovedAt" is deliberately not stamped.
+        const string handBackSql = """
+            UPDATE "GeneratedValueSequences"
+            SET "NextValue" = @firstUnused, "LastUpdated" = now()
+            WHERE "MetaverseAttributeId" IS NOT DISTINCT FROM @metaverseAttributeId
+              AND "ConnectedSystemObjectTypeAttributeId" IS NOT DISTINCT FROM @connectedSystemObjectTypeAttributeId
+              AND "NextValue" = @counterAfter
+              AND (extract(epoch FROM "LastMovedAt") * 1000000)::bigint IS NOT DISTINCT FROM @counterMovedStamp
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        var metaverseAttributeIdParam = BulkSqlHelpers.NullableParam(metaverseAttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+        metaverseAttributeIdParam.ParameterName = "metaverseAttributeId";
+        var connectedSystemObjectTypeAttributeIdParam = BulkSqlHelpers.NullableParam(connectedSystemObjectTypeAttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+        connectedSystemObjectTypeAttributeIdParam.ParameterName = "connectedSystemObjectTypeAttributeId";
+        var counterMovedStampParam = BulkSqlHelpers.NullableParam(block.CounterMovedStamp, NpgsqlTypes.NpgsqlDbType.Bigint);
+        counterMovedStampParam.ParameterName = "counterMovedStamp";
+
+        await using var command = new NpgsqlCommand(handBackSql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("firstUnused", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = firstUnused });
+        command.Parameters.Add(new NpgsqlParameter("counterAfter", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = block.CounterAfter });
+        command.Parameters.Add(metaverseAttributeIdParam);
+        command.Parameters.Add(connectedSystemObjectTypeAttributeIdParam);
+        command.Parameters.Add(counterMovedStampParam);
+
+        return await command.ExecuteNonQueryAsync() == 1;
     }
 
     /// <inheritdoc />
