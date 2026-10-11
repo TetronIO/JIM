@@ -75,10 +75,18 @@ Recorded with the product owner on 2026-10-11.
    - #2053, Phase 2;
    - #2054, Phase 3, blocked by #2053.
 4. **Export matching for an expression rule uses a per-run match value map.**<br /> The map is built lazily, once per rule and Connected System Object Type, over unjoined Connected System Objects. Making expression rules import-only was rejected: it leaves a window in which JIM provisions a duplicate account.
-5. **Case sensitivity: awaiting confirmation.**<br />
+5. **Case sensitivity follows one policy, organised by the question being asked (confirmed).**<br />
    - The decision first approved was "align Object Matching to the documented case-sensitive default".
-   - Validating that against the documented policy and the code overturned it. The policy contradicts itself, and the code already treats identifiers as case-insensitive in External ID and reference matching.
-   - The revised proposal is the four-question policy below, under which Object Matching ignores case by default unless the attribute is declared case-exact. This needs the product owner's confirmation before #2051 starts.
+   - Validating that against the documented policy and the code overturned it. The policy contradicted itself, and the code already treats identifiers as case-insensitive in External ID and reference matching.
+   - The confirmed policy is the four-question policy below. Under it, Object Matching ignores case by default unless the attribute is declared case-exact.
+   - The policy page carries a quick-reference table of every feature and the rule it follows.
+6. **JIM never chooses between candidates on the administrator's behalf.**<br /> Where a match, a lookup or an expression could resolve to more than one object or value, JIM:
+   - does not pick one;
+   - takes no action for that object;
+   - records a dedicated error that names every candidate, for the administrator to resolve.
+
+   Helping the administrator resolve the conflict is future work. The non-deterministic behaviour this replaces is listed in [Determinism](#determinism-no-arbitrary-choices).
+7. **All four sub-issues are in the v1.0-ILM-COMPLETE milestone.**
 
 ## Goals
 
@@ -149,13 +157,19 @@ Recorded with the product owner on 2026-10-11.
    - It is retried on the next synchronisation.
    - **This applies to every matching failure, not only expression ones.** Today `ObjectMatchingServer` logs a warning and tries the next rule, and `ExportEvaluationServer.AttemptExportMatchingAsync` swallows every exception and provisions.
 7. **Import.** The expression is evaluated in .NET for each Connected System Object, then the existing indexed equality lookup runs unchanged.
-   - Zero, one and several matches behave as for attribute rules: next rule, join, or an AmbiguousMatch error.
+   - Zero and one match behave as for attribute rules: next rule, or join.
+   - Several matches are an AmbiguousMatch error naming every candidate.
+   - **Several match values (from a multi-valued attribute or result) are all looked up.** Today the first value that finds exactly one Metaverse Object wins. Now, if the values together resolve to more than one distinct Metaverse Object, that is an AmbiguousMatch error. The same applies to attribute rules on multi-valued attributes.
 8. **Export.** Before provisioning, an expression rule is evaluated against a per-run match value map.
    - **Built lazily:** the first time a provisioning decision in the run needs the rule.
    - **Built once:** the expression is evaluated once for every unjoined, Normal-status Connected System Object of the type.
    - **Keyed:** by computed value, case-folded when the rule ignores case.
    - **Kept current:** claiming a Connected System Object removes it from the map.
-   - **Looked up by:** the Metaverse Object's value for the rule's Metaverse attribute, read as attribute rules read it today.
+   - **Looked up by:** every value the Metaverse Object holds for the rule's Metaverse attribute. Today attribute rules read only the first value.
+   - **Several candidates are an error.** A lookup that finds more than one Connected System Object, for expression and attribute rules alike, is a dedicated **Ambiguous Provisioning Match** error that names every candidate.
+     - The Metaverse Object is neither joined nor provisioned for that system.
+     - It is retried on every synchronisation until the administrator resolves the conflict.
+     - Today JIM logs a warning and claims the candidate with the lowest id.
 9. **Case sensitivity.** The rule's case setting applies to the comparison between computed value and Metaverse value. New rules take their default from the policy settled in #2051.
 10. **Portal.** One shared editor serves both the Connected System's Object Matching tab (Simple mode) and the Synchronisation Rule's Matching tab (Advanced mode). It offers:
     - a **Match on: Attribute | Expression** choice (a `SegmentedToggle`);
@@ -208,10 +222,29 @@ Recorded with the product owner on 2026-10-11.
 7. **Functions mirror operators.**
    - `StartsWith`, `EndsWith` and `Contains` compare ordinally (a behaviour change for `StartsWith` and `EndsWith`, which compare by culture today) and take an optional `ignoreCase` argument.
    - New functions: `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, the regex ones with time limits.
-8. **Multi-valued attributes in expressions.** Every expression context reads a multi-valued attribute the same way (see [Open Question 2](#open-questions)). Today:
-   - synchronisation keeps the first Connected System value or the last Metaverse value;
-   - Example Data supplies them all;
-   - the documentation shows examples, such as `Join(mv["Group Memberships"], "|")`, that only work in Example Data.
+8. **Multi-valued attributes in expressions.** Every expression context reads a multi-valued attribute the same way, and no expression ever silently uses one value of several (Decision 6).
+   - **Today:**
+     - Import reads the first stored value of a multi-valued Connected System attribute.
+     - Export, derived flows and drift detection read the last stored value of a multi-valued Metaverse attribute.
+     - Example Data supplies them all.
+     - Directories store multi-valued attributes as unordered sets, so "first" and "last" are arbitrary: the same object can give a different answer after another import.
+     - The documented `Join(mv["Group Memberships"], "|")` and `CollectionContains(cs["memberOf"], ...)` therefore see one value during synchronisation.
+     - An export expression that returns several values writes the literal text `System.String[]`.
+   - **Proposed model** (see [Open Question 2](#open-questions), awaiting confirmation):
+     1. `cs["x"]` and `mv["x"]` read every value of a multi-valued attribute, in every context.
+     2. Transform functions (`Trim`, `Upper`, `Lower`, `Replace`, `Left`, `FormatDate`, the conversions and so on) apply to each value and return every result.
+     3. Comparison functions (`Eq`, `StartsWith`, `EndsWith`, `Contains`, `IsMatch`) are true when any value satisfies them, exactly as a scoping criterion on a multi-valued attribute is met. `!` therefore means "no value does", which matches the negated scoping operators.
+     4. Whole-set functions work on the set itself:
+        - `Count`;
+        - `Join`, in ordinal order, so the result does not change between imports;
+        - `Where(values, "starts with", "smtp:")`, which filters with the catalogue's own operator names.
+     5. Where one value is required (joining text with `+`, or writing to a single-valued attribute), a single value is used as it is. Several values are an error on the object, naming the attribute and suggesting `Join`, `Where` or `Count`. No value reads as null, as today.
+     6. A result with several values written to a multi-valued attribute writes every value, on import and on export (this fixes `System.String[]`).
+   - **Compatibility:**
+     - Single-valued attributes are unaffected.
+     - Multi-valued attributes holding one value are unaffected. This matters because LDAP schemas declare `cn`, `sn`, `givenName` and `mail` multi-valued.
+     - Only multi-valued attributes holding several values change, from an arbitrary value to all of them or a visible error.
+     - Sync Preview and the Configuration Change Preview show the difference before it runs, and an upgrade report lists every expression that reads a multi-valued attribute.
 9. **Expression editor.**
    - Suggestions as you type, for functions and attributes.
    - A browsable function list, with signature help.
@@ -235,7 +268,7 @@ Recorded with the product owner on 2026-10-11.
 
 Delivered by #2051, with its Object Matching default work landing first as the bottom layer beneath Phase 1.
 
-**Proposed policy (awaiting the product owner's confirmation).** JIM compares text to answer one of four questions, and each question has one rule:
+**Policy (confirmed 2026-10-11).** JIM compares text to answer one of four questions, and each question has one rule:
 
 | Question | Where it is asked | Rule | Configurable |
 |---|---|---|---|
@@ -258,6 +291,37 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 
 **References.** A reference's value is the object it points to. A change of case in a DN that resolves to the same object is not a change.
 
+**Quick reference.** `docs/concepts/case-sensitivity.md` carries this table, and it is kept current as features are added. Each row names a feature as an administrator meets it, the question it asks, and the rule that answers it.
+
+| Area | Feature | Question | Rule | Can you change it? |
+|---|---|---|---|---|
+| Importing | Finding the existing Connected System Object for an incoming object (External ID) | Same thing? | Ignore case, unless the External ID attribute is case-exact | Through the attribute's case-exact declaration |
+| Importing | Secondary External ID (for example an LDAP DN) | Same thing? | Ignore case, unless case-exact | Through the attribute's case-exact declaration |
+| Importing | Detecting two incoming objects with the same External ID | Same thing? | Follows the External ID rule | No |
+| Importing | Whether an attribute value changed | Changed? | Exact | No |
+| Importing | Resolving references (group members, managers) | Same thing? | Ignore case, unless case-exact. A reference is the object it points to | Through the attribute's case-exact declaration |
+| Importing | CSV column headers (File Connector) | Same thing? | Ignore case | No |
+| Importing | Anchor values (SQL Connector) | Same thing? | Follows the source column's collation | No |
+| Synchronising | Object Matching Rules: joining on import, and finding an existing account before provisioning on export | Same thing? | Ignore case by default; exact when the Connected System attribute is case-exact | Per rule |
+| Synchronising | Scoping criteria | Condition? | Exact by default | Per criterion |
+| Synchronising | Attribute Flow: whether a Metaverse value changed | Changed? | Exact | No |
+| Synchronising | Value processing: Case normalisation | Transform | Upper, lower or title case, as chosen | Per Attribute Flow |
+| Synchronising | Generated values: whether a candidate is already taken (this run, Metaverse, Connected Systems, retired values, target probes) | Same thing? | Ignore case | No |
+| Exporting | Whether a pending change is still needed | Changed? | Exact | No |
+| Exporting | Export confirmation (did the value JIM sent arrive?) | Changed? | Exact. References compare the object they point to | No |
+| Exporting | Drift Detection | Changed? | Exact | No |
+| Exporting | LDAP: renaming an object whose DN changes only in case | Changed? | The rename is sent to the directory | No |
+| Expressions | Attribute names in `mv["..."]` and `cs["..."]` | Same thing? | Ignore case | No |
+| Expressions | `Eq`, `StartsWith`, `EndsWith`, `Contains`, `CollectionContains`, `IsMatch` | Condition? | Exact by default | The function's `ignoreCase` argument |
+| Expressions | `Replace`, `Split` | Transform | Exact | No |
+| Searching | Predefined Search criteria | Condition? | Exact by default | Per criterion |
+| Searching | Portal search boxes, list filters, Activity filters, log search | Finding? | Ignore case | No |
+| Example Data | Template attribute dependencies | Condition? | Exact by default | Per dependency |
+| Configuration | Names of attributes, object types, Connected Systems, Run Profiles, Synchronisation Rules, Predefined Search URIs, Connector definitions and Roles, in the portal, REST API and PowerShell | Same thing? | Ignore case | No |
+| Configuration | Schema refresh: matching discovered object types and attributes to existing ones | Same thing? | Ignore case | No |
+| Connectors | LDAP object classes and attribute names; SCIM and SQL attribute and column names | Same thing? | Ignore case | No |
+| Connectors | Attributes a SCIM provider declares `caseExact`, an LDAP attribute with `caseExactMatch` equality, a case-sensitive SQL collation | Same thing? | Declared case-exact, so compared exactly | The administrator can override the declaration |
+
 **Deviations the policy must close** (full list with code locations in #2051):
 
 - External ID duplicate detection and lookup (they ignore case, but do not honour case-exact attributes);
@@ -272,6 +336,18 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 
 **Enforcement:** the .NET analysers CA1307, CA1309 and CA1310 become errors in `src/`.
 
+#### Determinism: no arbitrary choices
+
+Decision 6 applies everywhere JIM could resolve one question to several answers. Each of these becomes all values considered, or a dedicated error naming the candidates:
+
+| Today | Where | Becomes |
+|---|---|---|
+| Export matching claims the lowest-id candidate when several accounts match | `ExportEvaluationServer`, `ConnectedSystemRepository.FindConnectedSystemObjectUsingMatchingRuleAsync`, the prefetched candidate path | **Ambiguous Provisioning Match** error; nothing joined or provisioned (Phase 1) |
+| Import matching on a multi-valued source stops at the first value that finds one Metaverse Object, even if a later value would find a different one | `MetaverseRepository.FindMetaverseObjectUsingMatchingRuleAsync` | Every value looked up; more than one distinct Metaverse Object is an AmbiguousMatch error (Phase 1) |
+| Export matching reads only the first value of a multi-valued Metaverse attribute | `ExportMatchingValue.Resolve` | Every value looked up (Phase 1) |
+| Expressions read the first (import) or last (export, derived, drift) stored value of a multi-valued attribute | `SyncEngine.AttributeFlow.BuildCsoAttributeDictionary`, `SyncEngine.ExportStaging.BuildAttributeDictionary`, `DriftDetectionService` | Every value, under the multi-valued model (Phase 2) |
+| An export expression returning several values writes `System.String[]` | `SyncEngine.ExportStaging` result switch | Every value written to a multi-valued attribute; an error for a single-valued one (Phase 2) |
+
 ### Non-Functional Requirements
 
 - **Performance:**
@@ -280,6 +356,7 @@ Delivered by #2051, with its Object Matching default work landing first as the b
   - **Baselines:** Scenario 014 baselines must not regress. An expression rule on a 100,000-object Connected System must not make a full synchronisation materially slower than the equivalent attribute rule.
 - **Synchronisation integrity:**
   - No matching or scoping failure creates, joins, projects, provisions or changes the scope of an object.
+  - No ambiguity is resolved by picking: every ambiguous outcome is a dedicated error naming its candidates.
   - Every failure is reported on the object's Activity item.
   - Batch summaries count matching errors.
 - **Security:**
@@ -397,13 +474,44 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 - the first two are in scope and the third is not;
 - each explanation shows the computed value.
 
-### Scenario 11: Identifiers differing only in case (case-sensitivity policy, if confirmed)
+### Scenario 11: Identifiers differing only in case (case-sensitivity policy)
 
 **Given:** HR holds `JBloggs`, the directory holds `jbloggs`, and a matching rule on account name is created with its default case setting.
 
 **When:** the directory is synchronised.
 
 **Then:** the account joins Joe Bloggs's identity rather than projecting a duplicate, because the attribute is not declared case-exact. A SCIM attribute the provider declares `caseExact` would instead default the rule to exact matching.
+
+### Scenario 12: Two existing accounts match one identity on export
+
+**Given:**
+- a directory holds two unjoined accounts whose `employeeID` is `48213`;
+- an export rule matches `employeeID` against Employee ID.
+
+**When:** export evaluation would provision an account for Priya Shah (Employee ID `48213`).
+
+**Then:**
+- JIM neither joins nor provisions;
+- it records an **Ambiguous Provisioning Match** error on the object, naming both accounts;
+- the error repeats on each synchronisation until the administrator removes the duplicate or changes the rule. No account is chosen for them.
+
+### Scenario 13: A multi-valued attribute in an expression (Phase 2, if the model is confirmed)
+
+**Given:** a Connected System Object whose `proxyAddresses` holds `SMTP:priya.shah@example.org` and `smtp:p.shah@example.org`.
+
+**Then** each expression gives:
+
+| Expression | Result |
+|---|---|
+| `cs["proxyAddresses"]` into a multi-valued attribute | both addresses |
+| `Lower(cs["proxyAddresses"])` | both addresses, lower-cased |
+| `StartsWith(cs["proxyAddresses"], "SMTP:")` | `true` (one address does) |
+| `!StartsWith(cs["proxyAddresses"], "x500:")` | `true` (no address does) |
+| `Count(cs["proxyAddresses"])` | `2` |
+| `Join(cs["proxyAddresses"], ";")` | `SMTP:priya.shah@example.org;smtp:p.shah@example.org` (ordinal order) |
+| `Where(cs["proxyAddresses"], "starts with", "SMTP:")` | `SMTP:priya.shah@example.org` |
+| `Replace(Where(cs["proxyAddresses"], "starts with", "SMTP:"), "SMTP:", "")` into Email | `priya.shah@example.org` |
+| `cs["proxyAddresses"]` into single-valued Email | error on the object: proxyAddresses has 2 values; use `Where`, `Join` or `Count` to say which |
 
 ## Constraints
 
@@ -451,15 +559,12 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 
 ## Open Questions
 
-1. **Ambiguous matches on export.** Today, when an export match finds more than one Connected System Object, JIM logs a warning and claims the lowest id. Import treats the same situation as an error.
-   - **Recommendation:** make an ambiguous export match an error on the object, for attribute and expression rules alike, so that JIM never chooses between accounts on an administrator's behalf.
-2. **Multi-valued attributes in expressions.** Synchronisation keeps one value per attribute, while Example Data passes all of them.
-   - **Option A:** every context passes all values. This is correct, but changes existing Attribute Flow expressions that read a multi-valued attribute.
-   - **Option B:** keep `cs["x"]` as one value everywhere and add an explicit `Values(cs["x"])` that returns them all. This changes no existing behaviour.
-   - **Recommendation:** Option B, settled in Phase 2.
-   - Until then, a matching rule on a multi-valued Connected System attribute should use an attribute source, which already tries every value.
+1. **Ambiguous matches on export.** Resolved by Decision 6: a dedicated error, with no join and no provisioning.
+2. **Multi-valued attributes in expressions.** Awaiting confirmation of the model in Phase 2 requirement 8.
+   - The first recommendation was to keep `cs["x"]` as one value and add `Values(cs["x"])`.
+   - That was withdrawn because it keeps an arbitrary value, contrary to Decision 6.
+   - Until Phase 2, a matching rule on a multi-valued Connected System attribute should use an attribute source, which considers every value.
 3. **Phase 3 "compare as".** Should the type be chosen explicitly (proposed), or inferred from a test evaluation? Inference fails for expressions that return null for the sample.
-4. **Case-sensitivity policy.** Confirm the four-question policy (Decision 5) before #2051 starts.
 
 ## Acceptance Criteria
 
@@ -468,6 +573,7 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 - [ ] Expression rules join on import and are matched on export, in Simple and Advanced mode.
 - [ ] Unworkable rules (including multiple sources) are refused at save on every surface, with the messages in Scenario 5.
 - [ ] Matching failures never join, project or provision. They are reported on the object, for attribute and expression rules alike.
+- [ ] An ambiguous match on import or export is a dedicated error naming every candidate. JIM never claims one, and every value of a multi-valued source is considered.
 - [ ] Try it, Preview Impact, Sync Preview and the join explanations show computed match values.
 - [ ] The REST API and PowerShell reach parity, with tests. Docs are updated.
 - [ ] No regression in the Scenario 014 baselines.
@@ -486,7 +592,7 @@ Delivered by #2051, with its Object Matching default work landing first as the b
 
 ### Case sensitivity (#2051)
 
-- [ ] One policy page, and every audited site follows it.
+- [ ] One policy page with the quick-reference table, and every audited site follows it.
 - [ ] The Object Matching default is the same on every surface.
 - [ ] CA1307, CA1309 and CA1310 are enforced.
 
