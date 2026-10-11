@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Schedule's next run now reads as a time to come ("in 14 hours") on the Home page and on Operations > Schedules, instead of "just now".
 - 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
 - 🐛 Deleting a Synchronisation Rule, deleting a Connected System through synchronisation, and the stranded value sweep now record queued export changes they withdraw on their Activity too, and the Connected System deletion preview shows them beforehand. (#2011)
 - 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)

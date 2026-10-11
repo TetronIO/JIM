@@ -236,38 +236,42 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Extension method that converts a DateTime into a relative time string (e.g., "2 hours ago", "just now").
+    /// Extension method that converts a DateTime into a relative time string, in the past ("2 hours ago", "just now")
+    /// or the future ("in 3 hours", for a Schedule's next run).
     /// </summary>
-    public static string ToRelativeTime(this DateTime dateTime)
+    public static string ToRelativeTime(this DateTime dateTime) => dateTime.ToRelativeTime(DateTime.UtcNow);
+
+    /// <summary>
+    /// Converts a DateTime into a relative time string measured against the given UTC instant. Past and future read the
+    /// same way, in whole units rounded down: "3 hours ago" and "in 3 hours".
+    /// </summary>
+    public static string ToRelativeTime(this DateTime dateTime, DateTime utcNow)
     {
-        var timeSpan = DateTime.UtcNow - dateTime.ToUniversalTime();
+        var timeSpan = utcNow - dateTime.ToUniversalTime();
+        var isFuture = timeSpan < TimeSpan.Zero;
+        var distance = timeSpan.Duration();
 
-        if (timeSpan.TotalSeconds < 60)
-            return "just now";
-        if (timeSpan.TotalMinutes < 60)
-        {
-            var minutes = (int)timeSpan.TotalMinutes;
-            return $"{minutes} {(minutes == 1 ? "minute" : "minutes")} ago";
-        }
-        if (timeSpan.TotalHours < 24)
-        {
-            var hours = (int)timeSpan.TotalHours;
-            return $"{hours} {(hours == 1 ? "hour" : "hours")} ago";
-        }
-        if (timeSpan.TotalDays < 30)
-        {
-            var days = (int)timeSpan.TotalDays;
-            return $"{days} {(days == 1 ? "day" : "days")} ago";
-        }
-        if (timeSpan.TotalDays < 365)
-        {
-            var months = (int)(timeSpan.TotalDays / 30);
-            return $"{months} {(months == 1 ? "month" : "months")} ago";
-        }
+        if (distance.TotalSeconds < 60)
+            return isFuture ? "in under a minute" : "just now";
 
-        var years = (int)(timeSpan.TotalDays / 365);
-        return $"{years} {(years == 1 ? "year" : "years")} ago";
+        var amount = DescribeRelativeDistance(distance);
+        return isFuture ? $"in {amount}" : $"{amount} ago";
     }
+
+    private static string DescribeRelativeDistance(TimeSpan distance)
+    {
+        if (distance.TotalMinutes < 60)
+            return CountOf((int)distance.TotalMinutes, "minute");
+        if (distance.TotalHours < 24)
+            return CountOf((int)distance.TotalHours, "hour");
+        if (distance.TotalDays < 30)
+            return CountOf((int)distance.TotalDays, "day");
+        if (distance.TotalDays < 365)
+            return CountOf((int)(distance.TotalDays / 30), "month");
+        return CountOf((int)(distance.TotalDays / 365), "year");
+    }
+
+    private static string CountOf(int count, string unit) => $"{count} {unit}{(count == 1 ? "" : "s")}";
 
     /// <summary>
     /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.
