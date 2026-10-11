@@ -15,9 +15,11 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         Where the object would fall out of scope and disconnect, the preview also walks the
         destructive cascade: whether the Metaverse Object would be deleted or scheduled for
         deletion (per its Type's Deletion Rule), and which downstream Connected System Objects
-        would be deprovisioned as a result. A downstream object with no matching export
-        Synchronisation Rule is disconnected rather than deprovisioned, and is reported as a
-        warning (DownstreamDisconnectOnly) rather than as an outcome node. A downstream object
+        would be deprovisioned as a result. A downstream object that would only be disconnected
+        is reported as a warning (DownstreamDisconnectOnly); where a matching export
+        Synchronisation Rule's Deprovisioning Action is Disconnect, it is also a TargetDisconnected
+        outcome node nested under the deletion, naming that rule (SyncRuleName). With no matching
+        export Synchronisation Rule there is only the warning. A downstream object
         whose provisioning was never exported has that provisioning cancelled instead (the unsent
         Create Pending Export and the Connected System Object are removed; nothing is exported),
         reported as its own ProvisioningCancelled outcome node nested under the deletion, not as a

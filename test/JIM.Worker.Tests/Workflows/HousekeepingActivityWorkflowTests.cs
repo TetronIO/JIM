@@ -349,6 +349,72 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The queued deprovision names the export Synchronisation Rule whose Deprovisioning Action said Delete, so the
+    /// housekeeping Activity says why the account is being removed rather than left in place (#1811).
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_NamesTheRuleThatQueuedTheDeleteAsync()
+    {
+        // Arrange
+        var (personMvo, _) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var deprovisionOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deprovisionOutcome.SyncRuleId, Is.EqualTo(910));
+            Assert.That(deprovisionOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+        }
+    }
+
+    /// <summary>
+    /// A grace-period deletion under a Disconnect Deprovisioning Action leaves the account in place and queues
+    /// nothing. It used to record nothing about the account either, so it read as untouched when it was in fact now
+    /// unmanaged; it is reported as a Target Disconnected outcome beneath the deletion, naming the rule (#1811).
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDisconnectDeprovisionRule_ReportsTheAccountLeftInPlaceAsync()
+    {
+        // Arrange
+        SeedTargetExportUsersRule(SyncRepo, OutboundDeprovisionAction.Disconnect);
+        var personMvo = CreateEligiblePersonMvo("Dan Disconnected");
+        SyncRepo.SeedMetaverseObject(personMvo);
+        var personTargetCso = SeedProvisionedTargetCso(SyncRepo, personMvo, "uid=dan.disconnected,ou=People,dc=glitterband,dc=local");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var disconnectedOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(disconnectedOutcome, Is.Not.Null, "The account left in place must be reported, not silently disconnected");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disconnectedOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected));
+            Assert.That(disconnectedOutcome.TargetEntityId, Is.EqualTo(personTargetCso.Id));
+            Assert.That(disconnectedOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName));
+            Assert.That(disconnectedOutcome.SyncRuleId, Is.EqualTo(910));
+            Assert.That(disconnectedOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+            Assert.That(activity.TotalPendingExports, Is.Zero, "Nothing was queued, so nothing is counted as a Pending Export");
+        }
+    }
+
+    /// <summary>
     /// Housekeeping must evaluate every batch against the configuration as it stands now, not as the worker first
     /// saw it. The main loop's JimApplication lives for the worker's lifetime on a change-tracking DbContext, and
     /// EF Core serves a tracked entity back from its identity map rather than refreshing it from a later query, so

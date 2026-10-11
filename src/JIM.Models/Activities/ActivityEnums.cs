@@ -400,8 +400,9 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     WouldStageUpdateExport,
 
     /// <summary>
-    /// A Metaverse Object left an export Synchronisation Rule's scope under a Disconnect Deprovisioning Action, so the
-    /// join to its object in the target Connected System was broken and that object left in place (#1966). The
+    /// A Metaverse Object left an export Synchronisation Rule's scope (#1966), or was deleted (#1811), under a Disconnect
+    /// Deprovisioning Action, so the join to its object in the target Connected System was broken and that object left
+    /// in place; the outcome names the rule whose action decided it. On a deletion it nests under MvoDeleted. The
     /// Disconnect sibling of <see cref="DeprovisionQueued"/>, recorded on the same item in the same place, and like
     /// <see cref="ProvisioningCancelled"/> it queues nothing, so it is not counted as a Pending Export.
     /// Its target is the disconnected object in the target system, never the item's own object, which is why it is not
