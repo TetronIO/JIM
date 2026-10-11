@@ -327,6 +327,52 @@
           }
         }
       ]
+    },
+    {
+      "name": "powershell-1",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour: PowerShell"
+      ],
+      "commands": [
+        "Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey"
+      ]
+    },
+    {
+      "name": "powershell-2",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "commands": [
+        "!Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey",
+        "Get-JIMMetaverseObjectType | Select-Object id, name, pluralName, builtIn",
+        "(Get-JIMSchedule)[0] | Select-Object id, name, triggerType, patternType, isEnabled",
+        "Get-JIMSchedule | Select-Object name, isEnabled"
+      ]
+    },
+    {
+      "name": "powershell-3",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "commands": [
+        "!Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey",
+        "Get-JIMSyncRule"
+      ]
     }
   ]
 }

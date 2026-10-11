@@ -18,6 +18,11 @@
     and the data the published images show. Output goes to <OutputPath>/<Version>/ under the file names junctional.io
     uses in src/assets/tour/<version>/, so a refresh is a folder copy.
 
+    Terminal images are 1944x1222 with a transparent background. Each runs its manifest commands for real against
+    the portal, in a 120x30 pseudo-terminal, and redraws what the terminal showed in a macOS-style window: the
+    output's own colours and layout, the typed command highlighted as PSReadLine highlights it, and only the last 30
+    rows when the session runs longer. The session signs in with the API key at ApiKeyPath.
+
     Browser resolution is shared with the docs checks; see JimPlaywright.ps1.
 
 .PARAMETER Version
@@ -45,6 +50,11 @@
     resets the environment first and leaves it running; add the Scenario 8 Schedules; then recreate jim.web in
     Production mode on the same database. Replaces whatever the local stack held.
 
+.PARAMETER ApiKeyPath
+    The file holding the API key the terminal screenshots sign in with. Defaults to test/integration/.api-key, which
+    Run-IntegrationTests.ps1 (and so -PrepareData) leaves behind. The key is read inside the recorded session only and
+    never printed.
+
 .PARAMETER Template
     The Scenario 8 data size for -PrepareData. Defaults to Scale100k50Groups, the size the published images show
     (100,001 users), which needs a host with 20+ GB of memory; use Small or Medium where that is not available.
@@ -70,7 +80,8 @@ param(
     [pscredential]$Credential,
     [string]$ManifestPath,
     [switch]$PrepareData,
-    [string]$Template = 'Scale100k50Groups'
+    [string]$Template = 'Scale100k50Groups',
+    [string]$ApiKeyPath
 )
 
 Set-StrictMode -Version Latest
@@ -79,11 +90,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'screenshots' 'ScreenshotManifest.ps1')
 . (Join-Path $PSScriptRoot 'screenshots' 'CapturePreflight.ps1')
+. (Join-Path $PSScriptRoot 'screenshots' 'TerminalScreen.ps1')
 . (Join-Path $PSScriptRoot 'JimPlaywright.ps1')
 
 if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'screenshots' 'manifest.json' }
 if (-not $OutputPath) { $OutputPath = Join-Path $repoRoot 'artifacts' 'screenshots' }
 if (-not $Version) { $Version = 'v' + (Get-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Raw).Trim() }
+if (-not $ApiKeyPath) { $ApiKeyPath = Join-Path $repoRoot 'test' 'integration' '.api-key' }
 if ($Version -notmatch '^[A-Za-z0-9._-]+$') { throw "Version must be a folder name, got '$Version'." }
 if (-not $Credential) {
     # The bundled development realm's documented administrator (see README and .devcontainer/CLAUDE.md).
@@ -126,33 +139,61 @@ if ($PrepareData) {
 
 $screenshots = @($manifest.Screenshots)
 if ($Name) {
+    # From bash, `pwsh -File ... -Name a,b` arrives as the one string 'a,b'.
+    $Name = @($Name | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $unknown = @($Name | Where-Object { $_ -notin $screenshots.name })
     if ($unknown.Count -gt 0) { throw "Not in the manifest: $($unknown -join ', ')." }
     $screenshots = @($screenshots | Where-Object { $_.name -in $Name })
 }
 
-$terminal = @($screenshots | Where-Object kind -eq 'terminal')
-if ($terminal.Count -gt 0) {
-    Write-Warning "Terminal screenshots are not captured yet (#582 Phase 3); skipping: $($terminal.name -join ', ')."
+# The terminal a screenshot's session runs in, and the prompt and size a published image shows.
+$terminalPrompt = 'PS /Users/jim> '
+$terminalColumns = 120
+$terminalRows = 30
+
+# Records one terminal screenshot's commands in a pseudo-terminal and works out the screen it ends on.
+function Get-TerminalScreenshotScreen {
+    param([Parameter(Mandatory)]$Screenshot, [Parameter(Mandatory)][string]$WorkPath)
+
+    $commands = @($Screenshot.commands | Where-Object { $_.Trim() -ne '' } | ForEach-Object { Resolve-TerminalCommand -Command $_ -BaseUrl $BaseUrl })
+    $shown = @($commands | Where-Object { -not $_.StartsWith('!') })
+    $commandsFile = Join-Path $WorkPath "$($Screenshot.name).commands.txt"
+    $transcriptPath = Join-Path $WorkPath "$($Screenshot.name).transcript"
+    Set-Content -LiteralPath $commandsFile -Value $commands -Encoding utf8NoBOM
+
+    $session = Join-Path $PSScriptRoot 'screenshots' 'terminal-session.ps1'
+    $module = Join-Path $repoRoot 'src' 'JIM.PowerShell' 'JIM.psd1'
+    foreach ($path in $session, $commandsFile, $ApiKeyPath, $module) {
+        if ($path.Contains("'")) { throw "Cannot run a terminal session from a path containing a quote: $path" }
+    }
+    $inner = "export TERM=xterm-256color LC_ALL=C.UTF-8 POWERSHELL_UPDATECHECK=Off; stty cols $terminalColumns rows $terminalRows; " +
+        "exec pwsh -NoLogo -NoProfile -File '$session' -CommandsFile '$commandsFile' -KeyFile '$ApiKeyPath' -ModulePath '$module'"
+    & script --quiet --return --command $inner $transcriptPath | Out-Null
+
+    $transcript = if (Test-Path -LiteralPath $transcriptPath) { [System.IO.File]::ReadAllText($transcriptPath, [System.Text.Encoding]::UTF8) } else { '' }
+    Remove-Item -LiteralPath $transcriptPath -Force -ErrorAction SilentlyContinue
+    $outputs = @(Split-TerminalTranscript -Transcript $transcript -Count $shown.Count)
+    New-TerminalScreen -Commands $shown -Outputs $outputs -Prompt $terminalPrompt -Columns $terminalColumns -Rows $terminalRows
 }
 
-$jobs = foreach ($screenshot in @($screenshots | Where-Object kind -eq 'portal')) {
-    foreach ($file in Get-ScreenshotFileNames -Screenshot $screenshot) {
-        [pscustomobject]@{
-            name     = $screenshot.name
-            theme    = $file.Theme
-            fileName = $file.FileName
-            profile  = $screenshot.profile
-            steps    = @($screenshot.steps)
-        }
+$portalScreenshots = @($screenshots | Where-Object kind -eq 'portal')
+$terminalScreenshots = @($screenshots | Where-Object kind -eq 'terminal')
+if ($portalScreenshots.Count + $terminalScreenshots.Count -eq 0) { throw 'Nothing to capture.' }
+
+if ($terminalScreenshots.Count -gt 0) {
+    if (-not (Get-Command script -ErrorAction SilentlyContinue)) {
+        throw "Terminal screenshots record their session with 'script' (util-linux), which is not installed here."
+    }
+    if (-not (Test-Path -LiteralPath $ApiKeyPath)) {
+        throw "Terminal screenshots sign in with the API key in $ApiKeyPath, which does not exist; run with -PrepareData, or pass -ApiKeyPath."
     }
 }
-$jobs = @($jobs)
-if ($jobs.Count -eq 0) { throw 'Nothing to capture.' }
 
-# Every capture signs in first, so an identity provider that is not answering fails every image the same way.
-$signInProblem = Get-ScreenshotSignInProblem -BaseUrl $BaseUrl
-if ($signInProblem) { throw $signInProblem }
+# Every portal capture signs in first, so an identity provider that is not answering fails every image the same way.
+if ($portalScreenshots.Count -gt 0) {
+    $signInProblem = Get-ScreenshotSignInProblem -BaseUrl $BaseUrl
+    if ($signInProblem) { throw $signInProblem }
+}
 
 $versionPath = Join-Path $OutputPath $Version
 New-Item -ItemType Directory -Path $versionPath -Force | Out-Null
@@ -164,23 +205,60 @@ $work = Join-Path ([System.IO.Path]::GetTempPath()) "jim-screenshots-$([guid]::N
 New-Item -ItemType Directory -Path $work | Out-Null
 $configPath = Join-Path $work 'run.json'
 $resultsPath = Join-Path $work 'results.json'
-[pscustomobject]@{
-    baseUrl   = $BaseUrl
-    outputDir = $versionPath
-    profiles  = $manifest.Profiles
-    jobs      = $jobs
-} | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
-
-Write-Host "Capturing $($jobs.Count) image(s) from $BaseUrl into $versionPath ..."
 $started = Get-Date
+$results = [System.Collections.Generic.List[object]]::new()
+
 try {
-    # The account travels in the child's environment only, never on its command line or on disk.
-    $env:JIM_PLAYWRIGHT_MODULE = Resolve-PlaywrightModule
-    $env:JIM_CAPTURE_USERNAME = $Credential.UserName
-    $env:JIM_CAPTURE_PASSWORD = $Credential.GetNetworkCredential().Password
-    & node (Join-Path $PSScriptRoot 'screenshots' 'capture.cjs') $configPath $resultsPath
-    if ($LASTEXITCODE -ne 0) { throw "The capture driver failed (node exited $LASTEXITCODE)." }
-    $results = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
+    $jobs = [System.Collections.Generic.List[object]]::new()
+    foreach ($screenshot in $portalScreenshots) {
+        foreach ($file in Get-ScreenshotFileNames -Screenshot $screenshot) {
+            $jobs.Add([pscustomobject]@{
+                kind     = 'portal'
+                name     = $screenshot.name
+                theme    = $file.Theme
+                fileName = $file.FileName
+                profile  = $screenshot.profile
+                steps    = @($screenshot.steps)
+            })
+        }
+    }
+
+    if ($terminalScreenshots.Count -gt 0) { Write-Host "Recording $($terminalScreenshots.Count) terminal session(s) ..." }
+    foreach ($screenshot in $terminalScreenshots) {
+        try { $screen = @(Get-TerminalScreenshotScreen -Screenshot $screenshot -WorkPath $work) }
+        catch {
+            # One failed session fails its own images; the rest of the run goes on.
+            foreach ($file in Get-ScreenshotFileNames -Screenshot $screenshot) {
+                $jobs.Add([pscustomobject]@{ kind = 'terminal'; name = $screenshot.name; theme = $file.Theme; fileName = $file.FileName; profile = $screenshot.profile; screen = $null })
+                $results.Add([pscustomobject]@{ fileName = $file.FileName; ok = $false; error = $_.Exception.Message })
+            }
+            continue
+        }
+        foreach ($file in Get-ScreenshotFileNames -Screenshot $screenshot) {
+            $jobs.Add([pscustomobject]@{ kind = 'terminal'; name = $screenshot.name; theme = $file.Theme; fileName = $file.FileName; profile = $screenshot.profile; screen = $screen })
+        }
+    }
+
+    $failedEarly = @($results | ForEach-Object { $_.fileName })
+    $driverJobs = @($jobs | Where-Object { $_.fileName -notin $failedEarly })
+    [pscustomobject]@{
+        baseUrl   = $BaseUrl
+        outputDir = $versionPath
+        fontsDir  = Join-Path $repoRoot 'src' 'JIM.Web' 'wwwroot' 'fonts'
+        profiles  = $manifest.Profiles
+        jobs      = $driverJobs
+    } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
+
+    if ($driverJobs.Count -gt 0) {
+        Write-Host "Capturing $($driverJobs.Count) image(s) from $BaseUrl into $versionPath ..."
+        # The account travels in the child's environment only, never on its command line or on disk.
+        $env:JIM_PLAYWRIGHT_MODULE = Resolve-PlaywrightModule
+        $env:JIM_CAPTURE_USERNAME = $Credential.UserName
+        $env:JIM_CAPTURE_PASSWORD = $Credential.GetNetworkCredential().Password
+        & node (Join-Path $PSScriptRoot 'screenshots' 'capture.cjs') $configPath $resultsPath
+        if ($LASTEXITCODE -ne 0) { throw "The capture driver failed (node exited $LASTEXITCODE)." }
+        foreach ($result in @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)) { $results.Add($result) }
+    }
 }
 finally {
     Remove-Item Env:JIM_PLAYWRIGHT_MODULE, Env:JIM_CAPTURE_USERNAME, Env:JIM_CAPTURE_PASSWORD -ErrorAction SilentlyContinue
@@ -198,7 +276,8 @@ foreach ($result in $results) {
     $mismatch = Find-ScreenshotSizeMismatch -Path (Join-Path $versionPath $result.fileName) -ProfileName $job.profile -Profiles $manifest.Profiles
     if ($mismatch) { $problems.Add($mismatch) }
 }
-foreach ($job in $jobs | Where-Object { $_.fileName -notin $results.fileName }) {
+$reported = @($results | ForEach-Object { $_.fileName })
+foreach ($job in $jobs | Where-Object { $_.fileName -notin $reported }) {
     $problems.Add("$($job.fileName): no result from the capture driver.")
 }
 

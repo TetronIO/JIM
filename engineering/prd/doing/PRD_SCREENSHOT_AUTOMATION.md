@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (Phases 1 and 2 complete for the 21 portal and API tour images, with `-PrepareData` proven unattended; terminal mock-up awaiting approval)
+- **Status:** Doing (Phases 1 to 3 complete: the 21 portal and API tour images and the three terminal images, with `-PrepareData` proven unattended)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -50,7 +50,7 @@ Because a refresh is this expensive, screenshots fall behind the product, which 
 5. Each capture waits until the page is ready: network idle, web fonts loaded, no progress indicator or Blazor reconnect overlay showing, plus any element the entry names. Animations and the text caret are disabled and the pointer is parked where it hovers nothing.
 6. Theme and navigation state are set the way a user would leave them, through the portal's own preferences (`jim_darkMode`, `jim_navGroup_*` in browser storage), before the first page loads.
 7. Data preparation (`-PrepareData`) runs integration Scenario 8 through `Run-IntegrationTests.ps1` against OpenLDAP at a chosen template (default `Scale100k50Groups`, matching the published images), adds the Scenario 8 Schedules, then recreates the JIM services in Production mode on the same database.
-8. Terminal screenshots run real PowerShell commands against the live stack inside a 120×30 pseudo-terminal, so the output, its colours and its Format-List styling are exactly what a terminal shows. The typed command is highlighted from PowerShell's own tokeniser with PSReadLine's default colours. The session is drawn in a recreated macOS-style terminal window (IBM Plex Mono, which JIM already self-hosts; the palette, window box and shadow are measured from the published images) and captured with a transparent background. Box-drawing and block characters are drawn as vectors, one per cell, so the banner tiles whatever the font covers. A command may be marked as set-up (for example signing in), which runs but does not appear. Like a real terminal, a session longer than 30 rows shows its last 30.
+8. Terminal screenshots run real PowerShell commands against the live stack inside a 120×30 pseudo-terminal, so the output, its colours and its Format-List styling are exactly what a terminal shows. The typed command is highlighted from PowerShell's own tokeniser with PSReadLine's default colours. The session is drawn in a recreated macOS-style terminal window (IBM Plex Mono, which JIM already self-hosts; the palette, window box and shadow are measured from the published images) and captured with a transparent background. Box-drawing and block characters are drawn as vectors, one per cell, so the banner tiles whatever the font covers. A command may be marked as set-up (for example signing in), which runs but does not appear. Like a real terminal, a session longer than 30 rows shows its last 30. The session signs in with an API key read from a file (by default the one the integration runner leaves), never from a command line, so the image shows only `Connect-JIM`'s masked form of it; dates and numbers are written as en-GB, whatever the recording host's locale.
 9. The run ends with a summary: images written, by kind and theme, and elapsed time.
 
 ### Non-Functional Requirements
@@ -117,8 +117,8 @@ The integration runner resets the environment at the start of a run and leaves i
 
 1. **Capture engine and data-independent entries** ✅. Manifest, schema validation, the PowerShell entry point, the Playwright driver, geometry profiles, sign-in, theme and navigation state, readiness waits and size checks. Entries that need no particular data: Home, the main lists, the API reference.
 2. **Scenario 8 data and Production mode** ✅. `-PrepareData`, then the remaining tour entries.
-3. **Terminal screenshots.** The HTML terminal window, after a mock-up is approved.
-4. **The rest of the library.** The 56 images not on the tour page.
+3. **Terminal screenshots** ✅. The HTML terminal window, built after the mock-ups were approved: `powershell-1` (signing in) to `powershell-3` (a session longer than the terminal).
+4. **The rest of the library.** The 54 images in junctional.io's asset folder that the manifest does not list yet.
 5. **Distribution.** junctional.io PR, README stable URL, tetron.io.
 6. **Release workflow (later).** A workflow on a self-hosted runner with enough memory, run on demand or on release tag.
 
@@ -143,6 +143,6 @@ The integration runner resets the environment at the start of a run and leaves i
 - [x] `Capture-Screenshots.ps1` captures every tour entry in both themes at exactly the published geometry, and fails on any mismatch.
 - [x] The portal is captured in Production mode, with every service running and navigation groups expanded.
 - [x] `-PrepareData` reproduces the Scenario 8 dataset unattended.
-- [ ] The three terminal images are generated from a live session.
+- [x] The three terminal images are generated from a live session.
 - [ ] One end-to-end flow is proven: manifest entry, capture, published to junctional.io.
 - [ ] Refreshing every screenshot for a release is one command plus a review.

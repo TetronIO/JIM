@@ -8,15 +8,19 @@
  * validates the manifest, works out each file name and checks every image's size afterwards; this side only signs in,
  * sets each theme, follows each entry's steps, waits for the page to settle and takes the screenshot.
  *
+ * Terminal screenshots arrive with their screen already worked out (TerminalScreen.ps1); this draws each one in a
+ * terminal window (terminal-window.cjs) and captures it with a transparent background.
+ *
  * Usage: node capture.cjs <run-config.json> <results.json>
- *   The run config carries the portal's base URL, the output folder, the profiles and the jobs (one per file). The
- *   sign-in account arrives in JIM_CAPTURE_USERNAME and JIM_CAPTURE_PASSWORD, never on the command line or on disk.
- *   JIM_PLAYWRIGHT_MODULE names the playwright package to load (see scripts/JimPlaywright.ps1).
+ *   The run config carries the portal's base URL, the output folder, the font folder, the profiles and the jobs (one
+ *   per file). The sign-in account arrives in JIM_CAPTURE_USERNAME and JIM_CAPTURE_PASSWORD, never on the command
+ *   line or on disk. JIM_PLAYWRIGHT_MODULE names the playwright package to load (see scripts/JimPlaywright.ps1).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require(process.env.JIM_PLAYWRIGHT_MODULE);
+const { terminalWindowHtml } = require('./terminal-window.cjs');
 
 const [configPath, resultsPath] = process.argv.slice(2);
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -92,6 +96,36 @@ async function newContext(browser, theme, profile) {
   return context;
 }
 
+// Draws each terminal job's screen in a window and captures it. Nothing here signs in: the screen was recorded from
+// a real session before the browser started.
+async function captureTerminalJobs(browser, jobs, results) {
+  for (const job of jobs) {
+    const profile = config.profiles[job.profile];
+    const target = path.join(config.outputDir, job.fileName);
+    const started = Date.now();
+    const context = await browser.newContext({
+      viewport: { width: profile.ViewportWidth, height: profile.ViewportHeight },
+      deviceScaleFactor: profile.DeviceScaleFactor,
+    });
+    try {
+      const page = await context.newPage();
+      const htmlPath = path.join(path.dirname(configPath), `${job.fileName}.html`);
+      fs.writeFileSync(htmlPath, terminalWindowHtml({ rows: job.screen, fontsDir: config.fontsDir }));
+      await page.goto('file://' + htmlPath);
+      await page.evaluate(() => document.fonts.ready);
+      // A missing font falls back silently to another monospace face, which would change every row's width.
+      const unloaded = await page.evaluate(() => [...document.fonts].filter(f => f.status !== 'loaded').map(f => f.family));
+      if (unloaded.length > 0) throw new Error(`Font not loaded: ${[...new Set(unloaded)].join(', ')}`);
+      await page.screenshot({ path: target, omitBackground: !!profile.Transparent });
+      results.push({ fileName: job.fileName, ok: true, milliseconds: Date.now() - started });
+    } catch (error) {
+      results.push({ fileName: job.fileName, ok: false, error: String(error.message).split('\n')[0] });
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 (async () => {
   const username = process.env.JIM_CAPTURE_USERNAME;
   const password = process.env.JIM_CAPTURE_PASSWORD;
@@ -100,10 +134,12 @@ async function newContext(browser, theme, profile) {
   const browser = await chromium.launch(launchOptions);
   const results = [];
 
+  await captureTerminalJobs(browser, config.jobs.filter(job => job.kind === 'terminal'), results);
+
   // One signed-in context per theme and profile: the theme is set before the first page loads, and density is fixed
   // for a context's lifetime.
   const groups = new Map();
-  for (const job of config.jobs) {
+  for (const job of config.jobs.filter(job => job.kind !== 'terminal')) {
     const key = `${job.theme}|${job.profile}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(job);
