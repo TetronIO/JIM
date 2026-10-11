@@ -427,7 +427,7 @@ public class PendingExportMergeSemanticsTests
         var held = HeldChange(targetEmployeeIdAttr, "E999");
         var persisted = SeedExportedPendingExport(targetCso, held);
         var provisioningItemId = Guid.NewGuid();
-        persisted.QueuedByRunProfileExecutionItemId = provisioningItemId;
+        persisted.RecordStager(provisioningItemId);
 
         var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
         var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
@@ -442,6 +442,8 @@ public class PendingExportMergeSemanticsTests
             Assert.That(forObject.Select(pe => pe.Id), Is.EqualTo(new[] { persisted.Id }), "the persisted Pending Export is kept, not rebuilt");
             Assert.That(forObject.Single().QueuedByRunProfileExecutionItemId, Is.EqualTo(provisioningItemId),
                 "the item that queued it still names its cause");
+            Assert.That(forObject.Single().StagedByRunProfileExecutionItemIds, Is.EqualTo(new[] { provisioningItemId }),
+                "an evaluation that stages nothing is not a stager");
             Assert.That(forObject.Single().AttributeValueChanges, Is.EquivalentTo(new[] { held }));
         }
     }
