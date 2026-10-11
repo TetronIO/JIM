@@ -919,6 +919,57 @@ public class LdapConnectorExportDesiredStateTests
         }
     }
 
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP))]
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389))]
+    [TestCase(nameof(LdapDirectoryType.ActiveDirectory))]
+    [TestCase(nameof(LdapDirectoryType.SambaAD))]
+    public async Task Export_SingleValuedAttributeChangedByAnAddAndARemoveWhileAnotherValueIsAlreadyAbsent_HoldsTheNewValueAsync(
+        string directoryTypeName)
+    {
+        // The directory holds exactly the value the export replaces, but a description the export removes has already
+        // gone, so the whole modify is refused and applied in parts. In parts, the new value must not reach the directory
+        // ahead of the delete of the old: OpenLDAP and 389 Directory Server refuse it as a constraint violation, which
+        // says nothing about a value already in place, while the old value is still there.
+        var directory = SingleValuedDirectory(directoryTypeName).With("employeeType", "Contractor").With("description", "Staff");
+        var export = CreateExport(directory, directoryType: Enum.Parse<LdapDirectoryType>(directoryTypeName));
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"],
+                Add("employeeType", "Employee"), Remove("employeeType", "Contractor"), Remove("description", "Temporary"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Employee" }));
+            Assert.That(directory.ValuesOf("description"), Is.EquivalentTo(new[] { "Staff" }));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(1), "Only the description was already in its desired state");
+        }
+    }
+
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP))]
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389))]
+    public async Task Export_SingleValuedAttributeWhoseOldValueIsAlreadyGone_RfcDirectory_AddsTheNewValueAsync(string directoryTypeName)
+    {
+        // Applied in parts, the delete of the old value and the add of the new go in one request, which the directory
+        // refuses because the old value has already gone. Sent apart, the delete is found already in place and the add
+        // goes through.
+        var directory = SingleValuedDirectory(directoryTypeName).With("description", "Staff");
+        var export = CreateExport(directory, directoryType: Enum.Parse<LdapDirectoryType>(directoryTypeName));
+
+        var results = await export.ExecuteAsync(
+            [GroupUpdateWithSingleValued(["employeeType"],
+                Add("employeeType", "Employee"), Remove("employeeType", "Contractor"), Remove("description", "Temporary"))],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().Success, Is.True, results.Single().ErrorMessage);
+            Assert.That(directory.ValuesOf("employeeType"), Is.EquivalentTo(new[] { "Employee" }));
+            Assert.That(export.ValuesAlreadyInDesiredState, Is.EqualTo(2), "The old value and the description were already gone");
+        }
+    }
+
     #endregion
 
     #region Finding the values already in place by halving
@@ -1088,6 +1139,21 @@ public class LdapConnectorExportDesiredStateTests
         LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory) =>
         new(directory, Settings, Log.Logger, concurrency, batchSize, directoryType,
             directoryAdvertisesPermissiveModify: advertisesPermissiveModify);
+
+    /// <summary>
+    /// A directory whose employeeType holds one value at most, refusing an add while it holds a different value as the
+    /// named kind of directory does: OpenLDAP and 389 Directory Server with constraintViolation, the rest with
+    /// attributeOrValueExists.
+    /// </summary>
+    private static FakeDirectory SingleValuedDirectory(string directoryTypeName) =>
+        Enum.Parse<LdapDirectoryType>(directoryTypeName) is LdapDirectoryType.OpenLDAP or LdapDirectoryType.DirectoryServer389
+            ? new FakeDirectory
+            {
+                SingleValuedAttributes = { "employeeType" },
+                SingleValuedConflictCode = ResultCode.ConstraintViolation,
+                SingleValuedConflictMessage = "attribute 'employeeType' cannot have multiple values"
+            }
+            : new FakeDirectory { SingleValuedAttributes = { "employeeType" } };
 
     private static bool CarriesPermissiveModify(ModifyRequest request) =>
         request.Controls.Cast<DirectoryControl>().Any(control => control.Type == PermissiveModifyOid);
