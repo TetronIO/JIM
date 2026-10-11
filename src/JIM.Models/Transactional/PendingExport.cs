@@ -129,8 +129,8 @@ public class PendingExport
     /// Set on a <see cref="PendingExportChangeType.Create"/> just before it is sent when its
     /// <see cref="ProvisioningSyncRuleId"/> names a Synchronisation Rule whose Initial Password is enabled, so an
     /// Initial Password will be staged for the account once it exists (#2039). A Connector whose target refuses an
-    /// enabled account with no password (Active Directory) reads it to create the account disabled and leave the
-    /// password's delivery to enable it. Worked out once per export batch by the export run, alongside the lookup that
+    /// enabled account with no password (Active Directory) reads it to create the account disabled, to be enabled once
+    /// the password is set. Worked out once per export batch by the export run, alongside the lookup that
     /// stages the password; the Connector never sees the rule or any password material.
     /// <para>
     /// Transient: never persisted, and false on every export the run has not decided for, so whether the rule asks

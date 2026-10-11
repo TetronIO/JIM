@@ -109,7 +109,8 @@ Each batch follows this sequence, whether processed sequentially or in parallel:
 flowchart TD
     Start([Process batch]) --> MarkExecuting[Mark all exports in batch<br/>as Status = Executing]
     MarkExecuting --> ClassCheck[Pre-send check, #492:<br/>refuse any export that adds an<br/>object class without values for<br/>its required attributes<br/>ClassMembershipRequirementsNotMet]
-    ClassCheck --> CallConnector[connector.ExportAsync<br/>Send the rest via ForConnector:<br/>only what can be written now<br/>Returns List of ExportResult]
+    ClassCheck --> InitialPasswordLookup[Read once for the batch which<br/>provisioning rules ask for an<br/>Initial Password, #2039<br/>Flag their Creates<br/>InitialPasswordFollows]
+    InitialPasswordLookup --> CallConnector[connector.ExportAsync<br/>Send the rest via ForConnector:<br/>only what can be written now<br/>Returns List of ExportResult]
     CallConnector --> ProcessResults[For each export + result pair]
     ProcessResults --> CheckResult{Export<br/>succeeded?}
 
@@ -121,7 +122,7 @@ flowchart TD
     CsoStatus -->|Yes: provisioning was<br/>never confirmed| HandleUnconfirmedDelete[Record Deprovisioned<br/>Remove Pending Export and CSO now:<br/>import deletion detection excludes<br/>PendingProvisioning objects, so a<br/>successful Delete is the only<br/>confirmation the object will ever get]
     CheckResult -->|Failed, or refused:<br/>outside managed scope,<br/>class requirements unmet| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
-    HandleCreate --> InitialPassword{Provisioning rule<br/>asks for an<br/>initial password?}
+    HandleCreate --> InitialPassword{Provisioning rule<br/>asks for an<br/>initial password?<br/>the batch's lookup}
     InitialPassword -->|Yes| StagePassword[Stage a Provisioned password change<br/>on the Password Synchronisation queue<br/>for the Password Delivery Service, #1706<br/>after the external ID is assigned]
     InitialPassword -->|No| Persist
     StagePassword --> Persist
@@ -200,6 +201,8 @@ flowchart TD
 - **Refusals JIM makes before, or instead of, the target system (#492, #1250)**<br /> Two refusals give an administrator an actionable error rather than whatever the target system would return. Before a batch is sent, any export that adds an object class without values for that class's required attributes is failed as `ClassMembershipRequirementsNotMet`, naming the attributes. During the export, a connector given a managed scope refuses per object any write outside the selected containers, so an Attribute Flow cannot move an object somewhere JIM could not read it back. Both take the ordinary failure path, and the rest of the batch proceeds.
 
 - **Initial passwords are staged, not delivered (#1121, #1706)**<br /> When a Create succeeds for an object whose provisioning Synchronisation Rule asks for an initial password, the export records a Provisioned password change on the Password Synchronisation queue, after the external ID has been assigned so the object can be addressed. The Password Delivery Service delivers it later over the connector's password channel; setting it inside the export would put a second network call in the loop persisting a write that has already succeeded. A staging failure is logged as an error and counted on the Activity, never turned into a failed export.
+
+- **The connector is told an Initial Password will follow (#2039)**<br /> Which provisioning Synchronisation Rules ask for an Initial Password is read once per batch, before the batch is sent rather than after it succeeds, on the immediate, sequential-deferred and parallel paths alike (the parallel path on the batch's own repository, against the exports it re-loaded). Each qualifying Create carries the transient `InitialPasswordFollows` flag to the connector, and staging reuses the same answer, so the lookup moved rather than multiplied. The LDAP Connector reads the flag to create an Active Directory account disabled, since Active Directory refuses an enabled account with no password. A failed lookup flags nothing and is reported through staging, exactly as before.
 
 - **Keyset batch collection (#985)**<br /> Batches are collected in a single forward sweep with a keyset cursor on `(CreatedAt, Id)`. Executed exports drop out of the query mid-run and deferred ones stay `Pending` while being accumulated in memory, so a strictly-increasing cursor never re-reads a row. The previous OFFSET implementation restarted its scan from zero for every batch and degraded to O(n²) page loads once thousands of deferred exports accumulated; at 200,000 objects with 10,000 reference-bearing groups it spent hours re-reading collected rows before the first group reached the target system. Known trade-off: an export whose `NextRetryAt` backoff elapses mid-run at a position already behind the cursor waits for the next export run.
 

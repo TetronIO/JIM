@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -305,7 +306,7 @@ internal class LdapConnectorExport
         // Track whether we injected a placeholder so we can provide a specific error if it's rejected
         var hasPlaceholder = RequiresPlaceholderMember(pendingExport);
 
-        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         try
         {
@@ -332,11 +333,11 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
         }
 
         // External ID not available, return success without it
-        return ConnectedSystemExportResult.Succeeded(null, dn);
+        return ConnectedSystemExportResult.Succeeded(null, dn, attributesAwaitingInitialPassword);
     }
 
     /// <summary>
@@ -761,7 +762,7 @@ internal class LdapConnectorExport
             await EnsureParentContainersExistAsync(dn);
         }
 
-        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         // Sequential within this export: create must succeed before GUID fetch
         var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
@@ -781,10 +782,10 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
         }
 
-        return ConnectedSystemExportResult.Succeeded(null, dn);
+        return ConnectedSystemExportResult.Succeeded(null, dn, attributesAwaitingInitialPassword);
     }
 
     private async Task<string?> FetchExternalIdAsync(string dn, LdapConnectorRootDse rootDse)
@@ -1075,8 +1076,10 @@ internal class LdapConnectorExport
     /// needed when a multi-valued attribute (e.g. member) exceeds the batch size limit.
     /// The AddRequest carries the first batch of values; each overflow ModifyRequest carries
     /// the next batch as an Add operation against the already-created object.
+    /// Also returns the attributes the add carries with an interim value because an Initial Password will follow
+    /// (see <see cref="WithholdEnablementUntilInitialPassword"/>), or null when nothing was rewritten.
     /// </summary>
-    internal (AddRequest AddRequest, List<ModifyRequest> OverflowModifyRequests) BuildAddRequestWithOverflow(PendingExport pendingExport, string dn)
+    internal (AddRequest AddRequest, List<ModifyRequest> OverflowModifyRequests, IReadOnlyList<string>? AttributesAwaitingInitialPassword) BuildAddRequestWithOverflow(PendingExport pendingExport, string dn)
     {
         var addRequest = new AddRequest(dn);
 
@@ -1119,6 +1122,10 @@ internal class LdapConnectorExport
                 values.Add(value);
             }
         }
+
+        // Active Directory refuses an enabled account with no password, so one an Initial Password will follow is
+        // created disabled (#2039). Rewrites this request's copy of the value only, never the Pending Export.
+        var attributesAwaitingInitialPassword = WithholdEnablementUntilInitialPassword(pendingExport, attributeGroups, dn);
 
         // Placeholder member injection for groupOfNames/groupOfUniqueNames on non-AD directories.
         // If this is a MUST-member object class and no member values are present, inject the placeholder.
@@ -1193,7 +1200,57 @@ internal class LdapConnectorExport
             }
         }
 
-        return (addRequest, overflowModifyRequests);
+        return (addRequest, overflowModifyRequests, attributesAwaitingInitialPassword);
+    }
+
+    /// <summary>
+    /// Creates an Active Directory account disabled when an Initial Password will follow it (#2039), by adding
+    /// ACCOUNTDISABLE (0x2) to the <c>userAccountControl</c> value the add carries, and returns the attribute so the
+    /// result can say so. Returns null, leaving the add exactly as the Attribute Flows built it, unless every one of
+    /// these holds:
+    /// <list type="bullet">
+    /// <item>The directory is real Active Directory. Not the Active Directory family: Samba AD accepts an enabled
+    /// account with no password, so it keeps the value it was given.</item>
+    /// <item>The change is a Create, and JIM said an Initial Password follows it
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>).</item>
+    /// <item><c>userAccountControl</c> is present as a single integer value without ACCOUNTDISABLE. An account the
+    /// Attribute Flow already creates disabled needs nothing, and JIM never invents a value it was not given: absent,
+    /// Active Directory creates the account disabled on its own.</item>
+    /// </list>
+    /// <para>
+    /// Only <paramref name="attributeGroups"/>, the values built for this request, is changed. The Pending Export and its
+    /// changes keep the Synchronisation Rule's value, which is what the confirming import is judged against, and
+    /// Connectors never mutate an export.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string>? WithholdEnablementUntilInitialPassword(PendingExport pendingExport, Dictionary<string, List<object>> attributeGroups, string dn)
+    {
+        if (_directoryType != LdapDirectoryType.ActiveDirectory
+            || pendingExport.ChangeType != PendingExportChangeType.Create
+            || !pendingExport.InitialPasswordFollows)
+            return null;
+
+        if (!attributeGroups.TryGetValue(LdapConnectorConstants.UserAccountControlAttributeName, out var values) || values.Count != 1)
+            return null;
+
+        if (values[0] is not string flowText || !int.TryParse(flowText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var flowValue))
+            return null;
+
+        if ((flowValue & LdapConnectorConstants.UAC_ACCOUNTDISABLE) != 0)
+            return null;
+
+        var interimValue = flowValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
+        values[0] = interimValue.ToString(CultureInfo.InvariantCulture);
+
+        // Named as the Pending Export spells it; the dictionary matches the name whatever its case.
+        var attributeName = attributeGroups.Keys.First(key =>
+            key.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase));
+
+        _logger.Debug("LdapConnectorExport.BuildAddRequestWithOverflow: Creating '{Dn}' disabled ({Attribute} {FlowValue} sent as {InterimValue}) " +
+            "because an Initial Password follows; the account is enabled once the password is set",
+            LogSanitiser.Sanitise(dn), LogSanitiser.Sanitise(attributeName), flowValue, interimValue);
+
+        return [attributeName];
     }
 
     /// <summary>

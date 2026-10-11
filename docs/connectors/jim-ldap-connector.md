@@ -751,3 +751,14 @@ If exports fail with LDAP errors:
 - For "constraint violation" errors on multi-valued attributes, try reducing the Modify Batch Size setting.
 - For group membership operations, ensure the Group Placeholder Member DN setting is appropriate for your directory.
 - A member who is already in the group, or already out of it, is not the cause of a failure: JIM treats those as done and applies the rest of the change (see [Values already in place](#values-already-in-place)). If the worker log shows a modify applied one value at a time and the export still failed, the directory refused a value for the reason in the error message.
+
+#### "Active Directory will not enable an account that has no password"
+
+Active Directory refuses to create a user account enabled, or to enable an existing one, while the account has no password, answering `0000052D` (WILL_NOT_PERFORM). JIM never sends a password with the account itself: passwords travel on their own channel once the account exists (see [Setting Passwords](#setting-passwords)). So a Synchronisation Rule that provisions accounts with an enabled `userAccountControl` value, such as `512`, and gives them no password is refused on every Create. JIM reports the refusal on the export's execution item with the remedies named, and the directory's own words after them, rather than as a bare directory error. Samba AD accepts an enabled account with no password, which is why a configuration that works against a Samba AD lab can be refused by Windows Server.
+
+Either remedy works:
+
+- **Give the provisioning Synchronisation Rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password).**<br /> On Active Directory, JIM then creates the account disabled, adding ACCOUNTDISABLE to the `userAccountControl` value the Attribute Flow sends, and enables it once the password is set. Your `userAccountControl` Attribute Flow stays as it is, so enabling and disabling accounts from source data keeps working.
+- **Create the account disabled.**<br /> Have the Attribute Flow write `userAccountControl` with ACCOUNTDISABLE (`0x2`) set, such as `514`, until the account has a password.
+
+If the Synchronisation Rule already has an Initial Password, look under **Operations > Passwords** for one that is parked or has expired: until it is delivered, the account has no password to enable it with. Nothing is lost while you fix it. The Pending Export stays queued and is retried on later export runs, with a growing delay between attempts, and the Metaverse Object is untouched.

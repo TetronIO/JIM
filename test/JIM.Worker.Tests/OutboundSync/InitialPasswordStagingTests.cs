@@ -483,8 +483,8 @@ public class InitialPasswordStagingTests
 
     /// <summary>
     /// A Create whose provisioning Synchronisation Rule asks for an Initial Password reaches the Connector flagged, so
-    /// a directory that refuses an enabled account with no password (Active Directory) can create it disabled and
-    /// leave the password's delivery to enable it.
+    /// a directory that refuses an enabled account with no password (Active Directory) can create it disabled, to be
+    /// enabled once the password is set.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_IsHandedToTheConnectorFlaggedAsync()
