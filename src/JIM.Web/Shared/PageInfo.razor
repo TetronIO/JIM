@@ -4,9 +4,12 @@
 @* What a page is for, said once, from an info button at the end of the page's title. This is the design
    system's one way of describing a page: not a dismissible alert under the breadcrumbs (which costs a band
    of every visit's first screen until someone closes it, and is then gone for good), and not a second
-   paragraph restating the title. Place it as the last child of the title's MudText. Pass Term where the
-   page is about a glossary term, and the popover links to that entry. *@
-<InfoPopover Title="@Title" GlossaryAnchor="@(Term is { } term ? TermDefinitions.For(term).GlossaryAnchor : null)">
+   paragraph restating the title. Place it as the last child of the title's MudText. DocsPage names the docs
+   page that covers this one, and the popover links to it; every routable page gives one or is allow-listed
+   with its reason (COV-5, scripts/Test-DocsCoverage.ps1). Pass Term where the page is about a glossary term,
+   and the popover links to that entry too. *@
+<InfoPopover Title="@Title" DocsUrl="@(DocsPage is { Length: > 0 } page ? DocsSite.PageUrl(page) : null)"
+             GlossaryAnchor="@(Term is { } term ? TermDefinitions.For(term).GlossaryAnchor : null)">
     @ChildContent
 </InfoPopover>
 
@@ -29,4 +32,13 @@
     /// </summary>
     [Parameter]
     public Term? Term { get; set; }
+
+    /// <summary>
+    /// The docs page that covers this one, as its Markdown path under <c>docs/</c>, optionally with a heading's
+    /// anchor: <c>configuration/connected-systems.md#the-connector-space</c>. Adds a Documentation link to it.
+    /// The coverage check reads this value from source, so name the page as a literal, or as an expression whose
+    /// every choice is a literal.
+    /// </summary>
+    [Parameter]
+    public string? DocsPage { get; set; }
 }

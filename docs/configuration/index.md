@@ -58,3 +58,5 @@ Each configuration object page covers:
 - **Where to do the work** in three forms: the JIM portal, PowerShell, and the REST API
 
 The portal is the right surface for most day-to-day administration. PowerShell is the right surface for repeatable automation, scripted onboarding, and integrations into existing operational tooling. The REST API is the right surface for purpose-built integrations and bespoke tooling.
+
+In the portal, the info button beside a page's title says what the page is for, and links to the page in this documentation that covers it.
