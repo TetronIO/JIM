@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011164637_AddRpeiUnresolvedReferenceCount")]
-    partial class AddRpeiUnresolvedReferenceCount
+    [Migration("20261011141220_AddJoinObjectMatchingRuleProvenance")]
+    partial class AddJoinObjectMatchingRuleProvenance
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -451,9 +451,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");
-
-                    b.Property<int?>("UnresolvedReferenceCount")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -3083,7 +3080,13 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ImportStateHash")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("JoinMatchValue")
+                        .HasColumnType("text");
+
                     b.Property<int?>("JoinMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("JoinObjectMatchingRuleId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("JoinSyncRuleId")
@@ -3129,6 +3132,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
                         .HasFilter("\"DerivedInputChangePending\"");
+
+                    b.HasIndex("JoinObjectMatchingRuleId")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_JoinObjectMatchingRuleId")
+                        .HasFilter("\"JoinObjectMatchingRuleId\" IS NOT NULL");
 
                     b.HasIndex("JoinSyncRuleId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
@@ -5651,6 +5658,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.ObjectMatchingRule", null)
+                        .WithMany()
+                        .HasForeignKey("JoinObjectMatchingRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany()

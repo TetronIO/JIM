@@ -107,9 +107,9 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 1. After logging in, navigate to `/claims`
 2. Verify you see the expected claims:
-    - `sub` -- Your unique identifier
-    - `name` -- Your display name
-    - `email` -- Your email address
+    - `sub`: your unique identifier
+    - `name`: your display name
+    - `email`: your email address
 
 ### 4. Test Sign-Out
 
@@ -210,7 +210,7 @@ Configure appropriate token lifetimes in your identity provider:
 
 - **Request only the minimum scopes needed**<br /> Follow the principle of least privilege.
 - **Regularly audit which permissions are granted**<br /> Review permissions periodically for security compliance.
-- **Use admin consent for organisation-wide deployments**<br /> For widespread deployments, use organization-level consent mechanisms.
+- **Use admin consent for organisation-wide deployments**<br /> For widespread deployments, use organisation-level consent mechanisms.
 
 ### Brute-Force Protection and MFA
 

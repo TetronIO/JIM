@@ -702,10 +702,16 @@ public class SyncPreviewServer
             .ToList();
         var importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
 
+        // Generated Value Forms (#2023): the values built from each generated value, from the same rules and graph the
+        // run builds them from (SyncTaskProcessorBase.BuildDriftDetectionCache), so the preview checks a candidate's
+        // values with it exactly as the run does. The re-election path reads them through another system's rules.
+        var generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
+        var allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
+
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
             BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
             uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage,
-            driftExportRules, importMappingCache);
+            driftExportRules, importMappingCache, generatedValueBuiltValues, allImportRules);
     }
 
     /// <summary>
@@ -1311,24 +1317,31 @@ public class SyncPreviewServer
         CsoPreviewContext context,
         List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)> flowErrors)
     {
-        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id);
+        var outcomes = new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>();
 
         var graph = context.PriorityContext.DerivedFlowGraph;
-        if (graph == null || inScopeRules.Count == 0)
-            return outcomes;
+        var maxLevel = graph == null || inScopeRules.Count == 0
+            ? 0
+            : inScopeRules
+                .Select(rule => rule.MetaverseObjectTypeId)
+                .Distinct()
+                .Select(graph.MaxLevel)
+                .Max();
 
-        var maxLevel = inScopeRules
-            .Select(rule => rule.MetaverseObjectTypeId)
-            .Distinct()
-            .Select(graph.MaxLevel)
-            .Max();
-
-        for (var level = 1; level <= maxLevel; level++)
+        // Level 0 is the generations the ordinary pass recorded; each level after evaluates its derived flows first. A
+        // generation checks the values built from each candidate (Generated Value Forms, #2023), so resolving one can
+        // throw as a derived flow can, and fails the object the same way.
+        for (var level = 0; level <= maxLevel; level++)
         {
             try
             {
-                foreach (var error in _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, context.ObjectTypes, ExpressionEvaluator, context.PriorityContext))
-                    flowErrors.Add((FindHostingRule(inScopeRules, error.SyncRuleName)?.Id, error.SyncRuleName, error));
+                if (level > 0)
+                {
+                    foreach (var error in _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, context.ObjectTypes, ExpressionEvaluator, context.PriorityContext))
+                        flowErrors.Add((FindHostingRule(inScopeRules, error.SyncRuleName)?.Id, error.SyncRuleName, error));
+                }
+
+                outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, cso, inScopeRules, ownCsoId: cso.Id));
             }
             catch (SyncExpressionEvaluationException expressionEx)
             {
@@ -1358,8 +1371,6 @@ public class SyncPreviewServer
                 workingMvo.PendingGeneratedValues.Clear();
                 break;
             }
-
-            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id));
         }
 
         return outcomes;
@@ -1461,6 +1472,11 @@ public class SyncPreviewServer
     /// where the real run would record an error understates what synchronising would do.</param>
     /// <param name="workingMvo">The preview's own working copy of the Metaverse Object.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="cso">The previewed object, linked to <paramref name="workingMvo"/>, whose rules recorded the requests;
+    /// null on the re-election paths, where each request names the surviving account that recorded it.</param>
+    /// <param name="inScopeRules">The rules whose derived flows build values from the generated value for
+    /// <paramref name="cso"/>; null on the re-election paths, where they are the enabled import rules of the surviving
+    /// account's own system.</param>
     /// <param name="ownCsoId">The previewed Connected System Object when it is joined to (or projects)
     /// <paramref name="workingMvo"/>: the person's own account for the connector-space gate, as in the worker.</param>
     /// <param name="disconnectingCsoId">The previewed Connected System Object when it is LEAVING
@@ -1471,19 +1487,25 @@ public class SyncPreviewServer
     /// outcome tree; empty when nothing was generated.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
-        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
+        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, ConnectedSystemObject? cso = null,
+        IReadOnlyList<SyncRule>? inScopeRules = null, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
     {
         var pending = workingMvo.PendingGeneratedValues.ToList();
         if (pending.Count == 0)
             return [];
 
         var forOutcomeTree = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
+        var relinked = new List<(ConnectedSystemObject Source, MetaverseObject? MetaverseObject)>();
         try
         {
             var exportRules = context.Cache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules);
             var requests = new List<GenerationRequest>(pending.Count);
+            var formSources = new List<IGeneratedValueFormSource?>(pending.Count);
             foreach (var p in pending)
             {
+                var formSource = BuildGeneratedValueFormSourceForPreview(p, workingMvo, context, cso, inScopeRules, exportRules, relinked);
+                formSources.Add(formSource);
+
                 var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(p.Mapping, exportRules);
                 var connectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList();
 
@@ -1499,7 +1521,8 @@ public class SyncPreviewServer
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
                     OwnConnectedSystemObjectIds = ownCsoId.HasValue ? [ownCsoId.Value] : [],
                     DisconnectingConnectedSystemObjectId = disconnectingCsoId,
-                    StickyOnly = p.BaseUnavailable
+                    StickyOnly = p.BaseUnavailable,
+                    FormSource = formSource
                 });
             }
 
@@ -1509,13 +1532,20 @@ public class SyncPreviewServer
             {
                 var outcome = outcomes[i];
                 var request = pending[i];
+                var attributeName = request.Mapping.TargetMetaverseAttribute!.Name;
+
+                // Generated Value Forms (#2023): candidates passed over because a value built from them was already held,
+                // recorded where and as the run records them.
+                forOutcomeTree.AddRange(GeneratedValueFormReporting.DescribeSkippedCandidates(outcome.SkippedCandidates)
+                    .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
                 {
                     case GenerationOutcomeKind.Generated:
                         _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
-                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
+                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, attributeName, outcome.Value!));
                         await RecordGeneratedValueProbesAsync(result, request.Mapping, outcome.Value!, context, exportRules);
+                        RecordGeneratedValueFormProbes(result, attributeName, formSources[i], outcome, context);
                         break;
 
                     case GenerationOutcomeKind.Sticky:
@@ -1526,7 +1556,22 @@ public class SyncPreviewServer
                         break;
 
                     case GenerationOutcomeKind.Waiting:
-                        // Nothing to do: any existing value stays, and there is nothing new to apply.
+                        // Nothing to apply: any existing value stays. A value held back because a value built from it
+                        // cannot be worked out yet is said, in the run's words, on the tree and as a warning, since the
+                        // object may have nothing else to show (Generated Value Forms, #2023).
+                        if (outcome.FormWaits.Count > 0)
+                        {
+                            var waitingFor = GeneratedValueFormReporting.DescribeWaits(outcome.FormWaits);
+                            forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
+                            result.Warnings.Add(new SyncPreviewMessage
+                            {
+                                Code = SyncPreviewMessageCode.GeneratedValueWaiting,
+                                Detail = $"{attributeName} would not be generated yet: a value built from it needs an input the object has no value for: {waitingFor}. "
+                                    + "It is generated by a later synchronisation once the input arrives.",
+                                ConnectedSystemId = context.ConnectedSystemId,
+                                AttributeName = attributeName
+                            });
+                        }
                         break;
 
                     case GenerationOutcomeKind.Exhausted:
@@ -1553,9 +1598,98 @@ public class SyncPreviewServer
             // Always clear, on every exit path, exactly like the worker's own resolution method: a leftover
             // request here would carry into whatever else touches this working copy next.
             workingMvo.PendingGeneratedValues.Clear();
+
+            foreach (var (source, metaverseObject) in relinked)
+                source.MetaverseObject = metaverseObject;
         }
 
         return forOutcomeTree;
+    }
+
+    /// <summary>
+    /// The form source for a generated value the preview is about to generate (Generated Value Forms, #2023), as the run
+    /// builds it (<c>SyncTaskProcessorBase.BuildGeneratedValueFormSourceAsync</c>): the values built from it on its own
+    /// Synchronisation Rule, worked out for each candidate by replaying the derived pass, and checked against JIM's own
+    /// records. Each form keeps its probe targets, for the preview to say what the run would probe; a dry run never
+    /// probes. Null when there are none to check, or when the request came from another object's rule.
+    /// </summary>
+    /// <param name="relinked">A surviving account the re-election path left as it found it is linked to
+    /// <paramref name="workingMvo"/> for the call, as the run's is, and recorded here to be put back.</param>
+    private IGeneratedValueFormSource? BuildGeneratedValueFormSourceForPreview(
+        PendingGeneratedValue pending,
+        MetaverseObject workingMvo,
+        CsoPreviewContext context,
+        ConnectedSystemObject? cso,
+        IReadOnlyList<SyncRule>? inScopeRules,
+        IEnumerable<SyncRule> exportRules,
+        List<(ConnectedSystemObject Source, MetaverseObject? MetaverseObject)> relinked)
+    {
+        if (pending.BaseUnavailable)
+            return null;
+
+        var source = inScopeRules != null ? cso : pending.SourceConnectedSystemObject;
+        if (source == null || pending.SourceConnectedSystemObjectId != source.Id)
+            return null;
+
+        var generationId = pending.Mapping.Generation!.Id;
+        if (!context.FormsByGenerationId.TryGetValue(generationId, out var forms))
+        {
+            forms = GeneratedValueParticipation.DescribeForms(pending.Mapping, context.GeneratedValueBuiltValues, exportRules);
+            context.FormsByGenerationId[generationId] = forms;
+        }
+
+        if (forms.Count == 0)
+            return null;
+
+        inScopeRules ??= context.AllImportRules
+            .Where(rule => rule.ConnectedSystemId == source.ConnectedSystemId && rule.MetaverseObjectTypeId == workingMvo.Type?.Id)
+            .ToList();
+
+        if (!ReferenceEquals(source.MetaverseObject, workingMvo))
+        {
+            relinked.Add((source, source.MetaverseObject));
+            source.MetaverseObject = workingMvo;
+        }
+
+        // Another system's account is of a type this preview does not otherwise load; it carries its own.
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes = source.Type != null && context.ObjectTypes.All(t => t.Id != source.TypeId)
+            ? [.. context.ObjectTypes, source.Type]
+            : context.ObjectTypes;
+
+        return GeneratedValueFormSource.Create(_syncEngine, source, pending, forms, inScopeRules, objectTypes, ExpressionEvaluator, context.PriorityContext);
+    }
+
+    /// <summary>
+    /// Records that the real synchronisation would probe for each value built from <paramref name="outcome"/>'s value
+    /// (Generated Value Forms, #2023), naming the Connected Systems it would probe, as
+    /// <see cref="RecordGeneratedValueProbesAsync"/> does for the generated value itself. The form source answers the
+    /// candidate it already evaluated from its cache.
+    /// </summary>
+    private static void RecordGeneratedValueFormProbes(SyncPreviewResult result, string generatedAttributeName, IGeneratedValueFormSource? formSource, GenerationOutcome outcome, CsoPreviewContext context)
+    {
+        if (formSource == null)
+            return;
+
+        foreach (var check in formSource.Evaluate(outcome.Value!, outcome.NumericValue).Checks.Where(check => check.ProbeTargets.Count > 0))
+        {
+            var names = check.ProbeTargets
+                .Select(target => context.SystemNames.GetValueOrDefault(target.ConnectedSystemId))
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count > 0)
+            {
+                result.GeneratedValueProbes.Add(new SyncPreviewGeneratedValueProbe
+                {
+                    AttributeName = check.Name,
+                    Value = check.Value,
+                    BuiltFromAttributeName = generatedAttributeName,
+                    ConnectedSystemNames = names
+                });
+            }
+        }
     }
 
     /// <summary>
@@ -2131,7 +2265,9 @@ public class SyncPreviewServer
         UniqueValueResolveOptions UniqueValueResolveOptions,
         string? DerivedFlowCycleMessage,
         List<SyncRule> DriftExportRules,
-        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache)
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache,
+        GeneratedValueBuiltValues GeneratedValueBuiltValues,
+        List<SyncRule> AllImportRules)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse
@@ -2150,6 +2286,13 @@ public class SyncPreviewServer
         /// rules on first need, so a full-system preview asks each Connector once rather than once per object.
         /// </summary>
         public Dictionary<int, List<string>> ProbedSystemNamesByGenerationId { get; } = [];
+
+        /// <summary>
+        /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>), the values built from it that are checked
+        /// before it is issued (Generated Value Forms, #2023), described once from this context's own export rules on
+        /// first need, as the run describes them.
+        /// </summary>
+        public Dictionary<int, List<GeneratedValueForm>> FormsByGenerationId { get; } = [];
 
         /// <summary>
         /// The Metaverse Objects flagged for export scope review that a walked object's preview already evaluated
@@ -2241,27 +2384,36 @@ public class SyncPreviewServer
                 candidateRuleSets.Add(typeRules);
         }
 
+        // The same matching engine the synchronisation uses (#2052), against the preview's read-only repository, so
+        // the preview cannot disagree with the run about what a rule computes or what it finds.
         foreach (var matchingRules in candidateRuleSets)
         {
-            foreach (var matchingRule in matchingRules.OrderBy(mr => mr.Order).Where(mr => mr.MetaverseObjectType != null))
+            try
             {
-                try
+                var match = await Application.ObjectMatching.FindMatchingMetaverseObjectAsync(guardedRepository, cso, matchingRules);
+                if (match != null)
+                    return match.MetaverseObject;
+            }
+            catch (MultipleMatchesException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    var mvo = await guardedRepository.FindMetaverseObjectUsingMatchingRuleAsync(
-                        cso, matchingRule.MetaverseObjectType!, matchingRule);
-                    if (mvo != null)
-                        return mvo;
-                }
-                catch (MultipleMatchesException ex)
+                    Code = SyncPreviewMessageCode.AmbiguousMatch,
+                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    MatchCandidates = [.. ex.Candidates]
+                });
+                return null;
+            }
+            catch (ObjectMatchingRuleFailedException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    result.Errors.Add(new SyncPreviewMessage
-                    {
-                        Code = SyncPreviewMessageCode.AmbiguousMatch,
-                        Detail = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object; a synchronisation would fail it with an AmbiguousMatch error. Matching MVO IDs: {string.Join(", ", ex.Matches)}",
-                        ConnectedSystemId = cso.ConnectedSystemId
-                    });
-                    return null;
-                }
+                    Code = SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = ex.Message,
+                    ConnectedSystemId = cso.ConnectedSystemId
+                });
+                return null;
             }
         }
 

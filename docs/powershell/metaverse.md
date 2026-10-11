@@ -825,7 +825,7 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 
 Metaverse Objects including their ID, object type, and requested attributes.
 
-The object type is returned as a nested `Type` object with `Id` and `Name` properties (for example `$obj.Type.Name`), identical in both the list and single-object responses. (Prior to this release the list response exposed flat `TypeId` and `TypeName` properties instead; this is a breaking change to the output shape.)
+The object type is returned as a nested `Type` object with `Id` and `Name` properties (for example `$obj.Type.Name`), identical in both the list and single-object responses.
 
 When retrieved by ID, `ConnectedSystemObjects` lists every Connected System Object joined to the Metaverse Object, carrying the same data the portal's Connections tab shows: `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. `IsSource` and `IsTarget` say whether an enabled Import or Export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` is derived from the object's status and any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is populated only for `UpdatePending`; it is `$null` for every other state, including a pending Create or Delete. The list form does not carry these rows; only the `-Id` form does.
 
@@ -1007,7 +1007,7 @@ One `PSCustomObject` per entry. Joined connections and not-connected entries sha
 | `Role` | `Source`, `Target`, `Source and Target` or `None`: whether enabled import or export Synchronisation Rules use the object. A not-connected entry is always `Target`. |
 | `State` | For a joined connection, its state (`InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`). For a not-connected entry, the reason: `NotInScope`, `ProvisioningDisabled`, `RuleMisconfigured` or `NotYetProvisioned`. |
 | `SyncRule` | The export Synchronisation Rule a not-connected entry is about; empty for a joined connection. |
-| `Join` | How a joined connection was joined: `JoinType`, `Method` (`Projection`, `Provisioning`, `InboundMatching` or `ExportMatching`), `DateJoined`, `SyncRuleId`, `SyncRuleName`, `Source` (`Recorded`, `Derived` from Activity history, or `NotRecorded`), `Description` (one sentence, for example *Projected by the Synchronisation Rule "HR Users Import"*), `ActivityId` and `RunProfileExecutionItemId`. Empty for a not-connected entry. |
+| `Join` | How a joined connection was joined: `JoinType`, `Method` (`Projection`, `Provisioning`, `InboundMatching` or `ExportMatching`), `DateJoined`, `SyncRuleId`, `SyncRuleName`, `Source` (`Recorded`, `Derived` from Activity history, or `NotRecorded`), `Description` (one sentence, for example *Projected by the Synchronisation Rule "HR Users Import"*), `ActivityId`, `RunProfileExecutionItemId`, and for a join made by matching `ObjectMatchingRuleId` and `MatchValue` (what it matched on). Empty for a not-connected entry. |
 | `Hint` | A not-connected entry's one-line qualifier, for example *Fails on Department; Cost Centre or Job Title*. |
 | `BulletsTitle`, `Bullets` | What a not-connected entry needs, or what happens next, as plain-text lines. |
 | `Summary` | A not-connected entry as plain text to paste into a ticket, ending with the evaluation time in UTC. |
@@ -1053,7 +1053,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 
 ### Get-JIMGeneratedValue
 
-Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
+Lists the generated values a Metaverse Object currently holds (Unique Value Generation): the
 committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
 and its state. Empty when the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
 [Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
@@ -1324,7 +1324,7 @@ Get-JIMPendingDeletion -Summary
 
 Depending on the parameter set:
 
-- **List**: pending deletion items including object details and scheduled deletion date. The object type is returned as a nested `Type` object with `Id` and `Name` properties (previously flat `TypeId`/`TypeName`; this is a breaking change to the output shape).
+- **List**: pending deletion items including object details and scheduled deletion date. The object type is returned as a nested `Type` object with `Id` and `Name` properties.
 - **Count**: total number of pending deletions as an integer
 - **Summary**: breakdown of pending deletion counts grouped by object type
 

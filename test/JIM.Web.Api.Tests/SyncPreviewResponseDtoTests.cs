@@ -63,6 +63,24 @@ public class SyncPreviewResponseDtoTests
     }
 
     [Test]
+    public void FromModel_ProbeForAValueBuiltFromTheGeneratedValue_CarriesTheAttributeItIsBuiltFrom()
+    {
+        // Generated Value Forms (#2023).
+        var model = new SyncPreviewResult
+        {
+            GeneratedValueProbes =
+            [
+                new SyncPreviewGeneratedValueProbe { AttributeName = "Account Name", Value = "jbloggs", ConnectedSystemNames = ["Corp AD"] },
+                new SyncPreviewGeneratedValueProbe { AttributeName = "Email", Value = "jbloggs@corp.local", BuiltFromAttributeName = "Account Name", ConnectedSystemNames = ["Corp AD"] }
+            ]
+        };
+
+        var dto = SyncPreviewResponse.FromModel(model);
+
+        Assert.That(dto.GeneratedValueProbes.Select(p => p.BuiltFromAttributeName), Is.EqualTo(new[] { null, "Account Name" }));
+    }
+
+    [Test]
     public void FromModel_NoGeneratedValueProbes_IsAnEmptyList()
     {
         Assert.That(SyncPreviewResponse.FromModel(new SyncPreviewResult()).GeneratedValueProbes, Is.Empty);

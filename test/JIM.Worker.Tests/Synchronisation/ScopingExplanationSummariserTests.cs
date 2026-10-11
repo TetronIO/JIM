@@ -273,6 +273,34 @@ public class ScopingExplanationSummariserTests
             }
         });
 
+    /// <summary>
+    /// A matching join says what matched (#2052): the value, the Metaverse attribute and what it was compared with.
+    /// </summary>
+    [TestCase(7, "Payroll Import", "employeeNumber",
+        ExpectedResult = "Joined by matching, under the Synchronisation Rule \"Payroll Import\": matched \"48213\" on Employee ID (equals employeeNumber)")]
+    [TestCase(null, null, "Replace(cs[\"employeeNumber\"], \"EMP-\", \"\")",
+        ExpectedResult = "Joined by matching on the Connected System's Object Matching Rules: matched \"48213\" on Employee ID (equals Replace(cs[\"employeeNumber\"], \"EMP-\", \"\"))")]
+    public string DescribeJoin_RecordedMatch_NamesTheValueAndTheRule(int? ruleId, string? ruleName, string matchSource) =>
+        ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            JoinType = ConnectedSystemObjectJoinType.Joined, Method = ConnectedSystemObjectJoinMethod.InboundMatching,
+            SyncRuleId = ruleId, SyncRuleName = ruleName, Source = JoinRecordSource.Recorded,
+            ObjectMatchingRuleId = 3, MatchValue = "48213", MatchedAttributeName = "Employee ID", MatchSource = matchSource
+        });
+
+    [Test]
+    public void DescribeJoin_RecordedMatchWhoseRuleWasDeleted_StillNamesTheValue()
+    {
+        var text = ScopingExplanationSummariser.DescribeJoin(new JoinRecord
+        {
+            JoinType = ConnectedSystemObjectJoinType.Joined, Method = ConnectedSystemObjectJoinMethod.InboundMatching,
+            SyncRuleId = 7, SyncRuleName = "Payroll Import", Source = JoinRecordSource.Recorded, MatchValue = "48213"
+        });
+
+        Assert.That(text, Is.EqualTo(
+            "Joined by matching, under the Synchronisation Rule \"Payroll Import\": matched \"48213\" (the Object Matching Rule has since been deleted)"));
+    }
+
     [TestCase(ConnectedSystemObjectJoinType.Projected, ExpectedResult = "Projected; the Synchronisation Rule was not recorded")]
     [TestCase(ConnectedSystemObjectJoinType.Provisioned, ExpectedResult = "Provisioned; the Synchronisation Rule was not recorded")]
     [TestCase(ConnectedSystemObjectJoinType.Joined, ExpectedResult = "Joined; how was not recorded")]

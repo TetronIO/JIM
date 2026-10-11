@@ -347,6 +347,8 @@
                 }
             </MudAlert>
 
+            <MatchCandidatesPanel Candidates="@_matchCandidates" />
+
             <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
         }
 
@@ -525,6 +527,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // The upward causal chain (#1223): why the changes on this item happened. Loaded here rather than in
     // the panel so the panel stays a rendering component with no data access of its own.
     private CausalChain? _causalChain;
+
+    /// <summary>The objects an ambiguous match found (#2052); empty for any other item.</summary>
+    private IReadOnlyList<MatchCandidateDetail> _matchCandidates = [];
 
     // Decision-time deletion policy snapshot (#119): the deletion rule context panels render from the facts
     // recorded when the decision was made, never from the object type's current configuration, so the
@@ -750,6 +755,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         await LoadLivePendingExportIdsAsync(jim);
         await LoadProvisionedConnectedSystemObjectNamesAsync(jim);
+
+        _matchCandidates = ActivityRunProfileExecutionItemMatchCandidate.AreRecordedFor(_activityRunProfileExecutionItem.ErrorType)
+            ? await jim.Activities.GetMatchCandidatesAsync(Id)
+            : [];
 
         // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.

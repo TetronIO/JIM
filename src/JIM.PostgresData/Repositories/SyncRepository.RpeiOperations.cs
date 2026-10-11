@@ -68,6 +68,9 @@ public partial class SyncRepository
             allEdges.AddRange(rpei.CausalEdges);
         }
 
+        // Ambiguous match candidates buffered on the RPEIs (#2052), written beside the edges for the same reason.
+        var allCandidates = CollectMatchCandidates(rpeis);
+
         // Persist CSO change records linked to sync outcomes (PendingExportCreated snapshots)
         // on the main EF connection — this is a small subset and needs EF AddRange.
         var outcomeCsoChanges = allOutcomes
@@ -142,6 +145,10 @@ public partial class SyncRepository
             if (allEdges.Count > 0)
                 await BulkInsertCausalEdgesAsync(allEdges);
 
+            // Step 4b: Insert ambiguous match candidates (#2052), on the same terms as the edges.
+            if (allCandidates.Count > 0)
+                await BulkInsertMatchCandidatesAsync(allCandidates);
+
             // Step 5: Upsert the batch's stat counter deltas on the main EF connection. Not
             // transactional with the COPY partitions (which have already committed); a crash
             // between the two leaves advisory drift that completion-time finalisation reconciles.
@@ -182,6 +189,9 @@ public partial class SyncRepository
                 if (allEdges.Count > 0)
                     await BulkInsertCausalEdgesAsync(allEdges);
 
+                if (allCandidates.Count > 0)
+                    await BulkInsertMatchCandidatesAsync(allCandidates);
+
                 await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
 
                 if (transaction != null)
@@ -202,6 +212,9 @@ public partial class SyncRepository
             foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
                 rpei.CausalEdges.Clear();
         }
+
+        foreach (var rpei in rpeis.Where(r => r.MatchCandidates.Count > 0))
+            rpei.MatchCandidates.Clear();
 
         _context.Database.SetCommandTimeout(previousTimeout);
         return true; // Raw SQL used — RPEIs persisted outside EF change tracker
@@ -511,12 +524,18 @@ public partial class SyncRepository
             if (edges.Count > 0)
                 await BulkInsertCausalEdgesAsync(edges);
 
+            var candidates = CollectMatchCandidates(rpeis);
+            if (candidates.Count > 0)
+                await BulkInsertMatchCandidatesAsync(candidates);
+
             if (transaction != null)
                 await transaction.CommitAsync();
 
             // Emptied only once committed, so a rolled-back update leaves them to be retried.
             foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
                 rpei.CausalEdges.Clear();
+            foreach (var rpei in rpeis.Where(r => r.MatchCandidates.Count > 0))
+                rpei.MatchCandidates.Clear();
         }
         finally
         {
@@ -837,6 +856,74 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 16}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 17}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 18}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
+            }
+
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The ambiguous match candidates buffered on <paramref name="rpeis"/> (#2052), each pointed at its item and given an
+    /// id. The items' own ids exist by now; the candidates were recorded before them.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItemMatchCandidate> CollectMatchCandidates(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        var candidates = new List<ActivityRunProfileExecutionItemMatchCandidate>();
+        foreach (var rpei in rpeis.Where(r => r.MatchCandidates.Count > 0))
+        {
+            foreach (var candidate in rpei.MatchCandidates)
+            {
+                if (candidate.Id == Guid.Empty)
+                    candidate.Id = Guid.NewGuid();
+                candidate.ActivityRunProfileExecutionItemId = rpei.Id;
+            }
+
+            candidates.AddRange(rpei.MatchCandidates);
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Bulk inserts ambiguous match candidates (#2052) using parameterised multi-row INSERT, chunked to stay within
+    /// the PostgreSQL parameter limit. Candidates are append-only, so there is no matching update path.
+    /// </summary>
+    internal async Task BulkInsertMatchCandidatesAsync(List<ActivityRunProfileExecutionItemMatchCandidate> candidates)
+    {
+        if (candidates.Count == 0)
+            return;
+
+        var columnsPerRow = MatchCandidateBulkColumns.MatchCandidates.Length;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        var sql = new System.Text.StringBuilder();
+
+        foreach (var chunk in BulkSqlHelpers.ChunkList(candidates, chunkSize))
+        {
+            sql.Clear();
+            // Parameter order below MUST match MatchCandidateBulkColumns.MatchCandidates exactly.
+            sql.Append($@"INSERT INTO ""ActivityRunProfileExecutionItemMatchCandidates"" ({BulkSqlHelpers.ToQuotedList(MatchCandidateBulkColumns.MatchCandidates)}) VALUES ");
+
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"@p{p}"))).Append(')');
+
+                var candidate = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = candidate.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = candidate.ActivityRunProfileExecutionItemId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)candidate.CandidateKind });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = candidate.CandidateId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)candidate.DisplayNameSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)candidate.TypeNameSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)candidate.ConnectedSystemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)candidate.ConnectedSystemNameSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)candidate.MatchedValue ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)candidate.ObjectMatchingRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)candidate.ObjectMatchingRuleDescriptionSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = candidate.Ordinal });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = candidate.CandidateTotal });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

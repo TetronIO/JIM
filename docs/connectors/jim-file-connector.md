@@ -246,7 +246,7 @@ The error `Row X has Y columns but the header defines Z columns` means a data ro
 
 The error `Object type column 'Type' not found in file headers` means the column name specified in Object Type Column does not match any column in the file.
 
-- Check the spelling and case of the column name -- the match is case-insensitive, but the column must exist in the header row.
+- Check the spelling and case of the column name; the match is case-insensitive, but the column must exist in the header row.
 - If the file does not have an object type column, use the Object Type setting instead.
 
 ### Encoding issues

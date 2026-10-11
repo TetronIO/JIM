@@ -93,13 +93,13 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 
 ## See also
 
-- [Sync Preview](sync-preview.md) -- previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
-- [Activities](activities.md) -- every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
-- [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
-- [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
-- [Connected Systems](connected-systems.md#previewing-a-partition-or-container-change) -- previewing a change to what JIM imports
-- [Synchronisation Rules](synchronisation-rules.md#previewing-a-destructive-toggle-change) -- previewing a change to the destructive toggles
-- [Object Matching](synchronisation-rules.md#previewing-an-object-matching-change) -- previewing a change to which identity an account joins
-- [Behaviour toggles](synchronisation-rules.md#previewing-a-behaviour-change) -- previewing a change to whether a rule runs, and what it may create
-- [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation) -- the changed-since indicator
-- [Service Settings](service-settings.md) -- switching configuration change tracking on or off
+- [Sync Preview](sync-preview.md): previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
+- [Activities](activities.md): every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
+- [Preview cmdlets](../powershell/previews.md): starting, reading and cancelling a preview from PowerShell
+- [Metaverse](metaverse.md#previewing-a-deletion-settings-change): previewing a change to deletion settings
+- [Connected Systems](connected-systems.md#previewing-a-partition-or-container-change): previewing a change to what JIM imports
+- [Synchronisation Rules](synchronisation-rules.md#previewing-a-destructive-toggle-change): previewing a change to the destructive toggles
+- [Object Matching](synchronisation-rules.md#previewing-an-object-matching-change): previewing a change to which identity an account joins
+- [Behaviour toggles](synchronisation-rules.md#previewing-a-behaviour-change): previewing a change to whether a rule runs, and what it may create
+- [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation): the changed-since indicator
+- [Service Settings](service-settings.md): switching configuration change tracking on or off

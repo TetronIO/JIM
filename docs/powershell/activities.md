@@ -265,8 +265,24 @@ Returns a `PSCustomObject` describing the item:
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
 | `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling) mode. The values themselves are on the Connected System Object. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
+| `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
+
+An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name:
+
+| Property | Description |
+|----------|-------------|
+| `CandidateKind` | `MetaverseObject` or `ConnectedSystemObject`. |
+| `CandidateId` | The candidate's ID. |
+| `DisplayNameSnapshot`, `TypeNameSnapshot` | The candidate's display name and type when the item was recorded. |
+| `ConnectedSystemId`, `ConnectedSystemNameSnapshot` | For a Connected System Object candidate, its Connected System. |
+| `MatchedValue` | The value or values the candidate matched on. |
+| `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot` | The rule, and what it compared, for example `Employee ID equals employeeNumber`. |
+| `Ordinal` | The candidate's position in the list. |
+| `CandidateTotal` | How many candidates the match found in all, which can be more than the 10 listed. |
+| `Exists` | Whether the candidate still exists. |
+| `JoinedObjects` | For a Metaverse Object candidate, the Connected System Objects joined to it now, each with `ConnectedSystemObjectId`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
 
 ### Examples
 
@@ -289,6 +305,12 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 ```
 
 This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
+
+```powershell title="List the identities an ambiguous match found"
+(Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
+    Select-Object DisplayNameSnapshot, MatchedValue, Exists,
+        @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
+```
 
 ---
 

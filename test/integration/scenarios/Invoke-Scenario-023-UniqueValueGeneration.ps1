@@ -22,9 +22,11 @@
     following, including when the refused value is the derived one); anchored by the Cross-Domain
     Export CSV target, the export is parked as Needs Decision; with the flow's Collision Remediation
     switch off (set in the database until PR 9 gives it a surface), the refusal is an ordinary export
-    error; and (Generated Value Forms, #2014) with the derived User Principal Name flow's Keep unique
+    error; (Generated Value Forms, #2014) with the derived User Principal Name flow's Keep unique
     switch off (set with Set-JIMSyncRuleMapping -KeepUnique), a refusal of the User Principal Name is an
-    ordinary export error and the Account Name stays. Steps that provoke an Error line on purpose declare
+    ordinary export error and the Account Name stays; and (Generated Value Forms, #2023) accounts created
+    outside JIM holding the User Principal Name or an Email alias built from a joiner's first candidates
+    make JIM pass those candidates over before issuing, so the export is never refused. Steps that provoke an Error line on purpose declare
     it (Add-JimExpectedError).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
@@ -73,7 +75,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "Forms", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -770,7 +772,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "Forms")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -1847,6 +1849,69 @@ try {
             $restored = Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id
             Add-TestResult -Name "[Keep unique] The switch is back on afterwards" -Passed ($restored.KeepUnique -eq $true) -Detail "KeepUnique: $($restored.KeepUnique)"
         }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Generated Value Forms (#2023): accounts created outside JIM, in an OU outside the import scope and
+    # BEFORE the joiner's synchronisation, hold values built from the joiner's first candidates, not the
+    # candidates themselves. JIM works out each candidate's Email and User Principal Name before issuing it,
+    # finds them in use by probing, passes those candidates over and issues the next, so the export is never
+    # refused. Active Directory: the User Principal Name built from the first candidate (userPrincipalName
+    # is forest-unique), then the Email built from the second as a proxyAddresses alias (mail is probed
+    # with its aliases). OpenLDAP: the Email built from the first (the lab keeps mail unique).
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("Forms")) {
+        Write-TestSection "Test 20: Values built from a candidate are in use, so JIM passes the candidate over before issuing it"
+
+        # ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, pinned by SyncOutcomeTypeOrdinalTests.
+        $script:CandidatesSkippedOutcomeType = 60
+        $formsBase = Get-GeneratedBaseValue -FirstName "Ottoline" -LastName "Vex"
+        $skippedExpected = 1
+        if ($isRfcDirectory) {
+            $clashDn = New-CollidingDirectoryAccount -Collide Mail -Value $formsBase -Tag "formsa"
+            Write-Host "  Created $clashDn holding mail '$formsBase@panoply.local' outside JIM" -ForegroundColor Gray
+        }
+        else {
+            $clashDn = New-CollidingDirectoryAccount -Collide UserPrincipalName -Value $formsBase -Tag "formsa"
+            Write-Host "  Created $clashDn holding userPrincipalName '$formsBase@panoply.local' outside JIM" -ForegroundColor Gray
+
+            $aliasDn = "CN=legacy-formsb,OU=Legacy,$($DirectoryConfig.BaseDN)"
+            $alias = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $aliasDn -SamAccountName 'legacy-formsb' -Password 'Pz7#Kq2!Wm9$' `
+                -Attributes ([ordered]@{ userPrincipalName = 'legacy-formsb@panoply.local'; proxyAddresses = "smtp:$($formsBase)1@panoply.local"; description = 'Created outside JIM' })
+            if (-not $alias.Success) { throw "Failed to create the alias account '$aliasDn': $($alias.Output)" }
+            Write-Host "  Created $aliasDn holding the alias smtp:$($formsBase)1@panoply.local outside JIM" -ForegroundColor Gray
+            $skippedExpected = 2
+        }
+        $expected = if ($skippedExpected -eq 1) { "$($formsBase)1" } else { "$($formsBase)2" }
+
+        Add-HrCsvJoiner -EmployeeId "EMP900090" -FirstName "Ottoline" -LastName "Vex" -Department "Estates"
+        $import = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $import.activityId -Name "HR CSV Full Import (forms)"
+        $formsSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $formsSync.activityId -Name "HR CSV Delta Sync (forms)"
+
+        $ottoline = Get-PersonByEmployeeId -EmployeeId "EMP900090"
+        Assert-NotNull -Value $ottoline -Message "Ottoline Vex was projected"
+        $email = Get-MvoAttributeValue -MvoId $ottoline.id -AttributeName "Email"
+        $upn = Get-MvoAttributeValue -MvoId $ottoline.id -AttributeName "User Principal Name"
+        Add-TestResult -Name "[Forms] The joiner is given '$expected': the values built from the earlier candidates were in use" `
+            -Passed ($ottoline.attributes.'Account Name' -eq $expected) -Detail "Got '$($ottoline.attributes.'Account Name')'"
+        Add-TestResult -Name "[Forms] Email and User Principal Name are built from the issued Account Name" `
+            -Passed ($email -eq "$expected@panoply.local" -and $upn -eq "$expected@panoply.local") -Detail "Email '$email', User Principal Name '$upn'"
+
+        $skippedDetails = @((Invoke-JimDatabaseScalar -Sql "SELECT string_agg(o.""DetailMessage"", ' | ' ORDER BY o.""DetailMessage"") FROM ""ActivityRunProfileExecutionItemSyncOutcomes"" o JOIN ""ActivityRunProfileExecutionItems"" r ON r.""Id"" = o.""ActivityRunProfileExecutionItemId"" WHERE r.""ActivityId"" = '$($formsSync.activityId)' AND o.""OutcomeType"" = $script:CandidatesSkippedOutcomeType;") -split ' \| ' | Where-Object { $_ })
+        Add-TestResult -Name "[Forms] The synchronisation records each candidate passed over, naming the value built from it" `
+            -Passed ($skippedDetails.Count -eq $skippedExpected -and @($skippedDetails | Where-Object { $_ -match '\(built from Account Name\)' }).Count -eq $skippedExpected) `
+            -Detail ($skippedDetails -join ' | ')
+
+        $export = Start-DirectoryExportForCollision -Context "forms"
+        $ownItems = @($export.Items | Where-Object { $_.displayName -eq 'Ottoline Vex' })
+        Add-TestResult -Name "[Forms] The directory accepts the export: nothing is refused or corrected" `
+            -Passed ($ownItems.Count -eq 1 -and (-not $ownItems[0].errorType -or $ownItems[0].errorType -eq 'NotSet') -and $export.Stats.totalGeneratedValuesRemediated -eq 0) `
+            -Detail "Items: $(($ownItems | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | '); remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+        $provisioned = Get-LDAPUser -UserIdentifier $expected -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "[Forms] The joiner is provisioned to the directory as '$expected'" -Passed ($null -ne $provisioned) `
+            -Detail "Directory entry: $(if ($provisioned) { $provisioned['dn'] } else { 'none' })"
     }
 
     Assert-NoWorkerErrors -Since $startTime

@@ -355,6 +355,7 @@ public static class Helpers
 
             // Synchronisation-phase errors: the Connected System Object exists but synchronisation failed.
             [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",

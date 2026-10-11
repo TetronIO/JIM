@@ -108,7 +108,7 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 12. Confirm `offline_access` is listed (Keycloak adds it as a default optional scope on new clients). If it is missing, click **Add client scope**, select `offline_access`, and add it as **Optional**. This lets the module receive a refresh token for silent renewal and token persistence.
 
 !!! note
-    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401--8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
+    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401 to 8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
 
 ## Step 7: Configure JIM Environment Variables
 
