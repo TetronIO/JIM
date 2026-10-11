@@ -449,6 +449,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("UnresolvedReferenceCount")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ActivityId");

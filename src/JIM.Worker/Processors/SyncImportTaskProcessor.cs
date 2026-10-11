@@ -3641,6 +3641,21 @@ public class SyncImportTaskProcessor
         // reported like unresolved references, never a run failure.
         var ambiguousItems = new System.Collections.Concurrent.ConcurrentBag<(ConnectedSystemObject Cso, ConnectedSystemObjectAttributeValue AttrValue, List<string> CandidateTypeNames)>();
 
+        // Every value each object is left with, unresolved or ambiguous, gathered before anything is reported (#959),
+        // so the object's item records all of them rather than whichever one reached it first. Only the sequential
+        // phases below call it; the parallel Phase 1 never does.
+        var unresolvedByCso = new Dictionary<ConnectedSystemObject, List<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)>>();
+        void RecordUnresolved(ConnectedSystemObject cso, ConnectedSystemObjectAttributeValue attrValue, IReadOnlyList<string>? ambiguousWith)
+        {
+            if (!unresolvedByCso.TryGetValue(cso, out var references))
+            {
+                references = [];
+                unresolvedByCso[cso] = references;
+            }
+
+            references.Add((attrValue.Attribute?.Name ?? $"attribute {attrValue.AttributeId}", attrValue.UnresolvedReferenceValue!, ambiguousWith));
+        }
+
         // Phase 1: Resolve from in-memory dictionaries in parallel and collect still-unresolved references for batch DB query.
         // After Commits 1-4, the loop body is purely CPU-bound dictionary lookups with no DB calls,
         // so parallel execution is safe. All shared data structures are read-only after construction;
@@ -3804,39 +3819,17 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // how this is reported (error, warning or silently logged) is a per-Connected System setting.
+                    // Recorded against the object here and reported once per object below; how it is reported
+                    // (error, warning or silently logged) is a per-Connected System setting.
                     unresolvedReferenceCount++;
+                    RecordUnresolved(cso, attrValue, null);
 
-                    switch (unresolvedReferenceHandling)
-                    {
-                        case UnresolvedReferenceHandling.Error:
-                            rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                            {
-                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it.";
-                                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                            }
-                            else
-                            {
-                                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
-                            }
-
-                            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
-                            break;
-
-                        case UnresolvedReferenceHandling.Warn:
-                            // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
-                            // summary warning after the loop instead (see below).
-                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
-                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
-                            break;
-
-                        case UnresolvedReferenceHandling.Ignore:
-                        default:
-                            Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. Ignored per Connected System setting.",
-                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
-                            break;
-                    }
+                    if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+                        Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
+                            LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                    else
+                        Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId} (handling: {UnresolvedReferenceHandling}).",
+                            LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, unresolvedReferenceHandling);
                 }
             }
         }
@@ -3848,36 +3841,36 @@ public class SyncImportTaskProcessor
         foreach (var (cso, attrValue, candidateTypeNames) in ambiguousItems)
         {
             ambiguousReferenceCount++;
-            var candidateNames = string.Join(", ", candidateTypeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+            var distinctCandidateNames = candidateTypeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+            RecordUnresolved(cso, attrValue, distinctCandidateNames);
 
-            switch (unresolvedReferenceHandling)
-            {
-                case UnresolvedReferenceHandling.Error:
-                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                    {
-                        activityRunProfileExecutionItem.ErrorMessage = $"A reference value ({attrValue.UnresolvedReferenceValue}) matches objects of more than one Object Type ({candidateNames}), and attribute '{attrValue.Attribute?.Name}' does not declare which Object Type it references, so the reference cannot be resolved. Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                    }
-                    else
-                    {
-                        Log.Warning("ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {CsoId}, ambiguous reference: {AmbiguousRef}",
-                            cso.Id, LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue));
-                    }
-                    break;
-
-                case UnresolvedReferenceHandling.Warn:
-                    Log.Warning("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) and cannot be resolved.",
-                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
-                    break;
-
-                case UnresolvedReferenceHandling.Ignore:
-                default:
-                    Log.Debug("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}). Ignored per Connected System setting.",
-                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
-                    break;
-            }
+            var candidateNames = string.Join(", ", distinctCandidateNames);
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+                Log.Warning("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) and cannot be resolved.",
+                    LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames);
+            else
+                Log.Debug("ResolveReferencesAsync: A reference value ({AmbiguousRef}) on CSO {CsoId} matches objects of more than one Object Type ({CandidateNames}) (handling: {UnresolvedReferenceHandling}).",
+                    LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id, candidateNames, unresolvedReferenceHandling);
         }
+
+        // One report per object, whatever the handling (#959). The count always goes on the object's item, so no
+        // unresolved reference is ever lost from the Activity; Warn and Ignore leave the item un-errored as #873
+        // intends. Under Error the item takes the unresolved reference error only when nothing else already holds
+        // the slot: that error came first and keeps it, and the count still says what else the object was left with.
+        var objectsMissingAnItem = 0;
+        foreach (var (cso, references) in unresolvedByCso)
+        {
+            if (rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem))
+                RecordUnresolvedReferencesOnItem(activityRunProfileExecutionItem, references, unresolvedReferenceHandling);
+            else
+                objectsMissingAnItem++;
+        }
+
+        // An object this run created, or updated with new reference values, has an item, so a miss is not expected:
+        // say so rather than lose those counts silently.
+        if (objectsMissingAnItem > 0)
+            Log.Warning("ResolveReferencesAsync: {Count} Connected System Object(s) with unresolved references had no Run Profile Execution Item; their unresolved values are recorded on the objects only.",
+                objectsMissingAnItem);
 
         if (ambiguousReferenceCount > 0)
         {
@@ -3913,6 +3906,26 @@ public class SyncImportTaskProcessor
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _syncRepo.UpdateActivityAsync(_activity);
+    }
+
+    /// <summary>
+    /// Records what reference resolution left unresolved on one object's Run Profile Execution Item (#959): the count
+    /// under every handling mode, and under Error the unresolved reference error itself, provided no other error
+    /// already holds the item's single error slot.
+    /// </summary>
+    private static void RecordUnresolvedReferencesOnItem(
+        ActivityRunProfileExecutionItem item,
+        IReadOnlyList<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)> references,
+        UnresolvedReferenceHandling handling)
+    {
+        item.UnresolvedReferenceCount = references.Count;
+
+        if (handling != UnresolvedReferenceHandling.Error ||
+            item.ErrorType is not (null or ActivityRunProfileExecutionItemErrorType.NotSet))
+            return;
+
+        item.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+        item.ErrorMessage = ImportOutcomeMessage.ForUnresolvedReferences(references);
     }
 
     /// <summary>

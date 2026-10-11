@@ -33,8 +33,13 @@ function Get-JIMActivityExecutionItem {
     .OUTPUTS
         Without a switch: PSCustomObject with Id, ActivityId, ObjectChangeType, NoChangeReason,
         ConnectedSystemObjectId, MetaverseObjectId, PendingExportId, ExternalIdSnapshot, DisplayNameSnapshot,
-        ObjectTypeSnapshot, ErrorType, ErrorMessage, ErrorStackTrace, AttributeFlowCount, OutcomeSummary and
-        MatchCandidates.
+        ObjectTypeSnapshot, ErrorType, ErrorMessage, ErrorStackTrace, AttributeFlowCount, UnresolvedReferenceCount,
+        OutcomeSummary and MatchCandidates.
+
+        UnresolvedReferenceCount is how many of the object's reference values the import could not resolve to a
+        Connected System Object. It is set whatever ErrorType the item carries and under every Unresolved Reference
+        Handling mode, so filter on it rather than on ErrorType to find every object an import left with
+        unresolved references.
 
         MatchCandidates is empty unless the item is an AmbiguousMatch. Then it lists up to 10 of the objects the
         match found, ordered by display name, each with CandidateKind, CandidateId, DisplayNameSnapshot,
@@ -64,6 +69,15 @@ function Get-JIMActivityExecutionItem {
             Select-Object DisplayNameSnapshot, ErrorType, ErrorMessage
 
         Lists why each object in a Run Profile execution failed.
+
+    .EXAMPLE
+        Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+            Get-JIMActivityExecutionItem |
+            Where-Object { $_.UnresolvedReferenceCount -gt 0 } |
+            Select-Object DisplayNameSnapshot, UnresolvedReferenceCount, ErrorType
+
+        Lists every object an import left with unresolved references, including those whose item carries a
+        different error.
 
     .EXAMPLE
         (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |

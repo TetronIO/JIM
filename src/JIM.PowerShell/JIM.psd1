@@ -64,6 +64,7 @@
         'Get-JIMConnectedSystemAuxiliaryClassDiscovery',
         'Get-JIMConnectedSystemObjectAttributeValue',
         'Get-JIMConnectedSystemObjectChangeHistory',
+        'Get-JIMConnectedSystemObjectUnresolvedReference',
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMConnectedSystemCapability',

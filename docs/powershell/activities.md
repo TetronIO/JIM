@@ -274,6 +274,7 @@ Returns a `PSCustomObject` describing the item:
 | `ErrorMessage` | What went wrong, in words; empty when the object did not fail. |
 | `ErrorStackTrace` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
+| `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling) mode. The values themselves are on the Connected System Object. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
 
@@ -327,6 +328,15 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
     Get-JIMActivityExecutionItem |
     Format-List DisplayNameSnapshot, ErrorType, ErrorMessage
 ```
+
+```powershell title="List every object an import left with unresolved references"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+    Get-JIMActivityExecutionItem |
+    Where-Object { $_.UnresolvedReferenceCount -gt 0 } |
+    Format-Table DisplayNameSnapshot, UnresolvedReferenceCount, ErrorType
+```
+
+This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
 
 ```powershell title="List the identities an ambiguous match found"
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
