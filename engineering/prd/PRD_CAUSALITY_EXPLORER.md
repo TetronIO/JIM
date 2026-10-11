@@ -4,6 +4,8 @@
 - **Created:** 2026-10-11
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
+- **Plan:** [CAUSALITY_EXPLORER.md](../plans/CAUSALITY_EXPLORER.md)
+- **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
 - **Parent PRD:** [Causal Provenance](done/PRD_CAUSAL_PROVENANCE.md), whose Phase 3 was sketched directionally and left to "its own design pass". This is that pass.
 
 ## Problem Statement
@@ -138,12 +140,13 @@ Phases 1 and 2 answer two questions about one Run Profile Execution Item: what c
 
 ## Open Questions
 
-To be settled at mock review, before the plan is written.
+All five settled at mock review on 2026-10-11, each as recommended.
 
-1. Should the item page's own "View activity item" links open the explorer rather than the item page? Recommendation: no. The item page stays the record; the explorer is reached through its action.
-2. Can a deleted object be a focus? A deleted Connected System Object's items lose their object id, and the Phase 2 walk falls back to the external ID snapshot within the Connected System. Recommendation: yes for a Lineage head that names one, using the same fallback, and say so on the timeline.
-3. How long is the trail, and does it show objects and items alike? Recommendation: the 10 most recent foci, both kinds.
-4. Does the explorer offer the panel's other views (Table, Timeline) or the Lineage only? Recommendation: the Lineage only; the other views stay on the item page.
+1. ~~Should the item page's own "View activity item" links open the explorer?~~ **Resolved: no.** The item page stays the record; the explorer is reached through its **Open in explorer** button.
+2. ~~Can a deleted object be a focus?~~ **Resolved: yes,** found through its deletion record and by its external ID within its Connected System, the fallback the walk already uses, and the timeline says so.
+3. ~~How long is the trail?~~ **Resolved:** the 10 most recent foci, items and objects alike, carried in the page address.
+4. ~~Which views does the explorer offer?~~ **Resolved:** the Lineage only; Table and Timeline stay on the item page.
+5. ~~Where does the explorer live in navigation?~~ **Resolved:** no menu entry. It always opens on a focus; with none, it says where to start from.
 
 ## Acceptance Criteria
 

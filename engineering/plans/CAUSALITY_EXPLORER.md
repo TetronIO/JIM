@@ -1,0 +1,175 @@
+# Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
+
+- **Status:** Planned
+- **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
+- **PRD:** [PRD_CAUSALITY_EXPLORER.md](../prd/PRD_CAUSALITY_EXPLORER.md)
+- **Earlier phases:** [Phase 1 plan](done/CAUSAL_PROVENANCE.md), [Phase 2 plan](done/CAUSAL_PROVENANCE_PHASE_2.md)
+- **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
+- **Created:** 2026-10-11
+
+## Overview
+
+Phases 1 and 2 explain one execution item from that item's own page. This phase lets an administrator start where the question arises (a Pending Export, a Connected System Object, a Metaverse Object) and follow a chain without changing page. It adds three entry points, a Causality Explorer page that re-centres the existing Lineage in place with a trail back, and the matching REST and PowerShell reads. Nothing new is captured: every read uses what Phases 1 and 2 already record, plus four indexes.
+
+## Business Value
+
+An administrator who finds a Pending Export they do not recognise has no route today to the run that queued it, although JIM recorded it. Following a five-hop chain costs five page loads, each landing above the Lineage. An object's history is reachable one change at a time, and only where change tracking is on. The explorer turns each of those into one click, at the same read cost as a single item page.
+
+## Resolved design decisions
+
+Approved at mock review, 2026-10-11:
+
+1. **Scope:** entry points plus re-centring. No graph canvas, no Activity-wide aggregate, no new capture.
+2. **The item page keeps its own links.** "View activity item" still opens the item page; the explorer is reached through an **Open in explorer** button on the causality panel.
+3. **A deleted object can be a focus,** found through its deletion record and, as the walk already does, by its external ID within its Connected System.
+4. **The trail holds the 10 most recent foci,** items and objects alike, and travels in the page address.
+5. **The explorer shows the Lineage only.** Table and Timeline stay on the item page.
+6. **No menu entry.** The explorer always opens on a focus; the breadcrumb is Activities › Causality Explorer, and an address with no focus says where to start from.
+7. **Parity:** the two new reads (an object's causal timeline, a Pending Export's queueing runs) ship on all three surfaces. Re-centring and the trail are portal-only navigation, because the API already walks from any item id.
+
+## Technical Architecture
+
+### Current state (verified against the code)
+
+- **Lineage links are strings built inside the builders.** `CausalityLineageModelBuilder.GetActivityItemHref` and the consequence placement write `/activity/item/{id}`, object heads carry the object page's address, and `CausalityLineageConsequenceCard.razor` hard-codes the same address for paged cohort members.
+- **The item page assembles everything the panel needs itself,** in roughly 250 lines of `ActivityRunProfileExecutionItemDetail.razor`: the item, its Activity, both Connected System headers, the identity (with the deleted-identity fallback), the Metaverse Object Type (four fallbacks), live Pending Export ids, provisioned object names, the decision-time deletion policy, the upward chain, and the consequences after first render.
+- **A live Pending Export can name its stagers.** It records the latest one (`QueuedByRunProfileExecutionItemId`); each staging synchronisation's outcome names it (`TargetEntityId`, type `PendingExportCreated` or `DeprovisionQueued`); a reference recall item also carries it as `PendingExportId`. Outcomes are indexed by item, not by `TargetEntityId`, and outcome tracking can be switched off, in which case only the latest stager is known.
+- **Items have no time of their own;** their time is their Activity's `Executed`. Items are indexed by `ConnectedSystemObjectId` and `ExternalIdSnapshot`, not by `MetaverseObjectId` (set only on export scope review items).
+- **Deleted objects keep their history under a different column.** On deletion, `MetaverseObjectChanges` rows move from `MetaverseObjectId` to `DeletedMetaverseObjectId`, and a deleted Connected System Object's change records carry `DeletedConnectedSystemObjectId`. Neither is indexed.
+- **Batched cause reads exist:** `GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync` and `GetRunProfileExecutionItemCausalSummariesAsync`. The source-import hop is read per object (`GetLatestImportItemForCsoAsync`, `...ForExternalIdAsync`).
+- **Both walks already mark where they stopped:** `CausalChainResolution.DepthLimitReached` on an upward cohort, `CausalConsequenceCohort.IsFurtherThanShown` downward, each with member item ids.
+
+### Proposed solution
+
+**1. A link policy for the Lineage (`ICausalityLinks`, JIM.Web/Causality).** One interface for every address the Lineage writes: an item, a Connected System Object, a Metaverse Object, plus the label an item link carries. `CausalityPageLinks` reproduces today's addresses and labels exactly; `CausalityExplorerLinks` produces explorer addresses carrying the trail, labelled **Explore from here**. The builders take the policy instead of formatting strings, and the view passes it to the consequence card for paged members. This is the only change the item page sees, and its existing tests must pass unchanged.
+
+**2. One loader for an item's causality (`CausalityItemLoader`, JIM.Web/Causality).** The item page's assembly code moves, unchanged, into a class both the page and the explorer call. It returns a `CausalityItemData` (everything `CausalityPanel` takes today) and keeps the consequences read separate, so both hosts can still read it after first render. The panel stays a rendering component with no data access of its own.
+
+**3. The explorer page (`Pages/CausalityExplorer.razor`).**
+
+| Route | Focus |
+|-------|-------|
+| `/causality` | none: says where to start from |
+| `/causality/items/{id:guid}` | an execution item: the Lineage |
+| `/causality/connected-system-objects/{id:guid}` | a Connected System Object, live or deleted: its causal timeline |
+| `/causality/metaverse-objects/{id:guid}` | a Metaverse Object, live or deleted: its causal timeline |
+
+The trail is the `trail` query value: comma-separated tokens `i:`, `c:` and `m:` followed by an id, oldest first, at most 10. `CausalityTrail` (a plain class) parses, appends, truncates at a revisited focus and serialises it; malformed or unknown tokens are dropped, never thrown on. Every explorer address is a real link, so Blazor's router re-parameterises the same page instance without a page load, and new-tab and back behave as anywhere else. The page reloads its focus in `OnParametersSetAsync`, keyed on the focus as the item page keys its consequences read, so a superseded read never lands on the wrong focus. Trail labels for all tokens resolve in one batch read; a focus that no longer resolves reads "No longer retained". **Copy link** uses the existing clipboard interop.
+
+**4. An object's causal timeline (`ActivityServer.GetCausalTimelineAsync`).** One page (50) of the execution items about an object, newest first by Activity `Executed`, then id. The item ids come from a union, then one join to Activities for ordering and paging, with the total counted from the same set:
+
+| Subject | Item sources |
+|---------|--------------|
+| Live Connected System Object | items by `ConnectedSystemObjectId` |
+| Deleted Connected System Object | items whose change records carry `DeletedConnectedSystemObjectId`; items in its Connected System's Activities with its `ExternalIdSnapshot` (the walk's existing fallback) |
+| Live Metaverse Object | items its `MetaverseObjectChanges` name; items of its currently joined Connected System Objects; items with `MetaverseObjectId` |
+| Deleted Metaverse Object | items its change records name through `DeletedMetaverseObjectId`; items with `MetaverseObjectId` |
+
+Raw SQL into a header DTO (the Summary tier: four sources unioned is one statement, not four EF queries). Where change tracking is off, the Metaverse Object sources reduce to its joined objects' items, and the timeline says what it cannot show (PRD Scenario 5).
+
+**5. Nearest causes in one batch (`ActivityServer.GetNearestCausesAsync`).** For a page of item ids: their causal edges in one read (existing), grouped into first-level cohorts by the walk's own `GroupIntoCohorts`, plus the source-import hop for synchronisation items, read for the whole page by a new batched repository method (a lateral join per object, replacing the per-object call in this path only). The result is `CausalChainCohort`s, the walk's own type, so the portal words them with the existing `CausalityCauseWording.Sentence` and the API returns the existing `-Causes` row shape. Each item keeps at most three cohorts and the total.
+
+**6. A Pending Export's queueing runs (`ActivityServer.GetPendingExportQueuedByAsync`).** The distinct items whose outcomes target the Pending Export, plus its `QueuedByRunProfileExecutionItemId`, newest first, paged (a Group's Pending Export can collect stagers over several runs before it exports), each with its nearest causes from (5).
+
+**7. One migration, four filtered indexes.**
+
+| Index | Serves | Write cost |
+|-------|--------|------------|
+| Sync outcomes `(TargetEntityId)` where `OutcomeType` is `PendingExportCreated` or `DeprovisionQueued` | Queued by | Only staged-export outcome rows, on the synchronisation flush. Measured before and after (see Risks) |
+| `MetaverseObjectChanges (DeletedMetaverseObjectId)` where not null | deleted Metaverse Object timeline | Only the deletion re-key update |
+| `ConnectedSystemObjectChanges (DeletedConnectedSystemObjectId)` where not null | deleted Connected System Object timeline | Only deletion records |
+| `ActivityRunProfileExecutionItems (MetaverseObjectId)` where not null | Metaverse Object timeline | Only export scope review items |
+
+**8. REST and PowerShell.**
+
+| Read | REST | PowerShell |
+|------|------|------------|
+| Queueing runs | `GET /api/v1/synchronisation/pending-exports/{id}/queued-by` | `Get-JIMPendingExport -Id <guid> -QueuedBy [-All]` |
+| Connected System Object timeline | `GET /api/v1/synchronisation/connected-systems/{csId}/connector-space/{csoId}/causal-timeline` | `Get-JIMActivityExecutionItem -ConnectedSystemId <int> -ConnectedSystemObjectId <guid> [-All]` |
+| Metaverse Object timeline | `GET /api/v1/metaverse/objects/{id}/causal-timeline` | `Get-JIMActivityExecutionItem -MetaverseObjectId <guid> [-All]` |
+
+Routes mirror each object's existing `change-history` route. The timeline rows are execution items, so they belong to `Get-JIMActivityExecutionItem`, and each row's `Id` pipes straight into `-Causes` or `-Consequences`. Piping an object into the timeline sets uses an `-InputObject` parameter, following `Get-JIMScheduleExecution`, because the cmdlet already owns `-Id` and cannot alias it (`src/JIM.PowerShell/CLAUDE.md`).
+
+### Data flow
+
+```
+Pending Export page --Explore--+
+Connected System Object page --+--> /causality/... ?trail=...
+Metaverse Object page ---------+         |
+Item page (Open in explorer) --+         v
+                                 CausalityExplorer page
+                                   |               |
+                         item focus|               |object focus
+                                   v               v
+                         CausalityItemLoader   GetCausalTimelineAsync
+                         (chain, consequences)  + GetNearestCausesAsync
+                                   |               |
+                                   v               v
+                         Lineage (explorer links)  timeline rows --Explore--> item focus
+```
+
+## Implementation Phases
+
+Each phase is test-first (red, green, refactor) and builds clean with zero warnings.
+
+### Phase 3-0: Queued by completeness
+
+Before building on the stager link, prove every staging path is findable from the Pending Export it staged: a new Pending Export, a later run updating one already staged, a same-batch merge (#242, `MergedExistingPendingExports`), a reference recall merging into an existing export, a deprovision, a scope-exit delete, and the three housekeeping paths in `Worker.cs`. The first reading of the code suggests a same-batch merge records no outcome naming the export for the second contributor. Phase 2's outstanding-export hop reads the same outcomes, so a gap here is a gap there too. If a gap is confirmed, it is fixed in its own stack layer below the feature, as Phase 2-0 was, with worker and `RequiresPostgres` tests. This is a fix to existing capture, not new capture.
+
+### Phase 3a: Indexes and reads
+
+The migration (§7), regenerated if `main` gains migrations first. `RequiresPostgres` tests for each timeline source (live and deleted, both object kinds), the Queued by read with paging, the batched source-import read, and an index-use assertion (`EXPLAIN`) for each new read. A 10,000-item object opens its first page within the same budget as a ten-item one, asserted against real PostgreSQL.
+
+### Phase 3b: Application reads
+
+`GetCausalTimelineAsync`, `GetNearestCausesAsync`, `GetPendingExportQueuedByAsync`, and the trail's label batch, on `ActivityServer` (a new partial, `ActivityServer.CausalityExplorer.cs`). Unit tests cover cohort grouping matching the walk's, the three-cohort cap, the change-tracking-off reduction, and deleted-object resolution.
+
+### Phase 3c: Portal groundwork (no visible change)
+
+`ICausalityLinks` and `CausalityPageLinks`, threaded through the Lineage builders and the consequence card. Then a move-only extraction of `CausalityItemLoader` from the item page. The existing UI suite and the item page's own tests stay green throughout, with new tests pinning that the page policy writes today's addresses. The **Open in explorer** button on the causality panel follows.
+
+### Phase 3d: The explorer and its entry points
+
+- `CausalityTrail` and `CausalityExplorerLinks` (plain unit tests).
+- The explorer page; a trail bar component; an object timeline component; the focus header with its way out (item page, object page, or the deletion record); "Continue from …" on cards the walk stopped at, continuing from the cohort's sole member or, for a larger cohort, from each member's own link.
+- **Explore causality** on the Connected System Object and Metaverse Object pages; the **Queued by** panel on the Pending Export page, including its no-recorded-run state.
+- bUnit covers the trail bar, the timeline, the Queued by panel, and re-centring. Re-centring is only observable at page level (the router re-parameterising one page instance), so the explorer joins the item page as the second sanctioned page-level exception in `test/CLAUDE.md`.
+
+### Phase 3e: REST and PowerShell
+
+The endpoints and DTOs from §8, with controller tests and an OpenAPI generation run. New parameter sets on `Get-JIMPendingExport` and `Get-JIMActivityExecutionItem`, with Pester tests of binding (piped objects included), paging and output shape.
+
+### Phase 3f: Documentation, integration and close-out
+
+- `docs/configuration/causality.md` gains a section on the explorer, the entry points and the trail. "Causality Explorer" gets a glossary entry and a `vocabulary.psd1` entry (TERM-1). The PowerShell reference gains the new parameters and output tables. Docs conformance and docs coverage run clean.
+- Changelog entries.
+- Scenario 8 gains a step: after the leavers' Delta Synchronisation and before the Export, a Group's `-QueuedBy` names that synchronisation, and a leaver's account timeline lists its deprovision with the deletion as cause. Run at Medium.
+- Runtime check on the full stack against the mock, with screenshots.
+- PRD and plan moved to `done/` in the pull request that closes #2100.
+
+### Phase ordering
+
+3-0 first, since it may add a layer below. Then 3a, 3b, 3c, 3d in order; 3e can start once 3b is in. 3f closes. One pull request closes #2100, plus a stack layer below it if 3-0 finds a gap.
+
+## Success Criteria
+
+- Every PRD acceptance criterion is met, each with named evidence in the plan's delivery notes.
+- The item page renders exactly as before (its tests unchanged and green); the only addition is the **Open in explorer** button.
+- Scenario 8 at Medium passes with the new step.
+- No measurable change in synchronisation throughput from the outcome index (see Risks).
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| The outcome index adds write cost on the synchronisation flush | Filtered to staged-export outcomes only. Measure Scenario 8 at Medium before and after, comparing the outcome flush timings in the worker's diagnostics. If the cost is measurable, drop the index: Queued by then names only the latest stager (`QueuedByRunProfileExecutionItemId`) and says so, until real deployments show whether the full list is worth the write |
+| Extracting the loader from a 1,219-line page breaks something its tests miss | Move-only commit first, page tests green before and after, then a runtime check of the item page before anything builds on it |
+| Re-centring keeps a stale read: a slow load for focus A lands after focus B | Key every read on the focus it was started for and discard any result whose key no longer matches, as the item page does for consequences |
+| The Metaverse Object timeline is incomplete without change tracking | Say so on the timeline (PRD Scenario 5) rather than imply completeness |
+| Outcome tracking switched off leaves Queued by with only the latest stager | The panel lists what is recorded and says when outcome tracking limits it |
+| A long trail makes unwieldy addresses | Capped at 10 tokens (about 400 characters) |
+
+## Dependencies
+
+- Phases 1 (#1223) and 2 (#1811), both merged.
+- No new packages. The clipboard interop and `SegmentedToggle`, `ObjectChip`, `PageInfo` and `SearchField` components already exist.
