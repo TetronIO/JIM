@@ -20,6 +20,7 @@ The standard is the authority; this is the short version of what trips people up
     ```
 
 - **A rule that is wrong for one place is excused in that place,** with a reason: `<!-- conformance: allow STR-5 "terminal output, not code" -->`. Never edit the baseline by hand to make room.
+- **The judgement rules get an advisory review** (`docs-review.yml`): one comment, citing rule IDs, when a pull request changing customer pages opens or is marked ready. Add the `docs-review` label for a fresh one after more commits. It blocks nothing; answer each finding with a fix or a reason.
 
 ## ASCII Diagrams
 
