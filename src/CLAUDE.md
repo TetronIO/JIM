@@ -300,6 +300,8 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 4. Add tests
 5. **Declare the Connector's phases** via `IConnectorPhases` if it performs internal work an administrator would otherwise wait through blind (a file load, a paged fetch), and enter them through the `IConnectorProgress` it is handed. Derive the Connector's tests from `ConnectorPhaseConformanceTests` (JIM.Worker.Tests), which enforces the declaration rules. Declaring nothing is a valid answer where per-item counts already say more; say so where the interface is implemented. Author guidance: `docs/developer/connectors.md` > Declaring the steps of your work; design: `engineering/notes/RUN_PROFILE_PHASES.md`
 
+**Adding a Service Setting:** declare the key in `Constants.SettingKeys`, seed it in `SeedingServer.SyncServiceSettingsAsync` (`ServiceSettingSeedingCoverageTests` fails for a key that is declared but never seeded, #2060), and give it a row in the Service Settings table of `docs/administration/configuration.md` (COV-3; `ServiceSettingDocsCoverageTests`). A Connector setting added to `GetSettings()` likewise needs a row in a Setting table on its Connector's page, named exactly as the form shows it (COV-6; `ConnectorSettingDocsCoverageTests`).
+
 **Adding a built-in (seeded) object or audited configuration entity:**
 
 Two invariants here are enforced only by remembering them, and both have been missed before (the built-in example data template in #866, then the built-in Temporal Scope Reconciliation schedule):
