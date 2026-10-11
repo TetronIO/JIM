@@ -22,7 +22,10 @@
     following, including when the refused value is the derived one); anchored by the Cross-Domain
     Export CSV target, the export is parked as Needs Decision; with the flow's Collision Remediation
     switch off (set in the database until PR 9 gives it a surface), the refusal is an ordinary export
-    error. Steps that provoke an Error line on purpose declare it (Add-JimExpectedError).
+    error; and (Generated Value Forms, #2014) with the derived User Principal Name flow's Keep unique
+    switch off (set with Set-JIMSyncRuleMapping -KeepUnique), a refusal of the User Principal Name is an
+    ordinary export error and the Account Name stays. Steps that provoke an Error line on purpose declare
+    it (Add-JimExpectedError).
 
     The provisioning substrate is Scenario 001's, composed via Setup-Scenario-023.ps1 (which itself calls
     Setup-Scenario-001.ps1 -GenerateAccountName -DeriveFromAccountName, so Email and User Principal Name
@@ -70,7 +73,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -767,7 +770,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -1777,6 +1780,65 @@ try {
         $assignmentState = Invoke-JimDatabaseScalar -Sql "SELECT ""State""::text || ':' || ""RemediationCount""::text FROM ""GeneratedValueAssignments"" WHERE ""MetaverseObjectId"" = '$($person.id)' AND ""MetaverseAttributeId"" = $($config.AccountNameMvAttributeId);"
         Add-TestResult -Name "[Remediation off] The assignment is left unchanged (never remediated)" `
             -Passed ($assignmentState -match ':0$') -Detail "State:RemediationCount '$assignmentState'"
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    # Keep unique switched off on the derived User Principal Name (Generated Value Forms, #2014):
+    # the directory refuses the User Principal Name, but its flow's switch is off, so the refusal is
+    # an ordinary export error and the Account Name it is built from stays. Set through PowerShell,
+    # so the surface is exercised end to end; restored afterwards.
+    # ─────────────────────────────────────────────────────────────────────────────────────
+    if ($lastStepIndex -ge $stepOrder.IndexOf("CollisionKeepUniqueOff")) {
+        Write-TestSection "Test 19: With Keep unique off on the User Principal Name, its refusal is an ordinary export error"
+
+        if ($isRfcDirectory) {
+            Write-Host "  Skipped: OpenLDAP has no userPrincipalName" -ForegroundColor Yellow
+        }
+        else {
+            $upnMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId | Where-Object { $_.TargetMetaverseAttributeName -eq 'User Principal Name' })
+            Assert-Condition -Condition ($upnMapping.Count -eq 1) -Message "The HR import rule holds one User Principal Name Attribute Flow (found $($upnMapping.Count))"
+            $upnMapping = $upnMapping[0]
+
+            $builtFrom = $upnMapping.BuiltFromGeneratedValue
+            Add-TestResult -Name "[Keep unique] The User Principal Name flow reports it is built from Account Name, via Email" `
+                -Passed ($null -ne $builtFrom -and $builtFrom.GeneratedAttributeName -eq 'Account Name' -and @($builtFrom.Via) -contains 'Email' -and $builtFrom.KeepUnique -eq $true) `
+                -Detail "BuiltFromGeneratedValue: $(if ($builtFrom) { "$($builtFrom.GeneratedAttributeName) via '$(@($builtFrom.Via) -join ',')', Kind $($builtFrom.Kind), KeepUnique $($builtFrom.KeepUnique)" } else { 'none' })"
+            $accountNameMapping = Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.AccountNameMappingId
+            $builtValueNames = @($accountNameMapping.Generation.BuiltValues | ForEach-Object { $_.MetaverseAttributeName })
+            Add-TestResult -Name "[Keep unique] The generated Account Name flow lists Email and User Principal Name as built from it" `
+                -Passed ($builtValueNames -contains 'Email' -and $builtValueNames -contains 'User Principal Name') -Detail "BuiltValues: $($builtValueNames -join ', ')"
+
+            $person = Add-CollisionJoiner -EmployeeId "EMP900084" -FirstName "Thaddeus" -LastName "Merrow" -Department "Estates" -Context "Keep unique off"
+            $rejected = $person.attributes.'Account Name'
+            $clashDn = New-CollidingDirectoryAccount -Collide UserPrincipalName -Value $rejected -Tag "ku"
+            Write-Host "  JIM staged '$rejected'; created $clashDn holding userPrincipalName '$rejected@panoply.local' outside JIM" -ForegroundColor Gray
+
+            $stepName = "CollisionKeepUniqueOff"
+            Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $false
+            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse" | Out-Null
+            try {
+                $export = Start-DirectoryExportForCollision -Context "Keep unique off"
+            }
+            finally {
+                Complete-JimExpectedError -Step $stepName
+                Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $true
+            }
+
+            $inUse = @($export.Items | Where-Object { $_.errorType -eq 'UniqueValueAlreadyInUse' })
+            Add-TestResult -Name "[Keep unique] The export records an ordinary UniqueValueAlreadyInUse error" -Passed ($inUse.Count -eq 1) `
+                -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
+            Add-TestResult -Name "[Keep unique] Nothing is remediated or parked" `
+                -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0 -and $export.Stats.totalGeneratedValuesNeedingDecision -eq 0) `
+                -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision)"
+            Add-TestResult -Name "[Keep unique] The Metaverse Account Name is unchanged ('$rejected')" `
+                -Passed ((Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name") -eq $rejected) `
+                -Detail "Got '$(Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name")'"
+            $assignmentState = Invoke-JimDatabaseScalar -Sql "SELECT ""State""::text || ':' || ""RemediationCount""::text FROM ""GeneratedValueAssignments"" WHERE ""MetaverseObjectId"" = '$($person.id)' AND ""MetaverseAttributeId"" = $($config.AccountNameMvAttributeId);"
+            Add-TestResult -Name "[Keep unique] The assignment is left unchanged (never remediated)" `
+                -Passed ($assignmentState -match ':0$') -Detail "State:RemediationCount '$assignmentState'"
+            $restored = Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id
+            Add-TestResult -Name "[Keep unique] The switch is back on afterwards" -Passed ($restored.KeepUnique -eq $true) -Detail "KeepUnique: $($restored.KeepUnique)"
+        }
     }
 
     Assert-NoWorkerErrors -Since $startTime
