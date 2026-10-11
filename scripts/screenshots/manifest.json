@@ -1,71 +1,332 @@
 {
   "profiles": {
-    "portal": { "viewport": { "width": 1674, "height": 1046 }, "deviceScaleFactor": 2 },
-    "api-reference": { "viewport": { "width": 1794, "height": 1121 }, "deviceScaleFactor": 2 },
-    "terminal": { "viewport": { "width": 972, "height": 611 }, "deviceScaleFactor": 2, "transparent": true }
+    "portal": {
+      "viewport": {
+        "width": 1674,
+        "height": 1046
+      },
+      "deviceScaleFactor": 2
+    },
+    "api-reference": {
+      "viewport": {
+        "width": 1794,
+        "height": 1121
+      },
+      "deviceScaleFactor": 2
+    },
+    "terminal": {
+      "viewport": {
+        "width": 972,
+        "height": 611
+      },
+      "deviceScaleFactor": 2,
+      "transparent": true
+    }
   },
   "screenshots": [
     {
       "name": "homepage",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: The dashboard", "README hero image"],
-      "steps": [{ "goto": "/" }, { "waitFor": { "text": "Quick Links" } }]
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: The dashboard",
+        "README hero image"
+      ],
+      "steps": [
+        {
+          "goto": "/"
+        },
+        {
+          "waitFor": {
+            "text": "Quick Links"
+          }
+        }
+      ]
     },
     {
       "name": "connected-systems-list",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: Connected Systems"],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Connected Systems"
+      ],
       "steps": [
-        { "goto": "/admin/connected-systems" },
-        { "waitFor": { "role": "link", "name": "Create Connected System" } }
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "waitFor": {
+            "role": "link",
+            "name": "Create Connected System"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-schema",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Schema discovery"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Schema"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "jimPerson"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Attribute Selection"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-object-matching",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Object Matching"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Matching"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Matching Rules for"
+          }
+        }
       ]
     },
     {
       "name": "synchronisation-rules-list",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: Synchronisation Rules"],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Synchronisation Rules"
+      ],
       "steps": [
-        { "goto": "/admin/sync-rules" },
-        { "waitFor": { "role": "button", "name": "Create Synchronisation Rule" } }
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "waitFor": {
+            "text": "Create Synchronisation Rule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-detail-edit-flow",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Attribute Flow"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "EMEA LDAP Export Users"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Attribute Flow"
+          }
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Expression Mapping') button"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Edit Attribute Flow"
+          }
+        }
       ]
     },
     {
       "name": "mvo-users",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: The Metaverse"],
-      "steps": [{ "goto": "/t/users" }, { "waitFor": { "selector": ".mud-table-root" } }]
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: The Metaverse"
+      ],
+      "steps": [
+        {
+          "goto": "/t/users"
+        },
+        {
+          "waitFor": {
+            "selector": ".mud-table-root"
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-mvo-changes",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Full causality"
+      ],
+      "steps": [
+        {
+          "goto": "/t/groups?q=Company-NexusDynamics"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Company-NexusDynamics"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Changes"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Projected"
+          }
+        }
+      ]
     },
     {
       "name": "activities-history",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: Operational visibility"],
-      "steps": [{ "goto": "/admin/operations?t=history" }, { "waitFor": { "text": "Execution History" } }]
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Operational visibility"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=history"
+        },
+        {
+          "waitFor": {
+            "text": "Execution History"
+          }
+        }
+      ]
     },
     {
       "name": "schedules",
       "kind": "portal",
       "profile": "portal",
-      "themes": ["dark", "light"],
-      "usedBy": ["junctional.io tour: Automation"],
-      "steps": [{ "goto": "/admin/operations?t=schedules" }, { "waitFor": { "role": "button", "name": "New Schedule" } }]
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Automation"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=schedules"
+        },
+        {
+          "waitFor": {
+            "role": "button",
+            "name": "New Schedule"
+          }
+        }
+      ]
     },
     {
       "name": "api-documentation",
       "kind": "portal",
       "profile": "api-reference",
-      "themes": ["dark"],
-      "usedBy": ["junctional.io tour: Full REST API"],
-      "steps": [{ "goto": "/api/reference" }, { "waitFor": { "text": "Download OpenAPI Document" } }]
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour: Full REST API"
+      ],
+      "steps": [
+        {
+          "goto": "/api/reference"
+        },
+        {
+          "waitFor": {
+            "text": "Download OpenAPI Document"
+          }
+        }
+      ]
     }
   ]
 }
