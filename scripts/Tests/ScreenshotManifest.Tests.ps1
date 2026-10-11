@@ -114,6 +114,9 @@ Describe 'ConvertFrom-ScreenshotManifest' {
         @{ Case = 'a locator naming two ways to find the element'; Step = @{ click = @{ text = 'A'; selector = '.b' } } }
         @{ Case = 'a role locator with no name'; Step = @{ click = @{ role = 'tab' } } }
         @{ Case = 'a wait that is not a positive number of milliseconds'; Step = @{ wait = -5 } }
+        @{ Case = 'a fill with nothing to type'; Step = @{ fill = @{ selector = 'input' } } }
+        @{ Case = 'a fill typing something other than text'; Step = @{ fill = @{ selector = 'input'; value = 5 } } }
+        @{ Case = 'a value on an action that types nothing'; Step = @{ click = @{ text = 'Save'; value = 'x' } } }
     ) {
         $m = New-Manifest; $m.screenshots[0].steps = @($Step)
         { ConvertFrom-ScreenshotManifest -Json (ConvertTo-ManifestJson $m) } | Should -Throw '*connected-systems-list*step 1*'
@@ -127,6 +130,7 @@ Describe 'ConvertFrom-ScreenshotManifest' {
             @{ click = @{ role = 'tab'; name = 'Schema' } }
             @{ waitFor = @{ selector = '.mud-table-row' } }
             @{ scroll = @{ text = 'Attribute Flow' } }
+            @{ fill = @{ selector = 'input[placeholder^="Search"]'; value = 'Company-NexusDynamics' } }
             @{ wait = 500 }
         )
         { ConvertFrom-ScreenshotManifest -Json (ConvertTo-ManifestJson $m) } | Should -Not -Throw

@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (Phases 1 to 3 complete: the 21 portal and API tour images and the three terminal images, with `-PrepareData` proven unattended)
+- **Status:** Doing (Phases 1 to 4 complete: all 78 images in junctional.io's asset folder are in the manifest and capture at their published size, with `-PrepareData` proven unattended; distribution outstanding)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -118,7 +118,7 @@ The integration runner resets the environment at the start of a run and leaves i
 1. **Capture engine and data-independent entries** ✅. Manifest, schema validation, the PowerShell entry point, the Playwright driver, geometry profiles, sign-in, theme and navigation state, readiness waits and size checks. Entries that need no particular data: Home, the main lists, the API reference.
 2. **Scenario 8 data and Production mode** ✅. `-PrepareData`, then the remaining tour entries.
 3. **Terminal screenshots** ✅. The HTML terminal window, built after the mock-ups were approved: `powershell-1` (signing in) to `powershell-3` (a session longer than the terminal).
-4. **The rest of the library.** The 54 images in junctional.io's asset folder that the manifest does not list yet.
+4. **The rest of the library** ✅. The 54 images in junctional.io's asset folder that are not on a tour page. Reaching a particular object (a user, a group, the first Full Sync) uses a `fill` step to type into a page's search box, or a list's own URL state (`?q=`, `desc=0`), never an id that changes from run to run.
 5. **Distribution.** junctional.io PR, README stable URL, tetron.io.
 6. **Release workflow (later).** A workflow on a self-hosted runner with enough memory, run on demand or on release tag.
 

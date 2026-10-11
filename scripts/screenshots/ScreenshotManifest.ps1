@@ -18,7 +18,7 @@ Set-StrictMode -Version Latest
 
 $script:ScreenshotKinds = @('portal', 'terminal')
 $script:ScreenshotThemes = @('dark', 'light')
-$script:ScreenshotStepActions = @('goto', 'click', 'waitFor', 'scroll', 'wait')
+$script:ScreenshotStepActions = @('goto', 'click', 'fill', 'waitFor', 'scroll', 'wait')
 $script:ScreenshotLocatorKeys = @('text', 'role', 'name', 'selector', 'exact')
 
 function Read-ScreenshotManifest {
@@ -165,6 +165,15 @@ function Assert-ScreenshotStep {
         }
         { $_ -in 'click', 'waitFor', 'scroll' } {
             Assert-ScreenshotLocator -Where $where -Action $action -Locator $value
+        }
+        'fill' {
+            # A locator for the field, plus the text to type into it (a search box, say).
+            if ($value -isnot [System.Collections.IDictionary] -or $value['value'] -isnot [string] -or $value['value'] -eq '') {
+                throw "${where}: fill takes a locator for the field and the text to type as value."
+            }
+            $field = [ordered]@{}
+            foreach ($key in @($value.Keys | Where-Object { $_ -ne 'value' })) { $field[$key] = $value[$key] }
+            Assert-ScreenshotLocator -Where $where -Action $action -Locator $field
         }
         default {
             throw "${where}: '$action' is not an action; expected one of: $($script:ScreenshotStepActions -join ', ')."

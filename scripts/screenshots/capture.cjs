@@ -46,6 +46,12 @@ async function runStep(page, step) {
   switch (action) {
     case 'goto': await page.goto(baseOrigin + value, { waitUntil: 'networkidle' }); break;
     case 'click': await locate(page, value).click({ timeout: STEP_TIMEOUT_MS }); break;
+    case 'fill':
+      // Search boxes filter after a 300ms debounce (SearchField), so let it fire before the next step looks.
+      await locate(page, value).fill(value.value, { timeout: STEP_TIMEOUT_MS });
+      await page.waitForTimeout(600);
+      await page.waitForLoadState('networkidle');
+      break;
     case 'waitFor': await locate(page, value).waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS }); break;
     case 'scroll': await locate(page, value).scrollIntoViewIfNeeded({ timeout: STEP_TIMEOUT_MS }); break;
     case 'wait': await page.waitForTimeout(value); break;
