@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
+- ✨ A Full Import Run Profile can now **Allow Object Type Changes**, carrying out an intended change of Object Type: the object imports under its new type and the old one is retired. Portal, REST (`allowObjectTypeChanges`) or `-AllowObjectTypeChanges`. (#2049)
+- ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. PowerShell previews show warnings via `Write-Warning`. (#2049)
 
 ### Changed
 
@@ -46,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
 - 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
+- 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
 
 ### Fixed
 
@@ -59,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
 - 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
 - 🐛 A group over Active Directory's MaxValRange (1,500 members by default) now imports its members once when the domain controller also returns an empty `member` beside `member;range=0-1499`, instead of importing that empty attribute as well. (#2041)
-- 🐛 An LDAP entry carrying two selected Object Types now imports as the more specific: an Active Directory computer as `computer` rather than `user`, whatever order the directory lists its classes in. Refresh the schema of a Connected System with overlapping Object Types selected so JIM records which classes inherit from which. (#2043)
+- 🐛 An LDAP entry carrying two selected Object Types now imports as the more specific (an Active Directory computer as `computer`, not `user`), whatever order its classes are listed in. Refresh the schema of a Connected System with overlapping Object Types selected. (#2043)
+- 🐛 A deletion a Delta Import reads for an LDAP object JIM holds under another Object Type now retires that object, instead of being ignored until the next Full Import. (#2049)
 - 🐛 When a domain controller refuses the LDAP Connector's sign-in over plain LDAP because it requires LDAP signing (the Windows Server 2025 default), JIM now says to enable LDAPS, instead of only "Strong authentication is required for this operation". (#2042)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
 - 🐛 A rootful Podman JIM now survives a firewalld reload, which left it unable to reach its database until restarted: `setup.sh` enables Podman's `netavark-firewalld-reload.service`. Upgrading from v0.16.0 or earlier, enable it as the Podman page shows. (#2009)

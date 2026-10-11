@@ -59,6 +59,15 @@ Four rules matter:
 
 You may add keys of your own alongside JIM's. They are persisted and returned on the REST API's Object Type representation, so an automation author can act on them even where JIM's own surfaces do not.
 
+## Saying whether an External ID is unique across Object Types
+
+JIM recognises a Connected System Object by its External ID within one Object Type. Set `ExternalIdsUniqueAcrossObjectTypes` on your Connector (an `IConnectorCapabilities` member, `false` unless you override it) to `true` only when an External ID value names one object across **every** Object Type of the Connected System: the LDAP Connector does, because a directory never reuses an objectGUID, entryUUID or nsUniqueId, whatever class an entry carries.
+
+With it set, an object that arrives under one Object Type with an External ID JIM holds under another is recognised as the same object changing type. The import refuses the change by default, records an Object Type Changed error, and keeps the object JIM holds, unless the Full Import's Run Profile allows Object Type changes (see [When an object changes Object Type](../configuration/connected-systems.md#when-an-object-changes-object-type)). It also lets a deletion you report under one Object Type reach the object JIM holds under another.
+
+- **Leave it unset when values can repeat across your Object Types.** A SQL view shares its table's keys, and two tables' identity columns overlap, so the SQL Connector leaves it unset: the same value under two Object Types is two objects there, and declaring otherwise would refuse the second object of each such pair as a type change.
+- **Declare it because it is true of the system, not because your Object Types happen not to overlap today.** If your system never moves an object between types, there is nothing for the guard to catch, and an unset flag costs nothing.
+
 ## Reporting progress and errors
 
 A Connector is the only thing that knows what is happening inside a Connected System. JIM can count the objects you hand back and time how long you took, but everything else (which container you are reading, why one object could not be exported, that a Delta Import quietly became a Full Import) is invisible unless you report it.

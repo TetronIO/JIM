@@ -32,7 +32,7 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, `FilePath`, `VerifyImportContentHashes`, and `Safeguards` (an object with `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`; each is `$null` when that limit is not set). See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
+Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, `FilePath`, `VerifyImportContentHashes`, `AllowObjectTypeChanges`, and `Safeguards` (an object with `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`; each is `$null` when that limit is not set). See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
 
 ### Examples
 
@@ -62,10 +62,10 @@ Creates a new Run Profile on a Connected System. Supports `ShouldProcess`; use `
 
 ```powershell
 # By Connected System ID (default)
-New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-AllowObjectTypeChanges] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # By Connected System name
-New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-AllowObjectTypeChanges] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -80,6 +80,7 @@ New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string>
 | `PartitionId` | `int` | No | | Optional partition to scope this Run Profile to. If omitted, the Run Profile applies to the default partition. |
 | `FilePath` | `string` | No | | Optional file path for file-based connectors. |
 | `VerifyImportContentHashes` | `switch` | No | `$false` | Enables Verification Mode. Only valid when `-RunType` is `FullImport`; the API rejects it otherwise. Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash. |
+| `AllowObjectTypeChanges` | `switch` | No | `$false` | Carries out Object Type changes instead of refusing them: an object JIM holds under one Object Type that arrives under another is imported as a new object and the old one retired. Only valid when `-RunType` is `FullImport`; the API rejects it otherwise. Has an effect only for Connectors that can tell an Object Type change from a new object (the LDAP Connector). See [Run Profiles > Allow Object Type Changes](../configuration/run-profiles.md#allow-object-type-changes-full-import). |
 | `MaxCreates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most creates that may be pending for a single Export run to attempt any of them. If more are pending than this when the run starts, none are attempted; `0` refuses creates outright. Only valid when `-RunType` is `Export`. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
 | `MaxUpdates` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
 | `MaxDeletes` | `int` (nullable) | No | No limit | Run Profile Safeguards: the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
@@ -124,6 +125,10 @@ Get-JIMConnectedSystem -Name "CSV*" | ForEach-Object {
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (Verified)" -RunType FullImport -VerifyImportContentHashes
 ```
 
+```powershell title="Create a hand-run Full Import Run Profile that carries out Object Type changes"
+New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (Object Type changes)" -RunType FullImport -AllowObjectTypeChanges
+```
+
 ```powershell title="Preview with WhatIf"
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -RunType DeltaImport -WhatIf
 ```
@@ -146,13 +151,13 @@ Modifies an existing Run Profile. Supports `ShouldProcess`; use `-WhatIf` or `-C
 
 ```powershell
 # By Connected System ID (default)
-Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # By Connected System name
-Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # By input object
-Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -168,6 +173,7 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `PartitionId` | `int` | No | | New partition ID to scope the Run Profile to. |
 | `FilePath` | `string` | No | | New file path for file-based connectors. Omit to leave unchanged. |
 | `VerifyImportContentHashes` | `bool` | No | | Enables or disables Verification Mode. Pass `$true` to enable, `$false` to disable; omit to leave unchanged. Only valid on a Full Import Run Profile; the API rejects `$true` otherwise. |
+| `AllowObjectTypeChanges` | `bool` | No | | Allows or refuses Object Type changes. Pass `$true` to carry them out, `$false` to go back to refusing them; omit to leave unchanged. Only valid on a Full Import Run Profile; the API rejects `$true` otherwise. See [Run Profiles > Allow Object Type Changes](../configuration/run-profiles.md#allow-object-type-changes-full-import). |
 | `MaxCreates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most creates that may be pending for a single Export run to attempt any of them; if more are pending, the run attempts none of them. Pass a number to set it, `0` to refuse creates outright, or `$null` to clear the limit; omit the parameter to leave it unchanged. Only valid on an Export Run Profile. Setting any one of `-MaxCreates`, `-MaxUpdates`, `-MaxDeletes`, `-MaxDetectedDeletions` or `-MaxDetectedDeletionsPercent` preserves the other four exactly. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards). |
 | `MaxUpdates` | `int` (nullable) | No | | Run Profile Safeguards: sets the most updates that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
 | `MaxDeletes` | `int` (nullable) | No | | Run Profile Safeguards: sets the most deletes that may be pending for a single Export run to attempt any of them. Same rules as `-MaxCreates`. |
@@ -207,6 +213,10 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHash
 
 ```powershell title="Disable Verification Mode again"
 Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHashes $false
+```
+
+```powershell title="Stop a Run Profile carrying out Object Type changes"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 43 -AllowObjectTypeChanges $false
 ```
 
 ```powershell title="Preview changes with WhatIf"

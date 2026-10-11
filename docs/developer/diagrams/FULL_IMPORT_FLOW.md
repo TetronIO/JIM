@@ -127,7 +127,9 @@ flowchart TD
     CheckDelete -->|Yes| FindExisting[Find existing CSO<br/>by external ID]
     FindExisting --> ExistsDel{CSO<br/>exists?}
     ExistsDel -->|Yes| AlreadyObsoleteDel{CSO already<br/>Obsolete?}
-    ExistsDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
+    ExistsDel -->|No| HeldElsewhereDel{External ID held under<br/>another Object Type? #2049<br/>Connector declares External IDs<br/>unique across Object Types}
+    HeldElsewhereDel -->|Yes| AlreadyObsoleteDel
+    HeldElsewhereDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
     AlreadyObsoleteDel -->|Yes| ReplayedDel[Delete already reported<br/>by an earlier import<br/>Remove RPEI, skip]
     AlreadyObsoleteDel -->|No| MarkObsolete[Set Status = Obsolete<br/>RPEI: Deleted<br/>Add to update list]
 
@@ -135,7 +137,11 @@ flowchart TD
     CheckDelete -->|No| FindCso[Find existing CSO<br/>by external ID]
     FindCso --> CsoExists{CSO<br/>exists?}
 
-    CsoExists -->|No| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added]
+    CsoExists -->|No| HeldElsewhere{External ID held under<br/>another Object Type? #2049<br/>Connector declares External IDs<br/>unique across Object Types}
+    HeldElsewhere -->|No| CreateCso
+    HeldElsewhere -->|Yes| TypeChangeAllowed{Full Import whose Run Profile<br/>allows Object Type changes?}
+    TypeChangeAllowed -->|No| RefuseTypeChange[RPEI: ObjectTypeChanged<br/>naming both Object Types<br/>Nothing created; held CSO kept<br/>and excluded from deletion detection]
+    TypeChangeAllowed -->|Yes| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added<br/>A held CSO is left to<br/>deletion detection]
     CreateCso --> AddToCreate[Add to create list<br/>Update seenExternalIds<br/>with CSO reference]
 
     CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
@@ -161,7 +167,7 @@ flowchart TD
     Compare --> Loop{More missing<br/>external IDs?}
     Loop -->|No| NextType([Next object type])
     Loop -->|Yes| FindCso[Find CSO by external ID<br/>and attribute ID]
-    FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run?}
+    FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run, nor<br/>refused an Object Type change?}
     Found -->|No| Drop[Not a candidate<br/>Not found, or ext ID may have<br/>been updated during import]
     Drop --> Loop
     Found -->|Yes| Classify{CSO already<br/>Obsolete?}

@@ -88,6 +88,7 @@ flowchart TD
     Error -->|Duplicate attributes| DupAttrRPEI[RPEI: DuplicateImportedAttributes]
     Error -->|Unknown object type| TypeRPEI[RPEI: CouldNotMatchObjectType]
     Error -->|Duplicate external ID| DupObjRPEI[RPEI: DuplicateObject]
+    Error -->|External ID held under another<br/>Object Type, change not allowed #2049| TypeChangedRPEI[RPEI: ObjectTypeChanged<br/>held CSO kept and excluded<br/>from deletion detection]
     Error -->|Unhandled exception| UnhandledRPEI[RPEI: UnhandledError<br/>+ stack trace]
 
     AddedRPEI --> PostPasses
@@ -97,9 +98,10 @@ flowchart TD
     DupAttrRPEI --> PostPasses
     TypeRPEI --> PostPasses
     DupObjRPEI --> PostPasses
+    TypeChangedRPEI --> PostPasses
     UnhandledRPEI --> PostPasses
 
-    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
+    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO<br/>(not a CSO refused an Object Type change)<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
     PostPasses --> Batches[Save phase, per create and update batch:<br/>FlushImportRpeisAsync bulk-inserts that<br/>batch's RPEIs via raw SQL once its CSOs<br/>have committed, accumulates summary stats,<br/>then releases them]
     Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error]
     Reconcile --> FinalFlush[Flush remaining RPEIs<br/>Activity counters and message<br/>describe the whole run]
