@@ -3,7 +3,7 @@
 - **Status:** Done
 - **Issue:** [#545](https://github.com/TetronIO/JIM/issues/545)
 - **Related Issues:** #124 (SCIM 2.0 Server Support), #361 (Microsoft Graph Connector), #192 (Generic REST Connector), #875 (centralised connector dispatch)
-- **Related Plans:** [`SCIM_SERVER_DESIGN.md`](../SCIM_SERVER_DESIGN.md) (the inverse scenario: JIM as SCIM service provider), [`METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md) (canonical schema policy and SCIM-parity gap attributes)
+- **Related Plans:** [`SCIM_SERVER_DESIGN.md`](../doing/SCIM_SERVER_DESIGN.md) (the inverse scenario: JIM as SCIM service provider), [`METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md) (canonical schema policy and SCIM-parity gap attributes)
 - **Last Updated:** 2026-08-03
 
 > **Blockers cleared (July 2026).** Both prerequisites have landed on `main`: [#1046](https://github.com/TetronIO/JIM/issues/1046) delivered the `Decimal` attribute data type (so SCIM `decimal` maps to it directly, no interim `Text` mapping), and [#1104](https://github.com/TetronIO/JIM/issues/1104) delivered the SCIM-parity gap attributes and advisory Standard Mappings, giving this connector clean Attribute Flow targets. Its Phase 3 (consuming those mappings for Attribute Flow editor hints and connector wizard default-flow suggestions) is still outstanding, so Phase 7 below should not assume wizard hints already exist.
@@ -100,7 +100,7 @@ Validation: Phase 1 validates the Base URL shape (absolute URI; HTTPS required e
 
 ### Cross-design alignment with the SCIM 2.0 Service Provider (#124)
 
-Decisions from the July 2026 joint review of this plan and [`SCIM_SERVER_DESIGN.md`](../SCIM_SERVER_DESIGN.md):
+Decisions from the July 2026 joint review of this plan and [`SCIM_SERVER_DESIGN.md`](../doing/SCIM_SERVER_DESIGN.md):
 
 - **Shared protocol library `JIM.Scim`:** SCIM resource DTOs, serialisation, the PATCH operation model (this connector generates patches; the server applies them), filter/pagination primitives, schema URN constants, the SCIM-to-`AttributeDataType` mapping, and the multi-valued/complex flattening convention live in a new dependency-light class library referencing only `JIM.Models`, consumed by both `JIM.Connectors` and `JIM.Web`. Extraction happens at the start of Phase 2, when the first DTOs appear. `JIM.Utilities` was considered and rejected (grab-bag purpose; a protocol implementation is a cohesive domain deserving its own assembly and audit surface), as was a general `JIM.Protocols` (speculative generality; no concrete sibling exists).
 - **One flattening convention, owned by `JIM.Scim`:** canonical-type flattening (`emails.work`, `emails.primary` from the `primary=true` entry) applies on both sides; the server design's first-entry-wins sketch is superseded.
