@@ -3,15 +3,30 @@ site_url: https://docs.junctional.io
 repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
+# overrides/ is the theme's custom_dir, not content: without this it is also
+# published as a static file at /overrides/home.html.
 exclude_docs: |
   CLAUDE.md
+  overrides/
 
-# Silence the INFO emitted for relative links MkDocs leaves as-is for the
-# browser to resolve at runtime (e.g. links to the Scalar API reference
-# published alongside the docs at /api/reference/). Genuine broken
-# internal links are still reported via the not_found warning.
+# Link validation (#1454). Under --strict, which changelog-lint runs on every
+# pull request that touches the docs, a warning fails the build:
+#   - anchors: a link to a heading that does not exist on the target page,
+#     which MkDocs 1.6 only reports at INFO by default, so a broken anchor
+#     rendered as a working link that went nowhere;
+#   - absolute_links: a link written as /path rather than relative, which
+#     breaks if the site is ever served below the domain root;
+#   - omitted_files: a page that exists but is not in the nav, so readers can
+#     only reach it by guessing its URL.
+# Relative links MkDocs leaves as-is for the browser to resolve at runtime
+# (the Scalar API reference published at /api/reference/) stay silent here;
+# lychee checks those against the built site instead.
 validation:
+  nav:
+    omitted_files: warn
   links:
+    anchors: warn
+    absolute_links: warn
     unrecognized_links: ignore
 
 theme:

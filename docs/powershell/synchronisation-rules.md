@@ -1805,19 +1805,19 @@ Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `enabled` | `bool` | Whether JIM sets an initial password on the Connected System Objects this rule provisions |
-| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every Connected System Object) |
-| `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
-| `expiryBehaviour` | `string` | What happens to the password once it is set |
-| `enableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set |
-| `staticPasswordSet` | `bool` | Whether one password is stored for every Connected System Object this rule provisions |
-| `staticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
-| `parkedAccountCount` | `int` | Connected System Objects waiting on a change to these settings |
-| `expiredAccountCount` | `int` | Connected System Objects never given an initial password within its time to live |
-| `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
+| `Enabled` | `bool` | Whether JIM sets an initial password on the Connected System Objects this rule provisions |
+| `Source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every Connected System Object) |
+| `CustomPolicy` | `object` | The generator settings used when `Source` is `Custom` |
+| `ExpiryBehaviour` | `string` | What happens to the password once it is set |
+| `EnableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set |
+| `StaticPasswordSet` | `bool` | Whether one password is stored for every Connected System Object this rule provisions |
+| `StaticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
+| `ParkedAccountCount` | `int` | Connected System Objects waiting on a change to these settings |
+| `ExpiredAccountCount` | `int` | Connected System Objects never given an initial password within its time to live |
+| `ParkedReasons` | `array` | One entry per distinct refusal, biggest group first |
 
-Each entry in `parkedReasons` carries `targetMessage` (what the target said, unaltered), `failureReason`,
-`accountCount` and `firstSeenAt`.
+Each entry in `ParkedReasons` carries `TargetMessage` (what the target said, unaltered), `FailureReason`,
+`AccountCount` and `FirstSeenAt`.
 
 The two counts are never summed. Correcting these settings and saving releases the parked Connected System Objects,
 and does nothing at all for the expired ones; those need a password set by other means.
@@ -1825,24 +1825,24 @@ and does nothing at all for the expired ones; those need a password set by other
 #### Examples
 
 ```powershell title="See what a target objected to"
-(Get-JIMSyncRuleInitialPassword -Id 5).parkedReasons |
-    Format-Table accountCount, targetMessage -AutoSize
+(Get-JIMSyncRuleInitialPassword -Id 5).ParkedReasons |
+    Format-Table AccountCount, TargetMessage -AutoSize
 ```
 
 ```powershell title="Find every rule with initial password work waiting"
-Get-JIMSyncRule -All | ForEach-Object {
-    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
-    if ($p.parkedAccountCount -or $p.expiredAccountCount) {
-        [PSCustomObject]@{ Rule = $_.name; Parked = $p.parkedAccountCount; Expired = $p.expiredAccountCount }
+Get-JIMSyncRule | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.Id
+    if ($p.ParkedAccountCount -or $p.ExpiredAccountCount) {
+        [PSCustomObject]@{ Rule = $_.Name; Parked = $p.ParkedAccountCount; Expired = $p.ExpiredAccountCount }
     }
 }
 ```
 
 ```powershell title="Find shared initial passwords nobody has changed for 90 days"
-Get-JIMSyncRule -All | ForEach-Object {
-    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
-    if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
-        [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
+Get-JIMSyncRule | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.Id
+    if ($p.StaticPasswordSet -and $p.StaticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
+        [PSCustomObject]@{ Rule = $_.Name; LastChanged = $p.StaticPasswordSetAt }
     }
 }
 ```

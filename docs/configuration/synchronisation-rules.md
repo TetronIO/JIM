@@ -74,7 +74,7 @@ Objects that fall out of scope are **disconnected** from the rule. This is impor
 
 An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activities.md#execution-items).
 
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Criteria expressions use the JIM [expression language](../concepts/expressions.md).
+Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter; criteria do not use the [expression language](../concepts/expressions.md).
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
@@ -344,7 +344,7 @@ The third Password Settings option sets one password you choose on every Connect
 
 Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each object's share of the password; any other choice leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
 
-This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
+Apart from password changes queued for delivery (see [how long any of it is kept](../concepts/passwords.md#how-long-any-of-it-is-kept)), this is the only Connected System Object password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
 
 What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
 
@@ -499,7 +499,7 @@ When **Treat whitespace as no value** is switched off and a whitespace-only valu
 
 ### Initial Export Only (outbound)
 
-Some attributes should be set once when JIM creates an object, then left alone: an initial password or API token, a one-time setup value, or any attribute the target system should own after provisioning. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
+Some attributes should be set once when JIM creates an object, then left alone: a one-time setup value, or any attribute the target system should own after provisioning. An initial password is not one of them: JIM sets it through the rule's [Initial Password](#initial-password) tab, never through Attribute Flow. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
 
 - The attribute flows only when JIM **provisions** the object into the Connected System (the create export), and JIM retries until the initial export is confirmed.
 - Once the object is provisioned, the attribute becomes **unmanaged** on that Connected System Object: later Metaverse changes are not exported for it, and Drift Correction ([enforce state](#export-outbound)) leaves it alone, so the value can be changed freely in the Connected System.
@@ -818,7 +818,7 @@ A complete import rule for an HR system might look like:
 | **Name** | HR Import - Employees |
 | **Direction** | Import |
 | **Connected System** | HR Database |
-| **Scoping** | `Eq(cs["employeeType"], "FTE")` |
+| **Scoping** | `cs["employeeType"] = "FTE"` |
 | **Object Matching Rule 1** | Match `cs["employeeId"]` to `mv["Employee ID"]` |
 | **Projection** | Create MVO of type `Person` |
 | **Attribute mappings** | `cs["givenName"]` to `mv["First Name"]` (direct) |
@@ -869,7 +869,7 @@ Removing a single **Attribute Flow mapping** from the editor offers the same cho
 
 The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](#deriving-metaverse-attributes) the deletion leaves with a missing input. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
 
-For the full recall semantics (re-election, No Contributor outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
+For the full recall semantics (re-election, Value cleared outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
 
 ## Manage Synchronisation Rules
 

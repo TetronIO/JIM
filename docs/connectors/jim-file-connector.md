@@ -253,8 +253,7 @@ The error `Object type column 'Type' not found in file headers` means the column
 
 If imported data contains garbled characters or unexpected symbols:
 
-- Set the **Culture** setting to match the file's locale (e.g. `en-gb`, `de-de`).
-- Ensure the file is saved in UTF-8 encoding.
+- Ensure the file is saved in UTF-8 encoding. JIM reads the file as UTF-8 (or as UTF-16 or UTF-32 when the file starts with a byte order mark), and no setting changes this; the **Culture** setting only affects how numbers and dates are parsed.
 - If the file was exported from another system, check whether that system uses a different character encoding.
 
 ### Multi-valued attribute not detected
