@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011113912_AddRpeiUnresolvedReferenceCount")]
+    [Migration("20261011164637_AddRpeiUnresolvedReferenceCount")]
     partial class AddRpeiUnresolvedReferenceCount
     {
         /// <inheritdoc />
@@ -725,6 +725,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("DeletionPolicySnapshotJson")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("DeletionScheduledByRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("DeletionTriggeredBySystemId")
                         .HasColumnType("integer");
@@ -1809,6 +1812,11 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("KeepUnique")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
