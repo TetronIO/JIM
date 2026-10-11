@@ -125,4 +125,47 @@ public static class UnresolvedReferenceDisplay
             _ => new("View Run Profiles", $"{connectedSystemHref}?t=run-profiles")
         };
     }
+
+    /// <summary>The Connector Space's query value that filters it to objects holding unresolved references.</summary>
+    public const string UnresolvedReferencesFilterValue = "unresolved";
+
+    /// <summary>
+    /// The Connected System page's Unresolved References button: amber where Unresolved Reference Handling asks for
+    /// them to be reported, as Pending Exports is when exports are waiting, and neutral under Ignore, which stops runs
+    /// reporting them without hiding them from someone looking.
+    /// </summary>
+    public static UnresolvedReferenceTone SignpostTone(UnresolvedReferenceHandling handling) =>
+        handling == UnresolvedReferenceHandling.Ignore ? UnresolvedReferenceTone.None : UnresolvedReferenceTone.Warning;
+
+    /// <summary>What the Connected System page's Unresolved References button says when hovered.</summary>
+    public static string SignpostTooltip(ConnectedSystemUnresolvedReferenceTotals totals, UnresolvedReferenceHandling handling)
+    {
+        ArgumentNullException.ThrowIfNull(totals);
+
+        var handlingSentence = handling == UnresolvedReferenceHandling.Ignore
+            ? "Unresolved Reference Handling is set to Ignore, so runs do not report them."
+            : $"Unresolved Reference Handling is set to {handling}.";
+
+        return $"{ReferencesOnObjectsText(totals.ReferenceCount, totals.ObjectCount)} could not be resolved. {handlingSentence}";
+    }
+
+    /// <summary>How many references on how many objects, as the signpost and "Where they point" both put it.</summary>
+    public static string ReferencesOnObjectsText(int referenceCount, int objectCount) =>
+        $"{referenceCount:N0} {(referenceCount == 1 ? "reference" : "references")} on " +
+        $"{objectCount:N0} {(objectCount == 1 ? "Connected System Object" : "Connected System Objects")}";
+
+    /// <summary>The Connected System's Connector Space, filtered to the objects holding unresolved references.</summary>
+    public static string ConnectorSpaceHref(int connectedSystemId) =>
+        $"/admin/connected-systems/{connectedSystemId}/connector-space?references={UnresolvedReferencesFilterValue}";
+
+    /// <summary>
+    /// Whether a Connector Space link asks for the unresolved references filter. Anything else is ignored rather than
+    /// refused: a stale or hand-typed link should open the list, not an error page.
+    /// </summary>
+    public static bool IsUnresolvedReferencesFilter(string? value) =>
+        string.Equals(value, UnresolvedReferencesFilterValue, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>How many objects a step's values sit on, as "Where they point" puts it beside the step.</summary>
+    public static string ObjectCountText(int count) =>
+        $"on {count:N0} {(count == 1 ? "object" : "objects")}";
 }
