@@ -1815,7 +1815,7 @@ try {
 
             $stepName = "CollisionKeepUniqueOff"
             Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $false
-            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse" | Out-Null
+            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse|nerys\.vandal|GeneratedValueCollisionUnresolved" | Out-Null
             try {
                 $export = Start-DirectoryExportForCollision -Context "Keep unique off"
             }
@@ -1824,12 +1824,20 @@ try {
                 Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $true
             }
 
-            $inUse = @($export.Items | Where-Object { $_.errorType -eq 'UniqueValueAlreadyInUse' })
-            Add-TestResult -Name "[Keep unique] The export records an ordinary UniqueValueAlreadyInUse error" -Passed ($inUse.Count -eq 1) `
-                -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
-            Add-TestResult -Name "[Keep unique] Nothing is remediated or parked" `
-                -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0 -and $export.Stats.totalGeneratedValuesNeedingDecision -eq 0) `
-                -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision)"
+            $itemsDetail = "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | ')"
+            $ownItems = @($export.Items | Where-Object { $_.displayName -eq 'Thaddeus Merrow' })
+            Add-TestResult -Name "[Keep unique] The refused User Principal Name is an ordinary UniqueValueAlreadyInUse error" `
+                -Passed ($ownItems.Count -eq 1 -and $ownItems[0].errorType -eq 'UniqueValueAlreadyInUse') -Detail $itemsDetail
+            Add-TestResult -Name "[Keep unique] Nothing is remediated" `
+                -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0) -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+
+            # Changing a value's Keep unique switch releases every decision held on the generated value it is built
+            # from, as changing the generated flow's own settings does: Test 17's parked export is sent again, and,
+            # still anchored by the Cross-Domain Export, is held again rather than renamed.
+            $reheld = @($export.Items | Where-Object { $_.displayName -eq 'Nerys Vandal' -and $_.errorType -eq 'GeneratedValueCollisionUnresolved' })
+            Add-TestResult -Name "[Keep unique] Switching it released Test 17's held decision, which is held again" `
+                -Passed ($reheld.Count -eq 1 -and $export.Stats.totalGeneratedValuesNeedingDecision -eq 1) `
+                -Detail "needing decision: $($export.Stats.totalGeneratedValuesNeedingDecision); $itemsDetail"
             Add-TestResult -Name "[Keep unique] The Metaverse Account Name is unchanged ('$rejected')" `
                 -Passed ((Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name") -eq $rejected) `
                 -Detail "Got '$(Get-MvoAttributeValue -MvoId $person.id -AttributeName "Account Name")'"
