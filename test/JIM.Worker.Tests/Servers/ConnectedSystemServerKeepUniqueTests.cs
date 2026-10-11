@@ -36,11 +36,14 @@ public class ConnectedSystemServerKeepUniqueTests
     private SyncRuleMapping _displayName = null!;
     private GeneratedValueAssignment _waiting = null!;
     private List<SyncRule> _exportRules = [];
+    private List<SyncRule> _otherImportRules = [];
 
     [SetUp]
     public void SetUp()
     {
         TestUtilities.SetEnvironmentVariables();
+        _exportRules = [];
+        _otherImportRules = [];
 
         var person = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" };
         var accountNameAttribute = new MetaverseAttribute { Id = 10, Name = "Account Name", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
@@ -82,9 +85,15 @@ public class ConnectedSystemServerKeepUniqueTests
 
         _csRepo.Setup(r => r.GetSyncRuleMappingForUpdateAsync(It.IsAny<int>()))
             .ReturnsAsync((int id) => _hrImport.AttributeFlowRules.SingleOrDefault(m => m.Id == id));
-        _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => [_hrImport]);
+        _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => [_hrImport, .. _otherImportRules]);
         _csRepo.Setup(r => r.GetExportSyncRulesWithAttributeFlowsAsync()).ReturnsAsync(() => _exportRules);
-        _csRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(() => new Dictionary<int, string> { [1] = "HR", [2] = "Corp AD" });
+        _csRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(() => new Dictionary<int, string> { [1] = "HR", [2] = "Corp AD", [3] = "Mail" });
+        _csRepo.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() =>
+        [
+            new ConnectedSystem { Id = 1, Name = "HR", ConnectorDefinition = new ConnectorDefinition { Name = "JIM File Connector" } },
+            new ConnectedSystem { Id = 2, Name = "Corp AD", ConnectorDefinition = new ConnectorDefinition { Name = JIM.Connectors.ConnectorConstants.LdapConnectorName, SupportsUniquenessProbe = true } },
+            new ConnectedSystem { Id = 3, Name = "Mail", ConnectorDefinition = new ConnectorDefinition { Name = "JIM SQL Connector" } }
+        ]);
         _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(() => _hrImport.AttributeFlowRules);
         _csRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.GetSyncRuleMappingGenerationsAsync(It.IsAny<IReadOnlyCollection<int>>()))
@@ -226,6 +235,72 @@ public class ConnectedSystemServerKeepUniqueTests
     }
 
     [Test]
+    public async Task GetValuesBuiltFromGeneratedValuesAsync_ValuesOnTheGeneratedFlowsOwnRule_AreCheckedBeforeIssuingWhereTheRunProbesAsync()
+    {
+        // Generated Value Forms (#2023): Email and the User Principal Name built through it are on HR Import, so both are
+        // checked with each candidate; Email goes to Corp AD's mail, which the LDAP Connector probes.
+        AddUserPrincipalNameViaEmail();
+        AddDirectoryExport();
+
+        var values = (await Application().ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules))[_accountName.Id];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(values.Select(v => v.CheckedBeforeIssuing), Is.EqualTo(new[] { true, true }));
+            Assert.That(values[0].ProbedIn, Is.EqualTo(new[] { "Corp AD" }), "Email is probed where it is exported");
+            Assert.That(values[1].ProbedIn, Is.Empty, "the User Principal Name is exported nowhere, so JIM's records alone");
+            Assert.That(values.Select(v => v.MoveToSyncRuleName), Is.All.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetValuesBuiltFromGeneratedValuesAsync_KeepUniqueOff_IsNotCheckedButTheValueBuiltThroughItIsAsync()
+    {
+        AddUserPrincipalNameViaEmail();
+        _email.KeepUnique = false;
+
+        var values = (await Application().ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules))[_accountName.Id];
+
+        Assert.That(values.Select(v => (v.MetaverseAttributeName, v.CheckedBeforeIssuing)),
+            Is.EqualTo(new[] { ("Email", false), ("User Principal Name", true) }), "the switch is per value");
+    }
+
+    [Test]
+    public async Task GetValuesBuiltFromGeneratedValuesAsync_ValueBuiltOnAnotherRuleFromMetaverseAttributes_IsNotCheckedAndSuggestsMovingItAsync()
+    {
+        var mailImport = MoveEmailToMailImport("mv[\"Account Name\"] + \"@panoply.local\"");
+
+        var values = (await Application().ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules))[_accountName.Id];
+
+        var email = values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(email.SyncRuleName, Is.EqualTo(mailImport.Name));
+            Assert.That(email.Kind, Is.EqualTo(GeneratedValueBuiltValueKind.BuiltOnAnotherRule));
+            Assert.That(email.CheckedBeforeIssuing, Is.False);
+            Assert.That(email.MoveToSyncRuleName, Is.EqualTo("HR Import"), "it reads only Metaverse attributes, so it can be moved to the generated value's own rule");
+        }
+    }
+
+    [Test]
+    public async Task GetValuesBuiltFromGeneratedValuesAsync_ValueBuiltOnAnotherRuleFromItsOwnSystemsAttributes_SuggestsNoMoveAsync()
+    {
+        MoveEmailToMailImport("mv[\"Account Name\"] + \"@\" + cs[\"domain\"]");
+
+        var values = (await Application().ConnectedSystems.GetValuesBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules))[_accountName.Id];
+
+        Assert.That(values.Single().MoveToSyncRuleName, Is.Null, "it reads the Mail system's own attributes, which HR Import cannot");
+    }
+
+    [Test]
+    public async Task GetBuiltFromGeneratedValuesAsync_DerivedValueOnTheGeneratedFlowsOwnRule_IsCheckedBeforeIssuingAsync()
+    {
+        var described = await Application().ConnectedSystems.GetBuiltFromGeneratedValuesAsync(_hrImport, _hrImport.AttributeFlowRules);
+
+        Assert.That(described[_email.Id].CheckedBeforeIssuing, Is.True);
+    }
+
+    [Test]
     public async Task DescribeBuiltFromGeneratedValueAsync_FlowBeingEdited_IsDescribedAsync()
     {
         var proposal = new SyncRuleMapping { TargetMetaverseAttribute = _email.TargetMetaverseAttribute, TargetMetaverseAttributeId = _email.TargetMetaverseAttributeId };
@@ -243,6 +318,28 @@ public class ConnectedSystemServerKeepUniqueTests
         var upn = Mapping(103, upnAttribute);
         upn.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Email\"]" });
         return upn;
+    }
+
+    /// <summary>
+    /// Takes Email off HR Import and builds it on a Mail Import rule instead, from <paramref name="expression"/>.
+    /// </summary>
+    private SyncRule MoveEmailToMailImport(string expression)
+    {
+        _hrImport.AttributeFlowRules.Remove(_email);
+        var mailImport = new SyncRule
+        {
+            Id = 3, Name = "Mail Import", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemId = 3,
+            MetaverseObjectTypeId = _hrImport.MetaverseObjectTypeId, MetaverseObjectType = _hrImport.MetaverseObjectType
+        };
+        var email = new SyncRuleMapping
+        {
+            Id = 300, SyncRule = mailImport, SyncRuleId = mailImport.Id,
+            TargetMetaverseAttribute = _email.TargetMetaverseAttribute, TargetMetaverseAttributeId = _email.TargetMetaverseAttributeId
+        };
+        email.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = expression });
+        mailImport.AttributeFlowRules.Add(email);
+        _otherImportRules.Add(mailImport);
+        return mailImport;
     }
 
     private void AddDirectoryExport()
