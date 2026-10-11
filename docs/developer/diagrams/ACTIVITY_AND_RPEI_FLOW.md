@@ -156,7 +156,7 @@ flowchart TD
     Outcome -->|Unresolved reference, under<br/>Error handling| UnresolvedRPEI[RPEI: UnresolvedReference error]
     Outcome -->|Generated value already in use,<br/>corrected by Collision Remediation| CorrectedRPEI[RPEI: ObjectChangeType = PendingExport<br/>GeneratedValueRemediated outcome]
     Outcome -->|Generated value already in use,<br/>needs a decision| DecisionRPEI[RPEI: GeneratedValueCollisionUnresolved error<br/>Pending Export Parked]
-    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet or<br/>UniqueValueAlreadyInUse<br/>Error message + retry count]
+    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet,<br/>UniqueValueAlreadyInUse or<br/>PasswordRequiredToEnableAccount<br/>Error message + retry count]
 ```
 
 ## Activity Status Determination

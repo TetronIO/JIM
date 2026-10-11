@@ -39,10 +39,22 @@ internal static class LdapConnectorConstants
     internal const string DELETE_BEHAVIOUR_DISABLE = "Disable";
 
     /// <summary>
+    /// The Active Directory attribute holding an account's control flags, <see cref="UAC_ACCOUNTDISABLE"/> among them.
+    /// </summary>
+    internal const string UserAccountControlAttributeName = "userAccountControl";
+
+    /// <summary>
     /// Active Directory userAccountControl flag for disabled accounts.
     /// When this bit is set (0x2), the account is disabled.
     /// </summary>
     internal const int UAC_ACCOUNTDISABLE = 0x2;
+
+    /// <summary>
+    /// Win32 ERROR_PASSWORD_RESTRICTIONS, which Active Directory embeds in its diagnostic message when it refuses a
+    /// password for failing the policy in force for the account, and when it refuses to create or enable an account
+    /// that has no password at all (#2039).
+    /// </summary>
+    internal const string AD_ERROR_PASSWORD_RESTRICTIONS = "0000052D";
 
     /// <summary>
     /// Active Directory userAccountControl flag for passwords that never expire.

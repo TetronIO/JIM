@@ -315,7 +315,15 @@ public enum ConnectedSystemExportErrorType
     /// classify it from their own server-specific result codes; where a connector cannot classify, the
     /// rejection is reported as <see cref="General"/> instead.
     /// </summary>
-    UniqueValueAlreadyInUse
+    UniqueValueAlreadyInUse,
+
+    /// <summary>
+    /// Active Directory refused to create or enable a user account because the account has no password
+    /// (<c>0000052D</c>, ERROR_PASSWORD_RESTRICTIONS, #2039). Enabling an account needs a password to exist first,
+    /// so this is configuration to act on: give the provisioning Synchronisation Rule an Initial Password, or create
+    /// the account disabled.
+    /// </summary>
+    PasswordRequiredToEnableAccount
 }
 
 /// <summary>

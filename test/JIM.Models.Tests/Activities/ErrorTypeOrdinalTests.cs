@@ -59,7 +59,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
 
         // An imported External ID already belongs to a Connected System Object of another Object Type (#2049).
-        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 28
+        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 28,
+
+        // Active Directory refused to enable an account that has no password (#2039).
+        [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = 29
     };
 
     [Test]

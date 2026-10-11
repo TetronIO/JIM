@@ -214,5 +214,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// not allow Object Type changes (#2049). A configuration conflict for an administrator to resolve, not a JIM
     /// defect, so it does not count as an unhandled error.
     /// </summary>
-    ObjectTypeChanged
+    ObjectTypeChanged,
+
+    /// <summary>
+    /// Active Directory refused to create or enable a user account because the account has no password (#2039).
+    /// The message names the remedies: give the provisioning Synchronisation Rule an Initial Password, so JIM creates
+    /// the account disabled and enables it once the password is set, or create the account disabled. Configuration to
+    /// act on, not a JIM defect, so it does not count as an unhandled error.
+    /// </summary>
+    PasswordRequiredToEnableAccount
 }
