@@ -1367,6 +1367,19 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Read by the Scheduler's stale task recovery (ServiceSettingsServer.GetStaleTaskTimeoutAsync), which fell back
+        // to five minutes on every installation while this was unseeded, invisible and impossible to change (#2060).
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.StaleTaskTimeout,
+            DisplayName = "Stale task timeout",
+            Description = "How long a running Worker task may go without a heartbeat before JIM treats its Worker as crashed: the Scheduler then fails the task's Activity and removes the task, so the work can be run again. Format: d.hh:mm:ss.",
+            Category = ServiceSettingCategory.Maintenance,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "00:05:00",
+            IsReadOnly = false
+        });
+
         // Synchronisation Settings - Verbose no-change recording
         await SeedSettingAsync(new ServiceSetting
         {
