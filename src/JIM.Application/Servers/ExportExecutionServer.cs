@@ -2406,8 +2406,10 @@ public class ExportExecutionServer
             // replaced is gone).
             // Issue #1398: a reference change left behind on a partial write was not written, so it
             // must not be applied as though it had been; the calculator sees the export without it.
+            // #2039: nor was a change the Connector wrote with an interim value until an Initial
+            // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(
-                successfulNonDeleteExports.Select(WithoutUnresolvedReferences).ToList());
+                successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -3164,14 +3166,27 @@ public class ExportExecutionServer
     };
 
     /// <summary>
-    /// The export as optimistic apply should see it (issue #1398): without the reference changes it
-    /// still owes. Values sent on an earlier partial write and now awaiting confirmation are kept, since
-    /// re-applying them is a no-op by construction (add-if-absent, set-if-different).
+    /// The export as optimistic apply should see it: only the changes whose asserted value the target was actually
+    /// given (<see cref="IsWrittenAsAsserted"/>). Values sent on an earlier partial write and now awaiting confirmation
+    /// are kept, since re-applying them is a no-op by construction (add-if-absent, set-if-different). Returns the
+    /// export itself when every change qualifies, the ordinary case.
     /// </summary>
-    private static PendingExport WithoutUnresolvedReferences(PendingExport pendingExport) =>
-        pendingExport.AttributeValueChanges.Any(IsUnresolvedReference)
-            ? WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(c => !IsUnresolvedReference(c)).ToList())
-            : pendingExport;
+    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.All(IsWrittenAsAsserted)
+            ? pendingExport
+            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(IsWrittenAsAsserted).ToList());
+
+    /// <summary>
+    /// Whether the target was given the value a change asserts, so optimistic apply may record it on the Connected System
+    /// Object. Two kinds were not: a reference change still awaiting resolution (issue #1398), which was not written at
+    /// all, and a change the Connector wrote with an interim value until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, #2039). Recording the latter's asserted
+    /// value would claim the target holds a value it does not, and a later export evaluation would then find it already
+    /// current and withdraw the held change. Such an attribute records nothing until the confirming import reports what
+    /// the target really holds.
+    /// </summary>
+    private static bool IsWrittenAsAsserted(PendingExportAttributeValueChange change) =>
+        !IsUnresolvedReference(change) && !change.AwaitsInitialPassword;
 
     /// <summary>
     /// Whether a Pending Export that could not be fully resolved still has something worth sending

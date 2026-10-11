@@ -751,6 +751,40 @@ public class InitialPasswordStagingTests
         Assert.That(displayNameChange.AwaitsInitialPassword, Is.False);
     }
 
+    /// <summary>
+    /// Optimistic apply records what the Connector wrote, so a change written with an interim value is not recorded as
+    /// though the asserted value had been written: the target holds the interim value, and recording the asserted one
+    /// would let a later evaluation believe the target already holds it. The attribute is left as it was until the
+    /// confirming import reports what the target really holds; every other written change is recorded as usual.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ConnectorReportsAnAttributeAwaitingInitialPassword_DoesNotRecordTheAssertedValueOnTheObjectAsync()
+    {
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var displayNameAttributeId = export.AttributeValueChanges.Single().AttributeId;
+        var employeeIdAttribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER")
+            .Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+        export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = employeeIdAttribute.Id,
+            Attribute = employeeIdAttribute,
+            StringValue = "E123",
+            Status = PendingExportAttributeChangeStatus.Pending
+        });
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded(null, null, ["DisplayName"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.AttributeValues.Where(v => v.AttributeId == displayNameAttributeId), Is.Empty,
+                "the Connector wrote an interim value, so the asserted one is not recorded as held");
+            Assert.That(cso.AttributeValues.Where(v => v.AttributeId == employeeIdAttribute.Id).Select(v => v.StringValue),
+                Is.EqualTo(new[] { "E123" }), "a change written as asserted is recorded as before");
+        }
+    }
+
     #endregion
 
     #region Helper Methods
