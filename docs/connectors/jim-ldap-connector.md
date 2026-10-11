@@ -96,7 +96,7 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 
 These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
-Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
+Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
 ## Auxiliary Object Classes
 
@@ -176,11 +176,11 @@ Every control above is available to the REST API and PowerShell:
 
 | Task | REST | PowerShell |
 |------|------|------------|
-| List the classes on offer | `GET /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
-| Set which classes are merged | `PUT /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
-| Set the Structural Carrier Class | `PUT /connected-systems/{id}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
-| Start a discovery run | `POST /connected-systems/{id}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
-| Read the last discovery run | `GET /connected-systems/{id}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| List the classes on offer | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
+| Set which classes are merged | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
+| Set the Structural Carrier Class | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
+| Start a discovery run | `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| Read the last discovery run | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
 
 Setting the merged classes replaces the whole set, so read the current one first if you mean to add to it:
 
