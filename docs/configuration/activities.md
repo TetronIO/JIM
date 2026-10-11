@@ -14,12 +14,12 @@ Activities move through a small set of statuses:
 
 - **In progress**<br /> Currently executing.
 - **Complete**<br /> Finished successfully.
-- **Complete with warning**<br /> Finished with non-fatal warnings.
-- **Complete with error**<br /> Finished, but some individual objects had errors.
-- **Failed with error**<br /> Failed due to a critical error before or during execution.
+- **Complete with warning**<br /> Finished, but some objects hit a problem JIM recognises, or a safeguard stepped in.
+- **Complete with error**<br /> Finished, but an object hit an error JIM did not anticipate.
+- **Failed with error**<br /> The run stopped, or every object in it failed.
 - **Cancelled**<br /> Cancelled before completion.
 
-Most monitoring code only cares about whether the activity has reached a terminal status, and whether errors were recorded along the way.
+[Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md) explains each warning and error.
 
 ## Initiated by
 

@@ -602,7 +602,7 @@ The refused value is [retired](#retired-values) when the flow never reuses value
 - JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
 - JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
 
-The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, or switching **Keep unique** on or off for a value built from it, releases the parked export for the next export run to try again under the new settings.
+The export is then **parked**: it is not sent again, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, or switching **Keep unique** on or off for a value built from it, releases the parked export for the next export run to try again under the new settings.
 
 **Acting on a held value.** Three answers are open to you:
 
