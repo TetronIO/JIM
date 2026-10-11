@@ -3145,7 +3145,7 @@ public class SynchronisationController(
     /// <param name="request">The Run Profile creation request.</param>
     /// <returns>The created Run Profile details.</returns>
     /// <response code="201">Run Profile created successfully.</response>
-    /// <response code="400">Invalid request or run type not supported by connector.</response>
+    /// <response code="400">Invalid request, run type not supported by connector, or a setting that is not valid for the Run Type (for example AllowObjectTypeChanges on anything other than a Full Import).</response>
     /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles", Name = "CreateRunProfile")]
@@ -3183,6 +3183,7 @@ public class SynchronisationController(
             PageSize = request.PageSize,
             FilePath = request.FilePath,
             VerifyImportContentHashes = request.VerifyImportContentHashes,
+            AllowObjectTypeChanges = request.AllowObjectTypeChanges,
             MaxCreates = request.Safeguards?.MaxCreates,
             MaxUpdates = request.Safeguards?.MaxUpdates,
             MaxDeletes = request.Safeguards?.MaxDeletes,
@@ -3190,7 +3191,8 @@ public class SynchronisationController(
             MaxDetectedDeletionsPercent = request.Safeguards?.MaxDetectedDeletionsPercent
         };
 
-        // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
+        // Run Profile Safeguards (#1618) and Allow Object Type Changes (#2049): each is valid on one Run Type only,
+        // and a refusal names the offending field.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
         if (safeguardsError != null)
             return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
@@ -3232,7 +3234,7 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Run Profile details.</returns>
     /// <response code="200">Run Profile updated successfully.</response>
-    /// <response code="400">Invalid request.</response>
+    /// <response code="400">Invalid request, or a setting that is not valid for the Run Profile's Run Type (for example AllowObjectTypeChanges on anything other than a Full Import).</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}", Name = "UpdateRunProfile")]
@@ -3283,6 +3285,11 @@ public class SynchronisationController(
             runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
         }
 
+        // Allow Object Type Changes (#2049): omitted leaves the current value unchanged. Validated below with the
+        // other Run-Type-specific settings, against the existing RunType.
+        if (request.AllowObjectTypeChanges.HasValue)
+            runProfile.AllowObjectTypeChanges = request.AllowObjectTypeChanges.Value;
+
         // Run Profile Safeguards (#1618): when present, the safeguards object replaces ALL members; a
         // null member clears that limit, an absent object leaves every limit unchanged.
         if (request.Safeguards != null)
@@ -3292,11 +3299,14 @@ public class SynchronisationController(
             runProfile.MaxDeletes = request.Safeguards.MaxDeletes;
             runProfile.MaxDetectedDeletions = request.Safeguards.MaxDetectedDeletions;
             runProfile.MaxDetectedDeletionsPercent = request.Safeguards.MaxDetectedDeletionsPercent;
-
-            var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
-            if (safeguardsError != null)
-                return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
         }
+
+        // Validated whatever the request carried, not only when it supplied Safeguards: a Run-Type-specific setting
+        // can arrive on its own (Allow Object Type Changes does), and the server would refuse the same Run Profile
+        // anyway. RunType is immutable after create, so this judges each setting against the existing RunType.
+        var safeguardsError = RunProfileSafeguardsValidator.Validate(runProfile);
+        if (safeguardsError != null)
+            return BadRequest(ApiErrorResponse.BadRequest(safeguardsError));
 
         // Update partition if provided
         if (request.PartitionId.HasValue)
