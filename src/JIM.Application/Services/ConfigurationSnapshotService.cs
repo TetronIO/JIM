@@ -513,6 +513,21 @@ public class ConfigurationSnapshotService
             Add(children, "pageSize", Render(runProfile.PageSize), "Page size");
             Add(children, "filePath", runProfile.FilePath, "File path");
             AddReference(children, "partitionId", runProfile.Partition?.Id, runProfile.Partition?.Name, "Partition");
+            // The two Full Import switches are recorded by presence rather than by value, as a container's selection
+            // is, so a Run Profile that has never turned one on carries no line for it. Creation histories are then not
+            // littered with "false", and a snapshot captured before these settings were recorded agrees with a later
+            // one for every Run Profile still at its defaults, so the first save after an upgrade reports no change
+            // nobody made. Validation keeps both false on every other Run Type, so presence also means Full Import.
+            if (runProfile.AllowObjectTypeChanges)
+                Add(children, "allowObjectTypeChanges", Render(true), "Allow Object Type Changes");
+            if (runProfile.VerifyImportContentHashes)
+                Add(children, "verifyImportContentHashes", Render(true), "Verification Mode");
+            // Run Profile Safeguards (#1618). Null is "no limit" and records nothing; zero is a real limit and is kept.
+            Add(children, "maxCreates", Render(runProfile.MaxCreates), "Max creates");
+            Add(children, "maxUpdates", Render(runProfile.MaxUpdates), "Max updates");
+            Add(children, "maxDeletes", Render(runProfile.MaxDeletes), "Max deletes");
+            Add(children, "maxDetectedDeletions", Render(runProfile.MaxDetectedDeletions), "Max detected deletions");
+            Add(children, "maxDetectedDeletionsPercent", Render(runProfile.MaxDetectedDeletionsPercent), "Max detected deletions (% of Connector Space)");
             items.Add(ConfigurationSnapshotNode.ObjectNode("runProfile", children, "Run Profile", runProfile.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("runProfiles", items, "Run Profiles");
@@ -1143,6 +1158,7 @@ public class ConfigurationSnapshotService
         Add(children, "supportsPasswordPolicyDiscovery", Render(definition.SupportsPasswordPolicyDiscovery), "Password policy discovery");
         Add(children, "supportsUniquenessProbe", Render(definition.SupportsUniquenessProbe), "Uniqueness probe");
         Add(children, "supportsUniquenessRejectionClassification", Render(definition.SupportsUniquenessRejectionClassification), "Uniqueness rejection classification");
+        Add(children, "externalIdsUniqueAcrossObjectTypes", Render(definition.ExternalIdsUniqueAcrossObjectTypes), "External IDs unique across Object Types");
         return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
     }
 

@@ -196,6 +196,23 @@ public static class ConfigurationChangeClassifier
         ["pageSize"] = C,
         ["filePath"] = B,
         ["partitionId"] = B,
+        // Allow Object Type Changes (#2049). Switched on, the Full Import retires the held Connected System Object and
+        // imports a new one of the new Object Type instead of refusing the change, so the run's outcome changes. Not
+        // Class A: saving it deletes nothing, the retired object is disconnected by a later synchronisation under the
+        // Deletion Rules (themselves Class A), and how many objects it touches depends on what a future import
+        // returns, so no count could be stated at save time.
+        ["allowObjectTypeChanges"] = B,
+        // Verification Mode (SPEC-1082 D10): the Full Import skips nothing and reports any change a content-hash skip
+        // would have missed. It changes how the import reads and what it reports, not what it imports.
+        ["verifyImportContentHashes"] = C,
+        // Run Profile Safeguards (#1618). A limit decides whether a run goes ahead with what it was going to do:
+        // relaxing one lets through a mass export or a mass detected deletion that it would have stopped, the same
+        // shape as relaxing Partition Validation Mode, and tightening one can stop a run's changes altogether.
+        ["maxCreates"] = B,
+        ["maxUpdates"] = B,
+        ["maxDeletes"] = B,
+        ["maxDetectedDeletions"] = B,
+        ["maxDetectedDeletionsPercent"] = B,
 
         // Connected System schema. Deselecting an Object Type removes its Connected System Objects.
         ["objectTypes"] = B,
