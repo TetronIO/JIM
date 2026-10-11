@@ -42,7 +42,8 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         what attribute flows would result), ProposedExports (the Pending Exports a real
         synchronisation would stage), Errors, Warnings, HasBlockingErrors and
         AffectedSyncRules. An AmbiguousMatch error carries MatchCandidates: the Metaverse
-        Objects the object's Object Matching Rule found.
+        Objects the object's Object Matching Rule found. An AmbiguousProvisioningMatch error
+        carries the Connected System Objects matching found in the target before provisioning.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id "3934ff12-4996-42c0-a396-41e17ac47af7"

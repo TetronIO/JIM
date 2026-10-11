@@ -66,8 +66,9 @@ public class ActivityRunProfileExecutionItemDetailDto
     public string? OutcomeSummary { get; set; }
 
     /// <summary>
-    /// For an <c>AmbiguousMatch</c>, the objects the match found (#2052): up to 10, ordered by display name, each with
-    /// whether it still exists and what is joined to it now. Empty for any other item.
+    /// For an <c>AmbiguousMatch</c>, the Metaverse Objects the match found, and for an <c>AmbiguousProvisioningMatch</c>,
+    /// the Connected System Objects (#2052): up to 10, ordered by display name, each with whether it still exists and,
+    /// for a Metaverse Object, what is joined to it now. Empty for any other item.
     /// </summary>
     public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
 

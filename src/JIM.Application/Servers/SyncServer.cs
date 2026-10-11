@@ -79,13 +79,6 @@ public class SyncServer : ISyncServer
     public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
         => _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, matchingRules);
 
-    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules)
-        => _jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules);
-
     #endregion
 
     #region Connected System Operations

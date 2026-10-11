@@ -276,11 +276,11 @@ Returns a `PSCustomObject` describing the item:
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
 | `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling) mode. The values themselves are on the Connected System Object. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
-| `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
+| `MatchCandidates` | For an `AmbiguousMatch` or `AmbiguousProvisioningMatch`, the objects the match found; empty otherwise. See below. |
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 
-An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name:
+An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name. Likewise, when matching before provisioning finds several existing Connected System Objects, the Metaverse Object is neither joined to one nor provisioned, and its `AmbiguousProvisioningMatch` item lists them:
 
 | Property | Description |
 |----------|-------------|

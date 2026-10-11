@@ -209,10 +209,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject, ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
-        => _repo.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+    public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+        => _repo.ConnectedSystems.StreamUnjoinedConnectedSystemObjectValues(connectedSystemId, connectedSystemObjectTypeId, attributeIds);
 
     public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName,
@@ -581,8 +580,8 @@ public partial class SyncRepository : ISyncRepository
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
-        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined, joinSyncRuleId, joinSyncRuleName);
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName, int? joinObjectMatchingRuleId, string? joinMatchValue)
+        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined, joinSyncRuleId, joinSyncRuleName, joinObjectMatchingRuleId, joinMatchValue);
 
     #endregion
 

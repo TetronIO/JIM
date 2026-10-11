@@ -450,21 +450,10 @@ public interface ISyncRepository
     Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Finds a CSO that matches an MVO using the specified matching rule.
-    /// Used by object matching during export (MVO→CSO lookup).
-    /// </summary>
-    Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        ObjectMatchingRule objectMatchingRule);
-
-    /// <summary>
-    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
-    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
-    /// type whose named attribute equals one of the given values, in one query per rule per page
-    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
-    /// parameter and eligibility documentation.
+    /// Export matching's lookup (MVO→CSO, #2052): for a single Object Matching Rule, finds every unjoined,
+    /// Normal-status Connected System Object of the given type whose named attribute equals one of the
+    /// given values, for one Metaverse Object or a whole page of them. See <c>IConnectedSystemRepository</c>
+    /// for full parameter and eligibility documentation.
     /// </summary>
     Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
@@ -473,6 +462,14 @@ public interface ISyncRepository
         AttributeDataType dataType,
         bool caseSensitive,
         IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Streams every unjoined, Normal-status Connected System Object of the given type with its values for the given
+    /// attributes, ordered by object: what an expression-sourced Object Matching Rule's export index is built from
+    /// (#2052). See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
@@ -1344,10 +1341,12 @@ public interface ISyncRepository
     /// at write time, guarding against two Metaverse Objects racing to join the same object;
     /// returns true if the claim was written, false if another Metaverse Object claimed it first.
     /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined, Status (Normal) and join
-    /// record (the export Synchronisation Rule whose matching found it, #348) are set; the caller owns
-    /// fixing up any tracked instance to match (raw SQL bypasses the change tracker).
+    /// record (the export Synchronisation Rule whose matching found it, #348, and the Object Matching Rule and values
+    /// it matched on, #2052) are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
     /// </summary>
-    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName);
+    Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName,
+        int? joinObjectMatchingRuleId, string? joinMatchValue);
 
     #endregion
 

@@ -135,8 +135,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         => _inner.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(MetaverseObject metaverseObject, ConnectedSystem connectedSystem, ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
-        => _inner.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+    public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
+        int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
+        => _inner.StreamUnjoinedConnectedSystemObjectValues(connectedSystemId, connectedSystemObjectTypeId, attributeIds);
 
     public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName, AttributeDataType dataType, bool caseSensitive, IReadOnlyCollection<object> values)
         => _inner.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
@@ -611,7 +612,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
 
-    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName)
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined, int joinSyncRuleId, string joinSyncRuleName, int? joinObjectMatchingRuleId, string? joinMatchValue)
         => throw new PreviewWriteAttemptedException(nameof(TryClaimConnectedSystemObjectForJoinAsync));
 
     public Task CreatePendingExportAsync(PendingExport pendingExport)

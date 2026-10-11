@@ -15,14 +15,12 @@ namespace JIM.Worker.Tests.Repositories;
 /// <summary>
 /// Real-PostgreSQL verification of the batch export-matching candidate query added to batch export
 /// matching per page instead of one query per Metaverse Object:
-/// <c>ConnectedSystemRepository.GetExportMatchCandidateIdsAsync</c> (the batch lookup),
-/// <c>GetConnectedSystemObjectForExportMatchAsync</c> (hydration of a candidate), and the per-object
-/// <c>FindConnectedSystemObjectUsingMatchingRuleAsync</c>'s wildcard fix (case-insensitive comparison no
-/// longer uses <c>EF.Functions.ILike</c>, so <c>%</c>, <c>_</c> and <c>\</c> in a value no longer act as
-/// wildcards). The in-memory provider cannot prove any of the raw-SQL predicates (typed array
+/// <c>ConnectedSystemRepository.GetExportMatchCandidateIdsAsync</c> (export matching's lookup, for one
+/// Metaverse Object or a page) and <c>GetConnectedSystemObjectForExportMatchAsync</c> (hydration of a
+/// candidate). The in-memory provider cannot prove any of the raw-SQL predicates (typed array
 /// unnesting via <c>unnest(@values)</c>, the name-based join to <c>ConnectedSystemAttributes</c>,
-/// PostgreSQL's <c>lower()</c>-based exact case-insensitive equality) or EF's translation of
-/// <c>ILike</c>/<c>ToLower()</c>, so only a real database run proves the query text is correct.
+/// PostgreSQL's <c>lower()</c>-based exact case-insensitive equality, under which <c>%</c>, <c>_</c> and
+/// <c>\</c> in a value never act as wildcards), so only a real database run proves the query text is correct.
 /// </summary>
 /// <remarks>
 /// Seeding pattern mirrors <see cref="ExportMatchingClaimDatabaseTests"/>: every entity a test writes
@@ -610,78 +608,115 @@ public class ExportMatchCandidateDatabaseTests
 
     #endregion
 
-    #region Per-object method: wildcard fix
+    #region Expression index inputs (#2052)
 
     [Test]
-    public async Task FindConnectedSystemObjectUsingMatchingRuleAsync_CaseInsensitiveUnderscoreValue_DoesNotWildcardMatchAsync()
+    public async Task StreamUnjoinedConnectedSystemObjectValues_StreamsOnlyUnjoinedNormalObjectsOfTheTypeWithTheAskedAttributesAsync()
     {
         await using var seed = NewContext();
-        var (system, type, attribute) = await SeedSystemAndTypeAsync(seed, AttributeDataType.Text);
-        // "jxsmith" would previously match the ILIKE pattern "j_smith" (the `_` standing for "x").
-        var cso = CreateCso(system, type, attribute, "jxsmith");
-        seed.Add(cso);
+        var (system, type, employeeId) = await SeedSystemAndTypeAsync(seed, AttributeDataType.Text);
+        var mail = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "mail", ConnectedSystemObjectType = type, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        type.Attributes.Add(mail);
+        var mvo = new MetaverseObject { Type = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true } };
+        seed.Add(mvo);
         await seed.SaveChangesAsync();
 
-        var metaverseAttribute = new MetaverseAttribute { Id = 9001, Name = "Employee Id", Type = AttributeDataType.Text };
-        var rule = new ObjectMatchingRule
-        {
-            Id = 1,
-            CaseSensitive = false,
-            TargetMetaverseAttribute = metaverseAttribute,
-            TargetMetaverseAttributeId = metaverseAttribute.Id,
-            Sources =
-            [
-                new ObjectMatchingRuleSource { ConnectedSystemAttribute = attribute, ConnectedSystemAttributeId = attribute.Id }
-            ]
-        };
-
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = metaverseAttribute.Id, StringValue = "j_smith" }]
-        };
+        var unjoined = CreateCso(system, type, employeeId, "E1");
+        unjoined.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = mail, StringValue = "jo@corp.example" });
+        unjoined.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = mail, StringValue = "jo.smith@corp.example" });
+        var holdsNoneAsked = CreateCso(system, type, employeeId, "E2");
+        var joined = CreateCso(system, type, employeeId, "E3", metaverseObjectId: mvo.Id);
+        joined.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = mail, StringValue = "joined@corp.example" });
+        var obsolete = CreateCso(system, type, employeeId, "E4", status: ConnectedSystemObjectStatus.Obsolete);
+        obsolete.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = mail, StringValue = "gone@corp.example" });
+        seed.AddRange(unjoined, holdsNoneAsked, joined, obsolete);
+        await seed.SaveChangesAsync();
 
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
+        var streamed = new List<(Guid Id, List<string?> Mail, List<int> AttributeIds)>();
+        await foreach (var (id, values) in repository.ConnectedSystems.StreamUnjoinedConnectedSystemObjectValues(system.Id, type.Id, [mail.Id]))
+            streamed.Add((id, values.Select(v => v.StringValue).ToList(), values.Select(v => v.AttributeId).Distinct().ToList()));
 
-        var result = await repository.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(mvo, system, type, rule);
-
-        Assert.That(result, Is.Null, "j_smith must not wildcard-match jxsmith now that exact case-insensitive equality replaces EF.Functions.ILike");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(streamed.Select(s => s.Id), Is.EquivalentTo(new[] { unjoined.Id, holdsNoneAsked.Id }),
+                "every unjoined, Normal object of the type, including one holding none of the asked attributes");
+            Assert.That(streamed.Select(s => s.Id), Is.Ordered, "ordered by object, so a reader can build as it streams");
+            var unjoinedRow = streamed.Single(s => s.Id == unjoined.Id);
+            Assert.That(unjoinedRow.Mail, Is.EquivalentTo(new[] { "jo@corp.example", "jo.smith@corp.example" }));
+            Assert.That(unjoinedRow.AttributeIds, Is.EqualTo(new[] { mail.Id }), "only the asked attributes are read");
+            Assert.That(streamed.Single(s => s.Id == holdsNoneAsked.Id).Mail, Is.Empty);
+        }
     }
 
     [Test]
-    public async Task FindConnectedSystemObjectUsingMatchingRuleAsync_CaseInsensitiveExactMatch_StillMatchesAsync()
+    public async Task StreamUnjoinedConnectedSystemObjectValues_EveryValueColumnRoundTripsAsync()
     {
         await using var seed = NewContext();
-        var (system, type, attribute) = await SeedSystemAndTypeAsync(seed, AttributeDataType.Text);
-        var cso = CreateCso(system, type, attribute, "ESMITH");
-        seed.Add(cso);
+        var (system, type, text) = await SeedSystemAndTypeAsync(seed, AttributeDataType.Text);
+        ConnectedSystemObjectTypeAttribute Add(string name, AttributeDataType dataType)
+        {
+            var attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = name, ConnectedSystemObjectType = type, Type = dataType, AttributePlurality = AttributePlurality.SingleValued, Selected = true
+            };
+            type.Attributes.Add(attribute);
+            return attribute;
+        }
+
+        var number = Add("number", AttributeDataType.Number);
+        var longNumber = Add("long", AttributeDataType.LongNumber);
+        var decimalNumber = Add("decimal", AttributeDataType.Decimal);
+        var date = Add("date", AttributeDataType.DateTime);
+        var flag = Add("flag", AttributeDataType.Boolean);
+        var guid = Add("guid", AttributeDataType.Guid);
+        var binary = Add("binary", AttributeDataType.Binary);
+        var reference = Add("manager", AttributeDataType.Reference);
         await seed.SaveChangesAsync();
 
-        var metaverseAttribute = new MetaverseAttribute { Id = 9002, Name = "Employee Id", Type = AttributeDataType.Text };
-        var rule = new ObjectMatchingRule
-        {
-            Id = 1,
-            CaseSensitive = false,
-            TargetMetaverseAttribute = metaverseAttribute,
-            TargetMetaverseAttributeId = metaverseAttribute.Id,
-            Sources =
-            [
-                new ObjectMatchingRuleSource { ConnectedSystemAttribute = attribute, ConnectedSystemAttributeId = attribute.Id }
-            ]
-        };
-
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = metaverseAttribute.Id, StringValue = "esmith" }]
-        };
+        var manager = CreateCso(system, type, text, "M1");
+        var when = new DateTime(2026, 10, 11, 9, 30, 0, DateTimeKind.Utc);
+        var objectGuid = Guid.NewGuid();
+        var cso = CreateCso(system, type, text, "E1");
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = number, IntValue = 42 });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = longNumber, LongValue = 9_000_000_000L });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = decimalNumber, DecimalValue = 12.50m });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = date, DateTimeValue = when });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = flag, BoolValue = true });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = guid, GuidValue = objectGuid });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = binary, ByteValue = [1, 2, 3] });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = reference, ReferenceValue = manager });
+        seed.AddRange(manager, cso);
+        await seed.SaveChangesAsync();
 
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
+        IReadOnlyList<ConnectedSystemObjectAttributeValue> values = [];
+        await foreach (var (id, streamedValues) in repository.ConnectedSystems.StreamUnjoinedConnectedSystemObjectValues(
+                           system.Id, type.Id, [text.Id, number.Id, longNumber.Id, decimalNumber.Id, date.Id, flag.Id, guid.Id, binary.Id, reference.Id]))
+        {
+            if (id == cso.Id)
+                values = streamedValues;
+        }
 
-        var result = await repository.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(mvo, system, type, rule);
-
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+        ConnectedSystemObjectAttributeValue Of(ConnectedSystemObjectTypeAttribute attribute) => values.Single(v => v.AttributeId == attribute.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Of(text).StringValue, Is.EqualTo("E1"));
+            Assert.That(Of(number).IntValue, Is.EqualTo(42));
+            Assert.That(Of(longNumber).LongValue, Is.EqualTo(9_000_000_000L));
+            Assert.That(Of(decimalNumber).DecimalValue, Is.EqualTo(12.50m));
+            Assert.That(Of(date).DateTimeValue, Is.EqualTo(when));
+            Assert.That(Of(flag).BoolValue, Is.True);
+            Assert.That(Of(guid).GuidValue, Is.EqualTo(objectGuid));
+            Assert.That(Of(binary).ByteValue, Is.EqualTo(new byte[] { 1, 2, 3 }));
+            Assert.That(Of(reference).ReferenceValue?.Id, Is.EqualTo(manager.Id), "a reference reads as the referenced object's id");
+        }
     }
 
     #endregion

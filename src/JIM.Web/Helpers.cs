@@ -369,6 +369,7 @@ public static class Helpers
             // Raised while evaluating outbound exports during synchronisation, before anything is exported,
             // so it belongs with the synchronisation phase rather than "Export Failed".
             [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = "Synchronisation Failed",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",

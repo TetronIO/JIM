@@ -208,10 +208,19 @@ public enum ActivityRunProfileExecutionItemErrorType
 
     /// <summary>
     /// An Object Matching Rule could not be worked out for the object (#2052): its expression threw, its result could
-    /// not be converted to the Metaverse attribute's type, or the rule's shape cannot be compared. The object was
+    /// not be converted to the Metaverse attribute's type, or the rule's shape cannot be compared. Before provisioning,
+    /// also when the rule's expression could not be worked out for some of the target's objects and nothing else
+    /// matched, since one of those may be the object's own account. The object was
     /// neither joined nor projected (on export, not provisioned), so a broken rule cannot flood the Metaverse with
     /// duplicate identities. The message names the rule and the fault; the object is retried on the next
     /// synchronisation.
     /// </summary>
-    ObjectMatchingRuleFailed
+    ObjectMatchingRuleFailed,
+
+    /// <summary>
+    /// Before provisioning, an Object Matching Rule found more than one existing Connected System Object in the target
+    /// for the Metaverse Object (#2052). JIM cannot tell which account is the identity's, so it neither joined one nor
+    /// provisioned another; the item lists the accounts it found. Previously the lowest-id account was joined.
+    /// </summary>
+    AmbiguousProvisioningMatch
 }

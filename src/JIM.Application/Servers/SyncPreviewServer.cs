@@ -2454,6 +2454,24 @@ public class SyncPreviewServer
             if (result.AffectedSyncRules.All(r => r.Id != entry.SyncRuleId))
                 result.AffectedSyncRules.Add(new SyncPreviewSyncRuleReference { Id = entry.SyncRuleId, Name = entry.SyncRuleName });
 
+            // Export matching would stop the Metaverse Object for this rule (#2052): the run records the error and
+            // stages nothing, so the preview reports the error and proposes no export.
+            if (entry.ProvisioningMatchError is { } matchError)
+            {
+                result.Errors.Add(new SyncPreviewMessage
+                {
+                    Code = matchError.ErrorType == ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch
+                        ? SyncPreviewMessageCode.AmbiguousProvisioningMatch
+                        : SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = matchError.Message,
+                    SyncRuleId = matchError.SyncRuleId,
+                    SyncRuleName = matchError.SyncRuleName,
+                    ConnectedSystemId = matchError.ConnectedSystemId,
+                    MatchCandidates = [.. matchError.Candidates]
+                });
+                continue;
+            }
+
             switch (entry.Kind)
             {
                 // A real evaluation stages a Pending Export for a Create always (provisioning carries the

@@ -59,7 +59,8 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
 
         // An Object Matching Rule could not be worked out for an object (#2052).
-        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28
+        [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = 28,
+        [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 29
     };
 
     [Test]

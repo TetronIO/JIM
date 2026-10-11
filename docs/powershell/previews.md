@@ -410,7 +410,7 @@ Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the 
 
 Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
 
-Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found, with the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found, and an `AmbiguousProvisioningMatch` error the Connected System Objects matching found before provisioning, with the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 
 ### Examples
 
