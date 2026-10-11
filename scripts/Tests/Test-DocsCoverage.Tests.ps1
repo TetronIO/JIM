@@ -78,7 +78,8 @@ BeforeAll {
             DocsBaseUrl         = 'https://docs.junctional.io'
             DocsPath            = 'docs'
             DocsExclude         = @('CLAUDE.md', 'developer/**')
-            Allow               = @{ Cmdlets = @{}; EnvironmentVariables = @{}; ExpressionFunctions = @{}; DocsLinks = @{} }
+            ApiIndex            = 'docs/api/index.md'
+            Allow               = @{ Cmdlets = @{}; EnvironmentVariables = @{}; ExpressionFunctions = @{}; DocsLinks = @{}; ApiRoutes = @{}; ApiResourceGroups = @{} }
         }
     }
 
@@ -102,7 +103,7 @@ BeforeAll {
     }
 
     function Invoke-Coverage {
-        param([string]$Root, [hashtable]$Environment = @{})
+        param([string]$Root, [hashtable]$Environment = @{}, [string[]]$ExtraArgs = @())
         $saved = @{}
         foreach ($k in @('GITHUB_ACTIONS', 'GITHUB_STEP_SUMMARY') + @($Environment.Keys)) {
             $saved[$k] = [Environment]::GetEnvironmentVariable($k)
@@ -111,7 +112,7 @@ BeforeAll {
         foreach ($k in $Environment.Keys) { [Environment]::SetEnvironmentVariable($k, $Environment[$k]) }
         try {
             Push-Location $Root
-            $output = pwsh -NoProfile -File $script:ScriptPath -RepositoryRoot $Root 2>&1
+            $output = pwsh -NoProfile -File $script:ScriptPath -RepositoryRoot $Root @ExtraArgs 2>&1
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         finally {
@@ -252,5 +253,103 @@ Describe 'Test-DocsCoverage: reporting' {
         $root = New-Repository
         Set-Content -Path (Join-Path $root 'docs/.conformance/coverage.psd1') -Value '@{ }' -Encoding utf8
         (Invoke-Coverage -Root $root).ExitCode | Should -Be 2
+    }
+}
+
+Describe 'Test-DocsCoverage: ACC-3 REST routes and COV-4 resource groups' {
+    BeforeAll {
+        # A small OpenAPI document, shaped as the real one is.
+        $script:OpenApi = @'
+{
+  "openapi": "3.1.1",
+  "paths": {
+    "/api/v1/synchronisation/connected-systems/{connectedSystemId}/clear": { "post": { "tags": ["Synchronisation"] } },
+    "/api/v1/synchronisation/connected-systems/{connectedSystemId}": { "get": { "tags": ["Synchronisation"] }, "delete": { "tags": ["Synchronisation"] } },
+    "/api/v1/health/ready": { "get": { "tags": ["Health"] } },
+    "/api/v1/generated-values/decisions/{id}": { "get": { "tags": ["Health"] } },
+    "/api/v1/generated-values/decisions/summary": { "get": { "tags": ["Health"] } }
+  }
+}
+'@
+        $script:ApiIndex = Get-Page 'API' "## Resource groups`n`n| Resource group | What it covers |`n|---|---|`n| ``Synchronisation`` | Connected Systems and their runs. |`n| ``Health`` | Whether JIM is up. |`n"
+        function New-ApiRepository {
+            param([string]$Page, [string]$Index = $script:ApiIndex, [hashtable]$Allow = @{})
+            $root = New-Repository -Files @{ 'docs/api/index.md' = $Index; 'docs/configuration/systems.md' = (Get-Page 'Systems' $Page) } -Allow $Allow
+            Set-Content -Path (Join-Path $root 'openapi.json') -Value $script:OpenApi -Encoding utf8
+            $root
+        }
+        function Invoke-Api {
+            param([string]$Root)
+            Invoke-Coverage -Root $Root -ExtraArgs @('-OpenApiPath', (Join-Path $Root 'openapi.json'), '-Rule', 'ACC-3,COV-4')
+        }
+    }
+
+    It 'passes full routes, with placeholders or real ids, in prose, inline code and code blocks' {
+        $page = "Clear one with ``POST /api/v1/synchronisation/connected-systems/{id}/clear``.`n`n``````bash`ncurl -X DELETE https://jim.example.com/api/v1/synchronisation/connected-systems/3`n```````n`nReadiness: GET /api/v1/health/ready.`n"
+        $r = Invoke-Api -Root (New-ApiRepository -Page $page)
+        $r.Output | Should -Match 'Docs coverage passed'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a route the API does not have, naming the page line' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Line one.`n`nCall ``GET /api/v1/synchronisation/systems``.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "systems\.md:9\s+ACC-3\s+.*'/api/v1/synchronisation/systems'"
+    }
+
+    It 'fails a method the route does not support' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Call ``PUT /api/v1/health/ready``.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "ACC-3\s+.*PUT.*GET"
+    }
+
+    It 'fails an abbreviated route, naming the full route to write' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Clear it with ``POST /connected-systems/{id}/clear``.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "ACC-3\s+.*abbreviated.*'/api/v1/synchronisation/connected-systems/\{connectedSystemId\}/clear'"
+    }
+
+    It 'leaves alone a bare version prefix such as /api/v1/' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Every endpoint is under ``/api/v1/``; the next version under ``/api/v2/``.`n")
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'passes a path given without a method that is the start of a route, since it names a resource rather than a call' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Connected Systems live under ``/api/v1/synchronisation/connected-systems``, health under /api/v1/health.`n")
+        $r.Output | Should -Match 'Docs coverage passed'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a path without a method that starts no route, and a path with a method that is only the start of one' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Widgets live under ``/api/v1/widgets``.`n`nCall ``GET /api/v1/synchronisation/connected-systems``.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "ACC-3\s+.*'/api/v1/widgets'"
+        $r.Output | Should -Match "ACC-3\s+.*'/api/v1/synchronisation/connected-systems'"
+    }
+
+    It 'names the one full route whose fixed segments match, not every route a placeholder would' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Read ``GET /generated-values/decisions/summary``.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "'/api/v1/generated-values/decisions/summary'\."
+        $r.Output | Should -Not -Match 'decisions/\{id\}'
+    }
+
+    It 'leaves alone a method and path that are not a JIM route' {
+        $r = Invoke-Api -Root (New-ApiRepository -Page "The identity provider answers ``POST /token`` with the tokens.`n")
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a resource group with no row, and a row naming a group the API does not have' {
+        $index = Get-Page 'API' "## Resource groups`n`n| Resource group | What it covers |`n|---|---|`n| ``Synchronisation`` | Connected Systems. |`n| ``Widgets`` | Gone. |`n"
+        $r = Invoke-Api -Root (New-ApiRepository -Page "Nothing here.`n" -Index $index)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "COV-4\s+.*'Health'"
+        $r.Output | Should -Match "index\.md:\d+\s+COV-4\s+.*'Widgets'"
+    }
+
+    It 'skips the API rules, and says so, when no OpenAPI document is given' {
+        $r = Invoke-Coverage -Root (New-ApiRepository -Page "Call ``GET /api/v1/synchronisation/systems``.`n")
+        $r.ExitCode | Should -Be 0
+        $r.Output | Should -Match 'ACC-3 and COV-4 skipped'
     }
 }

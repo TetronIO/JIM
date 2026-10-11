@@ -187,7 +187,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 |----|------|------|------------|
 | **ACC-1** | Block | A PowerShell example invokes a cmdlet with each parameter's real name, never a declared alias. An alias reads like a different parameter: `Get-JIMRunProfile -Id 42` means "every Run Profile on Connected System 42". | `Lint-DocExamples.ps1` |
 | **ACC-2** | Block | Every JIM cmdlet a page names exists, and every parameter an example passes binds: declared, a common parameter, or `-WhatIf`/`-Confirm` where the cmdlet supports them; never abbreviated. | `Lint-DocExamples.ps1` |
-| **ACC-3** | Planned (Phase 2) | Every REST route in an example exists in the OpenAPI document. | |
+| **ACC-3** | Block | Every REST route a page gives exists in the OpenAPI document, and takes the method given with it. Write routes in full, as the API reference names them: `/connected-systems/{id}/clear` fails, naming `/api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`. A path given without a method names a resource rather than a call, so it may stop short of a whole route (`/api/v1/metaverse`). | `Test-DocsCoverage.ps1`, in `build-and-test`, which builds the OpenAPI document it reads |
 | **ACC-4** | Review | Every factual claim is a claim about source, so check it there. Parameter names, property names, setting keys, defaults, file paths, endpoint routes, counts and limits are all verifiable, and none is verified by the build. State a default alongside the setting key that carries it, so a reader who finds the default has drifted can find what to change. | |
 | **LNK-1** | Block | Every link and anchor in the Markdown resolves. Grep the target file for the heading rather than inferring the slug: `#passwords` and `#password-synchronisation` look equally plausible. | `Test-DocsSite.ps1` (strict MkDocs build) |
 | **LNK-2** | Block | Every link in the built site resolves, including links into the generated API reference and links written in raw HTML. | `Test-DocsSite.ps1` (lychee) |
@@ -231,14 +231,14 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 ## Coverage
 
-"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-4, COV-5 and the connector settings of COV-6 are planned for Phase 2.
+"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2, COV-4 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-5 and the connector settings of COV-6 are planned for Phase 2.
 
 | ID | Inventory | Documented means |
 |----|-----------|------------------|
 | **COV-1** | Exported cmdlets (module manifest) | A heading, or a row in the first column of a table, on a `docs/powershell/` page |
 | **COV-2** | Environment variables the product and installer read: `Constants.Config` and `GetEnvironmentVariable` reads, the PowerShell module's `$env:` reads, the compose files, `.env.example`, and the variables the installer's header documents | A row in a settings table |
 | **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings reference |
-| **COV-4** | REST resource groups (OpenAPI tags) | An overview page under `docs/api/` that names the group |
+| **COV-4** | REST resource groups (OpenAPI tags) | A row in the Resource groups table on the API overview page (`docs/api/index.md`) |
 | **COV-5** | Portal pages (routable components) | The docs page each declares through `PageInfo` exists |
 | **COV-6** | Connector settings and expression functions | A row in the connector's or the function reference's table |
 | **TERM-1** | Product nouns: the glossary's entries, and `docs/.conformance/vocabulary.psd1` (see "The product vocabulary" under Language) | A glossary entry with an anchor, a vocabulary entry, and a home page that exists (HOME-1) |
@@ -281,7 +281,7 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | MNT-3 | An over-budget page cannot grow | Warn (Block from Phase 5) | `Test-DocsConformance.ps1` |
 | ACC-1 | Real parameter names, never aliases | Block | `Lint-DocExamples.ps1` |
 | ACC-2 | Cmdlets and parameters exist | Block | `Lint-DocExamples.ps1` |
-| ACC-3 | REST routes exist | Planned (Phase 2) | |
+| ACC-3 | REST routes exist | Block | `Test-DocsCoverage.ps1` |
 | ACC-4 | Claims checked against source | Review | |
 | LNK-1 | Markdown links and anchors resolve | Block | `Test-DocsSite.ps1` |
 | LNK-2 | Built-site links resolve | Block | `Test-DocsSite.ps1` |
@@ -292,8 +292,8 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | STY-1 to STY-3 | Style conventions | Review | |
 | PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
 | TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
-| COV-1, COV-2 | Cmdlets and environment variables are documented | Block | `Test-DocsCoverage.ps1` |
+| COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |
 | COV-6 | Expression functions are documented (connector settings: planned, Phase 2) | Block | `Test-DocsCoverage.ps1` |
-| COV-3 to COV-5 | Service Settings, REST resource groups, portal pages | Planned (Phase 2) | |
+| COV-3, COV-5 | Service Settings and portal pages are documented | Planned (Phase 2) | |
 | TERM-1 | The vocabulary and the glossary agree; every product noun has a home page | Block | `Test-DocsConformance.ps1` |
 | EXC-1 | Exception markers are well formed and in use | Block | `Test-DocsConformance.ps1` |
