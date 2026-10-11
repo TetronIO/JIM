@@ -26,5 +26,14 @@
         @{ Name = 'u24-podrl-ag'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'ubuntu') }
         @{ Name = 'alma9-podrf-ag'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrl-ag'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
+
+        # Upgrades from the previous release, with its data, by the Upgrading guide, then a rollback by it. 12 GiB, as
+        # v0.16.0's database does not start below about 9 GB (#1943); 6 will do once the previous release is later.
+        @{ Name = 'u24-docker-ctrd-up'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'u24-docker-classic-up'; Image = 'u24-docker-classic'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'u24-podrf-up'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'ubuntu') }
+        @{ Name = 'u24-podrl-up'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'ubuntu') }
+        @{ Name = 'alma9-podrf-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrl-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
     )
 }

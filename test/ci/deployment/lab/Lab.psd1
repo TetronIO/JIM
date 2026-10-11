@@ -25,6 +25,15 @@
         Password = 'admin'
     }
 
+    # The lab's test directory (OpenLDAP, on each network's gateway), which upgrade cells connect a Connected System to,
+    # with a stored bind password that the upgraded JIM must still decrypt. Lab-only values, as ci-runners sets them.
+    Directory = @{
+        Port = 1389
+        Suffix = 'dc=jimlab,dc=test'
+        BindDn = 'cn=admin,dc=jimlab,dc=test'
+        Password = 'jimlab-directory'
+    }
+
     # Memory kept back for the host itself (its identity provider, directory and the runner) when working out how many
     # VMs run at once.
     ReserveGiB = 8
