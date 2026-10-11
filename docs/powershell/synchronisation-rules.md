@@ -1239,7 +1239,7 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
-| `CaseSensitive` | `bool` | No | `$false` | If `$true`, string comparisons are case-sensitive. Only meaningful with `StringValue`. |
+| `CaseSensitive` | `bool` | No | `$true` | If `$false`, string comparisons ignore case. Only meaningful with `StringValue`. |
 | `ValueMode` | `string` | No | `Absolute` | For Date/Time attributes: `Absolute` (use `DateTimeValue`) or `Relative` (compare against a date relative to now). |
 | `RelativeCount` | `int` | No | | Relative offset count, zero or positive (with `ValueMode Relative`). |
 | `RelativeUnit` | `string` | No | | Relative offset unit: `Hours`, `Days`, `Weeks`, `Months`, `Years` (with `ValueMode Relative`). |

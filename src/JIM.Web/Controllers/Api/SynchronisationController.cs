@@ -5757,7 +5757,7 @@ public class SynchronisationController(
             MetaverseObjectType = metaverseObjectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
             TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
         // Add sources
@@ -6092,7 +6092,7 @@ public class SynchronisationController(
             SyncRule = syncRule,
             TargetMetaverseAttributeId = targetMvAttr.Id,
             TargetMetaverseAttribute = targetMvAttr,
-            CaseSensitive = request.CaseSensitive
+            CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
         // Add sources - for advanced mode, sources reference CS attributes from the Synchronisation Rule's object type

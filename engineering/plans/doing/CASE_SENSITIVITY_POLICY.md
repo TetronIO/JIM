@@ -1,9 +1,9 @@
 # One Case-Sensitivity Policy
 
-- **Status:** Planned
+- **Status:** Doing (PR 1 in progress)
 - **Issue:** [#2051](https://github.com/TetronIO/JIM/issues/2051)
-- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../prd/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
-- **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](done/CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
+- **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (section "Case sensitivity: one policy")
+- **Supersedes, in part:** [CASE_SENSITIVITY_STRATEGY.md](../done/CASE_SENSITIVITY_STRATEGY.md) (its data-flow table; its `StringComparison` rules stand)
 
 ## Overview
 
@@ -89,22 +89,22 @@ Import / export / references / matching --> IdentifierKey.For(value, attribute.C
 
 Each PR follows TDD, keeps the build and tests green, and updates the policy page rows it makes true. The page always documents shipped behaviour.
 
-### PR 1: Policy page and one Object Matching default (bottom of the #207 stack)
+### PR 1: Policy page and one Object Matching default (bottom of the #207 stack) ✅
 
 - **Docs:**
   - Rewrite `docs/concepts/case-sensitivity.md` into the four-question shape, with the quick-reference table listing every row true at this point.
   - Fix `docs/configuration/synchronisation-rules.md` 146 ("case-sensitive by default").
-  - Fix `docs/powershell/synchronisation-rules.md` 1242, 1490 and 1652 (wrong `$false` defaults).
+  - Fix `docs/powershell/synchronisation-rules.md` 1242 (the scoping criterion default is `$true`). Lines 1490 and 1652 already said `$false` for matching rules, which this PR makes true.
 - **REST:** `CreateObjectMatchingRuleRequest.CaseSensitive` and `CreateSyncRuleObjectMatchingRuleRequest.CaseSensitive` (`ObjectMatchingRuleRequestDtos.cs` 68, 101) become `bool?`. Null takes the policy default, which is false until PR 3 adds the declaration.
   - The response DTO default (`ObjectMatchingRuleDtos.cs` 107) is mapped from the entity only.
 - **Preview:** `StartObjectMatchingPreviewRequest.CaseSensitive` (97) follows the same rule. The preview cmdlet's hashtable path (`New-JIMConfigurationChangePreview.ps1` 328) states its default in help.
 - **Portal:**
   - Fix the `ConnectedSystemObjectMatchingTab.razor` caption at 627.
-  - Make both tabs read the default from one place (an `ObjectMatchingDefaults.CaseSensitiveFor(attribute)` helper in `JIM.Models`) rather than two literals.
+  - Make both tabs read the default from one place rather than two literals: `ObjectMatchingDefaults.CaseSensitive` in `JIM.Models`, which the entity initialiser, the Simple mode tab, the REST create paths and the preview all read. It is a constant for now; PR 3 adds `CaseSensitiveFor(attribute)` once there is a declaration to derive from, rather than this PR shipping a parameter nothing reads.
 - **PowerShell help:** `New-JIMMatchingRule` and `New-JIMSyncRuleMatchingRule` state the default.
 - **Tests:**
   - Controller tests for null/true/false on create.
-  - A unit test that both portal tabs and the API take the default from the helper.
+  - A preview controller test that a proposed rule without the setting ignores case. The portal tabs are covered by reading the constant directly (the Advanced tab through the entity initialiser); a source-shape test for that was judged not worth its upkeep.
 - **Changelog:** 🔄 "Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged."
 
 ### PR 2: Comparison hygiene and configuration names

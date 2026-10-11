@@ -192,6 +192,17 @@ function New-JIMConfigurationChangePreview {
         write nothing; the preview reports that as a validation finding rather than as values that would
         never be written.
 
+    .PARAMETER MatchingRule
+        The proposed Object Matching Rules, as one hashtable per rule, across both matching modes. Each rule
+        takes an Order (rules are tried in ascending order until one matches), its owner
+        (ConnectedSystemObjectTypeId in Simple mode, SyncRuleId in Advanced mode), a MetaverseObjectTypeId
+        (required in Simple mode), a TargetMetaverseAttributeId, and a Sources array whose entries take an
+        Order and a ConnectedSystemAttributeId. CaseSensitive is optional: omitted, the rule ignores case,
+        exactly as a rule created without it does.
+
+        Mandatory, and an empty array is a valid and deliberate value: it proposes removing every rule, so
+        nothing would join and every unjoined object would project a new identity instead.
+
     .PARAMETER FullDataSet
         Keep every object-level detail row rather than the per-group cap's worth. Summary counts are
         exact either way; this decides only how much of the detail behind them can be read back with
