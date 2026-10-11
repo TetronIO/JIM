@@ -398,6 +398,58 @@ public class CausalConsequenceReadDatabaseTests
         }
     }
 
+    // ─── The walk over real reads ───
+
+    [Test]
+    public async Task GetCausalConsequencesAsync_DeletionCascade_WalksToTheConfirmationAndPagesANestedCohortAsync()
+    {
+        // The application walk over the real level reads: a deletion removes a reference from two Groups, each removal
+        // is exported, one export is confirmed and the other is still awaiting its confirming import.
+        var target = await SeedConnectedSystemAsync("Glitterband EMEA");
+        var housekeeping = await SeedActivityAsync(null, ConnectedSystemRunType.NotSet, T0);
+        var deletion = await SeedItemAsync(housekeeping, ObjectChangeType.Deleted, "Tina Adams", "User");
+        var export = await SeedActivityAsync(target.SystemId, ConnectedSystemRunType.Export, T0.AddHours(1));
+        var import = await SeedActivityAsync(target.SystemId, ConnectedSystemRunType.FullImport, T0.AddHours(2));
+        var awaitingId = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Exported);
+        foreach (var (name, confirmed) in new[] { ("Project Diamond", true), ("Project Pulse", false) })
+        {
+            var removal = await SeedItemAsync(housekeeping, ObjectChangeType.PendingExport, name, "Group");
+            await SeedEdgeAsync(removal, CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, causeItemId: deletion,
+                attributeName: "Static Members");
+            var exported = await SeedItemAsync(export, ObjectChangeType.Exported, name, "group", outcomeSummary: "Exported:1");
+            var pendingExportId = confirmed ? Guid.NewGuid() : awaitingId;
+            await SeedEdgeAsync(exported, CausalEdgeType.PendingExportQueueingCausedExportExecution, causeItemId: removal,
+                pendingExportId: pendingExportId, connectedSystemId: target.SystemId);
+            if (!confirmed)
+                continue;
+            var confirming = await SeedItemAsync(import, ObjectChangeType.Updated, name, "group");
+            await SeedEdgeAsync(confirming, CausalEdgeType.ExportCausedImportConfirmation, pendingExportId: pendingExportId,
+                connectedSystemId: target.SystemId);
+        }
+
+        await using var ctx = NewContext();
+        using var jim = new JIM.Application.JimApplication(new PostgresDataRepository(ctx));
+        var consequences = await jim.Activities.GetCausalConsequencesAsync(deletion);
+
+        var removals = consequences.Cohorts.Single();
+        var exports = removals.Consequences.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(removals.MemberCount, Is.EqualTo(2));
+            Assert.That(exports.MemberCount, Is.EqualTo(2));
+            Assert.That(exports.Consequences.Select(c => (c.HopKind, c.Ending)), Is.EquivalentTo(new (CausalConsequenceHopKind, CausalConsequenceEnding?)[]
+            {
+                (CausalConsequenceHopKind.Confirmation, CausalConsequenceEnding.Confirmed),
+                (CausalConsequenceHopKind.OutstandingPendingExport, CausalConsequenceEnding.WaitingForConfirmingImport)
+            }));
+            Assert.That(consequences.HasWaitingBranches, Is.True);
+        }
+
+        var page = await jim.Activities.GetCausalConsequenceCohortMembersAsync(deletion, exports.CohortKey, page: 2, pageSize: 1);
+        Assert.That(page!.TotalResults, Is.EqualTo(2));
+        Assert.That(page!.Results.Single().DisplayName, Is.EqualTo("Project Pulse"));
+    }
+
     // ─── Index ───
 
     [Test]

@@ -1,6 +1,6 @@
 # Causal Provenance: Phase 2 Implementation Plan (Consequences)
 
-- **Status:** Doing (Phase 2-0 in review as #2071; Phase 2a complete; Phase 2b under way)
+- **Status:** Doing (Phase 2-0 in review as #2071; Phases 2a and 2b complete; Phase 2c under way)
 - **Issue:** [#1811](https://github.com/TetronIO/JIM/issues/1811)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md), Phase 2 requirements 1 to 5, Scenarios 2 and 5
 - **Phase 1 plan:** [CAUSAL_PROVENANCE.md](../done/CAUSAL_PROVENANCE.md)
@@ -101,7 +101,7 @@ Discovered work, isolated per the stacked-PR doctrine: it is a capture gap in it
 - Repository reads in `ActivitiesRepository`, raw SQL: `GetCausalConsequenceLevelAsync` (one level: edge hops by cause item, confirmations via the queueing edges' Pending Export ids, the next synchronisation per Connected System Object or external ID after an import, outstanding Pending Exports, pending scheduled deletions, and the endings of frontier items with no hop, aggregated per cohort with the first member page and the next frontier) and `GetCausalConsequenceCohortMembersAsync` (one cohort's members, paged, with an optional name filter). Enum values are parameters, never literals.
 - `RequiresPostgres` tests for each read, including an `EXPLAIN` assertion that the cause-side reads use their indexes on a seeded table.
 
-### Phase 2b: Application walk
+### Phase 2b: Application walk ✅
 
 - `ActivityServer.GetCausalConsequencesAsync(Guid itemId, int maxDepth = 6)` and `GetCausalConsequenceCohortMembersAsync(Guid itemId, string cohortKey, int page, int pageSize)`.
 - Ending resolution as tabled above; live Pending Export status read once per walk.
