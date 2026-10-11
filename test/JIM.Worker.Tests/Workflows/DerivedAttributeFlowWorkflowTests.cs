@@ -294,6 +294,86 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         }
     }
 
+    // ---- Generated Value Forms (#2023): values built from the generated value checked with it ----
+
+    private const string AccountNameFromEmployeeId = "Lower(mv[\"EmployeeId\"])";
+
+    [Test]
+    public async Task FullSync_EmailBuiltFromTheGeneratedAccountNameAlreadyHeld_IssuesTheNextCandidateWithFreeValuesAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedMetaverseObjectHolding(ctx.Email, "e1@corp.local");
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single(m => Text(m, ctx.AccountName) != null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e11"), "e1 is passed over: the Email built from it is already held");
+            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("e11@corp.local"));
+            Assert.That(Text(mvo, ctx.Upn), Is.EqualTo("e11@corp.local"));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_EmailsKeepUniqueOff_IsNotCheckedAndDoesNotHoldTheGeneratedValueBackAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        ctx.EmailMapping.KeepUnique = false;
+        await DbContext.SaveChangesAsync();
+        SeedMetaverseObjectHolding(ctx.Email, "e1@corp.local");
+        SeedHr(ctx, "E1", accountName: null);
+
+        await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single(m => Text(m, ctx.AccountName) != null);
+        Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e1"),
+            "the switch is per value: the User Principal Name built through Email is still checked, and is free");
+    }
+
+    [Test]
+    public async Task FullSync_EmailNeedsARegionTheObjectHasNot_AccountNameWaitsAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountNameAndRegion, withUpn: false, withAd: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(mvo, ctx.AccountName), Is.Null, "no Account Name until the Email built from it can be worked out");
+            Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty,
+                "waiting is not an error");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_EmailExpressionFailsForTheCandidate_FailsTheObjectWithoutIssuingAnAccountNameAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: "mv[\"Account Name\"] + @@@", withUpn: false, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var errors = activity.RunProfileExecutionItems.Where(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors, Has.Count.EqualTo(1));
+            Assert.That(errors.Single().ErrorMessage, Does.Contain("'Email'").And.Contain("Synchronisation Rule 'HR Import'"));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values, Is.Empty, "nothing is issued for a candidate whose Email cannot be worked out");
+        }
+    }
+
+    private void SeedMetaverseObjectHolding(MetaverseAttribute attribute, string value)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow, Type = attribute.MetaverseObjectTypes.First() };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = value, MetaverseObject = mvo });
+        SyncRepo.SeedMetaverseObject(mvo);
+    }
+
     // ---- Run-start cycle ----
 
     [Test]
