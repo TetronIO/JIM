@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
 - ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
+- ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 
 ### Changed
 
