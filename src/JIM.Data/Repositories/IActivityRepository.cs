@@ -252,6 +252,12 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id);
 
     /// <summary>
+    /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded.
+    /// Empty when the item recorded none.
+    /// </summary>
+    public Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
     /// upward walk can resolve a whole level of a cascade in one round trip.
     /// </summary>

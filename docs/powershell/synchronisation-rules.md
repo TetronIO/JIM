@@ -519,7 +519,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
     -TargetConnectedSystemAttributeId <int>
     [-KeepUnique <bool>]
 
-# Import: generated (Unique Value Generation, #242)
+# Import: generated (Unique Value Generation)
 New-JIMSyncRuleMapping -SyncRuleId <int>
     -TargetMetaverseAttributeId <int>
     -Generate
@@ -530,7 +530,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
     [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
     [-CollisionRemediation <bool>] [-ExcludeConnectedSystemId <int[]>]
 
-# Export: generated (Unique Value Generation, #242)
+# Export: generated (Unique Value Generation)
 New-JIMSyncRuleMapping -SyncRuleId <int>
     -TargetConnectedSystemAttributeId <int>
     -Generate
@@ -582,7 +582,7 @@ Returns the created mapping object. A generated mapping's `Generation` property 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242).** `-Generate` and `-CollisionRemediation` apply to import and export generated mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only.
+- **Unique Value Generation.** `-Generate` and `-CollisionRemediation` apply to import and export generated mappings alike; `-ExcludeConnectedSystemId` to import generated mappings only.
 - Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples
@@ -759,7 +759,7 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 14 -KeepUnique $false
 
 ## Get-JIMGeneratedValueSequence
 
-Gets a generated Sequence mapping's counter state (Unique Value Generation, #242): the next number it
+Gets a generated Sequence mapping's counter state (Unique Value Generation): the next number it
 would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
 this. Only meaningful for a generated mapping whose token kind is Sequence; every other mapping returns a
 "not found" error.
@@ -804,7 +804,7 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 
 ## Restart-JIMGeneratedValues
 
-"Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
+"Start again" (Unique Value Generation). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
 "back" is the common case, but a lower configured start is honoured too), and forgets the attribute's
 [retired values](../configuration/synchronisation-rules.md#retired-values) so they can be issued again.

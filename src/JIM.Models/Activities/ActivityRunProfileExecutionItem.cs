@@ -164,6 +164,14 @@ public class ActivityRunProfileExecutionItem
     [NotMapped]
     public List<CausalEdge> CausalEdges { get; set; } = [];
 
+    /// <summary>
+    /// The candidates an ambiguous match found (#2052), for an AmbiguousMatch error. A hand-off buffer to the flush,
+    /// unmapped for exactly the reasons <see cref="CausalEdges"/> is: the flush writes them with the item and empties
+    /// the list, and read paths query the candidate table directly.
+    /// </summary>
+    [NotMapped]
+    public List<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; set; } = [];
+
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
         // try and get an external id for the target object

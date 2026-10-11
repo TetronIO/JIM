@@ -89,6 +89,13 @@ public partial class MetaverseServer
             ? await Application.Repository.ConnectedSystems.GetJoinHistoryAsync(joinedObjects.Select(cso => cso.Id).ToList(), pendingProvisioningQueuedBy)
             : [];
 
+        // The Object Matching Rules that made the matching joins (#2052), so each join can say what it compared.
+        var joiningRuleIds = joinedObjects.Where(cso => cso.JoinObjectMatchingRuleId.HasValue)
+            .Select(cso => cso.JoinObjectMatchingRuleId!.Value).Distinct().ToList();
+        var joiningRules = joiningRuleIds.Count > 0
+            ? (await Application.Repository.ConnectedSystems.GetObjectMatchingRulesAsync(joiningRuleIds)).ToDictionary(r => r.Id)
+            : new Dictionary<int, ObjectMatchingRule>();
+
         var scoping = Application.ScopingEvaluation;
         var exportExplanations = exportRulesToEvaluate
             .DistinctBy(r => r.Id)
@@ -113,7 +120,7 @@ public partial class MetaverseServer
             PopulateConnectionRow(row, cso, isSource: importRules.Count > 0,
                 isTarget: exportRules.Any(r => r.ConnectedSystemObjectTypeId == cso.TypeId), pendingExport);
 
-            row.Join = BuildJoinRecord(cso, pendingExport, joinHistory, rules);
+            row.Join = BuildJoinRecord(cso, pendingExport, joinHistory, rules, joiningRules);
 
             var objectForScoping = new ConnectedSystemObject
             {
@@ -198,7 +205,7 @@ public partial class MetaverseServer
     /// Activity link comes from history either way.
     /// </summary>
     private static JoinRecord BuildJoinRecord(ConnectedSystemObject cso, PendingExport? pendingExport, List<JoinHistoryEntry> joinHistory,
-        List<SyncRule> rules)
+        List<SyncRule> rules, Dictionary<int, ObjectMatchingRule> joiningRules)
     {
         var evidence = FindJoinEvidence(cso, joinHistory);
         var record = new JoinRecord
@@ -238,6 +245,17 @@ public partial class MetaverseServer
             record.SyncRuleId = evidence?.SyncRuleId;
             record.SyncRuleName = evidence?.SyncRuleName;
             record.Source = record.SyncRuleName != null ? JoinRecordSource.Derived : JoinRecordSource.NotRecorded;
+        }
+
+        // What a matching join matched on (#2052). The value is kept on the object; what the rule compares is read from
+        // the rule while it exists.
+        record.ObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+        record.MatchValue = cso.JoinMatchValue;
+        if (cso.JoinObjectMatchingRuleId is { } matchingRuleId && joiningRules.TryGetValue(matchingRuleId, out var matchingRule))
+        {
+            var source = matchingRule.Sources.Count == 1 ? matchingRule.Sources[0] : null;
+            record.MatchedAttributeName = matchingRule.TargetMetaverseAttribute?.Name;
+            record.MatchSource = string.IsNullOrWhiteSpace(source?.Expression) ? source?.ConnectedSystemAttribute?.Name : source.Expression;
         }
 
         record.Description = ScopingExplanationSummariser.DescribeJoin(record);

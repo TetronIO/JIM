@@ -29,6 +29,17 @@
         'A11Y-1' = 'Block'
         'A11Y-2' = 'Block'
         'TYP-1'  = 'Block'
+        # The language rules (Phase 2a). Small debt was fixed before they landed, so they block;
+        # lower-case product nouns, prose abbreviations and minimisers ratchet down from the baseline.
+        'LANG-1' = 'Block'
+        'LANG-2' = 'Block'
+        'LANG-3' = 'Ratchet'
+        'LANG-4' = 'Ratchet'
+        'LANG-5' = 'Block'
+        'LANG-6' = 'Block'
+        'LANG-7' = 'Ratchet'
+        'LANG-8' = 'Block'
+        'TERM-1' = 'Block'
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')
@@ -97,4 +108,60 @@
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
     ScenarioPathFormat      = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
+
+    # The glossary: each product noun's canonical form and anchor (LANG-3, TERM-1). What is
+    # enforced for each noun is in vocabulary.psd1, beside this file.
+    GlossaryPage            = 'reference/glossary.md'
+
+    # LANG-2. Whole words, matched in any case, each with its British form. Words ending -ize,
+    # -izes, -ized, -izing, -ization and so on are found by pattern instead, less the English
+    # words that only look like them (IzeExceptions). Some American spellings are left out
+    # because British usage shares them in this field: dialog (a software dialog), program
+    # (a computer program), toward, license (the verb).
+    AmericanSpellings       = @{
+        'analyze'    = 'analyse'
+        'analyzed'   = 'analysed'
+        'analyzes'   = 'analyses'
+        'analyzing'  = 'analysing'
+        'behavior'   = 'behaviour'
+        'behaviors'  = 'behaviours'
+        'behavioral' = 'behavioural'
+        'canceled'   = 'cancelled'
+        'canceling'  = 'cancelling'
+        'catalog'    = 'catalogue'
+        'catalogs'   = 'catalogues'
+        'center'     = 'centre'
+        'centers'    = 'centres'
+        'centered'   = 'centred'
+        'color'      = 'colour'
+        'colors'     = 'colours'
+        'defense'    = 'defence'
+        'enroll'     = 'enrol'
+        'favor'      = 'favour'
+        'favorite'   = 'favourite'
+        'fulfill'    = 'fulfil'
+        'gray'       = 'grey'
+        'honor'      = 'honour'
+        'labeled'    = 'labelled'
+        'labeling'   = 'labelling'
+        'modeled'    = 'modelled'
+        'modeling'   = 'modelling'
+        'neighbor'   = 'neighbour'
+        'offense'    = 'offence'
+        'traveled'   = 'travelled'
+        'traveling'  = 'travelling'
+    }
+    IzeExceptions           = @('size', 'sizes', 'sized', 'sizing', 'resize', 'resizes', 'resized', 'resizing', 'downsize', 'downsized',
+        'upsize', 'oversize', 'oversized', 'undersized', 'seize', 'seizes', 'seized', 'seizing', 'prize', 'prizes', 'capsize', 'maize', 'baize')
+    # Third-party names and protocol terms, which keep their own spelling.
+    AllowedSpellings        = @('authorization code', 'Authorization header', 'Global Catalog')
+
+    # LANG-5, LANG-6 and LANG-7 (regular expressions, any case). Only the wording that is
+    # wrong wherever it appears: "now", "currently", "no longer", "just" and "easy" are
+    # usually right, so the advisory review judges them instead.
+    TimeRelativePatterns    = @('\buntil now\b', '\b(?:from |since |as of |prior to |before )?this release\b', '\bin this version\b', '\(previously\b',
+        '\bpreviously (?:called|named|known as)\b', '\bwhere it previously\b')
+    FuturePatterns          = @('\bcoming soon\b', '\b(?:is|are) planned\b', '(?<!(?:is|are) )\bplanned for\b', '\bfuture (?:releases?|versions?|updates?)\b',
+        '\bwill be (?:added|introduced|supported|available|provided|extended)\b')
+    MinimiserPatterns       = @('\bsimply\b', '\bstraightforward\b', '\bobviously\b', '\bof course\b')
 }

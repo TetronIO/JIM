@@ -125,6 +125,7 @@ flowchart TD
 
     TryCatch --> JoinError{SyncJoin<br/>Exception?}
     JoinError -->|AmbiguousMatch| AmbiguousRPEI[RPEI: AmbiguousMatch error]
+    JoinError -->|Matching rule failed| RuleFailedRPEI[RPEI: ObjectMatchingRuleFailed error]
     JoinError -->|ExistingJoin| ExistingRPEI[RPEI: CouldNotJoinDueToExistingJoin]
 
     TryCatch --> ExprError{Expression<br/>exception?}

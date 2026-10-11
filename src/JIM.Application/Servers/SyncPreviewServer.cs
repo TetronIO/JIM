@@ -2384,27 +2384,36 @@ public class SyncPreviewServer
                 candidateRuleSets.Add(typeRules);
         }
 
+        // The same matching engine the synchronisation uses (#2052), against the preview's read-only repository, so
+        // the preview cannot disagree with the run about what a rule computes or what it finds.
         foreach (var matchingRules in candidateRuleSets)
         {
-            foreach (var matchingRule in matchingRules.OrderBy(mr => mr.Order).Where(mr => mr.MetaverseObjectType != null))
+            try
             {
-                try
+                var match = await Application.ObjectMatching.FindMatchingMetaverseObjectAsync(guardedRepository, cso, matchingRules);
+                if (match != null)
+                    return match.MetaverseObject;
+            }
+            catch (MultipleMatchesException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    var mvo = await guardedRepository.FindMetaverseObjectUsingMatchingRuleAsync(
-                        cso, matchingRule.MetaverseObjectType!, matchingRule);
-                    if (mvo != null)
-                        return mvo;
-                }
-                catch (MultipleMatchesException ex)
+                    Code = SyncPreviewMessageCode.AmbiguousMatch,
+                    Detail = ObjectMatchingServer.DescribeAmbiguity(ex, previewing: true),
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    MatchCandidates = [.. ex.Candidates]
+                });
+                return null;
+            }
+            catch (ObjectMatchingRuleFailedException ex)
+            {
+                result.Errors.Add(new SyncPreviewMessage
                 {
-                    result.Errors.Add(new SyncPreviewMessage
-                    {
-                        Code = SyncPreviewMessageCode.AmbiguousMatch,
-                        Detail = $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object; a synchronisation would fail it with an AmbiguousMatch error. Matching MVO IDs: {string.Join(", ", ex.Matches)}",
-                        ConnectedSystemId = cso.ConnectedSystemId
-                    });
-                    return null;
-                }
+                    Code = SyncPreviewMessageCode.ObjectMatchingRuleFailed,
+                    Detail = ex.Message,
+                    ConnectedSystemId = cso.ConnectedSystemId
+                });
+                return null;
             }
         }
 

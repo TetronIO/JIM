@@ -151,9 +151,9 @@ internal static class ScopingExplanationSummariser
         {
             (ConnectedSystemObjectJoinMethod.Projection, not null) => $"Projected by {rule}",
             (ConnectedSystemObjectJoinMethod.Provisioning, not null) => $"Provisioned by {rule}",
-            (ConnectedSystemObjectJoinMethod.InboundMatching, not null) => $"Joined by matching, under {rule}",
+            (ConnectedSystemObjectJoinMethod.InboundMatching, not null) => $"Joined by matching, under {rule}{DescribeMatch(record)}",
             (ConnectedSystemObjectJoinMethod.InboundMatching, null) when record.Source == JoinRecordSource.Recorded =>
-                "Joined by matching on the Connected System's Object Matching Rules",
+                $"Joined by matching on the Connected System's Object Matching Rules{DescribeMatch(record)}",
             (ConnectedSystemObjectJoinMethod.ExportMatching, not null) =>
                 $"Joined by {rule}, which matched an existing object instead of provisioning a new one",
             _ => record.JoinType switch
@@ -163,6 +163,20 @@ internal static class ScopingExplanationSummariser
                 _ => "Joined; how was not recorded"
             }
         };
+    }
+
+    /// <summary>
+    /// The clause naming what a matching join matched on, or nothing when the join recorded no value (it predates
+    /// recording). A rule since deleted still has its value, and says so.
+    /// </summary>
+    private static string DescribeMatch(JoinRecord record)
+    {
+        if (record.MatchValue == null)
+            return string.Empty;
+
+        return record.MatchedAttributeName == null || record.MatchSource == null
+            ? $": matched \"{record.MatchValue}\" (the Object Matching Rule has since been deleted)"
+            : $": matched \"{record.MatchValue}\" on {record.MatchedAttributeName} (equals {record.MatchSource})";
     }
 
     #endregion
