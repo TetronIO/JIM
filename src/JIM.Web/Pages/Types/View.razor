@@ -614,9 +614,9 @@
 
     private static readonly IReadOnlyList<SegmentedToggleOption<string>> DetailViewModes =
     [
-        new("form", "Form"),
-        new("tabs", "Tabs"),
-        new("table", "Inspect", Tooltip: "Attributes with their sources and history")
+        new("form", "Form", Icon: Icons.Material.Filled.ViewModule),
+        new("tabs", "Tabs", Icon: Icons.Material.Filled.Tab),
+        new("table", "Inspect", Tooltip: "Attributes with their sources and history", Icon: Icons.Material.Filled.ManageSearch)
     ];
     private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;

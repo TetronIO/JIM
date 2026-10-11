@@ -142,6 +142,47 @@ public class SegmentedToggleTests : JimComponentTestContext
     }
 
     [Test]
+    public void SegmentedToggle_AnOptionWithAnIcon_ShowsItBesideItsLabel_AndTheOthersShowNone()
+    {
+        IReadOnlyList<SegmentedToggleOption<string>> views =
+        [
+            new("form", "Form", Icon: Icons.Material.Filled.ViewModule),
+            new("tabs", "Tabs")
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, views)
+            .Add(c => c.Value, "form")
+            .Add(c => c.AriaLabel, "Details view"));
+
+        var buttons = cut.FindAll(".jim-seg button");
+        var icons = cut.FindComponents<MudIcon>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(icons.Select(i => i.Instance.Icon), Is.EqualTo(new[] { Icons.Material.Filled.ViewModule }));
+            Assert.That(buttons[0].QuerySelector("svg"), Is.Not.Null, "The icon renders inside its own option.");
+            Assert.That(buttons[1].QuerySelector("svg"), Is.Null);
+            Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Form", "Tabs" }));
+        }
+    }
+
+    [Test]
+    public void SegmentedToggle_ALinkOptionWithAnIcon_ShowsItInsideTheLink()
+    {
+        IReadOnlyList<SegmentedToggleOption<string>> pages =
+        [
+            new("systems", "Connected Systems", Href: "/admin/connected-systems", Icon: Icons.Material.Filled.Cable)
+        ];
+
+        var cut = Render<SegmentedToggle<string>>(p => p
+            .Add(c => c.Options, pages)
+            .Add(c => c.Value, "systems")
+            .Add(c => c.AriaLabel, "Connected Systems or Connectors"));
+
+        Assert.That(cut.Find(".jim-seg a").QuerySelector("svg"), Is.Not.Null);
+    }
+
+    [Test]
     public void SegmentedToggle_Dense_AddsTheCompactClass()
     {
         var cut = Render<SegmentedToggle<string>>(p => p
