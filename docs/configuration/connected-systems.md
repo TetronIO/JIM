@@ -255,7 +255,7 @@ The Schema tab's ticks decide what JIM **reads**, and the two kinds of tick beha
 
 | What you deselect | What actually happens |
 |---|---|
-| An **Object Type** | JIM takes it out of management. The Connector stops returning its objects, so the next **Full Import** finds every Connected System Object already imported from it missing and marks it obsolete, and the following synchronisation disconnects the joined ones from their Metaverse Objects. Their contributed values are withdrawn (see below), and a Metaverse Object left with no connectors may become eligible for deletion under its type's deletion rule. Nothing happens on save, and a Delta Import does not act on it; the Full Import does. |
+| An **Object Type** | JIM takes it out of management. The Connector stops returning its objects, so the next **Full Import** finds every Connected System Object already imported from it missing and marks it obsolete (unless an object also matches another selected Object Type, in which case it [changes Object Type](#when-an-object-changes-object-type) instead of disappearing), and the following synchronisation disconnects the joined ones from their Metaverse Objects. Their contributed values are withdrawn (see below), and a Metaverse Object left with no connectors may become eligible for deletion under its type's deletion rule. Nothing happens on save, and a Delta Import does not act on it; the Full Import does. |
 | An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
 
 Deselecting an Object Type is the same as deselecting a partition or a container: all three take objects out of an import that still runs, so the next Full Import does not find them and marks them obsolete. They go through the same deletion detection as any other missing object, so a Full Import Run Profile's [deletion limits](run-profiles.md#safeguards) hold them back too, which is worth setting before taking a large Object Type out of management.
@@ -292,13 +292,52 @@ Two things the preview is deliberately careful about:
 - **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
 - **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
 
-Validation names what stands in the way and what would go on running over frozen data. Deselecting an Object Type that an enabled Synchronisation Rule still manages is a blocking finding naming the rules, because saving it is refused; the preview counts nothing until those rules are disabled. Attribute Flow mappings still reading an attribute you are deselecting are named as a warning. Deselecting an External ID is refused outright.
+Validation names what stands in the way and what would go on running over frozen data. Deselecting an Object Type that an enabled Synchronisation Rule still manages is a blocking finding naming the rules, because saving it is refused; the preview counts nothing until those rules are disabled. Attribute Flow mappings still reading an attribute you are deselecting are named as a warning. Deselecting an External ID is refused outright. Selecting or deselecting an Object Type that overlaps another selected one (a class that inherits from it, or a structural class beside an auxiliary one) is named as a warning, because the objects carrying both [change Object Type](#when-an-object-changes-object-type); for a deselection, the obsoletion counts above overstate what happens to those objects, since they are kept rather than obsoleted. The warning relies on the class kinds and inheritance a schema refresh records, so it appears only for the LDAP Connector, and only once the schema has been refreshed since JIM began recording them.
 
 Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
 
 The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId -SchemaObjectType`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/schema-selection/preview` in the [REST API](../../api/reference/). Every omission means "leave this as it stands", so a request changing one flag cannot accidentally propose deselecting a whole Object Type.
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
+## When an object changes Object Type
+
+A Connected System Object belongs to one Object Type, and JIM recognises it by that Object Type's External ID. An object that starts arriving under a different Object Type therefore does not look like an existing object changing: it looks like a new object of the new type, while the old one seems to have disappeared. Taken at face value, the next Full Import would retire the old one, which can delete its Metaverse Object and deprovision it from every other Connected System before anything joins the new one.
+
+JIM does not let that happen unannounced. For a Connector whose External IDs are unique across the whole Connected System, such as the [LDAP Connector](../connectors/jim-ldap-connector.md) (an entry's objectGUID, entryUUID or nsUniqueId never repeats, whatever its class), the import recognises the object and **refuses the change**:
+
+- The object's Run Profile execution item records an **Object Type Changed** error naming the Object Type JIM holds it as, the Object Type it now arrives as, and its External ID. The [Activity](activities.md) completes with a warning, even when the refused objects are all it recorded, so a refusal never stops the Schedule the run belongs to.
+- Nothing is lost. Nothing is created, and the existing Connected System Object is kept exactly as it is: it stays joined, its values stay in place, and deletion detection leaves it alone, so nothing is disconnected or deprovisioned. The one exception is an object an earlier import already marked obsolete (because it had left scope, say): the next synchronisation still disconnects it, as it would have anyway, and the error says so.
+- The refusal repeats on every import until you either undo the cause or carry the change out deliberately.
+
+A Connector whose External IDs are only unique within an Object Type (the SQL, File and SCIM 2.0 Client Connectors) cannot tell a changed object from a different object that shares the value, so there an object under a new Object Type is imported as a new object. Their Object Types do not overlap the way directory classes do, so the causes below do not arise for them in ordinary running.
+
+### What changes an object's Object Type
+
+- **Selecting an overlapping Object Type**<br /> An entry carrying two selected classes imports as the more specific one, so selecting `computer` while `user` is selected moves every computer account, which also carries `user`, to `computer`. The [schema preview](#previewing-a-schema-change) warns about this.
+- **Deselecting an overlapping Object Type**<br /> The objects fall back to the other selected class: deselecting `computer` while `user` stays selected brings every computer back as a `user`, rather than taking them out of management. The preview warns about this too. To stop managing objects, scope them out by [partition or container](#partitions-and-containers) instead.
+- **Refreshing the schema**<br /> When a class changes between structural and auxiliary, or what it inherits from changes, the Object Type its entries resolve to can change. The [refresh preview](#refreshing-the-schema) lists these classification changes.
+- **Editing an entry in the directory**<br /> Changing an entry's structural class where the directory allows it, or adding or removing an auxiliary class that is itself a selected Object Type.
+
+Deleting an object and creating it again is not a type change. The new object has a new External ID, and JIM treats it as a leaver and a joiner.
+
+### Carrying out an intended change
+
+1. Build and enable the new Object Type's Synchronisation Rules first, with Object Matching Rules that join the new objects to the same Metaverse Objects.
+2. Protect the Metaverse Objects while the old objects are retired: set a [deletion grace period](metaverse.md#deletion-behaviour) on their Metaverse Object Type, and [deletion limits](run-profiles.md#full-import) on the Full Import Run Profile.
+3. Run a Full Import Run Profile with [Allow Object Type Changes](run-profiles.md#allow-object-type-changes-full-import) enabled, by hand. It imports each object as a new Connected System Object of its new type and marks the old one obsolete. Deletion limits hold back genuinely missing objects, not these retirements, which the change itself asks for. Where an old object cannot be retired (it is in a partition this Run Profile does not import, or its Object Type is deselected with an enabled Synchronisation Rule still bound to it), JIM does not create its replacement either, and reports the object as an Object Type Changed error saying why.
+4. [Preview the Full Synchronisation](#previewing-a-full-synchronisation), then run a Full Synchronisation, not a Delta Synchronisation. The old objects are disconnected under their type's Deletion Rules, and the new ones join or project through the new type's Synchronisation Rules.
+5. Check the Activities: each changed object should have an obsoleted old object and a new one joined to the same Metaverse Object, and there should be no new Metaverse Objects you did not expect.
+
+Keep Allow Object Type Changes off on the Run Profiles your Schedules run, so a change nobody planned is always refused and reported rather than carried out.
+
+### Undoing an unintended change
+
+Undo its cause: put the Object Type selection back, or revert the directory edit. Nothing needs repairing, because the refused objects were never changed; the next import matches them under their original Object Type again and the errors stop.
+
+A schema refresh is undone differently, because JIM resolves entries from the classification it has stored, not from the directory's live schema. Before applying, **Cancel** on the refresh preview keeps the current classification. After applying, either change the directory's schema back and refresh again, change which of the overlapping Object Types are selected so the entries resolve as before, or carry the change out as described above.
+
+Once a Full Import that allows Object Type changes has run, the old objects are obsolete, and JIM does not restore an obsolete object. Going back is then a second Object Type change: run the Full Synchronisation first so the change completes, then make the reverse change the same way.
 
 ## Refreshing the schema
 
@@ -310,6 +349,7 @@ The preview reports, per object type:
 |---|---|
 | Object types or attributes **added** | Recorded and available for selection. Additions cannot affect anything that already works. |
 | Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
+| Object Type **classification changed** (class kind, or which selected Object Type a class inherits from) | The new classification is recorded, which can change the Object Type that existing entries import as. Each object that would change is refused at the next import and kept as it is until you decide; see [When an object changes Object Type](#when-an-object-changes-object-type). A refresh with only these changes offers **Apply Schema Changes**, and its Activity completes with a warning listing them. A classification difference that cannot change resolution (an unselected Object Type, inheritance naming no other selected Object Type, or a class kind that neither becomes nor stops being auxiliary) is listed as **Object Type Classification Recorded** among the safe changes instead, without a warning; apply it so the [schema preview](#previewing-a-schema-change) can warn about overlapping Object Types later. |
 | Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
 
 Where the diff carries destructive changes, the review also names the configuration that depends on them: Synchronisation Rules bound to a removed object type, Attribute Flow mappings reading a removed or redefined attribute (including attributes consumed inside an expression), and Object Matching Rules that match on a removed attribute, each deep-linking to its page so you can inspect a dependent without losing the review.

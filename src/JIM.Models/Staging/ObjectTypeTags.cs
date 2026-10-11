@@ -41,6 +41,20 @@ public static class ObjectTypeTags
         public const string PermittedAuxiliaryClass = "permitted-auxiliary-class";
 
         /// <summary>
+        /// A class this object type inherits from in the Connected System's own schema, e.g. <c>person</c> on an RFC
+        /// 4512 directory's <c>inetOrgPerson</c> or Active Directory's <c>user</c>. Repeated once per class, with the
+        /// class's name as the value, for every class up the chain and not only the nearest, so a consumer never has
+        /// to walk it.
+        /// </summary>
+        /// <remarks>
+        /// What lets JIM tell which of two Object Types an entry carrying both actually is: the more specific one,
+        /// which names the other here. Order does not settle it, because a directory lists an entry's classes in
+        /// whatever order it likes. Its absence says nothing: Object Types discovered before JIM recorded
+        /// inheritance carry none until the schema is refreshed.
+        /// </remarks>
+        public const string SuperiorClass = "superior-class";
+
+        /// <summary>
         /// The name of the attribute that carries an object's class membership in the Connected System, i.e.
         /// <c>objectClass</c> on an RFC 4512 directory.
         /// </summary>

@@ -134,6 +134,56 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
+    /// <summary>
+    /// The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection entirely
+    /// (#2039), because a correction for any attribute would replace the Pending Export holding the change. The preview
+    /// proposes no correction for it either, or an administrator reads a correction the run will not make.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeAwaitingInitialPassword_ProposesNoCorrectionTheRunDoesNotMakeAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+        var displayNameAttribute = targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").Attribute;
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Target.Id,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = displayNameAttribute.Id,
+                    Attribute = displayNameAttribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    StringValue = "John Smith",
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+        var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.False, "arrange: the run makes no drift correction for an object holding a change");
+            Assert.That(preview.DriftCorrections, Is.Empty, "the preview proposes no correction the run does not make");
+            Assert.That(preview.Outbound.ProposedExports, Is.Empty);
+            Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
+                Has.No.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
+        }
+    }
+
     [Test]
     public async Task PreviewFullSyncAsync_OfATargetObjectThatWouldJoin_ProposesTheDriftCorrectionTheRunMakesAsync()
     {

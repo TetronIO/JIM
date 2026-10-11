@@ -166,7 +166,7 @@ public partial class ActivityRepository : IActivityRepository
         return true;
     }
 
-    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
@@ -175,13 +175,14 @@ public partial class ActivityRepository : IActivityRepository
             {
                 TotalRpeis = g.Count(),
                 TotalWithErrors = g.Count(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
-                TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError)
+                TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+                TotalObjectTypeChangeRefusals = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged)
             })
             .FirstOrDefaultAsync();
 
         return counts != null
-            ? (counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors)
-            : (0, 0, 0);
+            ? new ActivityRpeiErrorCounts(counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors, counts.TotalObjectTypeChangeRefusals)
+            : new ActivityRpeiErrorCounts(0, 0, 0, 0);
     }
 
     public async Task DeleteActivityAsync(Activity activity)

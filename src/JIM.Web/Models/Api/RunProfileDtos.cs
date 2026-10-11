@@ -62,6 +62,14 @@ public class RunProfileDto
     public bool VerifyImportContentHashes { get; set; }
 
     /// <summary>
+    /// Allow Object Type Changes (#2049): whether this Full Import carries out an Object Type change rather than
+    /// refusing it. Only ever true when <see cref="RunType"/> is <c>FullImport</c>, and only has an effect on a
+    /// Connected System whose Connector can tell an Object Type change from a new object (today the LDAP
+    /// Connector). See <see cref="CreateRunProfileRequest.AllowObjectTypeChanges"/> for behaviour.
+    /// </summary>
+    public bool AllowObjectTypeChanges { get; set; }
+
+    /// <summary>
     /// Run Profile Safeguards (#1618): the limits on what this Run Profile may attempt. Always present.
     /// </summary>
     public RunProfileSafeguardsDto Safeguards { get; set; } = new();
@@ -82,6 +90,7 @@ public class RunProfileDto
             TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges,
             Safeguards = new RunProfileSafeguardsDto
             {
                 MaxCreates = runProfile.MaxCreates,

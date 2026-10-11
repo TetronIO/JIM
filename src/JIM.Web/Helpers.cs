@@ -339,6 +339,7 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
@@ -380,6 +381,9 @@ public static class Helpers
             // The Connected System refused the export because another object there holds the value; the heading
             // names the conflict, since that is what an administrator has to resolve.
             [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
+            // Active Directory will not enable an account with no password (#2039); the heading names what the
+            // account is missing, since that is what the message's remedies supply.
+            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened

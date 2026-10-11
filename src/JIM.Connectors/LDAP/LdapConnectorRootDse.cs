@@ -194,6 +194,15 @@ internal class LdapConnectorRootDse
     public bool IsActiveDirectoryFamily => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
 
     /// <summary>
+    /// Whether the directory advertises the Permissive Modify control in its supportedControl, and so will accept an
+    /// export's add of a value already present, or delete of one already absent, as the success it is. False when the
+    /// control is not listed and when supportedControl could not be read: the control is critical, and a directory
+    /// that does not understand it refuses the whole modify, so it is never sent on assumption.
+    /// </summary>
+    public bool AdvertisesPermissiveModify =>
+        SupportedControls?.Contains(LdapConnectorConstants.LDAP_SERVER_PERMISSIVE_MODIFY_OID, StringComparer.Ordinal) == true;
+
+    /// <summary>
     /// Where this directory keeps its record of what changed, and so which <see cref="ILdapDeltaSource"/> a Delta
     /// Import reads through. The one place the directory type is mapped to a change source: Active Directory and
     /// Samba AD track uSNChanged and keep tombstones in the Deleted Objects container; OpenLDAP logs writes in the

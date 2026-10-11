@@ -1156,10 +1156,10 @@ public interface ISyncRepository
 
     /// <summary>
     /// Queries the database for RPEI error counts without loading RPEIs into memory.
-    /// Returns total RPEIs with errors, total RPEIs, and total UnhandledError RPEIs.
+    /// Returns total RPEIs with errors, total RPEIs, total UnhandledError RPEIs and total refused Object Type changes.
     /// UnhandledError RPEIs indicate code/logic bugs and escalate activity status.
     /// </summary>
-    Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records attached to RPEIs.
@@ -1225,6 +1225,46 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Narrows a set of Metaverse Object ids to those still owed a password on a Connected System (#2039): a queued
+    /// password change for the (Metaverse Object, Connected System) pair that is Pending, Delivering or Parked, of
+    /// any origin. Keyed on the pair rather than on an account, so a live user-set or propagated change that won
+    /// coalescing over a provisioned one counts too.
+    /// <para>
+    /// Asked by the confirming import, once per page and only when the page holds a change written with an interim
+    /// value until an Initial Password is delivered, and once more per import for the held changes on objects it did
+    /// not return (<see cref="GetInitialPasswordHoldSummariesAsync"/>): a change whose account is still owed one is
+    /// held, one whose account is not is released. Expired and Cancelled changes are never delivered, so they owe
+    /// nothing.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
+    /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
+    /// those objects entirely, because a correction staged for any of their attributes
+    /// would replace the Pending Export holding the change, and the synchronisation preview skips them too so it
+    /// proposes no correction the run will not make. Answered from a partial index, so it costs nothing where no change
+    /// carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Every change on a Connected System held until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039), one row per change with its
+    /// Pending Export, Connected System Object and that object's Metaverse Object (null when it is joined to none).
+    /// <para>
+    /// Asked once per import, after reconciliation, so a held change is judged even when the import did not return its
+    /// account: a Full Import skips an unchanged account by its content hash, and a Delta Import never returns one, so
+    /// without this a password that expired or was cancelled would leave the change held for ever. Answered from the
+    /// partial index on the flag, so it costs nothing where no change is held.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets the object types (schema) for a Connected System.

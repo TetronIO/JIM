@@ -4559,6 +4559,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
         tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
+        // #2049: copied by hand like every other property here; one left out is accepted and never written.
+        tracked.AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges;
         // Run Profile Safeguards (#1618). Every property the entity carries has to be copied here by
         // hand; one left out is accepted by the API, reported as saved, and never written, which is
         // exactly how the first Scenario 021 run found these three missing.
@@ -8687,7 +8689,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
 
-        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue).
+        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
+        // AwaitsInitialPassword).
         // Without this, reconciliation during confirming import cannot find ExportedPendingConfirmation changes
         // and the PE is never confirmed/deleted, causing stale Create exports on re-evaluation.
         await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
@@ -8696,8 +8699,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
     /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
-    /// and to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
-    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup.
+    /// to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
+    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup, and the
+    /// AwaitsInitialPassword mark the export run sets from the Connector's report (#2039).
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -8708,7 +8712,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 8; // Id + 7 mutable columns
+        const int columnsPerRow = 9; // Id + 8 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
@@ -8724,7 +8728,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid, {{{offset + 8}}}::boolean)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -8735,6 +8739,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(avc.AwaitsInitialPassword);
             }
 
             sql.Append(@") AS v(""Id"", ");

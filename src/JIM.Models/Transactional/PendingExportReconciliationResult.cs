@@ -27,6 +27,24 @@ public class PendingExportReconciliationResult
     public List<PendingExportAttributeValueChange> FailedChanges { get; } = new();
 
     /// <summary>
+    /// Attribute changes written with an interim value until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, #2039) that the import found still
+    /// holding the interim value while a password is owed to the account. Left exactly as they were: not retried,
+    /// not reported as unconfirmed, and nothing to persist. Counted in the reconciliation summary.
+    /// </summary>
+    public List<PendingExportAttributeValueChange> HeldChanges { get; } = new();
+
+    /// <summary>
+    /// Attribute changes written with an interim value until an Initial Password is delivered that are still
+    /// unconfirmed when no password is owed any more (it expired, was withdrawn, or was never staged): found holding
+    /// the interim value by the import, or judged on an object the import did not return. Put back to
+    /// <see cref="PendingExportAttributeChangeStatus.Pending"/> with the flag cleared, so the next export writes the
+    /// asserted value as an ordinary Update. Deliberately not reported as unconfirmed: the interim value was written
+    /// on purpose.
+    /// </summary>
+    public List<PendingExportAttributeValueChange> ReleasedChanges { get; } = new();
+
+    /// <summary>
     /// Whether the PendingExport was deleted (all changes confirmed).
     /// </summary>
     public bool PendingExportDeleted { get; set; }
@@ -44,7 +62,8 @@ public class PendingExportReconciliationResult
     public PendingExport? PendingExportToUpdate { get; set; }
 
     /// <summary>
-    /// True if any reconciliation was performed.
+    /// True if reconciliation changed anything that must be persisted. A hold changes nothing, so
+    /// <see cref="HeldChanges"/> alone does not count; a release does.
     /// </summary>
-    public bool HasChanges => ConfirmedChanges.Count > 0 || RetryChanges.Count > 0 || FailedChanges.Count > 0;
+    public bool HasChanges => ConfirmedChanges.Count > 0 || RetryChanges.Count > 0 || FailedChanges.Count > 0 || ReleasedChanges.Count > 0;
 }

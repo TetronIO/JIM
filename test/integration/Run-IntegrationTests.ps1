@@ -3770,8 +3770,9 @@ if ($SetupOnly) {
             $setupParams.MaxExportParallelism = $MaxExportParallelism
         }
         # The switches the scenario itself passes to its setup (Scenario 001: generated and derived
-        # identifiers), so the environment left for exploration is the one the scenario runs against.
-        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber
+        # identifiers, plus an Initial Password on the Active Directory lab), so the environment left for
+        # exploration is the one the scenario runs against.
+        $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber $scenarioNumber -DirectoryType $script:DirectoryConfig.DirectoryType
         foreach ($key in $scenarioSetupParams.Keys) {
             $setupParams[$key] = $scenarioSetupParams[$key]
         }

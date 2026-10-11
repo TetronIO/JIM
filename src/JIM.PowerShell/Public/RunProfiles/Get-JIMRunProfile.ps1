@@ -28,8 +28,12 @@ function Get-JIMRunProfile {
           System. Such a Run Profile is inoperable; a deselected partition is not managed by JIM, so
           Start-JIMRunProfile refuses it rather than reading scope that has been withdrawn.
         - filePath, verifyImportContentHashes
-        - safeguards: the Run Profile Safeguards limits (maxCreates, maxUpdates, maxDeletes), always
-          present; each member is null when that limit is not set
+        - allowObjectTypeChanges: true when this Full Import carries out Object Type changes rather
+          than refusing them (only ever true on a Full Import Run Profile, and with effect only for a
+          Connector whose External IDs name one object across every Object Type)
+        - safeguards: the Run Profile Safeguards limits, always present; each member is null when that
+          limit is not set. maxCreates, maxUpdates and maxDeletes apply to an Export Run Profile;
+          maxDetectedDeletions and maxDetectedDeletionsPercent apply to a Full Import Run Profile
         - ConnectedSystemId (added for pipeline chaining)
 
     .EXAMPLE
@@ -57,6 +61,12 @@ function Get-JIMRunProfile {
 
         Lists the Run Profiles left inoperable by the current partition selections, so an operator can repoint or
         remove them before a scheduled run fails.
+
+    .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object allowObjectTypeChanges
+
+        Lists the Full Import Run Profiles that carry out Object Type changes rather than refusing them, so an
+        operator can check none of them runs on a Schedule.
 
     .LINK
         Start-JIMRunProfile
