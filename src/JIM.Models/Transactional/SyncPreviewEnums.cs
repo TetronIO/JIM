@@ -48,7 +48,12 @@ public enum SyncPreviewMessageCode
     /// <summary>The enabled Attribute Flows that derive Metaverse attributes from other Metaverse attributes (#1750)
     /// contain a dependency cycle, so no evaluation order exists: the real synchronisation would refuse to start and
     /// process no object at all. The preview evaluates nothing either, and names the cycle.</summary>
-    DerivedFlowCycle
+    DerivedFlowCycle,
+    /// <summary>Generated Value Forms (#2023): the generated value would be held back because a value built from it
+    /// needs another input the object has no value for yet, so the candidate's values cannot be worked out and checked.
+    /// Not a failure: the real synchronisation generates nothing for the attribute this time, and generates the value
+    /// once the input arrives. The detail names each input and the value that needs it.</summary>
+    GeneratedValueWaiting
 }
 
 /// <summary>

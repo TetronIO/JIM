@@ -527,25 +527,10 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// The most candidates passed over for one generated value that are reported one by one on the object's item; any
-    /// beyond are counted in one more line.
-    /// </summary>
-    private const int MaximumSkippedCandidatesReported = 10;
-
-    /// <summary>
     /// Generated values the run held back because values built from them could not be worked out yet (Generated Value
     /// Forms, #2023), by generated attribute, with each distinct reason, for the run's warning.
     /// </summary>
     private readonly Dictionary<string, (int Count, HashSet<string> Reasons)> _generatedValuesWaiting = new(StringComparer.Ordinal);
-
-    private static IEnumerable<string> DescribeSkippedCandidates(IReadOnlyList<string> skipped)
-    {
-        foreach (var candidate in skipped.Take(MaximumSkippedCandidatesReported))
-            yield return candidate;
-
-        if (skipped.Count > MaximumSkippedCandidatesReported)
-            yield return string.Create(CultureInfo.InvariantCulture, $"and {skipped.Count - MaximumSkippedCandidatesReported} more candidates passed over for the same reasons");
-    }
 
     private void RecordGeneratedValueWaiting(string attributeName, string waitingFor)
     {
@@ -2691,7 +2676,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Generated Value Forms (#2023): candidates passed over because a value built from them was already
                 // held, whatever came of the request, a bounded number of them per object.
-                forRpei.AddRange(DescribeSkippedCandidates(outcome.SkippedCandidates)
+                forRpei.AddRange(GeneratedValueFormReporting.DescribeSkippedCandidates(outcome.SkippedCandidates)
                     .Select(skipped => (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped, attributeName, skipped)));
 
                 switch (outcome.Kind)
@@ -2716,7 +2701,7 @@ public abstract class SyncTaskProcessorBase
                         // may have nothing else to record (Generated Value Forms, #2023).
                         if (outcome.FormWaits.Count > 0)
                         {
-                            var waitingFor = string.Join("; ", outcome.FormWaits.Select(w => $"{w.InputName} (needed by {w.NeededBy})"));
+                            var waitingFor = GeneratedValueFormReporting.DescribeWaits(outcome.FormWaits);
                             forRpei.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, attributeName, waitingFor));
                             RecordGeneratedValueWaiting(attributeName, waitingFor);
                         }
