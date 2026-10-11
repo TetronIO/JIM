@@ -63,7 +63,7 @@ function Get-JIMSyncRuleInitialPassword {
         settings named by the reason and saving releases them.
 
     .EXAMPLE
-        Get-JIMSyncRule -All | ForEach-Object {
+        Get-JIMSyncRule | ForEach-Object {
             $p = Get-JIMSyncRuleInitialPassword -Id $_.id
             if ($p.parkedAccountCount -or $p.expiredAccountCount) {
                 [PSCustomObject]@{ Rule = $_.name; Parked = $p.parkedAccountCount; Expired = $p.expiredAccountCount }
@@ -73,7 +73,7 @@ function Get-JIMSyncRuleInitialPassword {
         Reports every Synchronisation Rule with initial password work waiting on somebody.
 
     .EXAMPLE
-        Get-JIMSyncRule -All | ForEach-Object {
+        Get-JIMSyncRule | ForEach-Object {
             $p = Get-JIMSyncRuleInitialPassword -Id $_.id
             if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
                 [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
@@ -84,7 +84,7 @@ function Get-JIMSyncRuleInitialPassword {
         password itself is never returned, which is why the date is what a rotation check has to work from.
 
     .EXAMPLE
-        Get-JIMSyncRule -All | Where-Object provisionToConnectedSystem |
+        Get-JIMSyncRule | Where-Object provisionToConnectedSystem |
             ForEach-Object { [PSCustomObject]@{ Rule = $_.name; Password = (Get-JIMSyncRuleInitialPassword -Id $_.id).enabled } }
 
         Reports which provisioning Synchronisation Rules set an initial password.

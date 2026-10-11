@@ -105,9 +105,11 @@ public static class CausalityModelBuilder
     /// <see cref="OutboundPreviewEntry.AttributeChanges"/>, correlated back to its <see cref="SyncOutcomeNode"/>
     /// by <see cref="SyncOutcomeNode.SyncRuleId"/> (unique per rule within one preview, since a preview
     /// always evaluates a single object). The destructive cascade's downstream deprovisioning nodes
-    /// (<c>SyncPreviewServer.BuildOutOfScopeCascadeAsync</c>) are the one shape with no Synchronisation
-    /// Rule of their own (<c>ISyncEngine.DecideMvoDeletionExport</c> decides per remaining connector, not
-    /// per rule); those are matched instead by target Connected System id against
+    /// (<c>SyncPreviewServer.BuildOutOfScopeCascadeAsync</c>, the children of the Metaverse Object
+    /// deletion) are the exception: they name the rule whose Deprovisioning Action decided them (#1811), but
+    /// they have no outbound entry of their own (<c>ISyncEngine.DecideMvoDeletionExport</c> decides per
+    /// remaining connector, outside the rule evaluation that produces entries), and the same rule's entry, where
+    /// one exists, describes a different export. They are matched instead by target Connected System id against
     /// <see cref="SyncPreviewResult.Outbound"/>'s proposed exports, consumed as they are used so two
     /// deletes to the same system are not both attributed to the first node.
     /// </remarks>
@@ -151,7 +153,8 @@ public static class CausalityModelBuilder
         SyncPreviewInboundSummary? inbound,
         int? parentSyncRuleId = null,
         string? parentSyncRuleName = null,
-        CausalityLane? parentLane = null)
+        CausalityLane? parentLane = null,
+        bool isDeletionCascade = false)
     {
         // A queued-export child carries no rule of its own (the engine attributes the rule to the
         // Provisioned parent), so the parent's rule is what keys its attribute changes. Inherited within
@@ -184,11 +187,12 @@ public static class CausalityModelBuilder
             EffectiveSyncRuleId = effectiveSyncRuleId,
             EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = BuildSpeculativeLinks(node, lane, systemId, systemName, context),
-            AttributeRows = GetSpeculativeAttributeRows(node, effectiveSyncRuleId, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes),
+            AttributeRows = GetSpeculativeAttributeRows(node, effectiveSyncRuleId, inbound, entriesBySyncRuleId, unmatchedCascadeDeletes, isDeletionCascade),
             Operation = OutcomeDisplayMap.GetEventOperation(node.OutcomeType, exportReasonCode: null, node.StagedChangeType),
             Children = node.Children
                 .OrderBy(c => c.Ordinal)
-                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId, effectiveSyncRuleName, lane))
+                .Select(c => BuildSpeculativeEvent(c, context, entriesBySyncRuleId, unmatchedCascadeDeletes, inbound, effectiveSyncRuleId, effectiveSyncRuleName, lane,
+                    isDeletionCascade: node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted))
                 .ToList()
         };
     }
@@ -273,7 +277,8 @@ public static class CausalityModelBuilder
         int? effectiveSyncRuleId,
         SyncPreviewInboundSummary? inbound,
         IReadOnlyDictionary<int, OutboundPreviewEntry> entriesBySyncRuleId,
-        List<PendingExport> unmatchedCascadeDeletes)
+        List<PendingExport> unmatchedCascadeDeletes,
+        bool isDeletionCascade)
     {
         if (node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
             return BuildInboundFlowAttributeRows(inbound?.AttributeFlowChanges);
@@ -285,7 +290,8 @@ public static class CausalityModelBuilder
             return [];
 
         List<PendingExportAttributeValueChange>? changes = null;
-        if (effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
+        // A deletion's own deprovisioning takes the deletion's own Delete, whatever rule it names; see BuildSpeculative.
+        if (!isDeletionCascade && effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
         {
             changes = isWithdrawal ? entry.WithdrawnChanges : entry.AttributeChanges;
         }

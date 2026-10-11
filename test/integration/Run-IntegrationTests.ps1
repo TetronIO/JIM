@@ -1895,17 +1895,16 @@ function Reset-JIMForNextScenario {
     # 1. Stop JIM containers (keep Samba AD running)
     Write-Host "${GRAY}  Stopping JIM containers...${NC}"
     $downOutput = docker compose @script:JimComposeArgs --profile with-db down -v 2>&1
-    # Surface any "Resource is still in use" lines. Seeing these here means a container
-    # outside the JIM compose file is mounting one of the JIM volumes (typically
-    # jim-connector-files-volume via Samba AD / OpenLDAP) — investigate before the
-    # stale contents cause a later scenario to fail.
-    $stuckVolumes = $downOutput | Where-Object { $_ -match 'Resource is still in use' }
-    if ($stuckVolumes) {
-        Write-Host "${YELLOW}  Warning: one or more JIM volumes could not be removed during reset:${NC}"
-        foreach ($line in $stuckVolumes) {
+    # The directory containers stay up across scenarios and hold this lane's network and connector files
+    # volume, so `down -v` can never remove those two; step 0 has emptied (and checked) the volume, and the
+    # network is reused as it is. Anything else still in use is held from outside the integration stack, so
+    # say which (#2056).
+    $unexpectedInUse = @(Get-UnexpectedComposeResourcesInUse -DownOutput $downOutput -ExpectedInUse @($script:Lane.Network, $script:Lane.ConnectorFilesVolume))
+    if ($unexpectedInUse.Count -gt 0) {
+        Write-Host "${YELLOW}  Warning: still in use after the reset, held by something outside the integration stack:${NC}"
+        foreach ($line in $unexpectedInUse) {
             Write-Host "${YELLOW}    $line${NC}"
         }
-        Write-Host "${YELLOW}    (contents were emptied in step 0, so the next scenario should still start clean)${NC}"
     }
 
     # 2. Remove JIM database volume (ensures clean schema + data)
@@ -2766,16 +2765,11 @@ if (-not $SkipReset) {
     docker volume rm $script:Lane.DbVolume 2>&1 | Out-Null
 
     # Remove the connector-files volume. With the containers force-rm'd above, no
-    # one should be holding this volume anymore; `docker volume rm` removes it
-    # outright. If it still fails for any reason (e.g. a leftover container from
-    # an unrelated Docker project), fall back to an in-place wipe so the next
-    # scenario doesn't inherit stale CSVs. This mirrors the Reset-JIMForNextScenario
-    # strategy where Samba/LDAP stay up and the volume must be emptied in place.
-    $rmResult = docker volume rm $script:Lane.ConnectorFilesVolume 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "${GRAY}  $($script:Lane.ConnectorFilesVolume) could not be removed (${rmResult}); wiping in place instead...${NC}"
-        Clear-ConnectorFilesVolume
-    }
+    # one should be holding this volume anymore, so it normally goes outright; if
+    # something outside the stack still does, it is wiped in place instead, and the
+    # run stops if even that fails. A volume that does not exist yet (a fresh host)
+    # is left alone, since the wipe's image is not built until Step 2 (#2056).
+    Remove-ConnectorFilesVolume
 
     Write-Success "Containers stopped and all volumes removed"
 

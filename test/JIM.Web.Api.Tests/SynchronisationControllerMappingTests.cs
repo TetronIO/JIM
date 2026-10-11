@@ -512,6 +512,59 @@ public class SynchronisationControllerMappingTests
 
     #endregion
 
+    #region Keep unique (#2023)
+
+    [Test]
+    public void SyncRuleMappingDto_FromEntity_CarriesKeepUnique()
+    {
+        var entity = new SyncRuleMapping { Id = 12, TargetMetaverseAttributeId = 5, KeepUnique = false };
+
+        var dto = SyncRuleMappingDto.FromEntity(entity);
+
+        Assert.That(dto.KeepUnique, Is.False);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExpressionMapping_SetsKeepUniqueFromRequest()
+    {
+        const int syncRuleId = 2;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Export Rule", Direction = SyncRuleDirection.Export, ConnectedSystemObjectTypeId = objectTypeId };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "mail",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetConnectedSystemAttributeId = 20,
+            KeepUnique = false,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, Expression = "mv[\"Account Name\"] + \"@panoply.local\"" }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null, "Mapping should have been created.");
+        Assert.That(captured!.KeepUnique, Is.False);
+    }
+
+    #endregion
+
     #region Initial Export Only (#223)
 
     [Test]

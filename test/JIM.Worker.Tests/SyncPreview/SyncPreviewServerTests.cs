@@ -886,10 +886,11 @@ public class SyncPreviewServerTests
     }
 
     [Test]
-    public async Task PreviewSyncForCsoAsync_ScopeExitWithDownstreamDisconnectOnlyTarget_ReportsWarningAndNoTreeNodeAsync()
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithDownstreamDisconnectOnlyTarget_ReportsTheAccountLeftInPlaceAndWarnsAsync()
     {
         // Arrange - a downstream target CSO whose export rule's Outbound Deprovision Action is Disconnect
-        // (the default): the real run would disconnect it without deprovisioning, so no tree node either.
+        // (the default): the real run disconnects it without deprovisioning, and records that as a Target
+        // Disconnected outcome under the deletion naming the rule (#1811), so the preview proposes the same node.
         // WhenAuthoritativeSourceDisconnected with the source as trigger, so deletion fires despite the
         // target remaining joined (WhenLastConnectorDisconnected cannot: the target is still a connector).
         var (cso, mvo, _, _) = ArrangeOutOfScopeCascadeFixture(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected);
@@ -927,14 +928,19 @@ public class SyncPreviewServerTests
         // Act
         var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
 
-        // Assert - warned, not a tree node: the real run records nothing for a disconnect-only downstream object
+        // Assert - the account left in place is a tree node naming the rule, and is still warned about
         var deletionNode = result.OutcomeTree[0].Children.Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var disconnectionNode = deletionNode.Children.SingleOrDefault();
+        Assert.That(disconnectionNode, Is.Not.Null, "The account left in place is shown under the deletion, as the real run records it");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(deletionNode.Children, Is.Empty, "A disconnect-only downstream object gets no tree node");
+            Assert.That(disconnectionNode!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected));
+            Assert.That(disconnectionNode.TargetEntityId, Is.EqualTo(targetCso.Id));
+            Assert.That(disconnectionNode.SyncRuleId, Is.EqualTo(exportRule.Id));
+            Assert.That(disconnectionNode.SyncRuleName, Is.EqualTo(exportRule.Name));
             Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.DownstreamDisconnectOnly
                 && w.ConnectedSystemId == targetSystem.Id), Is.True,
-                "The disconnect-only downstream object must still be surfaced, as a warning");
+                "The disconnect-only downstream object is still warned about, which the Full Synchronisation preview counts");
             Assert.That(result.Outbound.ProposedExports, Is.Empty);
         }
     }

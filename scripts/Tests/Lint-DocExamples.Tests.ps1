@@ -56,8 +56,11 @@ BeforeAll {
     # exit code plus merged output, so assertions test the real entry-point
     # contract rather than an internal function.
     function Invoke-Lint {
-        param([string]$ModuleRoot, [string]$DocsRoot)
-        $output = pwsh -NoProfile -File $script:ScriptPath -ModulePath $ModuleRoot -DocsPath $DocsRoot 2>&1
+        param([string]$ModuleRoot, [string]$DocsRoot, [string]$ModuleScriptPath)
+        # Every fixture names its own module script (or a path that does not exist), so the
+        # real src/JIM.PowerShell/JIM.psm1 and its command aliases never leak into a test.
+        if (-not $ModuleScriptPath) { $ModuleScriptPath = Join-Path $ModuleRoot 'no-module-script.psm1' }
+        $output = pwsh -NoProfile -File $script:ScriptPath -ModulePath $ModuleRoot -DocsPath $DocsRoot -ModuleScriptPath $ModuleScriptPath 2>&1
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
     }
 
@@ -349,5 +352,262 @@ Get-JIMWidget -ConnectedSystemId 1 | Get-JIMWidgetBad -Id 7
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match 'Get-JIMWidgetBad invoked via alias -Id'
         $r.Output | Should -Not -Match 'Get-JIMWidget invoked via alias'
+    }
+}
+
+Describe 'Lint-DocExamples unknown cmdlet and parameter detection' {
+
+    BeforeAll {
+        # A cmdlet that supports ShouldProcess, so -WhatIf and -Confirm are genuine parameters of it.
+        $script:RemoveWidgetCmdlet = @'
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+function Remove-JIMWidget {
+    <#
+    .SYNOPSIS
+        Removes a Widget from JIM.
+
+    .EXAMPLE
+        Remove-JIMWidget -Id 3 -WhatIf
+
+        Shows what removing Widget 3 would do.
+    #>
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    param(
+        [int]$Id,
+
+        [switch]$Force
+    )
+
+    process {
+        # fixture: no real body needed for lint purposes
+    }
+}
+'@
+
+        # A cmdlet that declares its own command alias with [Alias()] on the function.
+        $script:SprocketCmdlet = @'
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+function Get-JIMSprocket {
+    <#
+    .SYNOPSIS
+        Gets Sprockets from JIM.
+
+    .EXAMPLE
+        Get-JIMSprocket -Name cog
+
+        Gets the Sprocket named cog.
+    #>
+    [CmdletBinding()]
+    [Alias('Get-JIMCog')]
+    param(
+        [string]$Name
+    )
+
+    process {
+        # fixture: no real body needed for lint purposes
+    }
+}
+'@
+
+        # A cmdlet whose OWN .EXAMPLE help passes a parameter it does not declare.
+        $script:WrongExampleCmdlet = @'
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+function Get-JIMWidgetWrong {
+    <#
+    .SYNOPSIS
+        Gets Widgets from JIM (fixture whose self-example passes an undeclared parameter).
+
+    .EXAMPLE
+        Get-JIMWidgetWrong -All
+
+        Gets every Widget.
+    #>
+    [CmdletBinding()]
+    param(
+        [int]$ConnectedSystemId
+    )
+
+    process {
+        # fixture: no real body needed for lint purposes
+    }
+}
+'@
+    }
+
+    It 'fails when a doc example passes a parameter the cmdlet does not declare, naming the cmdlet and parameter' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Get-JIMWidget -All
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'widgets\.md:4'
+        $r.Output | Should -Match '-All is not a parameter of Get-JIMWidget'
+    }
+
+    It 'passes common parameters on an advanced function' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Get-JIMWidget -ConnectedSystemId 1 -Verbose -ErrorAction Stop -OutVariable widgets
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails -WhatIf on a cmdlet that does not support ShouldProcess' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Get-JIMWidget -ConnectedSystemId 1 -WhatIf
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match '-WhatIf is not a parameter of Get-JIMWidget'
+    }
+
+    It 'passes -WhatIf and -Confirm on a cmdlet that supports ShouldProcess' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Remove-JIMWidget.ps1' = $script:RemoveWidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Remove-JIMWidget -Id 3 -WhatIf
+Remove-JIMWidget -Id 3 -Confirm:$false -Force
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails an abbreviated parameter name and names the parameter to spell out' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Get-JIMWidget -Connected 1
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match '-Connected\b.*abbreviates -ConnectedSystemId'
+    }
+
+    It 'fails a doc example that invokes a JIM cmdlet the module does not define' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Invoke-JIMWidget -ConnectedSystemId 1
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'widgets\.md:4'
+        $r.Output | Should -Match 'no JIM cmdlet named Invoke-JIMWidget'
+    }
+
+    It 'fails a cmdlet name in prose that the module does not define, and leaves real names alone' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+- **PowerShell**<br /> Widget cmdlets (`Get-JIMWidget`, `New-JIMWidget`, etc.)
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'widgets\.md:3'
+        $r.Output | Should -Match 'no JIM cmdlet named New-JIMWidget'
+        $r.Output | Should -Not -Match 'no JIM cmdlet named Get-JIMWidget\b'
+    }
+
+    It 'accepts command aliases from Set-Alias in the module script and from [Alias()] on a function, and checks the target''s parameters' {
+        $moduleScript = Join-Path $TestDrive "Module_$([guid]::NewGuid().ToString('N')).psm1"
+        Set-Content -Path $moduleScript -Value 'Set-Alias -Name Get-JIMGizmo -Value Get-JIMWidget' -Encoding utf8
+
+        $fixture = New-LintFixture -ModuleFiles @{
+            'Get-JIMWidget.ps1'   = $script:WidgetCmdlet
+            'Get-JIMSprocket.ps1' = $script:SprocketCmdlet
+        } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+`Get-JIMGizmo` and `Get-JIMCog` are aliases.
+
+```powershell
+Get-JIMGizmo -ConnectedSystemId 1
+Get-JIMCog -Name cog
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot -ModuleScriptPath $moduleScript
+        $r.ExitCode | Should -Be 0
+
+        $bad = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = "# Widgets`n`n``````powershell`nGet-JIMGizmo -All`n```````n"
+        }
+
+        $r = Invoke-Lint -ModuleRoot $bad.ModuleRoot -DocsRoot $bad.DocsRoot -ModuleScriptPath $moduleScript
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match '-All is not a parameter of Get-JIMGizmo'
+    }
+
+    It 'flags an undeclared parameter inside the module''s own .EXAMPLE help' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidgetWrong.ps1' = $script:WrongExampleCmdlet } -DocFiles @{
+            'widgets.md' = "# Widgets`n`nNo code examples here.`n"
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Get-JIMWidgetWrong\.ps1'
+        $r.Output | Should -Match '-All is not a parameter of Get-JIMWidgetWrong'
+    }
+
+    It 'does not check commands outside the JIM module' {
+        $fixture = New-LintFixture -ModuleFiles @{ 'Get-JIMWidget.ps1' = $script:WidgetCmdlet } -DocFiles @{
+            'widgets.md' = @'
+# Widgets
+
+```powershell
+Get-ChildItem -Recurse -Filter *.csv | Where-Object { $_.Length -gt 0 } | Get-Thing -Whatever
+```
+'@
+        }
+
+        $r = Invoke-Lint -ModuleRoot $fixture.ModuleRoot -DocsRoot $fixture.DocsRoot
+        $r.ExitCode | Should -Be 0
     }
 }

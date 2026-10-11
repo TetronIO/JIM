@@ -34,7 +34,7 @@ The preview shows the exports synchronising this object would stage, which is na
 
 - **Queued changes the target no longer needs**<br /> Where an update is already queued for a target, but the target holds the value the Metaverse Object would now have (a value changed and changed back before an export ran, for example), synchronising withdraws the queued change instead of exporting it. The preview shows this as **Changes queued for its target Connected System would be withdrawn**, with the queued values, where the synchronisation records **Pending Export changes withdrawn**. The account keeps the value it already holds.
 
-The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips an object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
+The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips a joined object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
 
 ## The destructive cascade
 
@@ -50,7 +50,7 @@ When the rule's Out-of-Scope Action keeps the join instead, there is no cascade:
 
     When the Deletion Rule's outcome is a *scheduled* deletion (a grace period applies), nothing downstream is evaluated: no target account is deprovisioned until the grace period actually elapses and the deletion happens for real. The preview reflects that: you see the Metaverse Object would be scheduled for deletion, and nothing more, which is exactly what a real synchronisation would do too.
 
-A downstream object that would only be disconnected (no matching export rule, or a matching rule whose Deprovisioning Action is Disconnect) is not deprovisioned, so it does not appear as its own node in the outcome tree; it is reported as a warning instead, naming the object and the Connected System it belongs to.
+A downstream object that would only be disconnected is not deprovisioned, and is reported as a warning naming the object and the Connected System it belongs to. Where a matching export rule's Deprovisioning Action is Disconnect, it also appears in the outcome tree as a **Disconnected from target system** node under the deletion, naming that rule, exactly as the real synchronisation records it; with no matching export rule at all there is no node, only the warning. A downstream object that would be deprovisioned names the rule whose Deprovisioning Action said Delete.
 
 The same goes for a downstream object whose provisioning was **never exported**: JIM has staged a Create for it, but no export has run, so nothing exists in the target system. Deleting the Metaverse Object cancels that provisioning outright (the unsent Create Pending Export and the Connected System Object are both removed, and nothing is exported), whatever the export rule's Deprovisioning Action. There is nothing to deprovision, so this appears in the outcome tree as its own **Provisioning cancelled** node under the deletion, naming the Connected System the cancelled provisioning targeted, rather than as a Deprovision Queued node or a warning.
 

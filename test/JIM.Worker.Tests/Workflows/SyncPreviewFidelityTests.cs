@@ -356,6 +356,96 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// The cascade with one target under a Delete Deprovisioning Action and one under Disconnect. The real run used
+    /// to record nothing at all for the Disconnect target, so the preview mirrored that with nothing but a warning;
+    /// both now record the account left in place as Target Disconnected beneath the deletion, and both name the rule
+    /// whose action decided each target's fate (#1811). Shape: DisconnectedOutOfScope -> MvoDeleted ->
+    /// {DeprovisionQueued, TargetDisconnected}.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithImmediateDeletionAndADisconnectTarget_TreeMatchesTheRealSyncOutcomeTreeAsync()
+    {
+        // Arrange - as the flagship test above, but the second target's export rule leaves accounts in place.
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var deleteSystem = await CreateConnectedSystemAsync("AD Target 1");
+        var deleteType = await CreateCsoTypeAsync(deleteSystem.Id, "user");
+        var disconnectSystem = await CreateConnectedSystemAsync("AD Target 2");
+        var disconnectType = await CreateCsoTypeAsync(disconnectSystem.Id, "user");
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.Zero,
+            triggerConnectedSystemIds: [sourceSystem.Id]);
+
+        await CreateScopedImportSyncRuleAsync(sourceSystem, sourceType, mvType);
+        await CreateExportSyncRuleAsync(deleteSystem.Id, deleteType, mvType, "AD Export 1",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
+        await CreateExportSyncRuleAsync(disconnectSystem.Id, disconnectType, mvType, "AD Export 2",
+            deprovisionAction: OutboundDeprovisionAction.Disconnect);
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId!.Value;
+        Assert.That(SyncRepo.ConnectedSystemObjects.Values.Count(c => c.MetaverseObjectId == mvoId), Is.EqualTo(3),
+            "Both targets must have been provisioned and joined to the same Metaverse Object");
+        var disconnectTargetCso = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.MetaverseObjectId == mvoId && c.ConnectedSystemId == disconnectSystem.Id);
+
+        // Live accounts, as in the flagship test.
+        foreach (var targetCso in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.MetaverseObjectId == mvoId && c.Id != cso.Id))
+            targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        SyncRepo.ClearAllPendingExports();
+
+        var empIdAttrValue = cso.AttributeValues.Single(av => av.Attribute?.Name == "EmployeeId");
+        empIdAttrValue.StringValue = "OUT_OF_SCOPE";
+        cso.LastUpdated = DateTime.UtcNow;
+
+        // Act 1 - preview, BEFORE the real sync, over identical data
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+
+        // Act 2 - the real synchronisation over the same (undisturbed) data
+        var fullSync2Profile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var fullSync2Activity = await CreateActivityAsync(sourceSystem.Id, fullSync2Profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSync2Profile, fullSync2Activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Assert - the same shape on both sides, the Disconnect target included
+        var realTree = MapRealOutcomeTree(fullSync2Activity);
+        var describedReal = DescribeTree(realTree);
+        var describedPreview = DescribeTree(preview.OutcomeTree);
+        Assert.That(describedReal, Does.Contain("TargetDisconnected"), "Report: real tree shape -> " + describedReal);
+        Assert.That(describedPreview, Is.EqualTo(describedReal),
+            "The preview's outcome tree must have the same shape as the tree the real synchronisation recorded. " +
+            $"Preview: {describedPreview} | Real: {describedReal}");
+
+        // And both name the rule that decided each target's fate.
+        foreach (var (treeName, tree) in new[] { ("real", realTree), ("preview", preview.OutcomeTree) })
+        {
+            var nodes = Flatten(tree).ToList();
+            var deprovision = nodes.Single(n => n.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+            var disconnection = nodes.Single(n => n.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(deprovision.SyncRuleName, Is.EqualTo("AD Export 1"), $"{treeName}: the Delete rule queued the deprovision");
+                Assert.That(disconnection.SyncRuleName, Is.EqualTo("AD Export 2"), $"{treeName}: the Disconnect rule left the account in place");
+                Assert.That(disconnection.TargetEntityId, Is.EqualTo(disconnectTargetCso.Id), $"{treeName}: naming the account left in place");
+            }
+        }
+
+        Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.EqualTo(1),
+            "Only the Delete target is queued for deletion; the Disconnect target is left in place");
+    }
+
+    /// <summary>
     /// The same cascade over targets whose provisioning was never exported (Pending Provisioning, each carrying
     /// an unsent Create). Nothing exists in the target systems, so the deletion cancels the provisioning rather
     /// than deprovisioning: no Delete is staged, no Deprovision Queued node is recorded, and the CSOs are
@@ -906,6 +996,12 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         }
         return string.Join(Environment.NewLine, lines);
     }
+
+    /// <summary>
+    /// Every node of a tree, depth first, so a test can find a node by type wherever it sits.
+    /// </summary>
+    private static IEnumerable<SyncOutcomeNode> Flatten(IEnumerable<SyncOutcomeNode> nodes) =>
+        nodes.SelectMany(node => new[] { node }.Concat(Flatten(node.Children)));
 
     /// <summary>
     /// Counts non-overlapping occurrences of a substring in a described tree, so a test can assert "exactly N
