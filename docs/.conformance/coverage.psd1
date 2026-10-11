@@ -27,6 +27,10 @@
     LinkSources         = @('src', 'deploy', 'scripts/Build-ReleaseBundle.ps1', 'docker-compose.yml')
     DocsBaseUrl         = 'https://docs.junctional.io'
 
+    # ACC-3 and COV-4: the API overview whose Resource groups table names every OpenAPI tag. The routes
+    # themselves are checked against the OpenAPI document build-and-test generates.
+    ApiIndex            = 'docs/api/index.md'
+
     # The docs the checks read: the public site, less what leaves it.
     DocsPath            = 'docs'
     DocsExclude         = @('CLAUDE.md', 'developer/**', 'reference/changelog.md')
@@ -49,5 +53,7 @@
         }
         ExpressionFunctions  = @{}
         DocsLinks            = @{}
+        ApiRoutes            = @{}
+        ApiResourceGroups    = @{}
     }
 }
