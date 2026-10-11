@@ -2758,6 +2758,11 @@ public class ExportEvaluationServer
                 // child rows via raw SQL and then detaches their tracked instances from the change tracker
                 // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
                 // holds live, attachable entities by the time the new PE is built.
+                // A survivor keeps its place in the export lifecycle (#2039 Phase 0): one already sent and
+                // awaiting its confirming import stays ExportedPendingConfirmation, so it is confirmed rather
+                // than sent again with its attempt count restarted (SelectSurvivingDriftChanges keeps such a
+                // change on purpose). The rebuilt Pending Export is reconciled while any change awaits
+                // confirmation, whatever its own status (see SyncEngine.ReconcileCsoAgainstPendingExport).
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
@@ -2776,7 +2781,11 @@ public class ExportEvaluationServer
                         ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
                         ChangeType = avc.ChangeType,
                         SyncRuleId = avc.SyncRuleId,
-                        SyncRuleName = avc.SyncRuleName
+                        SyncRuleName = avc.SyncRuleName,
+                        Status = avc.Status,
+                        ExportAttemptCount = avc.ExportAttemptCount,
+                        LastExportedAt = avc.LastExportedAt,
+                        LastImportedValue = avc.LastImportedValue
                     })
                     .ToList();
 

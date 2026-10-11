@@ -301,6 +301,56 @@ public class PendingExportMergeSemanticsTests
     }
 
     /// <summary>
+    /// A surviving change keeps its place in the export lifecycle through the delete-and-recreate (#2039 Phase 0).
+    /// One already sent and awaiting its confirming import must not go back to Pending, or it is sent again with its
+    /// attempt count restarted: a re-sent multi-valued Add then meets a value already present.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_SurvivingChangeAwaitingConfirmation_KeepsItsStatusAttemptsAndTimesAsync()
+    {
+        var (_, mvo, targetCso, _, cache) = ArrangeSingleValuedScenario();
+        var survivingAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER")
+            .Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var exportedAt = new DateTime(2026, 10, 11, 9, 30, 0, DateTimeKind.Utc);
+
+        var dbPendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystem = targetCso.ConnectedSystem,
+            ConnectedSystemId = targetCso.ConnectedSystemId,
+            ConnectedSystemObject = targetCso,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow
+        };
+        var awaitingConfirmation = CreateChange(survivingAttr, PendingExportAttributeChangeType.Update, "Sent Display Name");
+        awaitingConfirmation.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        awaitingConfirmation.ExportAttemptCount = 2;
+        awaitingConfirmation.LastExportedAt = exportedAt;
+        awaitingConfirmation.LastImportedValue = "Old Display Name";
+        dbPendingExport.AttributeValueChanges.Add(awaitingConfirmation);
+        SyncRepo.SeedPendingExport(dbPendingExport);
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var newEmployeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        newEmployeeIdValue.StringValue = "E999";
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, [newEmployeeIdValue], cache);
+
+        var survivor = result.PendingExports.Single().AttributeValueChanges.Single(c => c.AttributeId == survivingAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(survivor.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                "A change already sent must not be re-sent because another attribute changed");
+            Assert.That(survivor.ExportAttemptCount, Is.EqualTo(2));
+            Assert.That(survivor.LastExportedAt, Is.EqualTo(exportedAt));
+            Assert.That(survivor.LastImportedValue, Is.EqualTo("Old Display Name"));
+        }
+    }
+
+    /// <summary>
     /// A stale database Pending Export left over from before the CSO's secondary external ID was
     /// confirmed (Status transitioned PendingProvisioning -> Normal) has ChangeType Create. Once the
     /// CSO is confirmed, the merge-and-replace must produce a PE typed Update (the freshly computed
