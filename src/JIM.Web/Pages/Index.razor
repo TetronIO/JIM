@@ -191,7 +191,7 @@
                         {
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
                                      Icon="@Icons.Material.Filled.Schedule">
-                                @GetScheduleDescription(cell.Item)
+                                @ScheduleTriggerDisplay.Describe(cell.Item)
                             </MudChip>
                         }
                         else
@@ -398,11 +398,11 @@
         }
 
         // The trigger column reads as a sentence rather than as a stored value, so it sorts by the same text the
-        // reader sees; sorting by TriggerType alone would put "Every 5 min" and "Weekdays at 6am" in an order
+        // reader sees; sorting by TriggerType alone would put "Every 5 min" and "Weekdays at 6:00 AM" in an order
         // nothing on screen explains.
         Func<Schedule, object> sortKey = request.SortBy switch
         {
-            "trigger" => GetScheduleDescription,
+            "trigger" => s => ScheduleTriggerDisplay.Describe(s),
             "lastrun" => s => s.LastRunTime ?? DateTime.MinValue,
             "nextrun" => s => s.NextRunTime ?? DateTime.MinValue,
             "status" => s => s.IsEnabled,
@@ -419,216 +419,4 @@
     private void HandleScheduleRowClicked(Schedule schedule) => GoToSchedules();
 
     private void GoToSchedules() => NavManager.NavigateTo("/admin/operations?t=schedules");
-
-    // ─── Schedule Description Helpers (reused from OperationsSchedulesTab) ───
-
-    private static string GetScheduleDescription(Schedule schedule)
-    {
-        if (schedule.TriggerType != ScheduleTriggerType.Cron)
-            return "Manual";
-
-        var dayDesc = GetDayDescriptionFromSchedule(schedule.DaysOfWeek);
-
-        switch (schedule.PatternType)
-        {
-            case SchedulePatternType.Interval:
-                var unit = schedule.IntervalUnit == ScheduleIntervalUnit.Hours ? "hr" : "min";
-                var intervalDesc = $"Every {schedule.IntervalValue ?? 1} {unit}";
-
-                if (!string.IsNullOrEmpty(schedule.IntervalWindowStart) &&
-                    !string.IsNullOrEmpty(schedule.IntervalWindowEnd))
-                {
-                    var start = FormatTimeString(schedule.IntervalWindowStart);
-                    var end = FormatTimeString(schedule.IntervalWindowEnd);
-                    return $"{dayDesc}, {intervalDesc} ({start}-{end})";
-                }
-                return $"{dayDesc}, {intervalDesc}";
-
-            case SchedulePatternType.SpecificTimes:
-                if (!string.IsNullOrEmpty(schedule.RunTimes))
-                {
-                    var times = schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    if (times.Length == 1)
-                        return $"{dayDesc} at {FormatTimeString(times[0].Trim())}";
-                    if (times.Length <= 3)
-                    {
-                        var timeList = string.Join(", ", times.Select(t => FormatTimeString(t.Trim())));
-                        return $"{dayDesc} at {timeList}";
-                    }
-                    return $"{dayDesc}, {times.Length} times/day";
-                }
-                break;
-
-            case SchedulePatternType.Custom:
-                return GetCronDescription(schedule.CronExpression);
-        }
-
-        return GetCronDescription(schedule.CronExpression);
-    }
-
-    private static string GetDayDescriptionFromSchedule(string? daysOfWeek)
-    {
-        if (string.IsNullOrEmpty(daysOfWeek))
-            return "Daily";
-
-        var days = daysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Where(d => int.TryParse(d.Trim(), out _))
-            .Select(d => int.Parse(d.Trim()))
-            .OrderBy(d => d)
-            .ToList();
-
-        if (days.Count == 0 || days.Count == 7)
-            return "Daily";
-        if (days.SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
-            return "Weekdays";
-        if (days.SequenceEqual(new[] { 0, 6 }))
-            return "Weekends";
-
-        if (days.Count == 6)
-        {
-            var missing = Enumerable.Range(0, 7).Except(days).First();
-            var missingName = missing switch
-            {
-                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
-                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
-            };
-            return $"Daily exc. {missingName}";
-        }
-
-        var dayNames = days.Select(d => d switch
-        {
-            0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
-            4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
-        });
-        return string.Join(", ", dayNames);
-    }
-
-    private static string FormatTimeString(string timeStr)
-    {
-        if (TimeSpan.TryParse(timeStr.Trim(), out var time))
-        {
-            var hour = time.Hours;
-            var minute = time.Minutes;
-            var period = hour >= 12 ? "pm" : "am";
-            var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-            return minute == 0 ? $"{displayHour}{period}" : $"{displayHour}:{minute:D2}{period}";
-        }
-        return timeStr;
-    }
-
-    private static string GetCronDescription(string? cronExpression)
-    {
-        if (string.IsNullOrWhiteSpace(cronExpression))
-            return "Not configured";
-
-        var parts = cronExpression.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 5)
-            return cronExpression;
-
-        var minute = parts[0];
-        var hour = parts[1];
-        var dayOfMonth = parts[2];
-        var month = parts[3];
-        var dayOfWeek = parts[4];
-
-        var dayDesc = GetDayDescription(dayOfWeek);
-
-        if (dayOfMonth == "*" && month == "*" && hour.Contains(',') && !hour.Contains('/'))
-        {
-            var hours = hour.Split(',')
-                .Where(h => int.TryParse(h.Trim(), out _))
-                .Select(h => int.Parse(h.Trim()))
-                .ToList();
-
-            if (hours.Count > 0)
-            {
-                var timeList = string.Join(", ", hours.Select(h => FormatHour(h, int.TryParse(minute, out var m) ? m : 0)));
-                return $"{dayDesc} at {timeList}";
-            }
-        }
-
-        if (dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
-        {
-            if (hour.StartsWith("*/"))
-                return $"Every {hour[2..]} hours";
-            return $"Daily at {FormatTime(hour, minute)}";
-        }
-
-        if (dayOfMonth == "*" && month == "*" && int.TryParse(hour, out _))
-            return $"{dayDesc} at {FormatTime(hour, minute)}";
-
-        if (hour == "*" && dayOfMonth == "*" && month == "*")
-        {
-            var hourlyDesc = minute == "0" ? "Hourly" : $"Hourly at :{minute.PadLeft(2, '0')}";
-            if (dayOfWeek != "*")
-                return $"{dayDesc}, {hourlyDesc.ToLower()}";
-            return hourlyDesc;
-        }
-
-        if (minute.StartsWith("*/") && hour == "*")
-        {
-            var interval = minute[2..];
-            if (dayOfWeek != "*")
-                return $"{dayDesc}, every {interval} min";
-            return $"Every {interval} minutes";
-        }
-
-        if (hour.StartsWith("*/") && minute == "0")
-        {
-            var interval = hour[2..];
-            if (dayOfWeek != "*")
-                return $"{dayDesc}, every {interval} hrs";
-            return $"Every {interval} hours";
-        }
-
-        return cronExpression;
-    }
-
-    private static string GetDayDescription(string dayOfWeek)
-    {
-        if (dayOfWeek == "*")
-            return "Daily";
-        if (dayOfWeek is "1-5" or "MON-FRI")
-            return "Weekdays";
-        if (dayOfWeek is "0,6" or "SAT,SUN")
-            return "Weekends";
-
-        var dayNumbers = dayOfWeek.Split(',')
-            .Where(d => int.TryParse(d.Trim(), out _))
-            .Select(d => int.Parse(d.Trim()))
-            .ToList();
-
-        if (dayNumbers.Count > 0)
-        {
-            if (dayNumbers.Count == 7)
-                return "Daily";
-            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
-                return "Weekdays";
-            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 0, 6 }))
-                return "Weekends";
-
-            var dayNames = dayNumbers.Select(d => d switch
-            {
-                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
-                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
-            });
-            return string.Join(", ", dayNames);
-        }
-
-        return dayOfWeek;
-    }
-
-    private static string FormatTime(string hour, string minute)
-    {
-        if (!int.TryParse(hour, out var h) || !int.TryParse(minute, out var m))
-            return $"{hour}:{minute}";
-        return FormatHour(h, m);
-    }
-
-    private static string FormatHour(int hour, int minute)
-    {
-        var period = hour >= 12 ? "PM" : "AM";
-        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-        return $"{displayHour}:{minute:D2} {period}";
-    }
 }

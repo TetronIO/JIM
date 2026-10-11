@@ -1143,9 +1143,10 @@ public class Worker : BackgroundService
                     // deleted: the deciding run ended in a previous Activity, and only the snapshot rode across
                     // on the object. Cohorts group on the code it carries, never on the reason sentence.
                     var policySnapshot = MvoDeletionPolicySnapshot.FromJson(mvo.DeletionPolicySnapshotJson);
+                    ActivityRunProfileExecutionItemSyncOutcome? mvoDeletedOutcome = null;
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
-                        var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
+                        mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
                             targetEntityDescription: mvo.NameOrId);
@@ -1216,6 +1217,17 @@ public class Worker : BackgroundService
                             queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
                             executionItems.Add(deprovisionItem);
                         }
+                    }
+
+                    // The run that scheduled this deletion sits in another Activity, days or weeks ago; the object
+                    // carried its item across, and this edge is the only thing connecting the two (#1811). Objects
+                    // scheduled before the item was recorded carry none, and their deletion simply has no such cause.
+                    if (mvo.DeletionScheduledByRunProfileExecutionItemId.HasValue)
+                    {
+                        var schedulingCause = BuildDeletionCause(mvo, policySnapshot, rpei: null, outcome: null,
+                            rpeiId: mvo.DeletionScheduledByRunProfileExecutionItemId);
+                        deletionItem.CausalEdges.Add(schedulingCause.ToEdge(
+                            CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion, mvoDeletedOutcome));
                     }
 
                     executionItems.Add(deletionItem);
@@ -1318,7 +1330,9 @@ public class Worker : BackgroundService
 
     /// <summary>
     /// Describes a housekeeping deletion as the cause of whatever it goes on to trigger (#1223), so a removal
-    /// recorded against a different object can still name the object whose deletion caused it.
+    /// recorded against a different object can still name the object whose deletion caused it. Also describes the
+    /// scheduling of the deletion as the cause of the deletion itself (#1811), which carries the same object, reason
+    /// and triggering system and differs only in the item it points at.
     /// </summary>
     /// <param name="mvo">The Metaverse Object being deleted. Read for its name and the triggering system
     /// recorded on it when the deletion was scheduled.</param>
@@ -1328,15 +1342,19 @@ public class Worker : BackgroundService
     /// without a reason: an unattributed cause is still far better than none.</param>
     /// <param name="rpei">The execution item recording the deletion, where one carries a deletion outcome.</param>
     /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where outcome tracking recorded one.</param>
+    /// <param name="rpeiId">The id of an item persisted in an earlier run, for a cause known only by id: the item
+    /// that scheduled the deletion, when the cause is the scheduling rather than the deletion itself (#1811).</param>
     private static CausalCause BuildDeletionCause(
         MetaverseObject mvo,
         MvoDeletionPolicySnapshot? policySnapshot,
         ActivityRunProfileExecutionItem? rpei,
-        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+        ActivityRunProfileExecutionItemSyncOutcome? outcome,
+        Guid? rpeiId = null)
     {
         return new CausalCause
         {
             RunProfileExecutionItem = rpei,
+            RunProfileExecutionItemId = rpeiId,
             SyncOutcome = outcome,
             MetaverseObjectId = mvo.Id,
             // Name, not NameOrId: the id is carried above, and the fallback would render the chain as

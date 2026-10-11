@@ -1159,6 +1159,10 @@ public abstract class SyncTaskProcessorBase
                         existingRpei.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
 
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1246,6 +1250,10 @@ public abstract class SyncTaskProcessorBase
                     {
                         runProfileExecutionItem.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
+
+                    // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
+                    if (changeResult.MvoScheduledForDeletion != null)
+                        MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -1882,8 +1890,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Clears every deletion marker from an MVO whose scheduled or queued deletion has been cancelled by a
     /// rejoin (#119): the disconnection date, the deletion initiator audit fields, the triggering system
-    /// fields and the decision-time policy snapshot. The markers travel together; clearing a subset would
-    /// leave a cancelled deletion half-described.
+    /// fields, the decision-time policy snapshot and the scheduling item (#1811). The markers travel together;
+    /// clearing a subset would leave a cancelled deletion half-described.
     /// </summary>
     private static void ClearMvoDeletionMarkers(MetaverseObject mvo)
     {
@@ -1894,6 +1902,7 @@ public abstract class SyncTaskProcessorBase
         mvo.DeletionTriggeredBySystemId = null;
         mvo.DeletionTriggeredBySystemName = null;
         mvo.DeletionPolicySnapshotJson = null;
+        mvo.DeletionScheduledByRunProfileExecutionItemId = null;
     }
 
     /// <summary>
@@ -1981,6 +1990,7 @@ public abstract class SyncTaskProcessorBase
         to.DeletionTriggeredBySystemId = from.DeletionTriggeredBySystemId;
         to.DeletionTriggeredBySystemName = from.DeletionTriggeredBySystemName;
         to.DeletionPolicySnapshotJson = from.DeletionPolicySnapshotJson;
+        to.DeletionScheduledByRunProfileExecutionItemId = from.DeletionScheduledByRunProfileExecutionItemId;
     }
 
     /// <summary>
@@ -7034,6 +7044,7 @@ public abstract class SyncTaskProcessorBase
                     // The MVO has been marked by this point, so its computed due date is the
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
+                    mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }

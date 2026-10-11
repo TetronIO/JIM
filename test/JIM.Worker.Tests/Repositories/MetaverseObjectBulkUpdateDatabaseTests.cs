@@ -195,13 +195,15 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
 
         var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected","triggerMode":"SpecificSourcesDisconnect"}""";
+        var schedulingItemId = Guid.NewGuid();
         var mvo = new MetaverseObject
         {
             Type = personType!,
             AttributeValues = { TextValue(ids.DepartmentId, "Sales") },
             DeletionTriggeredBySystemId = 7,
             DeletionTriggeredBySystemName = "HR System",
-            DeletionPolicySnapshotJson = snapshotJson
+            DeletionPolicySnapshotJson = snapshotJson,
+            DeletionScheduledByRunProfileExecutionItemId = schedulingItemId
         };
 
         // Raw COPY/INSERT create must persist the marker columns.
@@ -215,6 +217,8 @@ public class MetaverseObjectBulkUpdateDatabaseTests
                 Assert.That(created.DeletionTriggeredBySystemId, Is.EqualTo(7), "bulk create must persist DeletionTriggeredBySystemId");
                 Assert.That(created.DeletionTriggeredBySystemName, Is.EqualTo("HR System"), "bulk create must persist DeletionTriggeredBySystemName");
                 Assert.That(created.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson), "bulk create must persist DeletionPolicySnapshotJson");
+                Assert.That(created.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItemId),
+                    "bulk create must persist DeletionScheduledByRunProfileExecutionItemId");
             }
         }
 
@@ -223,6 +227,7 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         mvo.DeletionTriggeredBySystemId = null;
         mvo.DeletionTriggeredBySystemName = null;
         mvo.DeletionPolicySnapshotJson = null;
+        mvo.DeletionScheduledByRunProfileExecutionItemId = null;
         await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
 
         await using var verifyUpdateCtx = NewContext();
@@ -232,6 +237,8 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             Assert.That(updated.DeletionTriggeredBySystemId, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemId");
             Assert.That(updated.DeletionTriggeredBySystemName, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemName");
             Assert.That(updated.DeletionPolicySnapshotJson, Is.Null, "bulk update must persist a cleared DeletionPolicySnapshotJson");
+            Assert.That(updated.DeletionScheduledByRunProfileExecutionItemId, Is.Null,
+                "bulk update must persist a cleared DeletionScheduledByRunProfileExecutionItemId");
         }
     }
 
@@ -361,6 +368,8 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         await repo.Sync.CreateMetaverseObjectsAsync(new[] { seedMvo });
         var mvoId = seedMvo.Id;
 
+        var schedulingItemId = Guid.NewGuid();
+
         // Instance A: what MarkMvoForDeletionAsync's grace branch queues - the obsoleting CSO's own,
         // already-loaded MVO instance, carrying only the scalar deletion markers.
         var deletionOnlyInstance = new MetaverseObject
@@ -372,7 +381,8 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             DeletionInitiatedByType = ActivityInitiatorType.System,
             DeletionTriggeredBySystemId = 7,
             DeletionTriggeredBySystemName = "HR System",
-            DeletionPolicySnapshotJson = """{"deletionRule":"WhenLastConnectorDisconnected"}"""
+            DeletionPolicySnapshotJson = """{"deletionRule":"WhenLastConnectorDisconnected"}""",
+            DeletionScheduledByRunProfileExecutionItemId = schedulingItemId
         };
 
         // Instance C: what the join/Attribute Flow path queues - a separately-loaded instance (no deletion
@@ -401,6 +411,8 @@ public class MetaverseObjectBulkUpdateDatabaseTests
                 "the deletion markers carried only by the discarded instance must survive the collapse");
             Assert.That(persisted.DeletionTriggeredBySystemId, Is.EqualTo(7));
             Assert.That(persisted.DeletionPolicySnapshotJson, Is.Not.Null.And.Not.Empty);
+            Assert.That(persisted.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItemId),
+                "the bulk update writes the scheduling item, and the collapse keeps it with the other markers");
             Assert.That(persisted.AttributeValues.Count(av => av.AttributeId == ids.DisplayNameId), Is.EqualTo(1),
                 "the join's flowed attribute value must be inserted exactly once, not lost or duplicated");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.True,

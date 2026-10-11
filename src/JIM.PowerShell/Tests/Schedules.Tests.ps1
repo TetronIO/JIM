@@ -335,6 +335,45 @@ Describe 'New-JIMSchedule' {
         }
     }
 
+    Context 'Pattern sent to the API' {
+
+        # PowerShell reads a one-element array by its element, so @(0) (Sunday alone) is false in an if: a Sunday-only
+        # Schedule used to go out with no days, which the API reads as every day.
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ id = [guid]::NewGuid(); name = $Body.name }
+                }
+            }
+        }
+
+        It 'Sends Sunday alone as day 0' {
+            InModuleScope JIM {
+                New-JIMSchedule -Name 'Weekly' -TriggerType Cron -PatternType SpecificTimes -DaysOfWeek @(0) -RunTimes @('01:00') -Confirm:$false
+
+                $script:capturedBody.daysOfWeek | Should -BeExactly '0'
+                $script:capturedBody.runTimes | Should -BeExactly '01:00'
+            }
+        }
+
+        It 'Sends an interval and its window as given' {
+            InModuleScope JIM {
+                New-JIMSchedule -Name 'Hourly' -TriggerType Cron -PatternType Interval -DaysOfWeek @(1, 2, 3, 4, 5) -IntervalValue 2 `
+                    -IntervalUnit Hours -IntervalWindowStart '08:00' -IntervalWindowEnd '18:00' -Confirm:$false
+
+                $script:capturedBody.daysOfWeek | Should -BeExactly '1,2,3,4,5'
+                $script:capturedBody.intervalValue | Should -Be 2
+                $script:capturedBody.intervalUnit | Should -BeExactly 'Hours'
+                $script:capturedBody.intervalWindowStart | Should -BeExactly '08:00'
+                $script:capturedBody.intervalWindowEnd | Should -BeExactly '18:00'
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
