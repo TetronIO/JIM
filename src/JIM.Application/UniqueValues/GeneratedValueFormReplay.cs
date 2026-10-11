@@ -229,7 +229,8 @@ internal sealed class GeneratedValueFormReplay
 
     /// <summary>
     /// Whether every flow on a form's way from the generated value applied for this candidate: the form's own (for a
-    /// derived form), and the one writing each attribute it is built through, on the form's own Synchronisation Rule.
+    /// derived form), and the one writing each attribute it is built through. Every one of them is on the generated
+    /// flow's own Synchronisation Rule, which is what makes it a form; an export expression's own rule only writes it.
     /// </summary>
     private bool ChainApplies(GeneratedValueBuiltValue form, Dictionary<SyncRuleMapping, bool> applies)
     {
@@ -239,7 +240,7 @@ internal sealed class GeneratedValueFormReplay
 
         foreach (var attributeId in chain)
         {
-            var hop = attributeId.HasValue ? HopWriting(attributeId.Value, form.SyncRule) : null;
+            var hop = attributeId.HasValue ? HopWriting(attributeId.Value) : null;
             if (hop == null || !applies.TryGetValue(hop, out var applied) || !applied)
                 return false;
         }
@@ -247,11 +248,20 @@ internal sealed class GeneratedValueFormReplay
         return true;
     }
 
-    private SyncRuleMapping? HopWriting(int attributeId, SyncRule rule) =>
-        _replayed.Values.SelectMany(hops => hops)
-            .Where(hop => hop.Mapping.TargetMetaverseAttribute!.Id == attributeId && (ReferenceEquals(hop.Rule, rule) || (rule.Id > 0 && hop.Rule.Id == rule.Id)))
+    /// <summary>
+    /// The replayed flow on the generated flow's own Synchronisation Rule that writes <paramref name="attributeId"/>.
+    /// </summary>
+    private SyncRuleMapping? HopWriting(int attributeId)
+    {
+        var ownRule = _pending.Mapping.SyncRule;
+        var ownRuleId = _pending.Mapping.SyncRuleId;
+
+        return _replayed.Values.SelectMany(hops => hops)
+            .Where(hop => hop.Mapping.TargetMetaverseAttribute!.Id == attributeId
+                && ((ownRule != null && ReferenceEquals(hop.Rule, ownRule)) || (ownRuleId > 0 && hop.Rule.Id == ownRuleId)))
             .Select(hop => hop.Mapping)
             .FirstOrDefault();
+    }
 
     /// <summary>
     /// The Attribute Priority gate as <see cref="SyncEngine"/> applies it to a contribution, at the moment the pass would

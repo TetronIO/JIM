@@ -145,6 +145,21 @@ public class GeneratedValueFormReplayTests
     }
 
     [Test]
+    public void Replay_ExportExpressionBuiltThroughEmail_WorksOutWhatExportWouldSend()
+    {
+        var hr = HrImport();
+        Expression(hr, 101, _model.Email, EmailFromAccountName);
+        var adExport = ExportRule(3, "AD Export", AdSystemId);
+        ExportExpression(adExport, 300, _adMail, "Upper(mv[\"Email\"])");
+        var context = ContextWithGraph(hr, adExport);
+        var (_, cso, pending) = ReachGeneration(context, hr);
+
+        var result = Replay(cso, pending, context, [hr, adExport], [hr]).Replay("jbloggs1", null);
+
+        Assert.That(Worked(result)["mail"], Is.EqualTo("JBLOGGS1@CORP.LOCAL"));
+    }
+
+    [Test]
     public void Replay_LeavesTheRealObjectAsItWas()
     {
         var hr = HrImport();

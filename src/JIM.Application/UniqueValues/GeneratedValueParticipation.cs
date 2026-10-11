@@ -87,6 +87,69 @@ public static class GeneratedValueParticipation
     }
 
     /// <summary>
+    /// The values built from <paramref name="generatedMapping"/>'s value that are checked before it is issued (Generated
+    /// Value Forms, #2023): every form (<see cref="GeneratedValueBuiltValueKind.Form"/>) whose Keep unique switch is on,
+    /// with where it is checked besides JIM's records for its attribute. A Derived Attribute Flow's value is checked in
+    /// each enabled, single-source, direct export flow of its attribute, and probed there as the generated value would be
+    /// (<see cref="IsDirectProbeTarget"/>); an export expression's, in the attribute it writes. The generated mapping's
+    /// exclusions apply to everything built from it (plan decision 2): nothing is checked in an excluded system, and an
+    /// export expression whose only system is excluded is left out altogether.
+    /// </summary>
+    /// <param name="generatedMapping">The generated import mapping; no forms unless it generates a Metaverse attribute.</param>
+    /// <param name="builtValues">The shared resolver over the caller's Synchronisation Rules.</param>
+    /// <param name="exportRules">Every export Synchronisation Rule the caller knows about.</param>
+    public static List<GeneratedValueForm> DescribeForms(SyncRuleMapping generatedMapping, GeneratedValueBuiltValues builtValues, IEnumerable<SyncRule> exportRules)
+    {
+        ArgumentNullException.ThrowIfNull(generatedMapping);
+        ArgumentNullException.ThrowIfNull(builtValues);
+        ArgumentNullException.ThrowIfNull(exportRules);
+
+        if (generatedMapping.Generation == null || !generatedMapping.ResolveTargetMetaverseAttributeId().HasValue)
+            return [];
+
+        var excludedSystemIds = generatedMapping.Generation.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet();
+        var directFlows = exportRules
+            .Where(rule => rule.Enabled && rule.Direction == SyncRuleDirection.Export && !excludedSystemIds.Contains(rule.ConnectedSystemId))
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Where(m => m.Enabled && m.TargetConnectedSystemAttributeId.HasValue && m.Sources.Count == 1 && m.Sources[0].MetaverseAttributeId.HasValue)
+                .Select(m => (Rule: rule, Mapping: m)))
+            .ToList();
+
+        var forms = new List<GeneratedValueForm>();
+        foreach (var builtValue in builtValues.BuiltFrom(generatedMapping).Where(b => b.Kind == GeneratedValueBuiltValueKind.Form && b.KeepUnique))
+        {
+            if (builtValue.MetaverseAttributeId.HasValue)
+            {
+                var flows = directFlows.Where(f => f.Mapping.Sources[0].MetaverseAttributeId == builtValue.MetaverseAttributeId).ToList();
+                forms.Add(new GeneratedValueForm
+                {
+                    BuiltValue = builtValue,
+                    ConnectorSpaceAttributeIds = [.. flows.Select(f => f.Mapping.TargetConnectedSystemAttributeId!.Value).Distinct()],
+                    ProbeTargets = [.. flows
+                        .Where(f => IsDirectProbeTarget(f.Mapping.TargetConnectedSystemAttribute))
+                        .Select(f => new UniquenessProbeTarget(f.Rule.ConnectedSystemId, f.Mapping.TargetConnectedSystemAttributeId!.Value))
+                        .Distinct()]
+                });
+                continue;
+            }
+
+            var targetId = builtValue.Mapping.TargetConnectedSystemAttributeId;
+            var systemId = builtValue.SyncRule.ConnectedSystemId;
+            if (!targetId.HasValue || excludedSystemIds.Contains(systemId))
+                continue;
+
+            forms.Add(new GeneratedValueForm
+            {
+                BuiltValue = builtValue,
+                ConnectorSpaceAttributeIds = [targetId.Value],
+                ProbeTargets = IsDirectProbeTarget(builtValue.Mapping.TargetConnectedSystemAttribute) ? [new UniquenessProbeTarget(systemId, targetId.Value)] : []
+            });
+        }
+
+        return forms;
+    }
+
+    /// <summary>
     /// Describes every Connected System attribute <paramref name="generatedMapping"/>'s value is exported to, and how
     /// its availability is checked there (release 3): the read model behind the "Checked for availability in" panel,
     /// the REST mapping DTO's <c>participants</c> and <c>Get-JIMSyncRuleMapping</c>. One row per (Connected System,
