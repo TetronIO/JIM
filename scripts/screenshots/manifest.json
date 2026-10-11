@@ -399,6 +399,11 @@
           }
         },
         {
+          "waitFor": {
+            "selector": "tbody tr:has-text('View')"
+          }
+        },
+        {
           "fill": {
             "selector": "input[placeholder^='Search']",
             "value": "Alice Smith (S8-20)"

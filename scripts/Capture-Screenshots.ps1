@@ -47,8 +47,9 @@
 .PARAMETER PrepareData
     Before capturing, load the data the published images show and put the portal in the state a customer sees: run
     integration Scenario 8 (Cross-Domain Entitlement Sync) against OpenLDAP through Run-IntegrationTests.ps1, which
-    resets the environment first and leaves it running; add the Scenario 8 Schedules; then recreate jim.web in
-    Production mode on the same database. Replaces whatever the local stack held.
+    resets the environment first and leaves it running; add the Scenario 8 Schedules; then rebuild the Web, Worker
+    and Scheduler at the release version (the runner builds them with a development suffix) and recreate them, the
+    portal in Production mode, on the same database. Replaces whatever the local stack held.
 
 .PARAMETER ApiKeyPath
     The file holding the API key the terminal screenshots sign in with. Defaults to test/integration/.api-key, which
@@ -120,12 +121,22 @@ if ($PrepareData) {
     & (Join-Path $integration 'Add-Scenario-008-Schedules.ps1') -JIMUrl $BaseUrl -ApiKey $apiKey
     if (-not $? -or $LASTEXITCODE -ne 0) { throw 'Adding the Scenario 8 Schedules failed.' }
 
-    Write-Host 'Recreating jim.web in Production mode ...'
+    # The runner builds with a development version suffix (v0.16.0-dev.20261011.919), which the portal's footer and
+    # Connect-JIM would both show. Rebuild all three services without it: rebuilding the web alone would leave the
+    # Worker and Scheduler on the suffixed version, and Service Health would mark them as differing from the portal.
+    $services = @('jim.web', 'jim.worker', 'jim.scheduler')
     $compose = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'scripts/screenshots/docker-compose.production-web.yml')
+    Remove-Item Env:VERSION_SUFFIX -ErrorAction SilentlyContinue
     Push-Location $repoRoot
-    try { docker compose @compose up -d --no-deps jim.web | Out-Host }
+    try {
+        Write-Host 'Rebuilding the JIM services at the release version ...'
+        docker compose @compose build @services | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Rebuilding the JIM services failed (docker compose exited $LASTEXITCODE)." }
+        Write-Host 'Recreating them, with the portal in Production mode ...'
+        docker compose @compose up -d --no-deps @services | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Recreating the JIM services failed (docker compose exited $LASTEXITCODE)." }
+    }
     finally { Pop-Location }
-    if ($LASTEXITCODE -ne 0) { throw "Recreating jim.web failed (docker compose exited $LASTEXITCODE)." }
 
     $deadline = (Get-Date).AddMinutes(5)
     do {
