@@ -367,6 +367,30 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// An export expression built from the generated Account Name that also reads Region, which AD supplies: Account Name
+    /// waits for it, and AD's synchronisation flowing Region marks HR's object so its next delta generates Account Name.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_ExportExpressionBuiltFromAccountNameWaitsForAnotherSystemsInput_IsRetriedOnceItArrivesAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: false, withAd: true, withDirectoryExport: true,
+            generatedAccountNameBase: AccountNameFromEmployeeId,
+            directoryUpnExpression: "mv[\"Account Name\"] + \"@\" + Lower(mv[\"Region\"]) + \".corp.local\"");
+        var hrCso = SeedHr(ctx, "E1", accountName: null);
+        SeedAd(ctx, "E1", "EMEA");
+
+        await RunFullSyncAsync(ctx.Hr);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(Text(mvo, ctx.AccountName), Is.Null, "precondition: the userPrincipalName built from Account Name needs Region");
+
+        await RunFullSyncAsync(ctx.Ad!);
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "AD flowed Region, which a value built from HR's generated Account Name reads");
+
+        await RunDeltaSyncAsync(ctx.Hr);
+        Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e1"));
+    }
+
     private void SeedMetaverseObjectHolding(MetaverseAttribute attribute, string value)
     {
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow, Type = attribute.MetaverseObjectTypes.First() };
@@ -665,7 +689,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         MissingInputBehaviour emailMissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
         string? generatedAccountNameBase = null,
         bool adContributesEmail = false,
-        bool withOrdinaryFailingMapping = false)
+        bool withOrdinaryFailingMapping = false,
+        string? directoryUpnExpression = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -781,7 +806,21 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
 
             var export = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export", enableProvisioning: true);
             ToAttribute(export, directoryMail, email);
-            ToAttribute(export, directoryUpn, upn);
+            if (directoryUpnExpression == null)
+            {
+                ToAttribute(export, directoryUpn, upn);
+            }
+            else
+            {
+                export.AttributeFlowRules.Add(new SyncRuleMapping
+                {
+                    SyncRule = export,
+                    SyncRuleId = export.Id,
+                    TargetConnectedSystemAttribute = directoryUpn,
+                    TargetConnectedSystemAttributeId = directoryUpn.Id,
+                    Sources = { new SyncRuleMappingSource { Order = 0, Expression = directoryUpnExpression } }
+                });
+            }
             await DbContext.SaveChangesAsync();
         }
 

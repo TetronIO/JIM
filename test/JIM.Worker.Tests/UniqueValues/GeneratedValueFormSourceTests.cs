@@ -156,6 +156,41 @@ public class GeneratedValueFormSourceTests
         }
     }
 
+    // ---- Retrying a value that waits ----
+
+    /// <summary>
+    /// A derived flow's inputs already mark its hosting system when another system changes them; an export expression
+    /// built from a generated value is not a derived flow, so its inputs are mapped to the generated value's own system
+    /// here, for a value waiting on one of them to be retried once it arrives.
+    /// </summary>
+    [Test]
+    public void DescribeExportFormInputReaders_ExportExpressionReadingRegion_MarksTheGeneratedValuesOwnSystem()
+    {
+        _hr.MetaverseObjectTypeId = PersonTypeId;
+        FromConnectedSystem(_hr, 103, _model.Region, CsRegionId);
+        ExportExpression(_adExport, 400, _adUpn, "mv[\"Account Name\"] + \"@\" + mv[\"Region\"]");
+        SyncRule[] rules = [_hr, _adExport];
+        var builtValues = GeneratedValueBuiltValues.Create(rules, new DerivedFlowGraph(rules, _model.Types, DerivedFlowGraphScope.EnabledMappingsOnly), [_model.Person]);
+
+        var readers = GeneratedValueParticipation.DescribeExportFormInputReaders(builtValues, rules);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(readers[(PersonTypeId, _model.Region.Id)], Is.EqualTo(new[] { HrSystemId }));
+            Assert.That(readers[(PersonTypeId, _model.AccountName.Id)], Is.EqualTo(new[] { HrSystemId }));
+        }
+    }
+
+    [Test]
+    public void DescribeExportFormInputReaders_ExportExpressionsKeepUniqueOff_MarksNothing()
+    {
+        ExportExpression(_adExport, 400, _adUpn, "mv[\"Account Name\"] + \"@\" + mv[\"Region\"]").KeepUnique = false;
+        SyncRule[] rules = [_hr, _adExport];
+        var builtValues = GeneratedValueBuiltValues.Create(rules, new DerivedFlowGraph(rules, _model.Types, DerivedFlowGraphScope.EnabledMappingsOnly), [_model.Person]);
+
+        Assert.That(GeneratedValueParticipation.DescribeExportFormInputReaders(builtValues, rules), Is.Empty);
+    }
+
     // ---- A candidate's checks ----
 
     [Test]
@@ -233,6 +268,21 @@ public class GeneratedValueFormSourceTests
         engine.FlowInboundAttributes(cso, _hr, _objectTypes, evaluator, priorityContext: context);
 
         return GeneratedValueFormSource.Create(engine, cso, mvo.PendingGeneratedValues.Single(), forms, [_hr], _objectTypes, evaluator, context);
+    }
+
+    private static SyncRuleMapping FromConnectedSystem(SyncRule rule, int id, MetaverseAttribute target, int csAttributeId)
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = id,
+            SyncRule = rule,
+            SyncRuleId = rule.Id,
+            TargetMetaverseAttribute = target,
+            TargetMetaverseAttributeId = target.Id
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttributeId = csAttributeId });
+        rule.AttributeFlowRules.Add(mapping);
+        return mapping;
     }
 
     private static SyncRuleMapping ExportExpression(SyncRule rule, int id, ConnectedSystemObjectTypeAttribute target, string expression)

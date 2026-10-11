@@ -784,6 +784,7 @@ public partial class SyncEngine
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId,
                 SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
                 BaseValue = null,
                 BaseUnavailable = false
             });
@@ -812,6 +813,7 @@ public partial class SyncEngine
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId,
                 SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
                 BaseValue = null,
                 BaseUnavailable = true
             });
@@ -845,6 +847,7 @@ public partial class SyncEngine
             ContributedBySystemId = contributingSystemId,
             ContributedBySyncRuleId = contributingSyncRuleId,
             SourceConnectedSystemObjectId = cso.Id,
+                SourceConnectedSystemObject = cso,
             BaseValue = processed,
             BaseUnavailable = processed == null
         });

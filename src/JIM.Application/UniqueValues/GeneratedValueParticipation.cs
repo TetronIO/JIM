@@ -150,6 +150,54 @@ public static class GeneratedValueParticipation
     }
 
     /// <summary>
+    /// For each Metaverse attribute an export expression form reads (Generated Value Forms, #2023), the Connected Systems
+    /// whose generated values it is built from: their objects are to be re-evaluated when another system changes it. A
+    /// generated value whose export expression needs an input the object has no value for waits, and only its own
+    /// system's synchronisation can issue it; a derived flow's inputs are already marked this way through the derived flow
+    /// graph, but an export expression is not a derived flow, so without this a value waiting on one would never be
+    /// retried by a delta. Keyed by (Metaverse Object Type, Metaverse attribute); only forms with Keep unique on count.
+    /// </summary>
+    public static Dictionary<(int MetaverseObjectTypeId, int MetaverseAttributeId), List<int>> DescribeExportFormInputReaders(
+        GeneratedValueBuiltValues builtValues, IReadOnlyCollection<SyncRule> rules)
+    {
+        ArgumentNullException.ThrowIfNull(builtValues);
+        ArgumentNullException.ThrowIfNull(rules);
+
+        // Attribute names to ids, from every flow that writes or reads one.
+        var idsByName = rules
+            .SelectMany(rule => rule.AttributeFlowRules)
+            .SelectMany(mapping => mapping.Sources.Select(source => source.MetaverseAttribute).Append(mapping.TargetMetaverseAttribute))
+            .OfType<MetaverseAttribute>()
+            .GroupBy(attribute => attribute.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Id, StringComparer.OrdinalIgnoreCase);
+
+        var readers = new Dictionary<(int MetaverseObjectTypeId, int MetaverseAttributeId), List<int>>();
+        var generatedMappings = rules
+            .Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled)
+            .SelectMany(rule => rule.AttributeFlowRules.Where(m => m.Enabled && m.Generation != null && m.TargetMetaverseAttribute != null), (rule, mapping) => (Rule: rule, Mapping: mapping));
+
+        foreach (var (rule, generated) in generatedMappings)
+        {
+            var inputs = builtValues.BuiltFrom(generated)
+                .Where(b => b.Kind == GeneratedValueBuiltValueKind.Form && b.KeepUnique && !b.MetaverseAttributeId.HasValue)
+                .SelectMany(b => DerivedFlowGraph.GetMetaverseInputNames(b.Mapping))
+                .Where(idsByName.ContainsKey)
+                .Select(name => idsByName[name])
+                .Distinct();
+
+            foreach (var key in inputs.Select(id => (rule.MetaverseObjectTypeId, id)))
+            {
+                if (!readers.TryGetValue(key, out var systems))
+                    readers[key] = systems = [];
+                if (!systems.Contains(rule.ConnectedSystemId))
+                    systems.Add(rule.ConnectedSystemId);
+            }
+        }
+
+        return readers;
+    }
+
+    /// <summary>
     /// Describes every Connected System attribute <paramref name="generatedMapping"/>'s value is exported to, and how
     /// its availability is checked there (release 3): the read model behind the "Checked for availability in" panel,
     /// the REST mapping DTO's <c>participants</c> and <c>Get-JIMSyncRuleMapping</c>. One row per (Connected System,

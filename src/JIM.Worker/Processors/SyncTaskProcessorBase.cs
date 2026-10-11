@@ -718,6 +718,19 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private Dictionary<int, List<GeneratedValueForm>>? _generationForms;
 
+    /// <summary>
+    /// Every enabled import Synchronisation Rule the run knows, for working out the forms of a generated value re-elected
+    /// from another system's rule.
+    /// </summary>
+    private List<SyncRule> _allImportRules = [];
+
+    /// <summary>
+    /// For each Metaverse attribute an export expression built from a generated value reads, the systems whose generated
+    /// values it is built from (<see cref="GeneratedValueParticipation.DescribeExportFormInputReaders"/>): marked, as a
+    /// derived flow's host is, when another system changes it, so a generated value waiting on it is retried.
+    /// </summary>
+    private Dictionary<(int MetaverseObjectTypeId, int MetaverseAttributeId), List<int>> _exportFormInputReaders = [];
+
     private List<GeneratedValueForm> GetOrComputeGenerationForms(SyncRuleMapping mapping)
     {
         var generation = mapping.Generation!;
@@ -743,16 +756,30 @@ public abstract class SyncTaskProcessorBase
     /// sticky, so no candidate will be drawn. A form's probe targets are kept only when the run probes, with the values
     /// the object's own accounts hold exempted, exactly as for the generated value.
     /// </summary>
+    /// <param name="cso">The object being synchronised: the generated value's own account on the main path, the account
+    /// leaving the object on the re-election paths.</param>
+    /// <param name="inScopeRules">The rules whose derived flows run for the generated value's own account; null on the
+    /// re-election paths, where they are the enabled import rules of that account's own system.</param>
     private async Task<IGeneratedValueFormSource?> BuildGeneratedValueFormSourceAsync(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
         PendingGeneratedValue pending,
-        IReadOnlyList<SyncRule> inScopeRules,
+        IReadOnlyList<SyncRule>? inScopeRules,
         bool probing,
         bool csoIsJoinedToObject)
     {
-        if (_attributePriorityContext == null || _objectTypes == null || pending.BaseUnavailable || pending.SourceConnectedSystemObjectId != cso.Id)
+        if (_attributePriorityContext == null || _objectTypes == null || pending.BaseUnavailable)
             return null;
+
+        // The account the values built from the generated value read: the one being synchronised on the main path; on a
+        // re-election path, the surviving contributor's own account, as it recorded the request.
+        var source = inScopeRules != null ? cso : pending.SourceConnectedSystemObject;
+        if (source == null || pending.SourceConnectedSystemObjectId != source.Id || !ReferenceEquals(source.MetaverseObject, mvo))
+            return null;
+
+        inScopeRules ??= _allImportRules
+            .Where(rule => rule.ConnectedSystemId == source.ConnectedSystemId && rule.MetaverseObjectTypeId == mvo.Type?.Id)
+            .ToList();
 
         if (mvo.Id != Guid.Empty && _uniqueValueResolveOptions!.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
             return null;
@@ -772,7 +799,12 @@ public abstract class SyncTaskProcessorBase
                 prepared.Add(form with { ProbeExemptValues = await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, form.ProbeTargets) });
         }
 
-        return GeneratedValueFormSource.Create(_syncEngine, cso, pending, prepared, inScopeRules, _objectTypes, _expressionEvaluator, _attributePriorityContext);
+        // Another system's account is of a type this run does not otherwise load; it carries its own.
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes = source.Type != null && _objectTypes.All(t => t.Id != source.TypeId)
+            ? [.. _objectTypes, source.Type]
+            : _objectTypes;
+
+        return GeneratedValueFormSource.Create(_syncEngine, source, pending, prepared, inScopeRules, objectTypes, _expressionEvaluator, _attributePriorityContext);
     }
 
     private List<UniquenessProbeTarget> GetOrComputeGenerationProbeTargets(SyncRuleMapping mapping)
@@ -2390,7 +2422,7 @@ public abstract class SyncTaskProcessorBase
     private void CollectDerivedInputMarks(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> changedValues)
     {
         var graph = _attributePriorityContext?.DerivedFlowGraph;
-        if (graph == null)
+        if (graph == null && _exportFormInputReaders.Count == 0)
             return;
 
         if (mvo.Type == null)
@@ -2402,7 +2434,19 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changedValues, _connectedSystem.Id))
+        var changed = changedValues.ToList();
+        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changed, _connectedSystem.Id))
+            _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
+
+        // Generated Value Forms (#2023): an export expression built from a generated value is not a derived flow, so the
+        // graph does not know its inputs; the generated value's own system is marked for them here.
+        var exportFormReaders = changed
+            .Select(value => value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0)
+            .Distinct()
+            .SelectMany(attributeId => _exportFormInputReaders.GetValueOrDefault((mvo.Type.Id, attributeId)) ?? [])
+            .Where(connectedSystemId => connectedSystemId != _connectedSystem.Id)
+            .Distinct();
+        foreach (var connectedSystemId in exportFormReaders)
             _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
     }
 
@@ -2520,8 +2564,9 @@ public abstract class SyncTaskProcessorBase
     /// happens later in the calling method); empty when nothing was generated this pass.
     /// </returns>
     /// <param name="inScopeRules">The Synchronisation Rules in scope for <paramref name="cso"/>, whose derived flows the
-    /// synchronisation runs: given, each request's forms are checked with it (Generated Value Forms, #2023). Null on the
-    /// re-election paths, where the generated value comes from another system's rule.</param>
+    /// synchronisation runs, for checking each request's forms with it (Generated Value Forms, #2023). Null on the
+    /// re-election paths, where the generated value comes from another system's rule and its forms are worked out from
+    /// that system's own account.</param>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesAsync(
         ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false, IReadOnlyList<SyncRule>? inScopeRules = null)
     {
@@ -2557,9 +2602,7 @@ public abstract class SyncTaskProcessorBase
                     ? await GetImportProbeExemptValuesAsync(mvo, cso, csoIsJoinedToObject, probeTargets)
                     : [];
 
-                var formSource = inScopeRules == null
-                    ? null
-                    : await BuildGeneratedValueFormSourceAsync(cso, mvo, pending, inScopeRules, probing: _uniquenessProbeSessionHost != null, csoIsJoinedToObject);
+                var formSource = await BuildGeneratedValueFormSourceAsync(cso, mvo, pending, inScopeRules, probing: _uniquenessProbeSessionHost != null, csoIsJoinedToObject);
                 formsProbe |= formSource != null && GetOrComputeGenerationForms(pending.Mapping).Any(f => f.ProbeTargets.Count > 0);
 
                 requests.Add(new GenerationRequest
@@ -6969,6 +7012,8 @@ public abstract class SyncTaskProcessorBase
         // a generated value's forms are checked with it before it is issued.
         _generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
         _generationForms = null;
+        _allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
+        _exportFormInputReaders = GeneratedValueParticipation.DescribeExportFormInputReaders(_generatedValueBuiltValues, allSyncRules);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftGeneratedObjectTypes = null; // recomputed from the rules below on first need

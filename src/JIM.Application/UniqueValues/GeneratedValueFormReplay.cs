@@ -87,8 +87,17 @@ internal sealed class GeneratedValueFormReplay
         _expressionEvaluator = expressionEvaluator;
         _priorityContext = priorityContext;
 
-        foreach (var attribute in _mvo.Type.Attributes)
+        // Names resolve from whatever describes the object's attributes: its type when loaded with them, its values, and
+        // the flows that write them, so a load that leaves the type's attributes out cannot make a form's chain unreadable.
+        var known = (_mvo.Type?.Attributes ?? [])
+            .Concat(_mvo.AttributeValues.Select(av => av.Attribute))
+            .Concat(inScopeRules.SelectMany(rule => rule.AttributeFlowRules).Select(m => m.TargetMetaverseAttribute))
+            .Append(pending.Mapping.TargetMetaverseAttribute)
+            .OfType<MetaverseAttribute>();
+        foreach (var attribute in known)
             _attributeIdsByName.TryAdd(attribute.Name, attribute.Id);
+        foreach (var form in forms.Where(f => f.MetaverseAttributeId.HasValue && f.MetaverseAttributeName != null))
+            _attributeIdsByName.TryAdd(form.MetaverseAttributeName!, form.MetaverseAttributeId!.Value);
 
         PlanReplay(inScopeRules);
     }
@@ -164,7 +173,7 @@ internal sealed class GeneratedValueFormReplay
             return;
         }
 
-        var typeId = _mvo.Type.Id;
+        var typeId = _mvo.Type?.Id ?? _pending.Mapping.SyncRule?.MetaverseObjectTypeId ?? 0;
         var generatedLevel = graph.GetLevel(typeId, _pending.AttributeId) ?? 0;
 
         // Every in-scope derived flow above the generated value's level, by the attribute it writes.
