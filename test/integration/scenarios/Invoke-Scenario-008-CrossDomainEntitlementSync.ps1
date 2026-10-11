@@ -2034,7 +2034,12 @@ try {
                     -BindPassword $sourceConfig.BindPassword `
                     -Filter "($($sourceConfig.ExternalIdAttr)=$($importItem.ExternalIdValue))" `
                     -Attributes @("uid")
-                $uid = if ($uidSearch -match '(?m)^uid:\s*(.+)$') { $matches[1].Trim() } else { $null }
+                # Line by line, as the cohort discovery above reads it: the search returns lines, and -match over a
+                # collection filters it without setting $matches, which would leave the last cohort uid in place.
+                $uid = $null
+                foreach ($line in @($uidSearch -split "`n")) {
+                    if ($line -match '^uid:\s*(.+)$') { $uid = $matches[1].Trim(); break }
+                }
                 if (-not $uid -or -not $cohortUids.Contains($uid)) {
                     $walkFailures.Add("import item $($importItem.Id) ($($importItem.DisplayName)) does not belong to a cohort member")
                     continue
