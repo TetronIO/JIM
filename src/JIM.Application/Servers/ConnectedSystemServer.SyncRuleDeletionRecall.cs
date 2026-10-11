@@ -468,12 +468,16 @@ public partial class ConnectedSystemServer
 
             foreach (var pendingExport in deprovisioningExports)
             {
+                // The rule whose Deprovisioning Action queued the Delete, named so the item says why (#1811).
+                workingSet.TryGetDeprovisioningRule(pendingExport.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
                 SyncOutcomeBuilder.AddRootOutcome(executionItem,
                     SyncOutcomeTypes.ForPendingExport(pendingExport),
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: SystemName(pendingExport.ConnectedSystemId),
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, ObjectTypeName(pendingExport.ConnectedSystemId)),
+                    syncRuleId: deprovisioningRule?.Id,
+                    syncRuleName: deprovisioningRule?.Name,
                     stagedChangeType: pendingExport.ChangeType);
             }
 
@@ -493,7 +497,9 @@ public partial class ConnectedSystemServer
                     ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                     targetEntityId: disconnection.ConnectedSystemObjectId,
                     targetEntityDescription: SystemName(disconnection.ConnectedSystemId),
-                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, ObjectTypeName(disconnection.ConnectedSystemId)));
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, ObjectTypeName(disconnection.ConnectedSystemId)),
+                    syncRuleId: disconnection.SyncRuleId,
+                    syncRuleName: disconnection.SyncRuleName);
             }
 
             SyncOutcomeBuilder.BuildOutcomeSummary(executionItem);

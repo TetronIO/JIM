@@ -465,6 +465,8 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
             Assert.That(disconnection, Is.Not.Null, "the disconnection is recorded on Carol's item: " + DescribeItems(activity));
             Assert.That(disconnection?.TargetEntityId, Is.EqualTo(carolsAccount.Id), "naming the account it disconnected");
             Assert.That(disconnection?.TargetEntityDescription, Is.EqualTo("Directory"), "and the system it is in");
+            Assert.That(disconnection?.SyncRuleId, Is.EqualTo(ctx.ExportRule.Id), "and the rule whose Deprovisioning Action left it in place (#1811)");
+            Assert.That(disconnection?.SyncRuleName, Is.EqualTo(ctx.ExportRule.Name));
             Assert.That(PendingExportsFor(ctx.Directory), Is.Empty, "a disconnection exports nothing");
         }
     }
@@ -492,6 +494,14 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
         var bobsItem = activity.RunProfileExecutionItems.SingleOrDefault(i => i.ConnectedSystemObjectId == bobInHr.Id);
         Assert.That(bobsItem, Is.Not.Null, DescribeItems(activity));
         Assert.That(bobsItem!.SyncOutcomes.Select(o => o.OutcomeType), Does.Contain(expectedOutcome), DescribeItems(activity));
+
+        // Whichever way it went, the outcome names the rule whose Deprovisioning Action decided it (#1811).
+        var deprovisioning = bobsItem.SyncOutcomes.First(o => o.OutcomeType == expectedOutcome);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deprovisioning.SyncRuleId, Is.EqualTo(ctx.ExportRule.Id));
+            Assert.That(deprovisioning.SyncRuleName, Is.EqualTo(ctx.ExportRule.Name));
+        }
     }
 
     [Test]
