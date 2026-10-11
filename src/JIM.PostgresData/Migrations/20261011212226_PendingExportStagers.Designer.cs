@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011201423_PendingExportStagers")]
+    [Migration("20261011212226_PendingExportStagers")]
     partial class PendingExportStagers
     {
         /// <inheritdoc />
@@ -3281,6 +3281,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectId", "AttributeId")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
+
+                    b.HasIndex(new[] { "ConnectedSystemObjectId" }, "IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved")
+                        .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL AND \"ReferenceValueId\" IS NULL");
 
                     b.ToTable("ConnectedSystemObjectAttributeValues");
                 });
