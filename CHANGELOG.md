@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 **Initiated By** reads the same on every page: a run a Schedule started names the Schedule and links its execution, and System has its own icon instead of the Schedule's clock. An execution item's **Operation** shows what was done to the object even when it failed. (#2066)
 - 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)

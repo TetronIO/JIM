@@ -27,7 +27,7 @@ Activities move through a small set of statuses:
 
 ## Initiated by
 
-Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself (for example, a schedule), or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in or API key attempt. This is the audit trail.
+Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in or API key attempt. This is the audit trail. An activity a Schedule produced names the Schedule, with **(Schedule)** beside it, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind has one icon, the same on every page that shows it.
 
 ## Summary statistics
 
