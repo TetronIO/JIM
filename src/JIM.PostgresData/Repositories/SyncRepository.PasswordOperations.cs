@@ -868,4 +868,36 @@ public partial class SyncRepository
     }
 
     #endregion
+
+    #region Initial Password hold (#2039)
+
+    public async Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // Raw SQL per the worker hot-path rule: asked once per confirming-import page that holds a change awaiting an
+        // Initial Password (#2039). The unique (MetaverseObjectId, ConnectedSystemId) index serves the lookup, and a
+        // read-side projection is exempt from the bulk column list rule.
+        const string sql = """
+            SELECT DISTINCT "MetaverseObjectId"
+            FROM "PendingPasswordChanges"
+            WHERE "ConnectedSystemId" = @connectedSystemId
+              AND "MetaverseObjectId" = ANY(@metaverseObjectIds)
+              AND "Status" = ANY(@owedStatuses)
+            """;
+        int[] owedStatuses =
+        [
+            (int)PendingPasswordChangeStatus.Pending,
+            (int)PendingPasswordChangeStatus.Delivering,
+            (int)PendingPasswordChangeStatus.Parked
+        ];
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId },
+            new NpgsqlParameter("metaverseObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() },
+            new NpgsqlParameter("owedStatuses", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer) { Value = owedStatuses });
+    }
+
+    #endregion
 }

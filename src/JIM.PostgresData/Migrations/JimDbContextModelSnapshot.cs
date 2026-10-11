@@ -3709,6 +3709,11 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AllowObjectTypeChanges")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -3874,6 +3879,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<bool>("ExternalIdsUniqueAcrossObjectTypes")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
@@ -4505,6 +4513,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AwaitsInitialPassword")
+                        .HasColumnType("boolean");
+
                     b.Property<bool?>("BoolValue")
                         .HasColumnType("boolean");
 
@@ -4563,7 +4574,11 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("AttributeId");
 
-                    b.HasIndex("PendingExportId");
+                    b.HasIndex("PendingExportId")
+                        .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+
+                    b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
+                        .HasFilter("\"AwaitsInitialPassword\"");
 
                     b.ToTable("PendingExportAttributeValueChanges");
                 });

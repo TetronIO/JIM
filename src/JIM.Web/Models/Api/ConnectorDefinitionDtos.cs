@@ -150,6 +150,14 @@ public class ConnectorDefinitionDto
     public bool SupportsUniquenessRejectionClassification { get; set; }
 
     /// <summary>
+    /// Whether an External ID identifies one object across every Object Type of a Connected System using this
+    /// Connector (#2049). When true, an import refuses an object that has changed Object Type rather than treating
+    /// it as a deletion plus a new object, unless the Full Import Run Profile allows Object Type changes; when
+    /// false, a Run Profile's Allow Object Type Changes setting has no effect.
+    /// </summary>
+    public bool ExternalIdsUniqueAcrossObjectTypes { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the connector's schema follows (e.g. "Scim", "Ldap", "NotSet").
     /// Advisory metadata used for Standard Mapping hints.
     /// </summary>
@@ -189,6 +197,7 @@ public class ConnectorDefinitionDto
             SupportsPasswordPolicyDiscovery = entity.SupportsPasswordPolicyDiscovery,
             SupportsUniquenessProbe = entity.SupportsUniquenessProbe,
             SupportsUniquenessRejectionClassification = entity.SupportsUniquenessRejectionClassification,
+            ExternalIdsUniqueAcrossObjectTypes = entity.ExternalIdsUniqueAcrossObjectTypes,
             SchemaStandard = entity.SchemaStandard.ToString()
         };
     }

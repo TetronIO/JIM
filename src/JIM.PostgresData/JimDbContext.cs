@@ -667,6 +667,12 @@ public class JimDbContext : DbContext
             .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
+        // #2049: Allow Object Type Changes defaults to false, so an object that changes Object Type is refused
+        // rather than retired and recreated; the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.AllowObjectTypeChanges)
+            .HasDefaultValue(false);
+
         // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
         // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
         // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either
@@ -840,6 +846,22 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingExport>()
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
+
+        // The changes held until an Initial Password is delivered (#2039), found by Drift Detection's per-page skip
+        // (ISyncRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync) and by every import's sweep of the
+        // holds it did not reconcile (ISyncRepository.GetInitialPasswordHoldSummariesAsync). Partial, because a held change
+        // exists only between an Active Directory Create and its password's delivery, so the index is all but empty and
+        // the per-page lookup costs nothing, while every other directory and every other change, which never carry the
+        // flag, add nothing to it. Named, so it is a second index beside the foreign key's own on PendingExportId
+        // rather than a filter applied to that one. The foreign key's index is declared explicitly beside it because
+        // EF's convention treats any index leading with the foreign key column as covering it, partial or not, and
+        // would otherwise drop the full index every load and cascade by Pending Export relies on.
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId)
+            .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
+            .HasFilter("\"AwaitsInitialPassword\"");
 
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or

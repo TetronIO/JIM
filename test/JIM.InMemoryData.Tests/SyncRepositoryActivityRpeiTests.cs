@@ -136,23 +136,25 @@ public class SyncRepositoryActivityRpeiTests
             new() { Id = Guid.NewGuid(), ActivityId = activityId }, // No error
             new() { Id = Guid.NewGuid(), ActivityId = activityId, ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch },
             new() { Id = Guid.NewGuid(), ActivityId = activityId, ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError },
+            new() { Id = Guid.NewGuid(), ActivityId = activityId, ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged },
             new() { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() } // Different activity
         };
 
         await _repo.BulkInsertRpeisAsync(rpeis);
 
-        var (totalWithErrors, totalRpeis, totalUnhandledErrors) =
+        var (totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals) =
             await _repo.GetActivityRpeiErrorCountsAsync(activityId);
 
-        Assert.That(totalRpeis, Is.EqualTo(3));
-        Assert.That(totalWithErrors, Is.EqualTo(2));
+        Assert.That(totalRpeis, Is.EqualTo(4));
+        Assert.That(totalWithErrors, Is.EqualTo(3));
         Assert.That(totalUnhandledErrors, Is.EqualTo(1));
+        Assert.That(totalObjectTypeChangeRefusals, Is.EqualTo(1));
     }
 
     [Test]
     public async Task GetActivityRpeiErrorCountsAsync_NoRpeis_ReturnsZerosAsync()
     {
-        var (totalWithErrors, totalRpeis, totalUnhandledErrors) =
+        var (totalWithErrors, totalRpeis, totalUnhandledErrors, _) =
             await _repo.GetActivityRpeiErrorCountsAsync(Guid.NewGuid());
 
         Assert.That(totalRpeis, Is.EqualTo(0));
