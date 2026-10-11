@@ -173,6 +173,7 @@ nav:
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
+      - Data Flow: powershell/data-flow.md
       - Metaverse: powershell/metaverse.md
       - Password Synchronisation: powershell/password-synchronisation.md
       - Predefined Searches: powershell/predefined-searches.md

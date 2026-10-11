@@ -191,7 +191,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 | **ACC-4** | Review | Every factual claim is a claim about source, so check it there. Parameter names, property names, setting keys, defaults, file paths, endpoint routes, counts and limits are all verifiable, and none is verified by the build. State a default alongside the setting key that carries it, so a reader who finds the default has drifted can find what to change. | |
 | **LNK-1** | Block | Every link and anchor in the Markdown resolves. Grep the target file for the heading rather than inferring the slug: `#passwords` and `#password-synchronisation` look equally plausible. | `Test-DocsSite.ps1` (strict MkDocs build) |
 | **LNK-2** | Block | Every link in the built site resolves, including links into the generated API reference and links written in raw HTML. | `Test-DocsSite.ps1` (lychee) |
-| **LNK-3** | Planned (Phase 2) | Every link from the product into the docs (the portal's glossary links, and `docs.junctional.io` URLs in source) resolves to a page and anchor. | |
+| **LNK-3** | Block | Every link from the product into the docs (the portal's glossary links, and `docs.junctional.io` URLs in source, the installer and the deployment files) resolves to a page and anchor. | `Test-DocsCoverage.ps1`; the glossary links, built from a template, by `GlossaryTermConsistencyTests` |
 
 **The generated references are not restated.** REST endpoint specifications live in the Scalar reference, rendered from the OpenAPI document at build time; `docs/api/` holds only overview pages that link into it. PowerShell cmdlet pages are the exception, and a known liability: no generation exists yet ([#1083](https://github.com/TetronIO/JIM/issues/1083)), so the pages under `docs/powershell/` hand-maintain parameter and output tables. Until generation exists, treat those tables as hand-written claims about source and verify each against the DTO; `src/JIM.PowerShell/CLAUDE.md` has the sharpest version of ACC-4.
 
@@ -231,19 +231,19 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 ## Coverage
 
-"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. TERM-1 is checked (Block); the COV rules are planned for Phase 2.
+"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-4, COV-5 and the connector settings of COV-6 are planned for Phase 2.
 
 | ID | Inventory | Documented means |
 |----|-----------|------------------|
-| **COV-1** | Exported cmdlets (module manifest) | A heading on the cmdlet's `docs/powershell/` page |
-| **COV-2** | Environment variables the product and installer read | A row in a settings table |
+| **COV-1** | Exported cmdlets (module manifest) | A heading, or a row in the first column of a table, on a `docs/powershell/` page |
+| **COV-2** | Environment variables the product and installer read: `Constants.Config` and `GetEnvironmentVariable` reads, the PowerShell module's `$env:` reads, the compose files, `.env.example`, and the variables the installer's header documents | A row in a settings table |
 | **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings reference |
 | **COV-4** | REST resource groups (OpenAPI tags) | An overview page under `docs/api/` that names the group |
 | **COV-5** | Portal pages (routable components) | The docs page each declares through `PageInfo` exists |
 | **COV-6** | Connector settings and expression functions | A row in the connector's or the function reference's table |
 | **TERM-1** | Product nouns: the glossary's entries, and `docs/.conformance/vocabulary.psd1` (see "The product vocabulary" under Language) | A glossary entry with an anchor, a vocabulary entry, and a home page that exists (HOME-1) |
 
-"Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
+"Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list (`docs/.conformance/coverage.psd1`) with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
 
 ## Rule index
 
@@ -285,13 +285,15 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | ACC-4 | Claims checked against source | Review | |
 | LNK-1 | Markdown links and anchors resolve | Block | `Test-DocsSite.ps1` |
 | LNK-2 | Built-site links resolve | Block | `Test-DocsSite.ps1` |
-| LNK-3 | Product deep links resolve | Planned (Phase 2) | |
+| LNK-3 | Product deep links resolve | Block | `Test-DocsCoverage.ps1` |
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
 | PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
 | TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
-| COV-1 to COV-6 | Coverage | Planned (Phase 2) | |
+| COV-1, COV-2 | Cmdlets and environment variables are documented | Block | `Test-DocsCoverage.ps1` |
+| COV-6 | Expression functions are documented (connector settings: planned, Phase 2) | Block | `Test-DocsCoverage.ps1` |
+| COV-3 to COV-5 | Service Settings, REST resource groups, portal pages | Planned (Phase 2) | |
 | TERM-1 | The vocabulary and the glossary agree; every product noun has a home page | Block | `Test-DocsConformance.ps1` |
 | EXC-1 | Exception markers are well formed and in use | Block | `Test-DocsConformance.ps1` |

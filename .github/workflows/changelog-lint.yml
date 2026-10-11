@@ -39,8 +39,13 @@ name: changelog-lint
 #      with a shrink-only baseline so
 #      existing debt can only fall - see Test-DocsConformance.ps1 (#1454). It
 #      reads Markdown sources only, so it is cheap enough to run on every PR.
+#   8. Docs coverage: the cmdlets, environment variables and expression
+#      functions the product has are all documented, nothing documented is
+#      gone, and every link from the product into the docs resolves - see
+#      Test-DocsCoverage.ps1 (#1454). It reads sources as well as pages, so a
+#      change to either can fail it, which is why it runs on every PR.
 #
-# All seven run in this single job so they are enforced via the existing
+# All eight run in this single job so they are enforced via the existing
 # required "changelog-lint" status, without registering further required checks
 # in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
@@ -93,6 +98,8 @@ jobs:
           CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
           export CHANGED_FILES
           pwsh -File ./scripts/Test-DocsConformance.ps1
+      - name: Check docs coverage against what the product has
+        run: pwsh -File ./scripts/Test-DocsCoverage.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
       - name: Check concept diagrams (label cuts and lightbox framing)
