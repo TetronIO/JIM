@@ -8,9 +8,9 @@
 .DESCRIPTION
     The capture signs in through whichever identity provider the portal redirects browsers to. When that address is
     not answering, every image fails with the same "connection refused" and nothing says which address or why. On the
-    development stack the address is a bridge to Keycloak (localhost:8181 forwarding to 8180), which
-    Run-IntegrationTests.ps1 starts only when socat is installed, so a host without socat loads its data successfully
-    and then cannot capture a single image.
+    development stack the address is localhost:8181, which the devcontainer forwards to Keycloak and the integration
+    runner bridges only where socat is installed. -PrepareData publishes it on loopback when neither has; a capture of
+    a stack prepared some other way can still find nothing there.
 
     The requests are made without a proxy, as the browser makes them.
 #>
@@ -72,6 +72,6 @@ function Get-ScreenshotSignInProblem {
 
     if (Test-HttpOriginAnswers -Origin $signInOrigin) { return $null }
     "The portal sends browsers to $signInOrigin to sign in, and nothing answers there, so every capture would fail at " +
-    "sign-in. On the development stack that address is a bridge to Keycloak (port 8180), which " +
-    "Run-IntegrationTests.ps1 starts only when socat is installed; install socat and start the bridge, then run again."
+    "sign-in. On the development stack that address is Keycloak's; run with -PrepareData, which publishes it on " +
+    "loopback when nothing else does, or start the integration runner's socat bridge, then run again."
 }

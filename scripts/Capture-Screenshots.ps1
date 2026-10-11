@@ -145,6 +145,22 @@ if ($PrepareData) {
         catch [System.Net.Http.HttpRequestException] { $ready = $false }
     } until ($ready -or (Get-Date) -gt $deadline)
     if (-not $ready) { throw "The portal did not report ready within 5 minutes of restarting in Production mode." }
+
+    # Sign-in needs Keycloak where the realm sends browsers. The devcontainer forwards that address and the runner
+    # bridges it where socat is installed; on a host with neither (a CI runner), publish it on loopback instead.
+    $signInOrigin = 'http://localhost:8181'
+    if (-not (Test-HttpOriginAnswers -Origin $signInOrigin)) {
+        Write-Host "Publishing Keycloak at $signInOrigin (loopback only) for sign-in ..."
+        Push-Location $repoRoot
+        try {
+            docker compose @compose -f 'scripts/screenshots/docker-compose.keycloak-loopback.yml' up -d --no-deps jim.keycloak | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Publishing Keycloak at $signInOrigin failed (docker compose exited $LASTEXITCODE)." }
+        }
+        finally { Pop-Location }
+        $deadline = (Get-Date).AddMinutes(3)
+        do { Start-Sleep -Seconds 3 } until ((Test-HttpOriginAnswers -Origin $signInOrigin) -or (Get-Date) -gt $deadline)
+        if (-not (Test-HttpOriginAnswers -Origin $signInOrigin)) { throw "Keycloak did not answer at $signInOrigin within 3 minutes of publishing it." }
+    }
     Write-Host ("Data ready in {0:hh\:mm\:ss}." -f ((Get-Date) - $dataStarted))
 }
 

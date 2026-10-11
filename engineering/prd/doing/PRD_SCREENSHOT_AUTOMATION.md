@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (Phases 1 to 4 complete: all 78 images in junctional.io's asset folder are in the manifest and capture at their published size, with `-PrepareData` proven unattended; distribution outstanding)
+- **Status:** Doing (Phases 1 to 4 and 6 complete, and junctional.io distribution built: the release's pre-release run captures the library and opens the site's pull request; the first automated publish, the README's switch to the fixed address, and tetron.io are outstanding)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -45,17 +45,18 @@ Because a refresh is this expensive, screenshots fall behind the product, which 
 
 1. A declarative manifest (`scripts/screenshots/manifest.json`) lists every screenshot: its name, kind (`portal`, `api-reference`, `terminal`), the steps that reach it, which themes it is captured in, its geometry profile, and where it is published.
 2. `scripts/Capture-Screenshots.ps1` signs in through the bundled Keycloak realm, captures every manifest entry (or those named by `-Name`), and writes `<OutputPath>/<Version>/<name>-<theme>.png` (`<name>.png` for single-theme images). The default output path is `artifacts/screenshots`, which is gitignored.
-3. The manifest is validated before the browser starts: unknown kinds, profiles or themes, duplicate names, and steps of an unknown shape are rejected with the entry named. So is sign-in: when nothing answers at the address the portal sends browsers to (on the development stack, the Keycloak bridge on port 8181, which the integration runner starts only where `socat` is installed), the run stops and names it, rather than failing every image with the same refused connection.
+3. The manifest is validated before the browser starts: unknown kinds, profiles or themes, duplicate names, and steps of an unknown shape are rejected with the entry named. So is sign-in: when nothing answers at the address the portal sends browsers to (on the development stack, Keycloak at `localhost:8181`, which the devcontainer forwards and the integration runner bridges only where `socat` is installed), the run stops and names it, rather than failing every image with the same refused connection. `-PrepareData` publishes that address itself, on the loopback interface only, where nothing else does.
 4. After capture, every image's pixel dimensions are checked against its profile; any mismatch fails the run and names the image.
 5. Each capture waits until the page is ready: network idle, web fonts loaded, no progress indicator or Blazor reconnect overlay showing, plus any element the entry names. Animations and the text caret are disabled and the pointer is parked where it hovers nothing.
 6. Theme and navigation state are set the way a user would leave them, through the portal's own preferences (`jim_darkMode`, `jim_navGroup_*` in browser storage), before the first page loads.
 7. Data preparation (`-PrepareData`) runs integration Scenario 8 through `Run-IntegrationTests.ps1` against OpenLDAP at a chosen template (default `Scale100k50Groups`, matching the published images), adds the Scenario 8 Schedules, then rebuilds the JIM services at the release version (without the runner's development suffix, which the footer and `Connect-JIM` would show) and recreates them in Production mode on the same database.
 8. Terminal screenshots run real PowerShell commands against the live stack inside a 120×30 pseudo-terminal, so the output, its colours and its Format-List styling are exactly what a terminal shows. The typed command is highlighted from PowerShell's own tokeniser with PSReadLine's default colours. The session is drawn in a recreated macOS-style terminal window (IBM Plex Mono, which JIM already self-hosts; the palette, window box and shadow are measured from the published images) and captured with a transparent background. Box-drawing and block characters are drawn as vectors, one per cell, so the banner tiles whatever the font covers. A command may be marked as set-up (for example signing in), which runs but does not appear. Like a real terminal, a session longer than 30 rows shows its last 30. The session signs in with an API key read from a file (by default the one the integration runner leaves), never from a command line, so the image shows only `Connect-JIM`'s masked form of it; dates and numbers are written as en-GB, whatever the recording host's locale.
 9. The run ends with a summary: images written, by kind and theme, and elapsed time.
+10. Publishing (`scripts/screenshots/Publish-TourScreenshots.ps1`) updates a junctional.io checkout and opens a pull request with it. Only the images the tour's steps name are published, read from the site's own dictionaries, which must name identical images; the homepage images are also written to `public/assets/screenshots/`, whose addresses never change; folders no step uses are removed. Everything is checked before anything changes: a missing image or disagreeing dictionaries stop the run with the site untouched. The commit is made through GitHub's API with the `jim-automation` app's token, so GitHub signs it. One branch and one pull request per version: publishing again moves the branch and updates the open pull request.
 
 ### Non-Functional Requirements
 
-- **No new dependencies.** Browser automation reuses the Playwright the dev container already installs, through `scripts/JimPlaywright.ps1`, as the docs checks do.
+- **No new dependencies.** Browser automation reuses the Playwright the dev container already installs, through `scripts/JimPlaywright.ps1`, as the docs checks do. The release job installs the same pinned `@playwright/mcp` version (`.devcontainer/setup.sh`, watched by `tooling-pin-check`), and every action it uses is already pinned elsewhere in the repository.
 - **Air-gap compatible.** Nothing is fetched at capture time beyond the JIM stack itself.
 - **No secrets in the repository.** The default sign-in is the bundled development realm's documented account; any other is passed as a `PSCredential`.
 - **Scale:** the `Scale100k50Groups` template needs a host with 20+ GB of RAM, so release captures run in the dev container or on a self-hosted runner, not in a 15 GB cloud sandbox (which can use a smaller template for development).
@@ -108,8 +109,8 @@ The integration runner resets the environment at the start of a run and leaves i
 
 | Destination | Mechanism | Phase |
 |---|---|---|
-| junctional.io | A PR adding `src/assets/tour/<version>/` and setting `tour.imageVersion` in both `src/i18n/en-GB.ts` and `src/i18n/en-US.ts`. The site's Astro pipeline makes the AVIF/WebP variants, so only the PNG sources are needed. | 5 |
-| JIM README | Point the hero image at a stable URL instead of the content-hashed `/_astro/` path. | 5 |
+| junctional.io | A PR adding `src/assets/tour/<version>/` with the images the tour shows (22 of the 78; the whole library stays in the run's artefact, because every image committed to the site stays in its history for good) and setting `tour.imageVersion` in both `src/i18n/en-GB.ts` and `src/i18n/en-US.ts`. The site's Astro pipeline makes the AVIF/WebP variants, so only the PNG sources are needed. Opened by the release's pre-release run, merged by a person once the release is published. | 5 ✅ |
+| JIM README | Point the hero image at `https://junctional.io/assets/screenshots/homepage-dark.png`, which every publish writes, instead of the content-hashed `/_astro/` path, which stops resolving at the first publish. | 5 |
 | tetron.io | To be scoped: find where its screenshots live and how it deploys. | 5 |
 | docs.junctional.io | Not in scope (see Non-Goals). | n/a |
 
@@ -119,8 +120,8 @@ The integration runner resets the environment at the start of a run and leaves i
 2. **Scenario 8 data and Production mode** ✅. `-PrepareData`, then the remaining tour entries.
 3. **Terminal screenshots** ✅. The HTML terminal window, built after the mock-ups were approved: `powershell-1` (signing in) to `powershell-3` (a session longer than the terminal).
 4. **The rest of the library** ✅. The 54 images in junctional.io's asset folder that are not on a tour page. Reaching a particular object (a user, a group, the first Full Sync) uses a `fill` step to type into a page's search box, or a list's own URL state (`?q=`, `desc=0`), never an id that changes from run to run.
-5. **Distribution.** junctional.io PR, README stable URL, tetron.io.
-6. **Release workflow (later).** A workflow on a self-hosted runner with enough memory, run on demand or on release tag.
+5. **Distribution.** The junctional.io pull request ✅; the README's switch to the fixed address; tetron.io.
+6. **Release workflow** ✅. The `jim-screenshots` job in `pre-release.yml`, after a passing suite, on the same runner and commit. A job there rather than a workflow of its own, because the `jim-prerelease` runner group admits that one file; it cannot hold up a release, since the gate reads the status the suite has already posted.
 
 ## Affected Areas
 
@@ -135,8 +136,8 @@ The integration runner resets the environment at the start of a run and leaves i
 | Doc | Change |
 |------|--------|
 | `engineering/SANDBOX_RUNTIME_VERIFICATION.md` | Capture at 2× density and 1674×1046 instead of 1440×900 at 1×, so verification screenshots are legible |
-| `engineering/RELEASE_PROCESS.md` | Add the screenshot refresh to the release steps (Phase 5) |
-| `.claude/skills/release/SKILL.md` | Replace "screenshots are out of scope; request them from the user" with the capture command (Phase 5) |
+| `engineering/RELEASE_PROCESS.md` | Product Tour Screenshots: when the job runs, where the images go, what to merge, the runner's one-time setup (Phase 6) ✅ |
+| `.claude/skills/release/SKILL.md` | Post-release: merge the screenshot pull request; the site prompt leaves the tour's images to it (Phase 6) ✅ |
 
 ## Acceptance Criteria
 
