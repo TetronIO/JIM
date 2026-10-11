@@ -128,7 +128,6 @@ STR-2	connectors/jim-scim-connector.md	4
 STR-2	connectors/jim-sql-connector-delta-import-change-log.md	4
 STR-2	connectors/jim-sql-connector-delta-import-watermark.md	4
 STR-2	connectors/jim-sql-connector.md	4
-STR-2	getting-started/first-synchronisation.md	3
 STR-2	getting-started/index.md	2
 STR-2	getting-started/prerequisites.md	2
 STR-2	getting-started/quickstart.md	2
@@ -158,5 +157,3 @@ STR-2	powershell/system.md	3
 STR-2	powershell/worker-tasks.md	3
 STR-2	reference/glossary.md	4
 STR-2	reference/roadmap.md	4
-STR-6	administration/troubleshooting.md	1
-STR-6	getting-started/first-synchronisation.md	1
