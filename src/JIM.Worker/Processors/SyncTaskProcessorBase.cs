@@ -6050,7 +6050,7 @@ public abstract class SyncTaskProcessorBase
             if (match == null)
                 continue;
 
-            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule);
+            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule, match);
         }
 
         // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
@@ -6063,7 +6063,7 @@ public abstract class SyncTaskProcessorBase
                 var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
                 // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
                 if (match != null)
-                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null);
+                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null, match);
             }
         }
 
@@ -6133,7 +6133,7 @@ public abstract class SyncTaskProcessorBase
     /// to whichever site builds the root.
     /// </returns>
     private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
-        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule)
+        ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
@@ -6181,7 +6181,9 @@ public abstract class SyncTaskProcessorBase
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
-        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow);
+        // Which Object Matching Rule found the match, and on what value (#2052), so the join can be explained.
+        connectedSystemObject.RecordJoin(ConnectedSystemObjectJoinMethod.InboundMatching, joiningSyncRule, DateTime.UtcNow,
+            match.Rule, match.MatchedValue);
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -119,10 +120,42 @@ public class ObjectMatchingServer
             }
 
             Log.Debug("FindMatchingMetaverseObjectAsync: Found MVO {MvoId} using rule {RuleId}", mvo.Id, matchingRule.Id);
-            return new ImportMatch(mvo, matchingRule, resolution);
+            return new ImportMatch(mvo, matchingRule, resolution, DescribeMatchedValues(mvo, matchingRule, resolution));
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The looked-up values <paramref name="mvo"/> holds for the rule's Metaverse attribute, as text: what the join
+    /// matched on, recorded on the joined object (#2052). Every value is listed when, unexpectedly, none can be
+    /// confirmed, so the record never claims less than was looked up.
+    /// </summary>
+    private static string DescribeMatchedValues(MetaverseObject mvo, ObjectMatchingRule rule, MatchValueResolution resolution)
+    {
+        var attributeId = rule.TargetMetaverseAttribute!.Id;
+        var held = mvo.AttributeValues
+            .Where(av => av.AttributeId == attributeId)
+            .Select(av => resolution.ValueType switch
+            {
+                AttributeDataType.Text => (object?)av.StringValue,
+                AttributeDataType.Number => av.IntValue,
+                AttributeDataType.LongNumber => av.LongValue,
+                AttributeDataType.Decimal => av.DecimalValue,
+                AttributeDataType.Guid => av.GuidValue,
+                _ => null
+            })
+            .Where(value => value != null)
+            .ToList();
+
+        var comparer = rule.CaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        bool Holds(object value) => value is string text
+            ? held.OfType<string>().Any(heldText => comparer.Equals(heldText, text))
+            : held.Contains(value);
+
+        var matched = resolution.Values.Where(Holds).ToList();
+        return string.Join(", ", (matched.Count > 0 ? matched : resolution.Values)
+            .Select(value => Convert.ToString(value, CultureInfo.InvariantCulture)));
     }
 
     /// <summary>

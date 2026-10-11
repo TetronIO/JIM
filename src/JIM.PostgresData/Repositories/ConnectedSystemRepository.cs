@@ -911,6 +911,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(omr => omr.MetaverseObjectType)
             .SingleOrDefaultAsync(omr => omr.Id == id);
     }
+
+    public async Task<List<ObjectMatchingRule>> GetObjectMatchingRulesAsync(IReadOnlyCollection<int> ids)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        return await Repository.Database.ObjectMatchingRules
+            .AsSplitQuery()
+            .Include(omr => omr.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(omr => omr.TargetMetaverseAttribute)
+            .Where(omr => ids.Contains(omr.Id))
+            .ToListAsync();
+    }
     #endregion
 
     #region Connected System Objects
@@ -8142,6 +8156,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -8268,7 +8284,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer, {{{offset + 9}}}::integer, {{{offset + 10}}}::integer, {{{offset + 11}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer, {{{offset + 9}}}::integer, {{{offset + 10}}}::integer, {{{offset + 11}}}::text, {{{offset + 12}}}::integer, {{{offset + 13}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -8283,6 +8299,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");
@@ -8317,7 +8335,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::integer, {{{offset + 6}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::integer, {{{offset + 6}}}::text, {{{offset + 7}}}::integer, {{{offset + 8}}}::text)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -8327,6 +8345,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ");

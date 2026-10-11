@@ -1758,6 +1758,12 @@ public interface IConnectedSystemRepository
     /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+
+    /// <summary>
+    /// The Object Matching Rules with these ids that still exist, each with its source's Connected System attribute
+    /// and its Target Metaverse Attribute: what an explanation needs to say what a rule compares (#2052).
+    /// </summary>
+    Task<List<ObjectMatchingRule>> GetObjectMatchingRulesAsync(IReadOnlyCollection<int> ids);
     #endregion
 
     #region Connected System Deletion

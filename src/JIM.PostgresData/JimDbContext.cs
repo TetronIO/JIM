@@ -1014,6 +1014,20 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_ConnectedSystemObjects_JoinSyncRuleId")
             .HasFilter("\"JoinSyncRuleId\" IS NOT NULL");
 
+        // Join provenance (#2052): the Object Matching Rule that found the object's Metaverse Object. SetNull on rule
+        // deletion for the JoinSyncRuleId reason (the object survives, and JoinMatchValue still says what it matched
+        // on), and partially indexed for the same reason: deleting a rule must not scan the whole Connector Space.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasOne<ObjectMatchingRule>()
+            .WithMany()
+            .HasForeignKey(cso => cso.JoinObjectMatchingRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.JoinObjectMatchingRuleId)
+            .HasDatabaseName("IX_ConnectedSystemObjects_JoinObjectMatchingRuleId")
+            .HasFilter("\"JoinObjectMatchingRuleId\" IS NOT NULL");
+
         // Additional performance indexes for worker task queue processing
         // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
         modelBuilder.Entity<WorkerTask>()

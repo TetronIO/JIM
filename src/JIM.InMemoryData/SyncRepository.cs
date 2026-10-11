@@ -640,6 +640,8 @@ public class SyncRepository : ISyncRepository
         JoinMethod = cso.JoinMethod,
         JoinSyncRuleId = cso.JoinSyncRuleId,
         JoinSyncRuleName = cso.JoinSyncRuleName,
+        JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId,
+        JoinMatchValue = cso.JoinMatchValue,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
         DerivedInputChangePending = cso.DerivedInputChangePending,
@@ -973,6 +975,8 @@ public class SyncRepository : ISyncRepository
                 stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
+                stored.JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+                stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
@@ -1045,6 +1049,8 @@ public class SyncRepository : ISyncRepository
                 stored.JoinMethod = cso.JoinMethod;
                 stored.JoinSyncRuleId = cso.JoinSyncRuleId;
                 stored.JoinSyncRuleName = cso.JoinSyncRuleName;
+                stored.JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
+                stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.Status = cso.Status;
                 BumpRowVersion(stored);
                 UpdateMvoIndex(stored);

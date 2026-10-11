@@ -12,4 +12,6 @@ namespace JIM.Models.Logic;
 /// <param name="MetaverseObject">The Metaverse Object to join.</param>
 /// <param name="Rule">The Object Matching Rule that found it.</param>
 /// <param name="Resolution">The values the rule computed and looked up.</param>
-public sealed record ImportMatch(MetaverseObject MetaverseObject, ObjectMatchingRule Rule, MatchValueResolution Resolution);
+/// <param name="MatchedValue">The looked-up values the Metaverse Object holds, as text, separated by commas: what the
+/// join matched on.</param>
+public sealed record ImportMatch(MetaverseObject MetaverseObject, ObjectMatchingRule Rule, MatchValueResolution Resolution, string MatchedValue);
