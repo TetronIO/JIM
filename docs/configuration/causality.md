@@ -51,7 +51,7 @@ Objects the run itself never touched join the story where its consequences reach
 
 Objects that the same change reached for the same reason read as one card carrying an exact count ("Removed Tina Adams from Static Members on 4,218 Groups"). The count is exact however large the cohort is. Expanding the card lists its members 50 at a time with **Show 50 more**, and a cohort of more than 10 offers a find box to narrow the list by name.
 
-Where a configured setting decided an outcome, its card names that setting: a deprovision card names the [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) that deleted the account or left it in place, and the card for a deleted Metaverse Object names its Deletion Rule and what the grace period meant. Those are the settings to change for a different result next time. When the item that deleted a Metaverse Object has since aged out of Activity retention, a note beneath its events still says it was deleted after this run and links its deletion record.
+Where a configured setting decided an outcome, its card names that setting: a deprovision card names the [Deprovisioning Action](deprovisioning.md) that deleted the account or left it in place, and the card for a deleted Metaverse Object names its Deletion Rule and what the grace period meant. Those are the settings to change for a different result next time. When the item that deleted a Metaverse Object has since aged out of Activity retention, a note beneath its events still says it was deleted after this run and links its deletion record.
 
 ### Where each branch ends
 
@@ -79,4 +79,4 @@ The summary band adds an **After this run** strip of what followed, separate fro
 
 - [Activities](activities.md): execution items and the causality panel's views.
 - [PowerShell: Activities](../powershell/activities.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort.
-- [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) and [grace period](metaverse.md#grace-period): the settings the deletion cards name.
+- [Deprovisioning Action](deprovisioning.md) and [grace period](metaverse.md#grace-period): the settings the deletion cards name.

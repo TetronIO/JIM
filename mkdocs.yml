@@ -131,6 +131,13 @@ nav:
       - Removing a Connected System: configuration/removing-a-connected-system.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
+      - Scoping Criteria: configuration/scoping-criteria.md
+      - Object Matching Rules: configuration/object-matching-rules.md
+      - Attribute Mappings: configuration/attribute-mappings.md
+      - Generated Values: configuration/generated-values.md
+      - Deriving Metaverse Attributes: configuration/derived-attributes.md
+      - Deprovisioning: configuration/deprovisioning.md
+      - Initial Password: configuration/initial-password.md
       - Data Flow: configuration/data-flow.md
       - Metaverse: configuration/metaverse.md
       - Predefined Searches: configuration/predefined-searches.md

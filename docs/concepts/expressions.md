@@ -52,7 +52,7 @@ cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
 
-Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) for the evaluation order, loops, and which synchronisation evaluates the flow.
+Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/derived-attributes.md) for the evaluation order, loops, and which synchronisation evaluates the flow.
 
 In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
 
@@ -184,7 +184,7 @@ Eq(Lower(mv["Status"]), "active")
 | `ToFileTime(date)` | Convert a date to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
 | `FromFileTime(filetime)` | Convert an Active Directory FILETIME back to a date | `FromFileTime(cs["accountExpires"])` |
 
-`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
 
 ### Distinguished Name (DN) Functions
 
@@ -286,7 +286,7 @@ Where a component simply has no safe fallback, guarding is not enough and you wa
 
 ### 4. Whitespace-only results become no value (by default)
 
-A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/synchronisation-rules.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
+A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/attribute-mappings.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
 
 ### 5. Missing Input Behaviour: have JIM refuse rather than guess
 
@@ -303,7 +303,7 @@ It is set per expression source on an Attribute Flow, in the portal beside the e
 
 Both failure behaviours report against the object on every run until the missing value is supplied or the configuration changes, so the errors are a work queue rather than a one-off notification. Neither behaviour writes anything: "Fail this mapping" leaves the target attribute exactly as it was, and "Fail the object" leaves the whole object untouched.
 
-On an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), its `mv["..."]` inputs count exactly as its `cs["..."]` inputs do, so "Contribute no value" waits for an Account Name that has not arrived yet rather than building `@corp.local`.
+On an import Attribute Flow that [derives a Metaverse attribute](../configuration/derived-attributes.md), its `mv["..."]` inputs count exactly as its `cs["..."]` inputs do, so "Contribute no value" waits for an Account Name that has not arrived yet rather than building `@corp.local`.
 
 The default is **Evaluate anyway** on every existing and newly created mapping, so nothing changes until you choose otherwise. Guarding the expression and setting a behaviour are complementary rather than alternatives: guard where the absence is expected and you know the right answer, and set a behaviour where it is not.
 
@@ -354,9 +354,9 @@ IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 This reads as: "If the Employee Status is Active, set the value to 512 (enabled), otherwise set it to 514 (disabled)."
 
 !!! note "Creating accounts enabled on Active Directory"
-    Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
+    Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/initial-password.md) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
 
-    One exception: with the Initial Password's **Enable the Connected System Object once the password is set** on, as it is by default, the password's delivery enables every account the rule provisions, including one this expression creates disabled (`514`), such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export restore the expression's `514`; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](../configuration/synchronisation-rules.md#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch that setting off, or scope provisioning to active people; see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled).
+    One exception: with the Initial Password's **Enable the Connected System Object once the password is set** on, as it is by default, the password's delivery enables every account the rule provisions, including one this expression creates disabled (`514`), such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export restore the expression's `514`; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](../configuration/initial-password.md#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch that setting off, or scope provisioning to active people; see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled).
 
 **Check if an account is currently disabled:**
 

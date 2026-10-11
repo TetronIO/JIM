@@ -471,7 +471,7 @@ $preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it): what previews are and how to read them
 - [Sync Preview](../configuration/sync-preview.md): what `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview` evaluate, including the destructive cascade
 - [Metaverse](../configuration/metaverse.md#previewing-a-deletion-settings-change): what a deletion settings preview evaluates
-- [Synchronisation Rules](../configuration/synchronisation-rules.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
+- [Synchronisation Rules](../configuration/deprovisioning.md#previewing-a-destructive-toggle-change): what a destructive toggle preview evaluates
 - [Metaverse cmdlets](metaverse.md#set-jimmetaverseobjecttype): applying a previewed change with `-PreviewActivityId`
 - [Synchronisation Rule cmdlets](synchronisation-rules.md#set-jimsyncrule): applying a previewed toggle change with `-PreviewActivityId`
 - [Activities](activities.md): the Activity a preview runs as, and the one the change it informed is recorded under
