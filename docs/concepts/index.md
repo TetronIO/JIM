@@ -30,7 +30,7 @@ Where a Connector supports it and you have configured it, JIM can set passwords 
 
 ## 🧮 Expressions
 
-JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See the [Expression Language Guide](expressions.md) for syntax, functions, and examples.
+JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See [Expressions](expressions.md) for syntax, functions, and examples.
 
 ## 🏷️ Object Naming
 
@@ -38,4 +38,4 @@ Wherever JIM shows you an object, it names it the same way: an ordered list of n
 
 ## 🔡 Case Sensitivity
 
-JIM compares identity data exactly (case-sensitive) by default, keeps the identifiers it generates unique without regard to case, and keeps configuration names and search forgiving (case-insensitive). The [Case Sensitivity](case-sensitivity.md) page explains where each rule applies, why uniqueness differs, and how to relax matching and scoping per rule where a data source is inconsistent.
+Whenever JIM compares text it is asking one of four questions, and each has one rule: whether a value has changed is exact, whether two values are the same thing ignores case, whether a value meets a condition is exact unless you say otherwise, and finding things ignores case. The [Case Sensitivity](case-sensitivity.md) page explains why, and lists every feature with the rule it follows.

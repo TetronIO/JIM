@@ -143,7 +143,7 @@ JIM evaluates the matching rules in order and uses the first match found. You ca
 2. If no match, try `mail` (secondary)
 3. If no match, try `firstName` + `lastName` (least reliable)
 
-Attribute comparisons in a matching rule are case-sensitive by default. Where systems disagree on casing, you can make an individual rule case-insensitive; see [Case Sensitivity](../concepts/case-sensitivity.md).
+A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on **Case sensitive** only where a system treats them as different objects; see [Case Sensitivity](../concepts/case-sensitivity.md#object-matching-rules).
 
 ### Matching outcomes
 
@@ -885,4 +885,4 @@ For the full recall semantics (re-election, Value cleared outcomes, and how disa
 - [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
 - [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
 - [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
-- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, how to make them case-insensitive, and why generated values are unique without regard to case
+- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- the four questions JIM asks when comparing text, and which features ask which

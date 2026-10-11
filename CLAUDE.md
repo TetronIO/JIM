@@ -10,7 +10,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
-- `docs/CLAUDE.md` - MkDocs site, diagram embedding, doc style
+- `docs/CLAUDE.md` - MkDocs site mechanics and diagram embedding; the rules for every page (audience, page types, voice, maintenance, rule IDs) are `engineering/DOCUMENTATION_STANDARD.md`
 
 ## Context7 MCP
 

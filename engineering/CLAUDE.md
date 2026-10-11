@@ -207,6 +207,7 @@ Internal engineering artefacts live under `engineering/`; the customer-facing Mk
   - `COMPLIANCE_MAPPING.md` - Security framework and standards compliance mapping
   - `DATABASE_GUIDE.md` - PostgreSQL configuration, connection pooling, and backup/restore
   - `DEVELOPER_GUIDE.md` - Comprehensive development guide
+  - `DOCUMENTATION_STANDARD.md` - The rules for public documentation (`docs/`), with rule IDs, tiers and how they are enforced
   - `INTEGRATION_TESTING.md` - Integration testing guide
   - `plans/done/MVP_DEFINITION.md` - MVP completion record and future roadmap
   - `RELEASE_PROCESS.md` - Release and deployment procedures
@@ -246,7 +247,7 @@ JIM follows strict security development practices aligned with NCSC, CISA, OWASP
 
 Documentation is part of the definition of done, not a follow-up. Any change that alters behaviour an administrator can observe must update the relevant documentation **in the same PR**:
 
-- **Public documentation (`docs/`)** is the customer-facing how-to, reference, and concept material. New features and changed behaviour must be documented here. This is mechanically enforced: a PR that adds a ✨ (new feature) or 🔄 (changed behaviour) entry to the changelog must also change a file under `docs/`, or opt out explicitly (see Enforcement below).
+- **Public documentation (`docs/`)** is the customer-facing how-to, reference, and concept material. New features and changed behaviour must be documented here. This is mechanically enforced: a PR that adds a ✨ (new feature) or 🔄 (changed behaviour) entry to the changelog must also change a file under `docs/`, or opt out explicitly (see Enforcement below). *How* to change the page is the documentation standard ([`DOCUMENTATION_STANDARD.md`](DOCUMENTATION_STANDARD.md)): rewrite what the change made wrong rather than appending to it (MNT-1, MNT-2), and keep to the page's type and size budget (which `changelog-lint` checks) and to its voice (which the reviewer checks).
 - **Engineering reference documentation (`engineering/`)** is the architecture guide, developer guide, and living design docs. Keep these current when a change makes them stale (a new component, a changed data flow, a superseded design decision). This is a judgement call, not mechanically enforced; the PR template prompts for it.
 - **Point-in-time records are exempt.** Do **not** retro-edit completed plans (`engineering/plans/done/`) or PRDs to reflect later changes; they capture a decision at a moment in time. Update the living reference docs instead.
 
