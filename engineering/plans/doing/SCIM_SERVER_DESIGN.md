@@ -2,9 +2,9 @@
 
 - **Status:** Doing (design revised 11 October 2026; implementation not started)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
-- **Sub-issues fixed as part of this work:** {{SUBISSUES}}
+- **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
-- **Backlog and parked follow-ups:** {{FOLLOWUPS}}
+- **Backlog and parked follow-ups:** [#2098](https://github.com/TetronIO/JIM/issues/2098) (Reset SCIM store, backlog), [#2099](https://github.com/TetronIO/JIM/issues/2099) (SCIM inbound password channel, parked; sub-issue of #1119)
 - **Related Plans:** [`../done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`../METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md), [`../done/OUTBOUND_SYNC_DESIGN.md`](../done/OUTBOUND_SYNC_DESIGN.md) (Event-Based Sync Roadmap)
 - **Last Updated:** 2026-10-11
 
@@ -70,7 +70,7 @@ Rejected alternatives (judge panel, weighted for integrity, conformance, scope, 
 
 The universal SCIM credential is a static token sent as `Authorization: Bearer <token>`; every mainstream client supports it and several support nothing else. Mainstream SCIM servers issue it the same way: generated in the admin UI and shown once, usable only for SCIM and one tenant, about a year's lifetime, two at a time for rotation.
 
-- **Bearer everywhere.** JIM API keys move to `Authorization: Bearer jim_ak_...` only, across the whole product, and `X-API-Key` is removed ({{bearer-only}}). JIM is pre-v1.0, so there is no compatibility window.
+- **Bearer everywhere.** JIM API keys move to `Authorization: Bearer jim_ak_...` only, across the whole product, and `X-API-Key` is removed ([#2088](https://github.com/TetronIO/JIM/issues/2088)). JIM is pre-v1.0, so there is no compatibility window.
 - **Scope is mandatory for SCIM.** A key used on `/scim/v2/{id}` must be scoped to that Connected System. A scoped key carries no role claims (not even the virtual User role) and is refused on every other path. The scope model is generic (scope type plus target) because #1566 needs scoped keys too.
 - **At most two active scoped keys per Connected System,** for overlap rotation; the portal shows each key's last-used time and address so the administrator can see the old one has gone quiet.
 - **Expiry is mandatory** for scoped keys: default 365 days, capped, with warnings as it approaches.
@@ -80,6 +80,8 @@ The universal SCIM credential is a static token sent as `Authorization: Bearer <
 - **Leniency.** The scheme name is matched case-insensitively, and a bare `jim_ak_...` value without the `Bearer` prefix is accepted on `/scim` only, because some clients send the configured header value verbatim.
 
 ### D4. A second authentication method is deferred until a customer needs it
+
+> **Awaiting product owner decision.** This section records the recommendation; confirm or change it before Phase 4.
 
 The original design's "Federated Identity Credential" (the client presenting its own IdP-signed JWT on SCIM calls) is dropped: no mainstream SCIM client does this. The options for a second method, assessed in the October review:
 
@@ -96,9 +98,9 @@ Most large SCIM services accept only static tokens, so v1 ships with D3 alone. W
 - A request carrying `password` (POST, PUT, PATCH, including no-path value objects and `add` operations) gets `400` with `scimType` `invalidValue`; a filter on `password` gets `400` `invalidFilter`. Both checks run before anything touches the store.
 - `password` is left out of the published `/Schemas`, and `ServiceProviderConfig.changePassword.supported` is `false`.
 - The store has no password column and never keeps a document built from the unsanitised request; logs, Activities and error details never hold the value or its length.
-- One write-only-attribute intake function, called from the single deserialise and PATCH-apply boundary, owns these rules. It is the seam for the parked inbound password channel ({{scim-inbound-password-channel}}), which needs its own decisions: an explicit per-Connected-System "authoritative for passwords" opt-in, what to do before a Metaverse Object exists, and the assurance gap against #1566.
+- One write-only-attribute intake function, called from the single deserialise and PATCH-apply boundary, owns these rules. It is the seam for the parked inbound password channel ([#2099](https://github.com/TetronIO/JIM/issues/2099)), which needs its own decisions: an explicit per-Connected-System "authoritative for passwords" opt-in, what to do before a Metaverse Object exists, and the assurance gap against #1566.
 - Refusing (rather than silently discarding) never tells an identity provider that a password was set when it was not.
-- The separate defect that lets the shipped client map and export `password` in clear text is fixed first ({{scim-password-exposure}}).
+- The separate defect that lets the shipped client map and export `password` in clear text is fixed first ([#2091](https://github.com/TetronIO/JIM/issues/2091)).
 
 ### D6. `JIM.Scim` is the one SCIM protocol layer
 
@@ -109,7 +111,7 @@ The server consumes `src/JIM.Scim` from JIM.Web and JIM.Application and adds no 
 - **A server mode for the resource reader and writer** that honours `mutability` and `returned` (ignore client-supplied `id` and `meta`; emit `id` and `meta` in responses; never return write-only attributes).
 - **ETag helpers** with SCIM's weak comparison.
 - **Discovery emitters** for `/ServiceProviderConfig`, `/ResourceTypes` and `/Schemas`, with the resource-type composition moved out of the client's private `ScimConnectorSchema` so client and server derive identical schemas.
-- **Defect fixed first:** the writer collapses multi-valued complex attributes without canonical types (`roles`, `entitlements`, `x509Certificates`) to the first value ({{scim-writer-multivalue}}).
+- **Defect fixed first:** the writer collapses multi-valued complex attributes without canonical types (`roles`, `entitlements`, `x509Certificates`) to the first value ([#2090](https://github.com/TetronIO/JIM/issues/2090)).
 
 ### D7. Identifiers
 
@@ -151,7 +153,7 @@ The store accepts every supported resource type and keeps the whole sanitised pa
 
 ### D13. Resetting the store is a backlog item only
 
-Clearing a store is unlike clearing a Connector Space: JIM cannot rebuild it, and until the identity provider re-pushes, JIM sees what looks like a mass delete. The supported guidance is to create a new Connected System for scenarios such as pointing at a different identity provider tenant. A reset feature ({{reset-scim-store-backlog}}) needs a hard benefits-versus-risks review once the Service Provider has been in use and feedback is available.
+Clearing a store is unlike clearing a Connector Space: JIM cannot rebuild it, and until the identity provider re-pushes, JIM sees what looks like a mass delete. The supported guidance is to create a new Connected System for scenarios such as pointing at a different identity provider tenant. A reset feature ([#2098](https://github.com/TetronIO/JIM/issues/2098)) needs a hard benefits-versus-risks review once the Service Provider has been in use and feedback is available.
 
 ### D14. Latency is stated honestly
 
@@ -265,12 +267,12 @@ The JIM-to-JIM scenario must exercise everything the client relies on: discovery
 
 ### Phase 0: Prerequisites, each its own stacked PR beneath the feature
 
-- API keys as `Authorization: Bearer` only ({{bearer-only}}).
-- Run Profile deletion safeguards for Delta Import deletes ({{delta-delete-safeguards}}); the Service Provider runs almost entirely on Delta Import.
-- `JIM.Scim` multi-value writer fix ({{scim-writer-multivalue}}).
-- SCIM `password` exposure fix ({{scim-password-exposure}}).
+- API keys as `Authorization: Bearer` only ([#2088](https://github.com/TetronIO/JIM/issues/2088)).
+- Run Profile deletion safeguards for Delta Import deletes ([#2089](https://github.com/TetronIO/JIM/issues/2089)); the Service Provider runs almost entirely on Delta Import.
+- `JIM.Scim` multi-value writer fix ([#2090](https://github.com/TetronIO/JIM/issues/2090)).
+- SCIM `password` exposure fix ([#2091](https://github.com/TetronIO/JIM/issues/2091)).
 
-The other sub-issues ({{OTHER_SUBISSUES}}) are fixed during the work, in whichever order suits.
+The other sub-issues ([#2092](https://github.com/TetronIO/JIM/issues/2092), [#2093](https://github.com/TetronIO/JIM/issues/2093), [#2094](https://github.com/TetronIO/JIM/issues/2094), [#2095](https://github.com/TetronIO/JIM/issues/2095), [#2096](https://github.com/TetronIO/JIM/issues/2096), [#2097](https://github.com/TetronIO/JIM/issues/2097)) are fixed during the work, in whichever order suits.
 
 ### Phase 1: `JIM.Scim` server primitives
 
@@ -317,7 +319,7 @@ The JIM-to-JIM integration scenario (both directions of the round trip, schedule
 | Tombstones purged before an import reads them lose deletes | Purge only below a recorded watermark and minimum age; a Delta Import below the purge floor fails loudly |
 | Duplicate storage (store payload plus Connector Space) | Accepted: the store is the full record and the Connector Space a projection; documented |
 | Activity volume from frequent Schedules | Retention already exists; empty-run suppression belongs to #123 |
-| Administrators put this system's import and synchronisation in one parallel step group | Documented warning; the underlying watermark race is fixed separately ({{delta-sync-watermark-race}}) |
+| Administrators put this system's import and synchronisation in one parallel step group | Documented warning; the underlying watermark race is fixed separately ([#2092](https://github.com/TetronIO/JIM/issues/2092)) |
 | Group membership at scale | Child table for members; tests for large groups and for User deletion removing memberships |
 | JIM.Web's database connection pool shared with the portal | Per-system rate limits and short transactions; measure under load |
 
@@ -332,8 +334,8 @@ The JIM-to-JIM integration scenario (both directions of the round trip, schedule
 ## Future Work
 
 - **Second authentication method** (D4), when a customer needs it.
-- **SCIM inbound password channel** ({{scim-inbound-password-channel}}).
-- **Reset SCIM store** ({{reset-scim-store-backlog}}).
+- **SCIM inbound password channel** ([#2099](https://github.com/TetronIO/JIM/issues/2099)).
+- **Reset SCIM store** ([#2098](https://github.com/TetronIO/JIM/issues/2098)).
 - **Push-triggered runs** and immediate processing (#123).
 - **SCIM Delta Query** (publishing a change feed to downstream pullers via `draft-sehgal-scim-delta-query`). Deferred, not planned: the draft is an expired individual Internet-Draft never adopted by the working group, no client ecosystem consumes `/.delta`, and it needs durable change-feed retention, token issue and expiry, and per-resource authorisation re-checks on replay. Revisit on working-group adoption plus concrete demand. The store's change sequence would be the natural basis.
 
