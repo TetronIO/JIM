@@ -292,7 +292,8 @@ public class PendingExportMergeSemanticsTests
 
         Assert.That(result.PendingExports, Has.Count.EqualTo(1));
         var merged = result.PendingExports.Single();
-        Assert.That(merged.Id, Is.Not.EqualTo(dbPendingExport.Id), "Delete-and-recreate must produce a new PE, not reuse the old one's Id.");
+        Assert.That(merged.Id, Is.EqualTo(dbPendingExport.Id),
+            "A replacement for an export still waiting keeps its id, so every earlier run's outcome still names it (#2100).");
         Assert.That(merged.AttributeValueChanges, Has.Count.EqualTo(2), "Export eval change plus the surviving drift-only change.");
         Assert.That(merged.AttributeValueChanges.Any(c => c.AttributeId == targetEmployeeIdAttr.Id && c.StringValue == "E999"), Is.True,
             "Fresh export evaluation change must be present.");
@@ -591,6 +592,8 @@ public class PendingExportMergeSemanticsTests
             Status = PendingExportStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
+        var scopeExitRun = Guid.NewGuid();
+        staleDeletePendingExport.RecordStager(scopeExitRun);
         SyncRepo.SeedPendingExport(staleDeletePendingExport);
 
         var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
@@ -610,6 +613,8 @@ public class PendingExportMergeSemanticsTests
         Assert.That(replacement.AttributeValueChanges.Single().AttributeId, Is.EqualTo(targetEmployeeIdAttr.Id));
         Assert.That(SyncRepo.PendingExports.ContainsKey(staleDeletePendingExport.Id), Is.False,
             "The stale Delete Pending Export must be removed by the merge (Delete gone, Update staged).");
+        Assert.That(replacement.Stagers(), Has.No.Member(scopeExitRun),
+            "A Delete superseded by an Update is withdrawn, not continued: the run that queued the Delete did not stage the Update (#2100).");
     }
 
     /// <summary>

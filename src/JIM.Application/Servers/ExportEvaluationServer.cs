@@ -2652,6 +2652,9 @@ public class ExportEvaluationServer
         // CreatePendingProvisioningCsoAsync with a fresh Guid.NewGuid(), so no persisted Pending Export
         // can possibly reference it yet. Without this guard the lookup always returns null - profiling
         // recorded 100,098 such no-op lookups on one run - and the database round trip is pure waste.
+        // The export this call's merged replacement supersedes, when it found one still queued from an earlier run
+        // (#2100): the replacement carries the runs that staged it and, while nothing has been sent, its id.
+        PendingExport? replacedPendingExport = null;
         if (!createdNewCso && csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
@@ -2807,6 +2810,8 @@ public class ExportEvaluationServer
                     dbPendingExport.Id, csoId.Value,
                     attributeChanges.Count, driftOnlyChanges.Count, mergedChanges.Count, mvo.Id);
 
+                replacedPendingExport = dbPendingExport;
+
                 // Delete the old PE from the database
                 using (var deleteSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("DeletePendingExportForMerge")
                     .SetTag("attributeChangeCount", dbPendingExport.AttributeValueChanges.Count))
@@ -2824,9 +2829,20 @@ public class ExportEvaluationServer
         // This is used to defer exports with reference attributes until the referenced objects have been exported
         var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
 
+        // The replacement continues the export it replaces unless that was a Delete: an Update superseding a Delete
+        // means the object came back into scope, so the Delete is withdrawn rather than merged, and neither its id
+        // nor the run that queued it carries over (#1018, #2100).
+        var continuedPendingExport = replacedPendingExport is { ChangeType: not PendingExportChangeType.Delete }
+            ? replacedPendingExport
+            : null;
+
         var pendingExport = new PendingExport
         {
-            Id = Guid.NewGuid(),
+            // A replacement for an export still waiting is the same queued work, so it keeps the same id: every
+            // earlier run's outcome names the export by id, and that is how each finds its change still queued
+            // (#2100). One already sent and awaiting confirmation is an export cycle of its own, and its id stays
+            // with what was sent. A Pending one that failed and awaits a retry keeps its id across retries anyway.
+            Id = continuedPendingExport is { Status: PendingExportStatus.Pending } ? continuedPendingExport.Id : Guid.NewGuid(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             ConnectedSystemObjectId = csoId,
             ChangeType = changeType,
@@ -2837,6 +2853,11 @@ public class ExportEvaluationServer
             HasUnresolvedReferences = hasUnresolvedReferences,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
+
+        // It carries every change the original did that this run did not supersede, so the runs that staged those
+        // are its stagers too. The run staging it now is recorded after them, by the caller.
+        if (continuedPendingExport != null)
+            pendingExport.InheritStagersFrom(continuedPendingExport);
 
         if (hasUnresolvedReferences)
         {

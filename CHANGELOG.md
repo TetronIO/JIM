@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 
 - 🐛 A Connected System's tabs fit on one line at common laptop widths instead of scrolling with Details and Danger Zone cut off, and a Schedule's trigger writes every time the same way ("Sun at 1:00 AM", where some read "Sun at 1am").
