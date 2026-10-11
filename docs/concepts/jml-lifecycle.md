@@ -40,7 +40,8 @@ A new employee, Jane Smith, is added to the HR system:
 4. Outbound sync to Active Directory provisions a new CSO
 5. Expression builds her email: `jane.smith@company.com`
 6. Expression sets account to enabled: `userAccountControl = 512`
-7. Export creates Jane's AD account
+7. Export creates Jane's AD account. Active Directory will not create an enabled account that has no password, so the Synchronisation Rule that provisions it has an [Initial Password](passwords.md#giving-new-connected-system-objects-their-first-password): JIM creates the account disabled and queues her password
+8. The password is set within seconds, which enables the account, and the next import confirms it holds `512`
 
 ## 🔄 Mover
 

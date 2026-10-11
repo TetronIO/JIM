@@ -44,6 +44,24 @@ function New-JIMRunProfile {
         otherwise have missed. Use temporarily to validate the skip optimisation; leave off for
         normal, faster Full Imports.
 
+    .PARAMETER AllowObjectTypeChanges
+        Lets this Full Import carry out an Object Type change rather than refusing it. Only valid
+        when -RunType is FullImport; the API rejects it otherwise. Omit to leave it off, which is
+        the default and the right setting for normal runs.
+
+        Only Connectors whose External IDs name one object across every Object Type (today, the
+        LDAP Connector) can tell an object that has changed Object Type apart from two objects
+        that share an External ID; for any other Connector this setting has no effect. Where it
+        applies, an object that comes back under a different Object Type is, by default, refused:
+        the Activity records an Object Type Changed error naming both Object Types, nothing is
+        created, and the existing Connected System Object is kept exactly as it is, protected
+        from deletion detection. With this switch the Full Import instead imports the object as
+        a new Connected System Object of its new Object Type, and its deletion detection retires
+        the old one, which the next synchronisation disconnects under the usual Deletion Rules.
+
+        Usually set on a second Full Import Run Profile that is run by hand when the change is
+        intended, so that scheduled runs keep refusing.
+
     .PARAMETER MaxCreates
         Run Profile Safeguards: the most creates that may be pending for a single Export run to
         attempt any of them. If more are pending than this when the run starts, JIM attempts NONE
@@ -125,6 +143,13 @@ function New-JIMRunProfile {
         Creates a Full Import Run Profile that marks nothing as deleted on a run where deletion
         detection would newly mark more than 10% of the Connected System's objects as deleted.
 
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (apply Object Type changes)" -RunType FullImport -AllowObjectTypeChanges
+
+        Creates a second Full Import Run Profile, to be run by hand, that carries out Object Type
+        changes the Connected System's usual Full Import refuses: each object that has changed
+        Object Type is imported as a new Connected System Object, and the old one is retired.
+
     .LINK
         Get-JIMRunProfile
         Set-JIMRunProfile
@@ -161,6 +186,9 @@ function New-JIMRunProfile {
 
         [Parameter()]
         [switch]$VerifyImportContentHashes,
+
+        [Parameter()]
+        [switch]$AllowObjectTypeChanges,
 
         [Parameter()]
         [Nullable[int]]$MaxCreates,
@@ -234,6 +262,11 @@ function New-JIMRunProfile {
 
             if ($VerifyImportContentHashes) {
                 $body.verifyImportContentHashes = $true
+            }
+
+            # Sent only when the switch is present, so an omitted switch leaves the API's default (off).
+            if ($AllowObjectTypeChanges) {
+                $body.allowObjectTypeChanges = $true
             }
 
             # Run Profile Safeguards: send the whole safeguards object when any limit is bound;

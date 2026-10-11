@@ -151,7 +151,7 @@ public class DeselectedObjectTypeDeletionDetectionTests
                 "object type filter here, because that filter is the behaviour under test.");
 
         var queuedForUpdate = new List<ConnectedSystemObject>();
-        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), queuedForUpdate, null, existingCsoCount])!;
+        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), new List<ConnectedSystemObject>(), queuedForUpdate, null, existingCsoCount])!;
         return queuedForUpdate;
     }
 

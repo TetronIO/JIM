@@ -997,12 +997,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             importObject.ObjectType = objectType.Name;
 
             // start populating import object attribute values from the search result
-            foreach (string attributeDescription in searchResult.Attributes.AttributeNames)
+            foreach (var attributeDescription in LdapRangedAttribute.DescriptionsToRead(searchResult))
             {
                 // Active Directory answers a multi-valued attribute over its MaxValRange (1,500 by default) as
-                // "member;range=0-1499" and leaves the plain attribute out of the entry. The range option is not part
-                // of the attribute's name, so it is stripped for the schema lookup, and the values past the first
-                // range are read before the attribute is (#1853).
+                // "member;range=0-1499", with the plain attribute absent or empty beside it (an empty one is left out
+                // of what is read, #2041). The range option is not part of the attribute's name, so it is stripped for
+                // the schema lookup, and the values past the first range are read before the attribute is (#1853).
                 var attributeName = attributeDescription;
                 var attribute = searchResult.Attributes[attributeDescription];
                 if (LdapRangedAttribute.TryParse(attributeDescription, out var rangedAttributeName, out _, out _))

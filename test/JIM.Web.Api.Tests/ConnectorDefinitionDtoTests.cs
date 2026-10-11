@@ -110,6 +110,22 @@ public class ConnectorDefinitionDtoTests
         }
     }
 
+    /// <summary>
+    /// Whether an External ID names one object across every Object Type (#2049) decides whether an Allow Object Type
+    /// Changes Run Profile has any effect on a Connected System, so a client has to be able to read it.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public void FromEntity_MapsExternalIdsUniqueAcrossObjectTypes(bool unique)
+    {
+        var definition = BuildDefinition();
+        definition.ExternalIdsUniqueAcrossObjectTypes = unique;
+
+        var dto = ConnectorDefinitionDto.FromEntity(definition);
+
+        Assert.That(dto.ExternalIdsUniqueAcrossObjectTypes, Is.EqualTo(unique));
+    }
+
     [Test]
     public void FromEntity_MapsSettingsWithEnumNames()
     {

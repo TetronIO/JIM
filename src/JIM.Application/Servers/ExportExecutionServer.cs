@@ -760,6 +760,10 @@ public class ExportExecutionServer
 
                         try
                         {
+                            // Which of the batch's Creates an Initial Password will follow, decided once for the batch
+                            // and read again when the passwords are staged below (#2039).
+                            var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(immediateExports, SyncRepo, connectedSystem.Name);
+
                             // Execute batch via connector
                             List<ConnectedSystemExportResult> exportResults;
                             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
@@ -776,7 +780,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
                             }
                         }
                         catch (OperationCanceledException)
@@ -1345,6 +1349,9 @@ public class ExportExecutionServer
                 await MarkBatchAsExecutingAsync(batch, SyncRepo);
             }
 
+            // A deferred Create is followed by an Initial Password exactly as one sent on the first pass is (#2039).
+            var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, SyncRepo, connectedSystem.Name);
+
             List<ConnectedSystemExportResult> exportResults;
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
@@ -1356,7 +1363,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
             }
 
             processedCount += batch.Count;
@@ -1478,6 +1485,10 @@ public class ExportExecutionServer
                     // Mark batch as executing (raw SQL - context-independent)
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
+                    // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
+                    // set on the primary's copies would never reach this batch's connector (#2039).
+                    var initialPasswordRuleIds = await FlagCreatesFollowedByAnInitialPasswordAsync(batch, batchRepo, connectedSystem.Name);
+
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
                     // #1398) are persisted before this path runs: ForConnector decides from what it reads.
@@ -1485,7 +1496,7 @@ public class ExportExecutionServer
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1774,6 +1785,11 @@ public class ExportExecutionServer
     /// The Connected System's name, carried onto the parent Activity a provisioned password change stages
     /// (#1697), so the queue page and the Activity list can name the target without a join.
     /// </param>
+    /// <param name="initialPasswordRuleIds">
+    /// The batch's provisioning Synchronisation Rules that ask for an Initial Password, as
+    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> read them before the batch was sent (#2039), so the
+    /// passwords staged here are the ones the Connector was told would follow. Null when that lookup failed.
+    /// </param>
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
     /// the referenced object has no Connected System Object in the target (issue #1398), built by
@@ -1788,6 +1804,7 @@ public class ExportExecutionServer
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
         string connectedSystemName,
+        IReadOnlySet<int>? initialPasswordRuleIds,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
@@ -1942,6 +1959,10 @@ public class ExportExecutionServer
             // Update attribute change statuses to ExportedPendingConfirmation
             UpdateAttributeChangeStatusesAfterExport(writtenChanges);
 
+            // Which of those the Connector wrote with an interim value until an Initial Password is delivered (#2039),
+            // persisted with the statuses below so the confirming import holds rather than retries them.
+            MarkChangesAwaitingInitialPassword(export, writtenChanges, exportResult, connectedSystemName);
+
             exportsToUpdate.Add(export);
             result.SuccessCount++;
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
@@ -1992,7 +2013,7 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive, connectedSystemName);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, result, repository, initialPasswordTimeToLive, connectedSystemName);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -2064,6 +2085,129 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Works out, once for the batch about to be sent, which of its Creates an Initial Password will follow, and says
+    /// so on each of them (<see cref="PendingExport.InitialPasswordFollows"/>), so a Connector whose target refuses an
+    /// enabled account with no password can create it disabled instead (#2039). Returns the batch's provisioning
+    /// Synchronisation Rules that ask for an Initial Password, for <see cref="StageInitialPasswordsForBatchAsync"/> to
+    /// stage the passwords from the same answer: the lookup moved ahead of the Connector call rather than being repeated.
+    /// <para>
+    /// Every export in the batch is decided, the ones no password follows included, so the flag always reflects this
+    /// batch's answer. A batch with no Create from a provisioning rule reads nothing.
+    /// </para>
+    /// <para>
+    /// A failed lookup is contained, as it was when staging made it: no Create is flagged, so each is sent as its
+    /// Attribute Flows say, and null is returned so staging reports every account it creates as owed a password
+    /// nobody recorded. Failing the batch instead would stop an export over a question about passwords.
+    /// </para>
+    /// </summary>
+    private static async Task<IReadOnlySet<int>?> FlagCreatesFollowedByAnInitialPasswordAsync(
+        List<PendingExport> batch,
+        ISyncRepository repository,
+        string connectedSystemName)
+    {
+        var provisioningRuleIds = batch
+            .Where(IsProvisioningCreate)
+            .Select(pe => pe.ProvisioningSyncRuleId!.Value)
+            .Distinct()
+            .ToList();
+
+        var rulesAskingForAPassword = provisioningRuleIds.Count == 0
+            ? new HashSet<int>()
+            : await TryReadRulesAskingForAPasswordAsync(provisioningRuleIds, repository, connectedSystemName);
+
+        foreach (var pendingExport in batch)
+        {
+            pendingExport.InitialPasswordFollows = rulesAskingForAPassword != null
+                && pendingExport.ChangeType == PendingExportChangeType.Create
+                && pendingExport.ProvisioningSyncRuleId is { } provisioningRuleId
+                && rulesAskingForAPassword.Contains(provisioningRuleId);
+        }
+
+        return rulesAskingForAPassword;
+    }
+
+    /// <summary>
+    /// Which of the given Synchronisation Rules ask for an Initial Password, or null when that could not be read; see
+    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/> for why a failure is contained.
+    /// </summary>
+    private static async Task<HashSet<int>?> TryReadRulesAskingForAPasswordAsync(
+        List<int> provisioningRuleIds,
+        ISyncRepository repository,
+        string connectedSystemName)
+    {
+        try
+        {
+            return await repository.GetSyncRuleIdsWithInitialPasswordEnabledAsync(provisioningRuleIds);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "FlagCreatesFollowedByAnInitialPasswordAsync: Could not read which Synchronisation Rules ask for an Initial Password " +
+                "before sending a batch to {ConnectedSystem}. Its Creates are sent as their Attribute Flows say, and any account they create " +
+                "is reported as owed a password nobody recorded", LogSanitiser.Sanitise(connectedSystemName));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A Create recording the Synchronisation Rule whose provisioning decision produced it: the only export an
+    /// Initial Password can follow.
+    /// </summary>
+    private static bool IsProvisioningCreate(PendingExport pendingExport) =>
+        pendingExport.ChangeType == PendingExportChangeType.Create && pendingExport.ProvisioningSyncRuleId.HasValue;
+
+    /// <summary>
+    /// Marks each written change with whether the Connector reports it wrote that attribute with an interim value until
+    /// an Initial Password is delivered (<see cref="ConnectedSystemExportResult.AttributesAwaitingInitialPassword"/>,
+    /// #2039), matching attribute names case-insensitively as directories do. The mark is what makes the confirming
+    /// import hold such a change while the password is owed, rather than retrying a value the target refuses until the
+    /// password arrives. Every written change is decided, the unreported ones cleared: the mark describes this write,
+    /// and a change marked on an earlier attempt and sent again must not keep a hold this write did not ask for.
+    /// <para>
+    /// A Connector may only report this for an export JIM said an Initial Password follows
+    /// (<see cref="PendingExport.InitialPasswordFollows"/>). A report on any other export breaks that contract: it is
+    /// logged as an error and nothing is marked, so the change is reconciled as an ordinary one and any mismatch is
+    /// reported, instead of being held for a password nobody will deliver.
+    /// </para>
+    /// </summary>
+    private static void MarkChangesAwaitingInitialPassword(
+        PendingExport export,
+        List<PendingExportAttributeValueChange> writtenChanges,
+        ConnectedSystemExportResult exportResult,
+        string connectedSystemName)
+    {
+        var reported = exportResult.AttributesAwaitingInitialPassword ?? [];
+        if (reported.Count > 0 && !export.InitialPasswordFollows)
+        {
+            Log.Error("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
+                "on Pending Export {ExportId}, but JIM did not say an Initial Password follows it. The changes are not marked, and are reconciled " +
+                "as ordinary changes; this is a defect in the Connector",
+                LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", reported)), export.Id);
+        }
+
+        var reportedNames = export.InitialPasswordFollows
+            ? new HashSet<string>(reported, StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var change in writtenChanges)
+            change.AwaitsInitialPassword = change.Attribute?.Name is { } name && reportedNames.Contains(name);
+
+        if (reportedNames.Count == 0)
+            return;
+
+        var unmatched = reportedNames
+            .Where(name => !writtenChanges.Any(change => string.Equals(change.Attribute?.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (unmatched.Count > 0)
+        {
+            Log.Warning("ProcessBatchSuccessAsync: The Connector for {ConnectedSystem} reported attribute(s) [{Attributes}] written with an interim value " +
+                "on Pending Export {ExportId}, but no change written for it names them; nothing was marked for those",
+                LogSanitiser.Sanitise(connectedSystemName), LogSanitiser.Sanitise(string.Join(", ", unmatched)), export.Id);
+        }
+
+        Log.Debug("ProcessBatchSuccessAsync: {Count} change(s) on Pending Export {ExportId} for CSO {CsoId} written with an interim value " +
+            "until an Initial Password is delivered", writtenChanges.Count(change => change.AwaitsInitialPassword), export.Id, export.ConnectedSystemObjectId);
+    }
+
+    /// <summary>
     /// Records that this batch's newly provisioned accounts are owed a first password (issue #1121, #1697): one
     /// row on the queued password pipeline per account, delivered by the Password Delivery Service rather than
     /// here.
@@ -2074,10 +2218,12 @@ public class ExportExecutionServer
     /// opens one password connection per Connected System and works through what is outstanding.
     /// </para>
     /// <para>
-    /// Which rules ask for a password is read now rather than stamped onto the export when it was staged, so
-    /// that switching the feature on reaches work already queued, and so that a deployment not using it writes
-    /// no rows at all. A live user-set or propagated password for the same person and system wins over a
-    /// provisioned row: the queue's own coalescing decides that, not this method.
+    /// Which rules ask for a password is read for the batch just before it is sent (see
+    /// <see cref="FlagCreatesFollowedByAnInitialPasswordAsync"/>), rather than stamped onto the export when it was
+    /// staged, so that switching the feature on reaches work already queued, and so that a deployment not using it
+    /// writes no rows at all. Staging reuses that one lookup, so the accounts given a password are exactly the ones the
+    /// Connector was told one would follow (#2039). A live user-set or propagated password for the same person and
+    /// system wins over a provisioned row: the queue's own coalescing decides that, not this method.
     /// </para>
     /// <para>
     /// Failure is contained but not swallowed. The accounts exist in the Connected System and their exports are
@@ -2089,6 +2235,7 @@ public class ExportExecutionServer
     /// </summary>
     private static async Task StageInitialPasswordsForBatchAsync(
         List<PendingExport> provisionedAccounts,
+        IReadOnlySet<int>? rulesAskingForAPassword,
         ExportExecutionResult result,
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
@@ -2097,21 +2244,26 @@ public class ExportExecutionServer
         using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
             .SetTag("count", provisionedAccounts.Count);
 
+        // The batch's lookup failed before it was sent, so JIM cannot tell which of these accounts needed recording:
+        // every one is reported as unrecorded, exactly as when this method made the lookup itself and it failed.
+        if (rulesAskingForAPassword == null)
+        {
+            result.InitialPasswordStagingFailedCount += provisionedAccounts.Count;
+            Log.Error("StageInitialPasswordsForBatchAsync: Could not record that {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
+                "are owed an initial password, because which Synchronisation Rules ask for one could not be read. " +
+                "The accounts were created successfully; export them again to stage the passwords",
+                provisionedAccounts.Count, provisionedAccounts[0].ConnectedSystemId);
+            return;
+        }
+
+        if (rulesAskingForAPassword.Count == 0)
+            return;
+
         // Declared out here so the failure count below is the number of accounts genuinely owed a password,
-        // once that is known. A failure in the lookup itself leaves it null, and every provisioned account in
-        // the batch is reported as unrecorded because JIM cannot tell which of them needed recording.
+        // once that is known.
         List<PendingPasswordChange>? staging = null;
         try
         {
-            var provisioningRuleIds = provisionedAccounts
-                .Select(pe => pe.ProvisioningSyncRuleId!.Value)
-                .Distinct()
-                .ToList();
-
-            var rulesAskingForAPassword = await repository.GetSyncRuleIdsWithInitialPasswordEnabledAsync(provisioningRuleIds);
-            if (rulesAskingForAPassword.Count == 0)
-                return;
-
             var eligible = provisionedAccounts
                 .Where(pe => rulesAskingForAPassword.Contains(pe.ProvisioningSyncRuleId!.Value))
                 .ToList();
@@ -2254,8 +2406,10 @@ public class ExportExecutionServer
             // replaced is gone).
             // Issue #1398: a reference change left behind on a partial write was not written, so it
             // must not be applied as though it had been; the calculator sees the export without it.
+            // #2039: nor was a change the Connector wrote with an interim value until an Initial
+            // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(
-                successfulNonDeleteExports.Select(WithoutUnresolvedReferences).ToList());
+                successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -3006,19 +3160,33 @@ public class ExportExecutionServer
         HasUnresolvedReferences = pendingExport.HasUnresolvedReferences,
         ProvisioningSyncRule = pendingExport.ProvisioningSyncRule,
         ProvisioningSyncRuleId = pendingExport.ProvisioningSyncRuleId,
+        InitialPasswordFollows = pendingExport.InitialPasswordFollows,
         CreatedAt = pendingExport.CreatedAt,
         AttributeValueChanges = changes
     };
 
     /// <summary>
-    /// The export as optimistic apply should see it (issue #1398): without the reference changes it
-    /// still owes. Values sent on an earlier partial write and now awaiting confirmation are kept, since
-    /// re-applying them is a no-op by construction (add-if-absent, set-if-different).
+    /// The export as optimistic apply should see it: only the changes whose asserted value the target was actually
+    /// given (<see cref="IsWrittenAsAsserted"/>). Values sent on an earlier partial write and now awaiting confirmation
+    /// are kept, since re-applying them is a no-op by construction (add-if-absent, set-if-different). Returns the
+    /// export itself when every change qualifies, the ordinary case.
     /// </summary>
-    private static PendingExport WithoutUnresolvedReferences(PendingExport pendingExport) =>
-        pendingExport.AttributeValueChanges.Any(IsUnresolvedReference)
-            ? WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(c => !IsUnresolvedReference(c)).ToList())
-            : pendingExport;
+    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges.All(IsWrittenAsAsserted)
+            ? pendingExport
+            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(IsWrittenAsAsserted).ToList());
+
+    /// <summary>
+    /// Whether the target was given the value a change asserts, so optimistic apply may record it on the Connected System
+    /// Object. Two kinds were not: a reference change still awaiting resolution (issue #1398), which was not written at
+    /// all, and a change the Connector wrote with an interim value until an Initial Password is delivered
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>, #2039). Recording the latter's asserted
+    /// value would claim the target holds a value it does not, and a later export evaluation would then find it already
+    /// current and withdraw the held change. Such an attribute records nothing until the confirming import reports what
+    /// the target really holds.
+    /// </summary>
+    private static bool IsWrittenAsAsserted(PendingExportAttributeValueChange change) =>
+        !IsUnresolvedReference(change) && !change.AwaitsInitialPassword;
 
     /// <summary>
     /// Whether a Pending Export that could not be fully resolved still has something worth sending

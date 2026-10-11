@@ -242,6 +242,10 @@ Simple Mode matching rules attach to a Connected System Object Type rather than 
 | `pageSize` | C | Throughput only. |
 | `filePath` | B | Changes the source data a file-based import reads, so what lands in the connector space. |
 | `partitionId` | B | Changes which partition the profile operates on. |
+| `allowObjectTypeChanges` | B | Allow Object Type Changes (#2049). Switched on, the Full Import retires the held Connected System Object and imports a new one of the new Object Type instead of refusing the change; switched off, it refuses again. Not Class A: saving it deletes nothing, the retired object is disconnected by a later synchronisation under the Deletion Rules (themselves Class A), and how many objects it touches depends on what a future import returns, so no count could be stated at save time. Recorded by presence, so a Run Profile that never turned it on carries no line. |
+| `verifyImportContentHashes` | C | Verification Mode (SPEC-1082 D10). The Full Import skips nothing and reports any change a content-hash skip would have missed: it changes how the import reads and what it reports, not what it imports. Recorded by presence, like `allowObjectTypeChanges`. |
+| `maxCreates`, `maxUpdates`, `maxDeletes` | B | Export limits (#1618). Relaxing one lets through a mass export the limit would have stopped; tightening one can stop an export run's changes altogether. The same shape as relaxing `PartitionValidationMode`. Null (no limit) records nothing; zero is a real limit and is recorded. |
+| `maxDetectedDeletions`, `maxDetectedDeletionsPercent` | B | Full Import deletion-detection limits (#1618). Relaxing one lets a Full Import mark objects deleted that it would have left alone; tightening one can stop deletion detection for a run. Recorded as for the export limits. |
 
 ### Connected System schema (`objectTypes`, `attributes`)
 

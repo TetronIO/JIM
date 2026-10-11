@@ -41,6 +41,22 @@ function Set-JIMRunProfile {
         content-hash skips and instead compares each object's stored import content hash against
         the freshly computed incoming hash, raising a diagnostic error for any disagreement.
 
+    .PARAMETER AllowObjectTypeChanges
+        When specified, sets whether this Full Import carries out an Object Type change rather
+        than refusing it. Pass $true to allow, $false to return to refusing. Omit to leave the
+        current state unchanged. Only valid on a Full Import Run Profile; the API rejects $true
+        otherwise.
+
+        Only Connectors whose External IDs name one object across every Object Type (today, the
+        LDAP Connector) can tell an object that has changed Object Type apart from two objects
+        that share an External ID; for any other Connector this setting has no effect. Where it
+        applies, an object that comes back under a different Object Type is, by default, refused:
+        the Activity records an Object Type Changed error naming both Object Types, nothing is
+        created, and the existing Connected System Object is kept exactly as it is, protected
+        from deletion detection. When allowed, the Full Import instead imports the object as a
+        new Connected System Object of its new Object Type, and its deletion detection retires
+        the old one, which the next synchronisation disconnects under the usual Deletion Rules.
+
     .PARAMETER MaxCreates
         Run Profile Safeguards: sets the most creates that may be pending for a single Export run
         to attempt any of them. If more are pending than this when a run starts, JIM attempts NONE
@@ -112,6 +128,19 @@ function Set-JIMRunProfile {
         Disables Verification Mode, returning the Run Profile to normal content-hash-skip behaviour.
 
     .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 3 -AllowObjectTypeChanges $true
+
+        Lets Full Import Run Profile 3 carry out the Object Type changes it would otherwise
+        refuse. If that Run Profile runs on a Schedule, set it back to $false once the change has
+        been imported, so later runs refuse again.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 3 -AllowObjectTypeChanges $false
+
+        Returns the Full Import to refusing Object Type changes, keeping each existing Connected
+        System Object and reporting the change as an error instead.
+
+    .EXAMPLE
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 
         Clears the delete limit, leaving Max creates and Max updates exactly as they were.
@@ -166,6 +195,9 @@ function Set-JIMRunProfile {
 
         [Parameter()]
         [bool]$VerifyImportContentHashes,
+
+        [Parameter()]
+        [bool]$AllowObjectTypeChanges,
 
         [Parameter()]
         [Nullable[int]]$MaxCreates,
@@ -249,6 +281,12 @@ function Set-JIMRunProfile {
         # express this (mirrors Set-JIMPredefinedSearch -IsEnabled).
         if ($PSBoundParameters.ContainsKey('VerifyImportContentHashes')) {
             $body.verifyImportContentHashes = $VerifyImportContentHashes
+        }
+
+        # As above: -AllowObjectTypeChanges $false is sent (turns it off); an unbound parameter is
+        # omitted, which the API reads as "leave unchanged".
+        if ($PSBoundParameters.ContainsKey('AllowObjectTypeChanges')) {
+            $body.allowObjectTypeChanges = $AllowObjectTypeChanges
         }
 
         # Run Profile Safeguards: the update contract replaces all five members together, so

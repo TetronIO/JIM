@@ -28,7 +28,99 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_DriftOnJustProjectedMvo_CorrectivePendingExportCarriesPersistedMvoIdAsync()
     {
-        // --- Source system: user type with DisplayName (imported) and Description (enforced by export policy) ---
+        var (system, cso, _) = await ArrangeDriftedObjectAsync();
+
+        // --- Act: one full sync projects the Metaverse Object AND detects the drift on the same page ---
+        await RunFullSyncAsync(system);
+
+        // --- Assert: the projected MVO exists and every staged Pending Export references its persisted id ---
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(mvo.Id, Is.Not.EqualTo(Guid.Empty), "the projected Metaverse Object must have a persisted id");
+
+        var pendingExports = await SyncRepo.GetPendingExportsAsync(system.Id);
+        var correctivePe = pendingExports.SingleOrDefault(pe =>
+            pe.ConnectedSystemObjectId == cso.Id && pe.ChangeType == PendingExportChangeType.Update);
+        Assert.That(correctivePe, Is.Not.Null, "drift detection must stage a corrective Pending Export for the drifted CSO");
+
+        Assert.That(correctivePe!.SourceMetaverseObjectId, Is.Not.EqualTo(Guid.Empty),
+            "the corrective Pending Export must not capture the Metaverse Object id before it is persisted; " +
+            "a Guid.Empty source violates FK_PendingExports_MetaverseObjects_SourceMetaverseObjectId at flush");
+        Assert.That(correctivePe!.SourceMetaverseObjectId, Is.EqualTo(mvo.Id),
+            "the corrective Pending Export must reference the projected Metaverse Object");
+    }
+
+    /// <summary>
+    /// A Connected System Object with a change held until its Initial Password is delivered (#2039 Phase 2) is left
+    /// out of Drift Detection entirely. Skipping only the held attribute is not enough: staging a correction for any
+    /// other attribute makes the page flush delete every existing Pending Export for the object, the held one with
+    /// it, and the next evaluation would re-send the enabled value Active Directory refuses.
+    /// </summary>
+    [Test]
+    public async Task FullSync_DriftOnAnObjectWithAChangeAwaitingInitialPassword_SkipsDriftAndKeepsTheHeldChangeAsync()
+    {
+        var (system, cso, displayNameAttr) = await ArrangeDriftedObjectAsync();
+
+        var held = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = displayNameAttr.Id,
+            Attribute = displayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "Drift User",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1,
+            AwaitsInitialPassword = true
+        };
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = [held]
+        });
+
+        var activity = await RunFullSyncAsync(system);
+
+        var changesForObject = (await SyncRepo.GetPendingExportsAsync(system.Id))
+            .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changesForObject.Any(c => c.AttributeId == displayNameAttr.Id && c.AwaitsInitialPassword &&
+                    c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
+                Is.True, "the held change must survive the page flush with its hold intact");
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.False, "Drift Detection must not run for an object with a held change");
+        }
+    }
+
+    /// <summary>
+    /// Control for the test above: the same drifted object with nothing held is corrected as usual, so the skip is
+    /// what the held change causes and nothing else.
+    /// </summary>
+    [Test]
+    public async Task FullSync_DriftOnAnObjectWithNothingHeld_StagesTheCorrectionAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync();
+
+        var activity = await RunFullSyncAsync(system);
+
+        Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+            Is.True);
+    }
+
+    /// <summary>
+    /// The arrangement of the first test in this fixture: a projecting import rule, an enforcing export rule whose
+    /// constant Description the object has drifted from, and the drifted object.
+    /// </summary>
+    private async Task<(ConnectedSystem System, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute DisplayNameAttr)> ArrangeDriftedObjectAsync()
+    {
         var system = await CreateConnectedSystemAsync("Drift Source");
         var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
         var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
@@ -39,7 +131,6 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
 
-        // --- Import rule: projects to the Metaverse, flows DisplayName ---
         var importRule = await CreateImportSyncRuleAsync(system.Id, csoType, mvType, "Drift Import");
         importRule.AttributeFlowRules.Add(new SyncRuleMapping
         {
@@ -51,9 +142,9 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // --- Export rule with EnforceState: Description must equal a constant the system does not contribute ---
-        // A constant expression source keeps the system a non-contributor for the enforced attribute, so drift
-        // detection fires on the very first sync, on the same page that projects the Metaverse Object.
+        // Export rule with EnforceState: Description must equal a constant the system does not contribute. A constant
+        // expression source keeps the system a non-contributor for the enforced attribute, so drift detection fires on
+        // the very first sync, on the same page that projects the Metaverse Object.
         var exportRule = new SyncRule
         {
             ConnectedSystemId = system.Id,
@@ -77,7 +168,6 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
         SyncRepo.SeedSyncRule(exportRule);
 
-        // --- CSO whose Description has drifted from the enforced value ---
         var cso = await CreateCsoAsync(system.Id, csoType, "Drift User");
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -88,31 +178,16 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
             ConnectedSystemObject = cso
         });
 
-        // --- Act: one full sync projects the Metaverse Object AND detects the drift on the same page ---
-        await RunFullSyncAsync(system);
-
-        // --- Assert: the projected MVO exists and every staged Pending Export references its persisted id ---
-        var mvo = SyncRepo.MetaverseObjects.Values.Single();
-        Assert.That(mvo.Id, Is.Not.EqualTo(Guid.Empty), "the projected Metaverse Object must have a persisted id");
-
-        var pendingExports = await SyncRepo.GetPendingExportsAsync(system.Id);
-        var correctivePe = pendingExports.SingleOrDefault(pe =>
-            pe.ConnectedSystemObjectId == cso.Id && pe.ChangeType == PendingExportChangeType.Update);
-        Assert.That(correctivePe, Is.Not.Null, "drift detection must stage a corrective Pending Export for the drifted CSO");
-
-        Assert.That(correctivePe!.SourceMetaverseObjectId, Is.Not.EqualTo(Guid.Empty),
-            "the corrective Pending Export must not capture the Metaverse Object id before it is persisted; " +
-            "a Guid.Empty source violates FK_PendingExports_MetaverseObjects_SourceMetaverseObjectId at flush");
-        Assert.That(correctivePe.SourceMetaverseObjectId, Is.EqualTo(mvo.Id),
-            "the corrective Pending Export must reference the projected Metaverse Object");
+        return (system, cso, displayNameAttr);
     }
 
-    private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
+    private async Task<JIM.Models.Activities.Activity> RunFullSyncAsync(ConnectedSystem connectedSystem)
     {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 }
