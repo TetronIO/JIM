@@ -7018,6 +7018,7 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
@@ -7069,6 +7070,7 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
@@ -7119,6 +7121,7 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
@@ -7130,6 +7133,8 @@ public partial class ConnectedSystemServer
         await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
         // The stored generation settings (#242, release 4), read before the Activity's save can flush the new ones.
         var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
+        // Likewise the stored Keep unique switch (#2023).
+        var previousKeepUnique = await ReadStoredKeepUniqueAsync([mapping]);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7151,6 +7156,7 @@ public partial class ConnectedSystemServer
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync([mapping], previousKeepUnique);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -7205,6 +7211,7 @@ public partial class ConnectedSystemServer
         // The stored generation settings (#242, release 4), read before anything can flush the new ones: a changed
         // configuration releases the Needs Decision the flow's assignments wait on.
         var previousGenerations = await ReadStoredGenerationsAsync([mapping]);
+        var keepUniqueBefore = mapping.KeepUnique;
 
         // Validation before the Activity, so a rejected update leaves no trace of an Update that never happened.
         ApplySyncRuleMappingSettings(mapping, settings);
@@ -7212,6 +7219,7 @@ public partial class ConnectedSystemServer
         ValidateMappingWritability(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        ValidateKeepUnique(mapping);
         // Its exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(mapping);
         // Metaverse-Derived Attribute Flows (#1750): validate the dependency graph (cycles, unknown names, Reference
@@ -7256,6 +7264,8 @@ public partial class ConnectedSystemServer
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await ReleaseNeedsDecisionIfGenerationChangedAsync([mapping], previousGenerations);
+        if (mapping.KeepUnique != keepUniqueBefore)
+            await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
@@ -7290,6 +7300,9 @@ public partial class ConnectedSystemServer
         if (isImport && settings.InitialExportOnly.HasValue)
             throw new ArgumentException("Initial Export Only applies to export mappings only.");
 
+        if (settings.KeepUnique.HasValue && !CanKeepUnique(mapping))
+            throw new ArgumentException(KeepUniqueNotApplicableMessage);
+
         if (settings.Expression != null)
             expressionSources[0].Expression = settings.Expression;
 
@@ -7308,6 +7321,9 @@ public partial class ConnectedSystemServer
 
         if (settings.InitialExportOnly.HasValue)
             mapping.InitialExportOnly = settings.InitialExportOnly.Value;
+
+        if (settings.KeepUnique.HasValue)
+            mapping.KeepUnique = settings.KeepUnique.Value;
 
         // Enabled applies to both directions (#1485), which is why it is absent from the direction guards
         // above. Re-enabling clears the recorded reason: it describes why the mapping is off, and re-enabled
@@ -8894,6 +8910,7 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        ValidateKeepUnique(syncRule);
         // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
@@ -8977,6 +8994,7 @@ public partial class ConnectedSystemServer
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
         var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
+        IReadOnlyDictionary<int, bool> previousKeepUnique = new Dictionary<int, bool>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -9018,6 +9036,7 @@ public partial class ConnectedSystemServer
             // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
             // assignments; read for the same reason, before anything below can flush the new settings.
             previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
+            previousKeepUnique = await ReadStoredKeepUniqueAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9042,6 +9061,7 @@ public partial class ConnectedSystemServer
 
         // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
         await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(syncRule.AttributeFlowRules, previousKeepUnique);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
@@ -9134,6 +9154,7 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        ValidateKeepUnique(syncRule);
         // ...and their exclusions (release 3): each must name a Connected System the value is exported to unchanged.
         await ValidateGeneratedValueExclusionsAsync(syncRule);
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping
@@ -9188,6 +9209,7 @@ public partial class ConnectedSystemServer
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
         var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
         var previousGenerations = new Dictionary<int, SyncRuleMappingGeneration>();
+        IReadOnlyDictionary<int, bool> previousKeepUnique = new Dictionary<int, bool>();
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
@@ -9225,6 +9247,7 @@ public partial class ConnectedSystemServer
             // Likewise the generation settings (#242, release 4), whose change releases the Needs Decision of the flows'
             // assignments; read for the same reason, before anything below can flush the new settings.
             previousGenerations = await ReadStoredGenerationsAsync(syncRule.AttributeFlowRules);
+            previousKeepUnique = await ReadStoredKeepUniqueAsync(syncRule.AttributeFlowRules);
 
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
@@ -9249,6 +9272,7 @@ public partial class ConnectedSystemServer
 
         // A changed generation configuration is the administrator's answer to a Needs Decision (FR 16, #242 release 4).
         await ReleaseNeedsDecisionIfGenerationChangedAsync(syncRule.AttributeFlowRules, previousGenerations);
+        await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(syncRule.AttributeFlowRules, previousKeepUnique);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
