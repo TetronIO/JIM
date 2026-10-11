@@ -136,6 +136,38 @@ public class ActiveDirectoryExportProbeTests
         }
     }
 
+    [Test]
+    public async Task Export_ChangingTheCaseOfAProxyAddress_KeepsTheAddressAsync()
+    {
+        // Active Directory compares proxyAddresses without regard to case, so under Permissive Modify an add of the new
+        // spelling sent before the delete of the old one was skipped as already present, and the delete then took the
+        // address away while the export reported success. Samba AD compares them exactly and never skips the add, so
+        // against Samba this passes with or without the fix; it guards the case against a Windows domain controller,
+        // and LdapConnectorExportDesiredStateTests covers it in every build.
+        var lab = ActiveDirectoryLab.Require();
+        using var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger);
+        var userDn = SeedProxyAddresses(admin, lab, OldPrimaryAddress);
+
+        var results = await ExportThroughTheConnectorAsync(lab, RenameChange(userDn));
+
+        Assert.That(results.Single().Success, Is.True, $"The directory said: {results.Single().ErrorMessage}");
+        Assert.That(ActiveDirectoryLab.ReadAllValues(admin, userDn, ProxyAddresses), Is.EquivalentTo(ExpectedAfterRename).IgnoreCase);
+    }
+
+    [Test]
+    public async Task Export_WithoutPermissiveModify_ChangingTheCaseOfAProxyAddress_KeepsTheAddressAsync()
+    {
+        var lab = ActiveDirectoryLab.Require();
+        using var admin = ActiveDirectoryLab.OpenAdminConnection(lab, _logger);
+        var userDn = SeedProxyAddresses(admin, lab, OldPrimaryAddress);
+        var export = ExportWithoutPermissiveModify(admin);
+
+        var results = await export.ExecuteAsync([RenameChange(userDn)], CancellationToken.None);
+
+        Assert.That(results.Single().Success, Is.True, $"The directory said: {results.Single().ErrorMessage}");
+        Assert.That(ActiveDirectoryLab.ReadAllValues(admin, userDn, ProxyAddresses), Is.EquivalentTo(ExpectedAfterRename).IgnoreCase);
+    }
+
     private async Task<List<ConnectedSystemExportResult>> ExportThroughTheConnectorAsync(ActiveDirectoryLab.Coordinates lab, PendingExport pendingExport)
     {
         using var connector = ActiveDirectoryLab.NewConnector(lab);
@@ -175,6 +207,59 @@ public class ActiveDirectoryExportProbeTests
         var present = memberDns.Where(held.Contains).Cast<object>().ToArray();
         if (present.Length > 0)
             connection.SendRequest(new ModifyRequest(groupDn, DirectoryAttributeOperation.Delete, "member", present));
+    }
+
+    private const string ProxyAddresses = "proxyAddresses";
+    private const string OldPrimaryAddress = "SMTP:jim.probe.old@probe.example";
+    private const string NewPrimaryAddress = "SMTP:jim.probe.new@probe.example";
+    private const string OldAddressAsAlias = "smtp:jim.probe.old@probe.example";
+    private static readonly string[] ExpectedAfterRename = [NewPrimaryAddress, OldAddressAsAlias];
+
+    /// <summary>
+    /// A user of its own, holding exactly the given addresses. A user rather than a contact, because the delegation
+    /// JIM's service account works under covers users, groups and organisational units.
+    /// </summary>
+    private static string SeedProxyAddresses(LdapConnection connection, ActiveDirectoryLab.Coordinates lab, params string[] addresses)
+    {
+        var userDn = ActiveDirectoryLab.EnsureUser(connection, lab, "JIM Probe Address Rename User", "jim-probe-rename");
+        connection.SendRequest(new ModifyRequest(userDn, DirectoryAttributeOperation.Replace, ProxyAddresses, addresses.Cast<object>().ToArray()));
+        return userDn;
+    }
+
+    /// <summary>
+    /// What a rename stages for the addresses: the new primary added, the old one kept as an alias (a spelling that
+    /// differs only in case), and the old primary removed, in the order JIM stages them, additions first.
+    /// </summary>
+    private static PendingExport RenameChange(string userDn)
+    {
+        var objectType = new ConnectedSystemObjectType { Id = 2, Name = "user", Selected = true };
+        objectType.Attributes.AddRange(
+        [
+            ActiveDirectoryLab.Attribute(objectType, 11, "objectGUID", AttributeDataType.Guid, isExternalId: true),
+            ActiveDirectoryLab.Attribute(objectType, 12, "distinguishedName", AttributeDataType.Text, isSecondaryExternalId: true),
+            ActiveDirectoryLab.Attribute(objectType, 13, ProxyAddresses, AttributeDataType.Text, AttributePlurality.MultiValued)
+        ]);
+        var dnAttribute = objectType.Attributes.Single(attribute => attribute.Name == "distinguishedName");
+        var proxyAttribute = objectType.Attributes.Single(attribute => attribute.Name == ProxyAddresses);
+
+        return new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Update,
+            ConnectedSystemObject = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = objectType,
+                SecondaryExternalIdAttributeId = dnAttribute.Id,
+                AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = dnAttribute.Id, StringValue = userDn }]
+            },
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange { Attribute = proxyAttribute, AttributeId = proxyAttribute.Id, ChangeType = PendingExportAttributeChangeType.Add, StringValue = NewPrimaryAddress },
+                new PendingExportAttributeValueChange { Attribute = proxyAttribute, AttributeId = proxyAttribute.Id, ChangeType = PendingExportAttributeChangeType.Add, StringValue = OldAddressAsAlias },
+                new PendingExportAttributeValueChange { Attribute = proxyAttribute, AttributeId = proxyAttribute.Id, ChangeType = PendingExportAttributeChangeType.Remove, StringValue = OldPrimaryAddress }
+            ]
+        };
     }
 
     private static PendingExport MembershipChange(string groupDn, params (PendingExportAttributeChangeType ChangeType, string MemberDn)[] changes)
