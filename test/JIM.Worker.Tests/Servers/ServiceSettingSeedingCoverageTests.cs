@@ -20,11 +20,7 @@ public class ServiceSettingSeedingCoverageTests
     /// Keys deliberately not created by seeding, each with the reason. An entry that seeding now creates, or that is
     /// no longer a key, fails <see cref="NotSeededExceptions_EachStillAppliesAsync"/>.
     /// </summary>
-    private static readonly Dictionary<string, string> NotSeeded = new(StringComparer.Ordinal)
-    {
-        ["Worker.StaleTaskTimeout"] = "#2060: the Scheduler reads it with a five-minute fallback, but it was never seeded; " +
-                                      "seed it or make it a plain constant, then remove this entry.",
-    };
+    private static readonly Dictionary<string, string> NotSeeded = new(StringComparer.Ordinal);
 
     private SeedingTestHarness _harness = null!;
 
