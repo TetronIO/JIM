@@ -8,7 +8,6 @@ LANG-3	administration/upgrading.md	1
 LANG-3	concepts/architecture.md	5
 LANG-3	concepts/attribute-priority.md	1
 LANG-3	concepts/expressions.md	2
-LANG-3	concepts/index.md	4
 LANG-3	concepts/jml-lifecycle.md	6
 LANG-3	concepts/synchronisation-pipeline.md	17
 LANG-3	configuration/activities.md	4
@@ -21,14 +20,12 @@ LANG-3	configuration/index.md	3
 LANG-3	configuration/metaverse.md	17
 LANG-3	configuration/predefined-searches.md	3
 LANG-3	configuration/roles.md	2
-LANG-3	configuration/run-profiles.md	2
 LANG-3	configuration/schedules.md	2
 LANG-3	configuration/service-settings.md	1
 LANG-3	configuration/sync-preview.md	2
 LANG-3	configuration/synchronisation-rules.md	24
 LANG-3	connectors/index.md	6
 LANG-3	getting-started/index.md	1
-LANG-3	index.md	3
 LANG-3	powershell/api-keys.md	3
 LANG-3	powershell/certificates.md	3
 LANG-3	powershell/connected-systems.md	20
@@ -56,7 +53,6 @@ LANG-4	connectors/jim-file-connector.md	1
 LANG-4	powershell/connected-systems.md	3
 LANG-4	powershell/history.md	4
 LANG-4	powershell/synchronisation-rules.md	9
-LANG-7	administration/backup-recovery.md	1
 LANG-7	administration/configuration.md	1
 LANG-7	administration/preview-features.md	2
 LANG-7	administration/troubleshooting.md	1
@@ -77,7 +73,6 @@ LANG-7	powershell/connection.md	1
 LANG-7	powershell/index.md	1
 LANG-7	powershell/previews.md	1
 LANG-7	reference/glossary.md	1
-STR-2	administration/backup-recovery.md	3
 STR-2	administration/configuration.md	3
 STR-2	administration/deploying-with-ansible.md	3
 STR-2	administration/deployment.md	3
@@ -100,7 +95,6 @@ STR-2	concepts/architecture.md	4
 STR-2	concepts/attribute-priority.md	4
 STR-2	concepts/case-sensitivity.md	4
 STR-2	concepts/expressions.md	4
-STR-2	concepts/index.md	4
 STR-2	concepts/jml-lifecycle.md	4
 STR-2	concepts/object-naming.md	4
 STR-2	concepts/passwords.md	4
@@ -116,7 +110,6 @@ STR-2	configuration/metaverse.md	3
 STR-2	configuration/operations.md	3
 STR-2	configuration/predefined-searches.md	3
 STR-2	configuration/roles.md	3
-STR-2	configuration/run-profiles.md	3
 STR-2	configuration/schedules.md	3
 STR-2	configuration/service-settings.md	3
 STR-2	configuration/sync-preview.md	3
@@ -129,9 +122,7 @@ STR-2	connectors/jim-sql-connector-delta-import-change-log.md	4
 STR-2	connectors/jim-sql-connector-delta-import-watermark.md	4
 STR-2	connectors/jim-sql-connector.md	4
 STR-2	getting-started/index.md	2
-STR-2	getting-started/prerequisites.md	2
 STR-2	getting-started/quickstart.md	2
-STR-2	index.md	2
 STR-2	powershell/activities.md	3
 STR-2	powershell/api-keys.md	3
 STR-2	powershell/certificates.md	3

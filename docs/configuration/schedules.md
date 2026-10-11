@@ -4,7 +4,7 @@ title: Schedules
 
 # Schedules
 
-A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and supports several step types: [Run Profile](run-profiles.md) execution, PowerShell scripts, external executables, and SQL scripts.
+A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and each step runs a [Run Profile](run-profiles.md).
 
 Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
@@ -39,9 +39,8 @@ A `stepIndex` orders steps; multiple steps with the same index run in parallel.
 ### Step types
 
 - **Run Profile**<br /> Execute a [Run Profile](run-profiles.md) against a Connected System.
-- **PowerShell**<br /> Run a PowerShell script with arguments.
-- **Executable**<br /> Run an external executable.
-- **SQL script**<br /> Run a SQL script against a configured database connection.
+
+The portal also lists **PowerShell Script**, **Executable** and **SQL Script** steps, and does not let you choose them: JIM does not run them. The REST API accepts them, and the Scheduler skips each one, logging a warning that names the step. A SQL Script step's connection string is stored without encryption, so never give one a real credential.
 
 ### When a step fails
 
@@ -154,7 +153,7 @@ Every configuration change to a schedule is recorded in the immutable audit log 
 
 ## Change history
 
-Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret: a change to it is recorded, but its value is never stored or shown.
+Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret here: a change to it is recorded, but the history never holds or shows its value.
 
 The same history is available from the `Get-JIMConfigurationChangeHistory` [cmdlet](../powershell/history.md) (`-Type Schedule -Id <guid>`) and the Schedule `change-history` REST endpoints in the [interactive API reference](../../api/reference/).
 
