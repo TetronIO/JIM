@@ -252,7 +252,7 @@ Each release refreshes the screenshots on junctional.io's product tour without a
 - **Running it again:** re-run the `jim-screenshots` job alone. It moves the branch to a fresh commit and updates the open pull request rather than opening another.
 - **Locally:** `pwsh ./scripts/Capture-Screenshots.ps1 -Version v<version> -PrepareData` in the devcontainer (it needs 20+ GB for `Scale100k50Groups`), then `Publish-TourScreenshots.ps1 -DryRun` against a junctional.io checkout to see what the pull request would change.
 
-**The runner, once** (TetronIO/ci-runners): Node.js 22, and Chromium's system libraries (`npx playwright install-deps chromium`, as root); the job installs Playwright itself, at the version `.devcontainer/setup.sh` pins. The `jim-automation` app needs **Contents** and **Pull requests** write on junctional.io (`notify-site` needs only the first). The first run builds the `Scale100k50Groups` OpenLDAP snapshot and the runner keeps it.
+**The runner, once** (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries, from `scripts/toolchain/install-playwright-for-runner.sh` there; the job installs Playwright itself, at the version `.devcontainer/setup.sh` pins. When that pin (`PLAYWRIGHT_MCP_VERSION`) moves, re-run the host script with the new version, in case the new Chromium needs another library. The `jim-automation` app needs **Contents** and **Pull requests** write on junctional.io (`notify-site` needs only the first). The first run builds the `Scale100k50Groups` OpenLDAP snapshot and the runner keeps it.
 
 ## API Reference Publication
 
