@@ -597,6 +597,15 @@ public partial class ActivityServer
         return await Application.Repository.Activity.HasAnyRunProfileExecutionAsync();
     }
 
+    /// <summary>
+    /// Whether any of the Activity's items left reference values unresolved (#959), under any Unresolved Reference
+    /// Handling: what decides whether the Activity's page offers View Affected Objects.
+    /// </summary>
+    public async Task<bool> HasUnresolvedReferencesAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.HasUnresolvedReferencesAsync(activityId);
+    }
+
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.

@@ -920,6 +920,14 @@ public partial class ActivityRepository : IActivityRepository
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> HasUnresolvedReferencesAsync(Guid activityId)
+    {
+        // Stops at the first item that left any, which for a run that did is usually among the first read.
+        return await Repository.Database.ActivityRunProfileExecutionItems
+            .AnyAsync(i => i.ActivityId == activityId && i.UnresolvedReferenceCount > 0);
+    }
+
     public async Task<bool> HasAnyRunProfileExecutionAsync()
     {
         // TargetOperationType must be Execute: creating, editing and deleting a Run Profile all record
