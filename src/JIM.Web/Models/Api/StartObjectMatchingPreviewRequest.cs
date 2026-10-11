@@ -93,8 +93,11 @@ public class ObjectMatchingRuleRequest
     /// <summary>The Metaverse Attribute the source values are compared against.</summary>
     public int? TargetMetaverseAttributeId { get; set; }
 
-    /// <summary>Whether text comparison respects case.</summary>
-    public bool CaseSensitive { get; set; }
+    /// <summary>
+    /// Whether text comparison respects case. Omitted or null takes the default, which ignores case (see
+    /// <see cref="ObjectMatchingDefaults"/>).
+    /// </summary>
+    public bool? CaseSensitive { get; set; }
 
     /// <summary>What supplies the value to match on, in evaluation order.</summary>
     public List<ObjectMatchingRuleSourceRequest> Sources { get; set; } = [];
@@ -105,7 +108,7 @@ public class ObjectMatchingRuleRequest
             SyncRuleId,
             MetaverseObjectTypeId,
             TargetMetaverseAttributeId,
-            CaseSensitive,
+            CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive,
             [.. Sources.Select(source => source.ToProposal())]);
 }
 

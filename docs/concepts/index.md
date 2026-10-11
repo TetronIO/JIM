@@ -38,4 +38,4 @@ Wherever JIM shows you an object, it names it the same way: an ordered list of n
 
 ## 🔡 Case Sensitivity
 
-JIM compares identity data exactly (case-sensitive) by default, keeps the identifiers it generates unique without regard to case, and keeps configuration names and search forgiving (case-insensitive). The [Case Sensitivity](case-sensitivity.md) page explains where each rule applies, why uniqueness differs, and how to relax matching and scoping per rule where a data source is inconsistent.
+Whenever JIM compares text it is asking one of four questions, and each has one rule: whether a value has changed is exact, whether two values are the same thing ignores case, whether a value meets a condition is exact unless you say otherwise, and finding things ignores case. The [Case Sensitivity](case-sensitivity.md) page explains why, and lists every feature with the rule it follows.
