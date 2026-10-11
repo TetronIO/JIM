@@ -241,6 +241,19 @@ All images are signed using [cosign](https://github.com/sigstore/cosign) for sup
 cosign verify ghcr.io/tetronio/jim-web:0.2.0
 ```
 
+## Product Tour Screenshots
+
+Each release refreshes the screenshots on junctional.io's product tour without anyone capturing them by hand ([#582](https://github.com/TetronIO/JIM/issues/582); design in [`PRD_SCREENSHOT_AUTOMATION.md`](prd/doing/PRD_SCREENSHOT_AUTOMATION.md)).
+
+- **When:** the `jim-screenshots` job in `pre-release.yml` runs once the pre-release suite has passed, on the same runner and the same commit, the one the release tags. It cannot hold up a release: the gate reads the `jim-pre-release` status, already posted by then.
+- **What it does:** `Capture-Screenshots.ps1 -PrepareData` loads integration Scenario 8 at `Scale100k50Groups`, rebuilds the JIM services at the release version with the portal in Production mode, and captures every image in `scripts/screenshots/manifest.json` at its published size. The whole library (78 images) is kept as the run's artefact for 90 days.
+- **Where the images go:** a pull request on junctional.io, `Product tour screenshots for JIM v<version>`, from the branch `screenshots/v<version>`, made by `scripts/screenshots/Publish-TourScreenshots.ps1` with the `jim-automation` app. It adds `src/assets/tour/v<version>/` with only the images the tour shows, sets `imageVersion` in both dictionaries, writes the homepage images to `public/assets/screenshots/` (fixed addresses, for links from outside the site such as JIM's README), and removes the folders no step uses any more. The commit is made through GitHub's API, so it is signed.
+- **What you do:** once the release is published, look through the pull request's images and each step's alt text, then merge it. junctional.io deploys on merge. A prerelease version's screenshots stay in the artefact; no pull request is opened.
+- **Running it again:** re-run the `jim-screenshots` job alone. It moves the branch to a fresh commit and updates the open pull request rather than opening another.
+- **Locally:** `pwsh ./scripts/Capture-Screenshots.ps1 -Version v<version> -PrepareData` in the devcontainer (it needs 20+ GB for `Scale100k50Groups`), then `Publish-TourScreenshots.ps1 -DryRun` against a junctional.io checkout to see what the pull request would change.
+
+**The runner, once** (TetronIO/ci-runners): Node.js 22, and Chromium's system libraries (`npx playwright install-deps chromium`, as root); the job installs Playwright itself, at the version `.devcontainer/setup.sh` pins. The `jim-automation` app needs **Contents** and **Pull requests** write on junctional.io (`notify-site` needs only the first). The first run builds the `Scale100k50Groups` OpenLDAP snapshot and the runner keeps it.
+
 ## API Reference Publication
 
 Each release publishes an interactive Scalar API reference to the JIM documentation site at [docs.junctional.io/api/reference/](https://docs.junctional.io/api/reference/). The public reference is a snapshot that matches the currently-published JIM version, so consumers can explore the API surface without a running JIM instance.

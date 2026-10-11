@@ -1093,13 +1093,9 @@ public class Worker : BackgroundService
                 .GroupBy(sr => sr.ConnectedSystemId)
                 .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
 
-            // Connected System id to CSO type name, so the causality panel can name a staged export's target
-            // "type: name" instead of the bare name or id, matching the sync engine's own lookup.
-            var csoTypeNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                .SelectMany(rules => rules)
-                .Where(sr => sr.ConnectedSystemObjectType != null)
-                .GroupBy(sr => sr.ConnectedSystemId)
-                .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+            // Target object type names, so the causality panel can name a staged export's target "type: name"
+            // instead of the bare name or id, matching the sync engine's own naming.
+            var typeNames = ExportTargetTypeNames.From(exportEvaluationCache);
 
             foreach (var mvo in mvosToDelete)
             {
@@ -1164,7 +1160,7 @@ public class Worker : BackgroundService
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
+                                typeNames.ForPendingExport(deletePendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id),
                                 deprovisioningRule?.Id, deprovisioningRule?.Name);
                             deletePendingExport.RecordStager(deletionItem.Id);
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
@@ -1179,7 +1175,8 @@ public class Worker : BackgroundService
                                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
+                                    cancellation.ConnectedSystemId,
+                                    typeNames.Resolve(cancellation.ConnectedSystemId, objectTypeId: cancellation.ConnectedSystemObjectTypeId)));
                         }
 
                         // Accounts left in place: a Disconnect Deprovisioning Action broke the join and queued
@@ -1191,7 +1188,8 @@ public class Worker : BackgroundService
                                 targetEntityId: disconnection.ConnectedSystemObjectId,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    disconnection.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId)),
+                                    disconnection.ConnectedSystemId,
+                                    typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId)),
                                 syncRuleId: disconnection.SyncRuleId,
                                 syncRuleName: disconnection.SyncRuleName);
                         }
@@ -1206,10 +1204,11 @@ public class Worker : BackgroundService
                         deletionCauses[mvo.Id] = deprovisionCause;
                         foreach (var pendingExport in reportableDeleteExports)
                         {
+                            mvoWorkingSet.TryGetDeprovisioningRule(pendingExport.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
                             var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                                 activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                                typeNames.ForPendingExport(pendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id));
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
@@ -1289,7 +1288,7 @@ public class Worker : BackgroundService
                         objectTypeSnapshot: null,
                         csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                         activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                        csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                        typeNames.ForPendingExport(pendingExport));
 
                     if (pendingExport.SourceMetaverseObjectId.HasValue
                         && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
