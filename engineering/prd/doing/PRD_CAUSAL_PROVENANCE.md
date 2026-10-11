@@ -6,6 +6,7 @@
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
 - **Plan:** [CAUSAL_PROVENANCE.md](../../plans/done/CAUSAL_PROVENANCE.md)
+- **Phase 2 plan:** [CAUSAL_PROVENANCE_PHASE_2.md](../../plans/CAUSAL_PROVENANCE_PHASE_2.md)
 
 ## Problem Statement
 
