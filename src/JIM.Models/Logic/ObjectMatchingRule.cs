@@ -107,7 +107,7 @@ public class ObjectMatchingRule : IAuditable
     /// When true, attribute value comparisons are case-sensitive.
     /// When false (default), comparisons ignore case differences.
     /// </summary>
-    public bool CaseSensitive { get; set; } = false;
+    public bool CaseSensitive { get; set; } = ObjectMatchingDefaults.CaseSensitive;
 
     /// <summary>
     /// Validates that the rule is correctly configured.

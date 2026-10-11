@@ -1,5 +1,5 @@
 ---
-title: SSO Setup - Keycloak
+title: "SSO Setup: Keycloak"
 ---
 
 # SSO Setup: Keycloak

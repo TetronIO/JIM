@@ -7,9 +7,9 @@ using System.Net;
 using System.Net.Sockets;
 using JIM.Connectors.LDAP;
 using JIM.Models.Staging;
-using Moq;
 using NUnit.Framework;
 using Serilog;
+using static JIM.Worker.Tests.Connectors.LdapProbeForest;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -23,12 +23,6 @@ namespace JIM.Worker.Tests.Connectors;
 [TestFixture]
 public class LdapConnectorUniquenessProbeGlobalCatalogTests
 {
-    private const string Root = "DC=corp,DC=local";
-    private const string ConfigurationNamingContext = "CN=Configuration,DC=corp,DC=local";
-    private const string SchemaNamingContext = "CN=Schema,CN=Configuration,DC=corp,DC=local";
-    private const string PartitionsContainer = "CN=Partitions,CN=Configuration,DC=corp,DC=local";
-    private const string ConnectedServer = "dc1.corp.local";
-
     // ---- Which attributes are forest-wide ----
 
     [TestCase("userPrincipalName", true)]
@@ -484,169 +478,4 @@ public class LdapConnectorUniquenessProbeGlobalCatalogTests
     private static LdapConnectorUniquenessProbe Probe(FakeDomainController directory, FakeGlobalCatalog globalCatalog, string? configuredServer = null) =>
         new(directory.Executor, new LoggerConfiguration().CreateLogger(),
             new LdapGlobalCatalogProbeOptions(configuredServer, ConnectedServer, LdapConnectorUniquenessProbe.GlobalCatalogPort(false), globalCatalog.Open));
-
-    /// <summary>
-    /// The domain controller the probe connection is bound to: answers the rootDSE, the forest's domain crossRefs and
-    /// the attribute's schema entry, and the partition search from the values it holds.
-    /// </summary>
-    private sealed class FakeDomainController
-    {
-        private readonly int _domainCount;
-        private readonly bool _isGlobalCatalog;
-        private readonly bool _activeDirectory;
-        private readonly bool _inPartialAttributeSet;
-        private readonly Dictionary<string, List<string>> _held = [];
-        private readonly Dictionary<string, List<string[]>> _proxyEntries = [];
-
-        public FakeDomainController(int domainCount, bool isGlobalCatalog, bool activeDirectory = true, bool inPartialAttributeSet = true)
-        {
-            _domainCount = domainCount;
-            _isGlobalCatalog = isGlobalCatalog;
-            _activeDirectory = activeDirectory;
-            _inPartialAttributeSet = inPartialAttributeSet;
-
-            var executor = new Mock<ILdapOperationExecutor>();
-            executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), It.IsAny<TimeSpan>()))
-                .Returns((DirectoryRequest r, TimeSpan _) => Answer((SearchRequest)r));
-            executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>()))
-                .Returns((DirectoryRequest r) => Answer((SearchRequest)r));
-            Executor = executor.Object;
-        }
-
-        public ILdapOperationExecutor Executor { get; }
-
-        public List<SearchRequest> Requests { get; } = [];
-
-        public FakeDomainController Holding(string partition, params string[] values)
-        {
-            _held[partition] = [.. values];
-            return this;
-        }
-
-        /// <summary>
-        /// Adds one entry under <paramref name="partition"/> whose proxyAddresses holds <paramref name="proxyAddresses"/>.
-        /// </summary>
-        public FakeDomainController HoldingProxyAddresses(string partition, params string[] proxyAddresses)
-        {
-            if (!_proxyEntries.TryGetValue(partition, out var entries))
-                _proxyEntries[partition] = entries = [];
-            entries.Add(proxyAddresses);
-            return this;
-        }
-
-        private SearchResponse Answer(SearchRequest request)
-        {
-            Requests.Add(request);
-
-            if (request.Scope == SearchScope.Base)
-                return RootDse();
-
-            if (request.DistinguishedName == PartitionsContainer)
-            {
-                // Every domain, plus the Configuration and Schema partitions, which are not domains (systemFlags 1).
-                return LdapTestResponses.SearchResponseWithEntries(Enumerable.Range(1, _domainCount)
-                    .Select(i => LdapTestResponses.Entry($"CN=DOMAIN{i},{PartitionsContainer}", ("nCName", $"DC=domain{i},DC=local"), ("systemFlags", "3")))
-                    .Append(LdapTestResponses.Entry($"CN=Enterprise Configuration,{PartitionsContainer}", ("nCName", ConfigurationNamingContext), ("systemFlags", "1")))
-                    .Append(LdapTestResponses.Entry($"CN=Enterprise Schema,{PartitionsContainer}", ("nCName", SchemaNamingContext), ("systemFlags", "1")))
-                    .ToArray());
-            }
-
-            if (request.DistinguishedName == SchemaNamingContext)
-            {
-                return LdapTestResponses.SearchResponseWith("CN=User-Principal-Name," + SchemaNamingContext,
-                    ("isMemberOfPartialAttributeSet", _inPartialAttributeSet ? "TRUE" : "FALSE"));
-            }
-
-            var attribute = request.Attributes[0]!;
-            var values = _held.TryGetValue(request.DistinguishedName, out var held) ? held : [];
-            var proxyEntries = _proxyEntries.TryGetValue(request.DistinguishedName, out var proxies) ? proxies : [];
-            return LdapTestResponses.SearchResponseWithEntries(values
-                .Where(v => request.Filter.ToString()!.Contains($"({attribute}={v})", StringComparison.OrdinalIgnoreCase))
-                .Select(v => LdapTestResponses.Entry($"CN={v},{request.DistinguishedName}", (attribute, v)))
-                .Concat(MatchingProxyEntries(request, proxyEntries, request.DistinguishedName))
-                .ToArray());
-        }
-
-        private SearchResponse RootDse()
-        {
-            var capabilities = _activeDirectory ? new[] { LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID } : ["1.3.6.1.4.1.4203.1.5.1"];
-            return LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues("",
-                ("supportedCapabilities", capabilities),
-                ("isGlobalCatalogReady", [_isGlobalCatalog ? "TRUE" : "FALSE"]),
-                ("configurationNamingContext", [ConfigurationNamingContext]),
-                ("schemaNamingContext", [SchemaNamingContext])));
-        }
-    }
-
-    /// <summary>
-    /// The Global Catalog the probe opens on demand: records where it was asked to connect, and answers the forest-wide
-    /// search from the values it holds.
-    /// </summary>
-    private sealed class FakeGlobalCatalog
-    {
-        private readonly List<string> _held = [];
-        private readonly List<string[]> _proxyEntries = [];
-
-        public Exception? OpenThrows { get; init; }
-
-        public Exception? SearchThrows { get; init; }
-
-        public int OpenAttempts { get; private set; }
-
-        public List<string> OpenedServers { get; } = [];
-
-        public List<SearchRequest> Requests { get; } = [];
-
-        public FakeGlobalCatalog Holding(params string[] values)
-        {
-            _held.AddRange(values);
-            return this;
-        }
-
-        /// <summary>
-        /// Adds one entry, in another domain, whose proxyAddresses holds <paramref name="proxyAddresses"/>.
-        /// </summary>
-        public FakeGlobalCatalog HoldingProxyAddresses(params string[] proxyAddresses)
-        {
-            _proxyEntries.Add(proxyAddresses);
-            return this;
-        }
-
-        public ILdapOperationExecutor Open(string server, TimeSpan timeout)
-        {
-            OpenAttempts++;
-            if (OpenThrows != null)
-                throw OpenThrows;
-
-            OpenedServers.Add(server);
-            var executor = new Mock<ILdapOperationExecutor>();
-            executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), It.IsAny<TimeSpan>()))
-                .Returns((DirectoryRequest r, TimeSpan _) => Answer((SearchRequest)r));
-            return executor.Object;
-        }
-
-        private SearchResponse Answer(SearchRequest request)
-        {
-            Requests.Add(request);
-            if (SearchThrows != null)
-                throw SearchThrows;
-
-            var attribute = request.Attributes[0]!;
-            return LdapTestResponses.SearchResponseWithEntries(_held
-                .Where(v => request.Filter.ToString()!.Contains($"({attribute}={v})", StringComparison.OrdinalIgnoreCase))
-                .Select(v => LdapTestResponses.Entry($"CN={v},DC=elsewhere,DC=local", (attribute, v)))
-                .Concat(MatchingProxyEntries(request, _proxyEntries, "DC=elsewhere,DC=local"))
-                .ToArray());
-        }
-    }
-
-    /// <summary>
-    /// The entries whose proxyAddresses the filter asks for, each returned with all of its proxy addresses, as a
-    /// directory returns them. Matching ignores case, as Active Directory's does for this attribute, so a filter for
-    /// <c>smtp:x</c> finds a primary <c>SMTP:x</c>.
-    /// </summary>
-    private static IEnumerable<SearchResultEntry> MatchingProxyEntries(SearchRequest request, List<string[]> entries, string container) =>
-        entries
-            .Where(e => e.Any(v => request.Filter.ToString()!.Contains($"(proxyAddresses={v})", StringComparison.OrdinalIgnoreCase)))
-            .Select((e, n) => LdapTestResponses.EntryWithValues($"CN=Mailbox {n},{container}", ("proxyAddresses", e)));
 }
