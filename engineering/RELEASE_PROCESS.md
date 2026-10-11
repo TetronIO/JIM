@@ -91,20 +91,26 @@ git push origin main --tags
    pwsh -File ./.github/scripts/check-apt-pins.ps1
    ```
 
-2. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
+2. **Re-validate the priority docs pages**: each records the release it was last checked against (`validated: vX.Y.Z`; PRI-1 in [`DOCUMENTATION_STANDARD.md`](DOCUMENTATION_STANDARD.md)). List those due:
+   ```bash
+   pwsh ./scripts/Get-DocsDueForValidation.ps1 -Version <version>
+   ```
+   Re-validate each page listed (read it against the product as this release ships it, correct it, and set `validated: v<version>`), or defer it with a one-line reason in the release pull request. A deferred page is listed again at the next release.
 
-3. **Update the version**: Edit the `VERSION` file
+3. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
 
-4. **Freeze the released migrations**: run `pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>` to append every migration shipping in this release to `src/JIM.PostgresData/Migrations/released-migrations.lock`. A listed migration has been applied to customer databases and is immutable; `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if one is later renamed, regenerated, edited or deleted, or if a new migration is sequenced before the newest released one. The script refuses to run if a frozen migration has already been changed; stop the release and investigate if it does.
+4. **Update the version**: Edit the `VERSION` file
 
-5. **Commit changes**:
+5. **Freeze the released migrations**: run `pwsh -File ./scripts/Update-ReleasedMigrationsManifest.ps1 -Version <version>` to append every migration shipping in this release to `src/JIM.PostgresData/Migrations/released-migrations.lock`. A listed migration has been applied to customer databases and is immutable; `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build if one is later renamed, regenerated, edited or deleted, or if a new migration is sequenced before the newest released one. The script refuses to run if a frozen migration has already been changed; stop the release and investigate if it does.
+
+6. **Commit changes**:
    ```bash
    git add VERSION CHANGELOG.md src/JIM.PostgresData/Migrations/released-migrations.lock
    git commit -m "Release v0.3.0"
    git push origin main
    ```
 
-6. **Pass the release gates.** Do not tag before each enforced gate's script exits 0 for the release commit; `release.yml` would refuse the release anyway.
+7. **Pass the release gates.** Do not tag before each enforced gate's script exits 0 for the release commit; `release.yml` would refuse the release anyway.
 
    **The pre-release integration gate** (only while `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`): merging the release PR started `pre-release.yml` on the release commit by itself. Wait for it (about 1h 45m), then check:
    ```bash
@@ -120,17 +126,17 @@ git push origin main --tags
    ```
    If either script exits 1 it names the state and the run; fix the cause, run that workflow again and re-check. Once enforced, there is no override.
 
-7. **Create the release tag**:
+8. **Create the release tag**:
    ```bash
    git tag v0.3.0
    git push origin v0.3.0
    ```
 
-8. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
+9. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
 
-9. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+10. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
-10. **Verify the release**: Once complete, verify:
+11. **Verify the release**: Once complete, verify:
    - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery

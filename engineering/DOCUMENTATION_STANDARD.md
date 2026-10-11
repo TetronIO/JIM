@@ -124,7 +124,7 @@ audience: implementer
 
 | ID | Tier | Rule |
 |----|------|------|
-| **STR-1** | Block | The front matter is valid. Quote any value containing `: ` or ` #`, or starting with a YAML indicator character: MkDocs drops an invalid block without a warning, and the page loses its description. Only the keys `title`, `description`, `type`, `audience`, `template`, `hide` and `scenario` are allowed; `type` and `audience` take the values above; the `description` is one sentence of 50 to 160 characters saying what the page is for. |
+| **STR-1** | Block | The front matter is valid. Quote any value containing `: ` or ` #`, or starting with a YAML indicator character: MkDocs drops an invalid block without a warning, and the page loses its description. Only the keys `title`, `description`, `type`, `audience`, `template`, `hide`, `scenario` and `validated` are allowed; `type` and `audience` take the values above; the `description` is one sentence of 50 to 160 characters saying what the page is for. |
 | **STR-2** | Ratchet | The front matter declares `title`, `description`, `type` and `audience`. |
 | **STR-3** | Block | One name for the page: the `title` equals the H1, and the nav label equals that name or drops its leading words (the nav section already says them: "Keycloak" under SSO Setup for "SSO Setup: Keycloak"). |
 | **STR-4** | Block | Exactly one H1 (a page with a `template` has none), and no heading skips a level. |
@@ -225,7 +225,7 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 | ID | Tier | Rule |
 |----|------|------|
-| **PRI-1** | Planned (Phase 3) | Each priority page records the release it was last checked against (`validated: vX.Y.Z`), and `/release` lists every page due for re-validation; the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. |
+| **PRI-1** | Block | Each conformant priority page records the release it was last checked against (`validated: vX.Y.Z`, no later than `VERSION`), and no other page records one. `/release` lists every priority page due for re-validation (`scripts/Get-DocsDueForValidation.ps1`); the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. Validating means reading the page against the product as the release ships it (ACC-4), not re-running the scripts, which run on every pull request anyway. |
 | **PRI-2** | Planned (Phase 3) | On a priority page, the advisory review's findings arrive as review threads, each answered by a fix or a reply; the review still never blocks a merge the author has answered. |
 | **TUT-1** | Block | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
 | **TUT-2** | Block | Every label a tutorial's Portal tab names in bold is one the portal shows: the check finds it in the portal's source (`PortalLabelSources` in `docs/.conformance/config.psd1`), ignoring case. A label the portal builds from data ("Project Users to the Metaverse?") is excused in place with a marker saying so. This proves the labels exist, not that the clicks work. |
@@ -298,7 +298,8 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
-| PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
+| PRI-1 | Priority pages record their last validation | Block | `Test-DocsConformance.ps1`; listed for each release by `Get-DocsDueForValidation.ps1` |
+| PRI-2 | Advisory review findings on priority pages arrive as review threads | Planned (Phase 3) | |
 | TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |
 | TUT-2 | A tutorial names only labels the portal shows | Block | `Test-DocsConformance.ps1` |
 | COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |

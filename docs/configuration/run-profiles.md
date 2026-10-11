@@ -1,30 +1,34 @@
 ---
 title: Run Profiles
+description: What each run type does, and the settings that scope a run, verify an import and stop a run becoming a mass change.
+type: object
+audience: administrator
+validated: v0.16.0
 ---
 
 # Run Profiles
 
 A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export), a batch size, and (where applicable) a target partition or file path.
 
-Run Profiles are the building blocks of [schedules](schedules.md): each schedule step typically references a Run Profile to execute. Run Profiles can also be executed directly for one-off operations.
+Run Profiles are the building blocks of [Schedules](schedules.md): each step of a Schedule runs a Run Profile. A Run Profile can also be run directly, for a one-off operation.
 
 ## Run types
 
 A Run Profile is one of:
 
-- **Full Import**<br /> Read every object from the Connected System and replace the existing connector space view.
+- **Full Import**<br /> Read every object from the Connected System into its Connector Space; an object it no longer returns is treated as deleted.
 - **Delta Import**<br /> Read only the objects that have changed since the last import. Faster, and only available where the connector supports change tracking.
-- **Full Synchronisation**<br /> Evaluate every connector space object against the Synchronisation Rules, skipping a joined object unchanged since the last synchronisation unless Synchronisation Rule configuration has changed since the last Full Synchronisation; produce projections, joins, Attribute Flows, and Pending Exports. Its preview action shows what it would do without running it; see [Previewing a Full Synchronisation](connected-systems.md#previewing-a-full-synchronisation).
+- **Full Synchronisation**<br /> Evaluate every Connected System Object against the Synchronisation Rules, skipping a joined object unchanged since the last synchronisation unless Synchronisation Rule configuration has changed since the last Full Synchronisation; produce projections, joins, Attribute Flows, and Pending Exports. Its preview action shows what it would do without running it; see [Previewing a Full Synchronisation](connected-systems.md#previewing-a-full-synchronisation).
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
 ## Page size
 
-Controls how many objects are processed per batch during execution. Larger batches reduce overhead per object but cost more memory and increase the blast radius if a batch fails. Sensible defaults differ per connector; tune as needed for your scale.
+How many objects an import asks the Connected System for at a time: the page of an LDAP paged search, a SQL query or a SCIM request. The default is 100. A larger page means fewer round trips to the Connected System and more memory held at once. The File Connector reads its file whole, so the setting does nothing there, and synchronisation is paged by the `Sync.PageSize` [Service Setting](../administration/configuration.md#service-settings) instead.
 
 ## Partition and file path
 
-For connectors that expose multiple partitions (for example LDAP) or that operate on files (the file connector), the Run Profile pins the operation to a specific scope. A connector can have several Run Profiles of the same run type, each scoped to a different partition or file.
+For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), the Run Profile pins the operation to one partition or file. A Connected System can have several Run Profiles of the same run type, each scoped to a different partition or file.
 
 A Run Profile that targets no partition reads from every partition currently selected on the Connected System, so it follows your selections automatically.
 
@@ -50,7 +54,7 @@ Full Import automatically skips loading and comparing objects whose content has 
 
 ## Allow Object Type Changes (Full Import)
 
-JIM recognises a Connected System Object by its External ID within one Object Type. When an object JIM already holds starts arriving under a different Object Type (an Object Type selection change, a schema refresh, or an edit in the directory), the import does not treat it as a new object: it **refuses the change**. The object's Run Profile execution item records an **Object Type Changed** error naming both Object Types, nothing is created, and the existing Connected System Object is kept exactly as it is, including through deletion detection, so nothing is disconnected or deprovisioned (unless an earlier import had already marked it obsolete, in which case the next synchronisation disconnects it as it would have anyway). The Activity completes with a warning, even when the refused objects are all it recorded. This applies to Full and Delta Imports alike, for every Connector that can tell an Object Type change from a new object (today the [LDAP Connector](../connectors/jim-ldap-connector.md), whose External IDs are unique across the whole directory).
+JIM recognises a Connected System Object by its External ID within one Object Type. When an object JIM already holds starts arriving under a different Object Type (an Object Type selection change, a schema refresh, or an edit in the directory), the import does not treat it as a new object: it **refuses the change**. The object's Run Profile execution item records an **Object Type Changed** error naming both Object Types, nothing is created, and the existing Connected System Object is kept exactly as it is, including through deletion detection, so nothing is disconnected or deprovisioned (unless an earlier import had already marked it obsolete, in which case the next synchronisation disconnects it as it would have anyway). The Activity completes with a warning, even when the refused objects are all it recorded. This applies to Full and Delta Imports alike, for every Connector that can tell an Object Type change from a new object: of the built-in Connectors, the [LDAP Connector](../connectors/jim-ldap-connector.md), whose External IDs are unique across the whole directory.
 
 **Allow Object Type Changes** is how you tell JIM a change is intended. On a Full Import Run Profile that allows it, JIM imports each such object as a new Connected System Object of its new type, and deletion detection retires the old one: it is marked obsolete, and the next synchronisation disconnects it from its Metaverse Object under the usual [Deletion Rules](metaverse.md#deletion-behaviour). Grace periods apply to that disconnection as to any other. [Deletion limits](#full-import) do not hold the retirement back: the import returned the object, under its new type, so it is not a missing object, and holding the old one back would leave two Connected System Objects for one directory object. A replacement is only ever created alongside the retirement of what it replaces: where the old object cannot be retired (it is in a partition this Run Profile does not import, or its Object Type is deselected with an enabled Synchronisation Rule still bound to it), the new one is not created and the object is reported as an Object Type Changed error. The setting is only valid on a Full Import Run Profile, because a Full Import is the run that returns every object and so the only one whose deletion detection can retire the old ones; enabling it on any other run type is rejected. For Connectors whose External IDs are only unique within an Object Type (SQL, File, SCIM 2.0 Client), an object under another Object Type is a different object, and the setting has no effect.
 
@@ -90,7 +94,7 @@ A refused detection also means the run does not count as a successful Full Impor
 
 ## Asynchronous execution
 
-Triggering a Run Profile returns an activity ID. The actual work runs on the worker process and is monitored via [activities](activities.md). For long-running runs, polling the activity gives you live progress counters; the per-object execution items let you drill into individual failures after the fact.
+Starting a Run Profile returns an Activity ID straight away. The work runs on the Worker, and its [Activity](activities.md) shows the run's progress as it goes, in the portal or with `Get-JIMActivity -Follow`; afterwards, its execution items give each object's outcome.
 
 ## Common workflows
 
@@ -103,8 +107,8 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 **Running a one-off import:**
 
 1. Find the right Run Profile for the Connected System
-2. Execute the Run Profile and capture the returned activity ID
-3. Watch the activity to monitor progress and inspect the result
+2. Run it, and note the Activity ID it returns
+3. Watch the Activity to follow its progress and inspect the result
 
 ## Manage Run Profiles
 
@@ -112,7 +116,7 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 - **PowerShell**<br /> [Run Profile cmdlets](../powershell/run-profiles.md) (`Get-JIMRunProfile`, `New-JIMRunProfile`, `Start-JIMRunProfile`, etc.)
 - **REST API**<br /> Run Profile endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
 - [Connected Systems](connected-systems.md): Run Profiles belong to a Connected System
 - [Schedules](schedules.md): automated execution of Run Profiles
