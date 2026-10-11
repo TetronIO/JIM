@@ -295,6 +295,71 @@ public class ConnectedSystemSchemaObjectTypeTagTests
     }
 
     [Test]
+    public async Task PreviewConnectedSystemSchemaRefreshAsync_WhenAClassKindChangeDoesNotFlipAuxiliary_RecordsItWithoutWarningAsync()
+    {
+        // Only whether a class is auxiliary decides resolution, so a type gaining its class kind for the first time,
+        // or moving between structural and abstract, can move nothing. It is still recorded, so the refresh can be
+        // applied rather than discarded as up to date.
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.ObjectTypes = [new ConnectedSystemObjectType { Id = 10, Name = "inetOrgPerson", Selected = true }];
+        _connector.SetSchema(("inetOrgPerson", [new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassKind, ObjectTypeTags.Values.ClassKindStructural)]));
+
+        var result = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasObjectTypeClassificationChanges, Is.False, "Nothing can change which Object Type an entry resolves to");
+            Assert.That(result.ObjectTypesWithClassificationUpdates, Is.EqualTo(new[] { "inetOrgPerson" }));
+            Assert.That(result.HasChanges, Is.True, "A refresh carrying only this is offered for applying");
+        }
+    }
+
+    [Test]
+    public async Task PreviewConnectedSystemSchemaRefreshAsync_WhenInheritanceNamesOnlyUnselectedClasses_RecordsItWithoutWarningAsync()
+    {
+        // Inheritance the selection preview will need once the other class is selected: discarding it as "no
+        // changes" would leave that preview unable to warn.
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType { Id = 10, Name = "user", Selected = true },
+            new ConnectedSystemObjectType { Id = 11, Name = "computer", Selected = false }
+        ];
+        _connector.SetSchema(
+            ("user", [SchemaSuperiorClassTag("top")]),
+            ("computer", [SchemaSuperiorClassTag("user"), SchemaSuperiorClassTag("top")]));
+
+        var result = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasObjectTypeClassificationChanges, Is.False);
+            Assert.That(result.ObjectTypesWithClassificationUpdates, Is.EquivalentTo(new[] { "user", "computer" }));
+            Assert.That(result.HasChanges, Is.True);
+            Assert.That(result.HasRemovalsOrDefinitionChanges, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task PreviewConnectedSystemSchemaRefreshAsync_WhenAClassKindChangeIsReported_DoesNotAlsoListItAsAnUpdateAsync()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType { Id = 10, Name = "posixAccount", Selected = true, Tags = [ClassKindTag(1, ObjectTypeTags.Values.ClassKindStructural)] }
+        ];
+        _connector.SetSchema(("posixAccount", [new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.ClassKind, ObjectTypeTags.Values.ClassKindAuxiliary)]));
+
+        var result = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasObjectTypeClassificationChanges, Is.True);
+            Assert.That(result.ObjectTypesWithClassificationUpdates, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task PreviewConnectedSystemSchemaRefreshAsync_WhenASelectedTypesClassificationIsUnchanged_DoesNotReportAsync()
     {
         var connectedSystem = CreateConnectedSystem();

@@ -2893,10 +2893,16 @@ public partial class ConnectedSystemServer
                 ? (TagValues(existingObjectType, ObjectTypeTags.Keys.ClassKind), TagValues(existingObjectType, ObjectTypeTags.Keys.SuperiorClass))
                 : null;
 
-            MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+            var classificationUpdated = MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
 
             if (classificationBefore is { } before)
                 RecordObjectTypeClassificationChanges(result, connectedSystemObjectType, before.ClassKinds, before.SuperiorClasses, selectedObjectTypeNames);
+
+            // Any other classification difference on a type JIM already holds is still worth applying: the selection
+            // preview reads the stored classification, so a refresh carrying only this must not be discarded as up to
+            // date (#2049).
+            if (existingObjectType != null && classificationUpdated && !result.ChangedObjectTypeClassifications.ContainsKey(connectedSystemObjectType.Name))
+                result.ObjectTypesWithClassificationUpdates.Add(connectedSystemObjectType.Name);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
@@ -3029,19 +3035,25 @@ public partial class ConnectedSystemServer
     /// key and value are unchanged are reused so that a refresh does not churn the table, and repeated tags are
     /// collapsed because the persisted tags are uniquely indexed per object type, key and value.
     /// </remarks>
-    private static void MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
+    /// <returns>Whether the classification differs from the one held before.</returns>
+    private static bool MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
     {
         var existingTagsByClassification = connectedSystemObjectType.Tags
             .GroupBy(t => (t.Key, t.Value))
             .ToDictionary(g => g.Key, g => g.First());
 
-        connectedSystemObjectType.Tags = schemaObjectType.Tags
+        var reported = schemaObjectType.Tags
             .Select(t => (t.Key, t.Value))
             .Distinct()
+            .ToList();
+
+        connectedSystemObjectType.Tags = reported
             .Select(classification => existingTagsByClassification.TryGetValue(classification, out var existingTag)
                 ? existingTag
                 : new ConnectedSystemObjectTypeTag { Key = classification.Key, Value = classification.Value })
             .ToList();
+
+        return !reported.ToHashSet().SetEquals(existingTagsByClassification.Keys);
     }
 
     /// <summary>
@@ -3065,7 +3077,7 @@ public partial class ConnectedSystemServer
     /// both.
     /// </summary>
     /// <remarks>
-    /// A class kind change is always recorded. An inheritance change is recorded only when a class gained or lost
+    /// A class kind change is recorded when the class becomes auxiliary or stops being one. An inheritance change is recorded only when a class gained or lost
     /// names another selected Object Type, because only then can it move entries between two types JIM imports. That
     /// restriction also stops the first refresh after JIM began recording inheritance from flagging every type at
     /// once, since each type gains its whole chain then (see <see cref="ObjectTypeTags.Keys.SuperiorClass"/>).
@@ -3077,8 +3089,10 @@ public partial class ConnectedSystemServer
         List<string> superiorClassesBefore,
         HashSet<string> selectedObjectTypeNames)
     {
+        // Only whether a class is auxiliary decides resolution (a structural class takes entries from an auxiliary one),
+        // so a type gaining its first class kind, or moving between structural and abstract, cannot move entries.
         var classKindsAfter = TagValues(objectType, ObjectTypeTags.Keys.ClassKind);
-        if (!classKindsAfter.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(classKindsBefore))
+        if (IsAuxiliaryClassKind(classKindsBefore) != IsAuxiliaryClassKind(classKindsAfter))
         {
             result.AddChangedClassification(objectType.Name, new SchemaObjectTypeClassificationChange
             {
@@ -3105,6 +3119,9 @@ public partial class ConnectedSystemServer
             });
         }
     }
+
+    private static bool IsAuxiliaryClassKind(List<string> classKinds) =>
+        classKinds.Contains(ObjectTypeTags.Values.ClassKindAuxiliary, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The lines a schema import's Activity carries for the Object Type classification changes it applied: one per

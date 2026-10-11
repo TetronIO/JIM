@@ -191,11 +191,11 @@ public class ConnectedSystemSchemaPreviewApplyTests
     }
 
     [Test]
-    public async Task PreviewConnectedSystemSchemaRefreshAsync_WithOnlyAClassificationChange_IsAChangeButNotADestructiveOneAsync()
+    public async Task PreviewConnectedSystemSchemaRefreshAsync_WithOnlyAClassificationUpdate_IsAChangeButNotADestructiveOneAsync()
     {
         // The persisted type was classified structural; the File Connector classifies nothing, so the refresh
-        // restates the selected type as unclassified and changes nothing else (#2049). That must be offered for
-        // applying, but it does not warrant the destructive decision: cancelling it keeps things as they are.
+        // restates the selected type as unclassified and changes nothing else (#2049). Neither kind is auxiliary, so
+        // nothing can move; it must still be offered for applying, but it does not warrant the destructive decision.
         var connectedSystem = CreateFileConnectorConnectedSystem();
         connectedSystem.ObjectTypes =
         [
@@ -218,8 +218,9 @@ public class ConnectedSystemSchemaPreviewApplyTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ChangedAttributes, Is.Empty, "The scenario must change the classification and nothing else.");
-            Assert.That(result.ChangedObjectTypeClassifications, Does.ContainKey("user"));
-            Assert.That(result.HasChanges, Is.True, "A classification change alone is a change; 'no changes detected' would discard it.");
+            Assert.That(result.ChangedObjectTypeClassifications, Is.Empty, "Structural to unclassified cannot change resolution");
+            Assert.That(result.ObjectTypesWithClassificationUpdates, Is.EqualTo(new[] { "user" }));
+            Assert.That(result.HasChanges, Is.True, "A classification update alone is a change; 'no changes detected' would discard it.");
             Assert.That(result.HasRemovalsOrDefinitionChanges, Is.False,
                 "A classification change must not drive the destructive three-way decision or the discard confirmation.");
         }
@@ -236,7 +237,8 @@ public class ConnectedSystemSchemaPreviewApplyTests
                 Id = 7,
                 Name = "user",
                 Selected = true,
-                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                // Auxiliary, so the File Connector restating it as unclassified changes whether it is auxiliary.
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }],
                 Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number }]
             }
         ];

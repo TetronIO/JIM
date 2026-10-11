@@ -118,6 +118,25 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void PreviewPanel_WithOnlyClassificationUpdates_OffersAPlainApplyWithoutWarning()
+    {
+        // A classification difference that cannot move entries (#2049) still has to be applied, or the inheritance
+        // the selection preview relies on is never stored; it carries no warning because nothing can change Object Type.
+        var result = new SchemaRefreshResult { Success = true, ObjectTypesWithClassificationUpdates = ["computer"] };
+
+        var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, result));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("up to date"));
+            Assert.That(cut.Markup, Does.Contain("computer"));
+            Assert.That(cut.FindAll("[data-testid=jim-apply-schema-refresh]"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("[data-testid=jim-close-schema-refresh]"), Is.Empty);
+            Assert.That(cut.FindAll("[data-testid=jim-schema-refresh-reclassified-warning]"), Is.Empty);
+        }
+    }
+
+    [Test]
     public void PreviewPanel_WithClassificationChanges_RaisesThePanelToWarning()
     {
         var cut = Render<SchemaRefreshPreviewPanel>(p => p.Add(c => c.Result, ClassificationOnlyResult()));

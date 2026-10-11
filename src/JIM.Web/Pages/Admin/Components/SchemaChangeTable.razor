@@ -25,6 +25,13 @@
                 <td class="jim-text-code">@string.Join(", ", Result.UpdatedObjectTypes)</td>
             </tr>
         }
+        @if (ShowAdditions && Result.ObjectTypesWithClassificationUpdates.Count > 0)
+        {
+            <tr>
+                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /><span>Object Type Classification Recorded</span></div></td>
+                <td class="jim-text-code">@string.Join(", ", Result.ObjectTypesWithClassificationUpdates)</td>
+            </tr>
+        }
         @if (ShowAdditions)
         {
             @foreach (var kvp in Result.AddedAttributes)

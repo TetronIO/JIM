@@ -355,6 +355,7 @@
     private bool HasAdditions =>
         Result.AddedObjectTypes.Count > 0 ||
         Result.UpdatedObjectTypes.Count > 0 ||
+        Result.ObjectTypesWithClassificationUpdates.Count > 0 ||
         Result.AddedAttributes.Values.Sum(v => v.Count) > 0;
 
     private static string SyncRuleUrl(int syncRuleId) => $"/admin/sync-rules/{syncRuleId}";

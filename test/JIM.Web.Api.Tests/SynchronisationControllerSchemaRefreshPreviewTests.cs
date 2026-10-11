@@ -185,7 +185,8 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
                 Id = 7,
                 Name = "user",
                 Selected = true,
-                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                // Auxiliary, so the File Connector restating it as unclassified changes whether it is auxiliary.
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }],
                 Attributes =
                 [
                     new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
@@ -204,13 +205,48 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(change.Aspect, Is.EqualTo("ClassKind"));
-            Assert.That(change.OldValues, Is.EqualTo(new[] { ObjectTypeTags.Values.ClassKindStructural }));
+            Assert.That(change.OldValues, Is.EqualTo(new[] { ObjectTypeTags.Values.ClassKindAuxiliary }));
             Assert.That(change.NewValues, Is.Empty);
             Assert.That(dto!.HasObjectTypeClassificationChanges, Is.True);
             Assert.That(dto!.HasChanges, Is.True);
             Assert.That(dto!.HasRemovalsOrDefinitionChanges, Is.False);
             Assert.That(dto!.Dependents, Is.Null, "A classification change is not destructive, so it names no dependents.");
             Assert.That(dto!.RemovalImpact, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task PreviewSchemaImport_WithOnlyAClassificationUpdate_ListsTheObjectTypeWithoutWarningAsync()
+    {
+        // Structural restated as unclassified cannot change which Object Type an entry resolves to (#2049): the caller
+        // sees it listed as an update to apply, without the classification-change flag.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Tags = [new ConnectedSystemObjectTypeTag { Id = 1, Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }],
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text }
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)?.Value as SchemaRefreshResultDto;
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.ObjectTypesWithClassificationUpdates, Is.EqualTo(new[] { "user" }));
+            Assert.That(dto!.HasObjectTypeClassificationChanges, Is.False);
+            Assert.That(dto!.HasChanges, Is.True);
         }
     }
 

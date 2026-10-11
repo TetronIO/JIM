@@ -71,6 +71,14 @@ public class SchemaRefreshResultDto
     public Dictionary<string, List<SchemaObjectTypeClassificationChangeDto>> ChangedObjectTypeClassifications { get; set; } = new();
 
     /// <summary>
+    /// Existing Object Types whose classification the Connected System now reports differently in a way that cannot
+    /// change which Object Type an entry resolves to (an unselected type, inheritance naming no other selected type,
+    /// or a class kind change that does not make a class auxiliary or stop it being one). Applying the refresh
+    /// records it; an Object Type listed in <see cref="ChangedObjectTypeClassifications"/> is not repeated here.
+    /// </summary>
+    public List<string> ObjectTypesWithClassificationUpdates { get; set; } = new();
+
+    /// <summary>
     /// Attributes no longer reported that are still referenced by Synchronisation Rules. Key is the attribute
     /// name, value is the list of Synchronisation Rule names that reference it.
     /// </summary>
@@ -141,6 +149,7 @@ public class SchemaRefreshResultDto
             AddedObjectTypes = result.AddedObjectTypes,
             RemovedObjectTypes = result.RemovedObjectTypes,
             UpdatedObjectTypes = result.UpdatedObjectTypes,
+            ObjectTypesWithClassificationUpdates = result.ObjectTypesWithClassificationUpdates,
             AddedAttributes = result.AddedAttributes,
             RemovedAttributes = result.RemovedAttributes,
             ChangedAttributes = result.ChangedAttributes.ToDictionary(
