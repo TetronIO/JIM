@@ -156,7 +156,7 @@ Fetch the public marketing site at `https://junctional.io/` and compare its cont
 2. **Architecture descriptions** — Does the site's description of JIM's architecture match the current state?
 3. **Connector/integration list** — Are all supported connectors and integrations represented?
 4. **Deployment/requirements** — Are prerequisites and deployment descriptions current?
-5. **Screenshots or visuals** — Are they representative of the current UI?
+5. **Visuals other than the product tour's screenshots** — Are diagrams and illustrations representative of the current product? (The tour's screenshots are refreshed by the `jim-screenshots` job; see Step 9.)
 
 > Note: the legacy `tetron.io/jim` page has been retired; do NOT fetch or reference it.
 
@@ -170,7 +170,7 @@ The prompt should:
 - Group suggestions by area (features, connectors, architecture, deployment, visuals, removals) so the site agent can prioritise
 - For each suggestion, include: **what area it relates to**, **what changed in JIM** (with a brief technical reason or pointer to the changelog entry), **what the site currently says or shows** (if you observed it during the fetch), and **a suggestion for what could be added/changed/removed** — phrased as "consider …", "you may want to …", or "this might be worth refreshing because …", never as "change X to Y"
 - Highlight any deprecations or removals that the site might still be advertising
-- Close with a note that screenshots/visuals are out of scope of this prompt; the site agent should request fresh screenshots from the user separately if it decides any are needed
+- Close with a note that the product tour's screenshots are out of scope of this prompt: JIM's `jim-screenshots` job opens their pull request on junctional.io (branch `screenshots/v<version>`) once the pre-release suite passes, so the site agent should leave the images and `imageVersion` to it, though it may suggest alt text changes where a step's image has visibly changed
 
 After writing the file, tell the user the absolute path to the prompt and remind them it is intentionally outside the repo and should be handed to the junctional.io site agent. Do NOT stage or commit the file.
 
@@ -388,6 +388,7 @@ Tell the user to verify after the workflow completes:
 - [ ] Docker images are available: `ghcr.io/tetronio/jim-web:<version>`, etc.
 - [ ] PowerShell module is available on PSGallery: `Install-Module JIM -RequiredVersion <version>`
 - [ ] The `setup.sh` installer detects the new release
+- [ ] The product tour's screenshots: the `jim-screenshots` job in the release commit's `jim-pre-release` run opens a junctional.io pull request, `Product tour screenshots for JIM v<version>`. Look through the images and each step's alt text, and merge it now the release is published. If the job failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
 
 Provide the Actions URL for monitoring:
 ```

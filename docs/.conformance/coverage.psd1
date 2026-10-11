@@ -59,7 +59,6 @@
         # COV-6), which need the compiled product to take their inventories. A Connector setting is keyed
         # 'Connector name: setting name'.
         ServiceSettings      = @{
-            'Worker.StaleTaskTimeout'           = 'Never seeded, so no administrator can see or change it (#2060); document it once it is.'
             'Maintenance.IsEnabled'             = 'Shown to administrators but nothing reads it, so it pauses nothing (#2101); document it once it is wired or removed.'
             'Security.CredentialEncryptionEnabled' = 'Shown to administrators but nothing reads it, so it switches nothing off (#2101); document it once it is wired or removed.'
             'Sync.VerboseNoChangeRecording'     = 'Shown to administrators but nothing reads it, so it records nothing extra (#2101); document it once it is wired or removed.'
