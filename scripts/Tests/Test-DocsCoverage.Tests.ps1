@@ -59,6 +59,8 @@ BeforeAll {
                 "## Installer`n`n| Variable | Description |`n|----------|-------------|`n| ``JIM_SETUP_AUTO_START`` | Start without prompting. |`n"))
             'docs/concepts/expressions.md'                             = (Get-Page 'Expressions' "## Built-in Functions`n`n| Function | Description | Example |`n|----------|-------------|---------|`n| ``Trim(value)`` | Remove spaces | ``Trim(x)`` |`n| ``Upper(value)`` | Uppercase | ``Upper(x)`` |`n")
             'docs/reference/glossary.md'                               = (Get-Page 'Glossary' "Metaverse { #metaverse }`n:   The central store.`n")
+            'src/JIM.Web/Pages/Things.razor'                           = "@page `"/things`"`n@page `"/things/{Id:int}`"`n<MudText Typo=`"Typo.h3`">Things`n    <PageInfo Title=`"Things`" DocsPage=`"administration/configuration.md#logging`">`n        What the page is for.`n    </PageInfo>`n</MudText>`n"
+            'src/JIM.Web/Shared/ThingChip.razor'                       = "<MudChip>@Name</MudChip>`n"
         }
     }
 
@@ -79,7 +81,8 @@ BeforeAll {
             DocsPath            = 'docs'
             DocsExclude         = @('CLAUDE.md', 'developer/**')
             ApiIndex            = 'docs/api/index.md'
-            Allow               = @{ Cmdlets = @{}; EnvironmentVariables = @{}; ExpressionFunctions = @{}; DocsLinks = @{}; ApiRoutes = @{}; ApiResourceGroups = @{} }
+            PortalSources       = @('src/JIM.Web')
+            Allow               = @{ Cmdlets = @{}; EnvironmentVariables = @{}; ExpressionFunctions = @{}; DocsLinks = @{}; ApiRoutes = @{}; ApiResourceGroups = @{}; PortalPages = @{} }
         }
     }
 
@@ -253,6 +256,62 @@ Describe 'Test-DocsCoverage: reporting' {
         $root = New-Repository
         Set-Content -Path (Join-Path $root 'docs/.conformance/coverage.psd1') -Value '@{ }' -Encoding utf8
         (Invoke-Coverage -Root $root).ExitCode | Should -Be 2
+    }
+}
+
+Describe 'Test-DocsCoverage: COV-5 portal pages name their docs page' {
+    It 'passes a routable page whose PageInfo names a docs page and heading that exist, and needs nothing of a component that is not a page' {
+        $r = Invoke-Coverage -Root (New-Repository)
+        $r.Output | Should -Match 'Docs coverage passed'
+        $r.Output | Should -Match '1 portal pages'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a routable page with no PageInfo naming its docs page, at its @page line' {
+        $page = "@using JIM.Web`n@page `"/widgets`"`n<MudText Typo=`"Typo.h3`">Widgets`n    <PageInfo Title=`"Widgets`">What the page is for.</PageInfo>`n</MudText>`n"
+        $r = Invoke-Coverage -Root (New-Repository -Files @{ 'src/JIM.Web/Pages/Widgets.razor' = $page })
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Widgets\.razor:2\s+COV-5\s+.*DocsPage'
+    }
+
+    It 'fails a DocsPage naming a page that does not exist, and one naming a heading its page does not have' {
+        $missingPage = "@page `"/a`"`n<PageInfo Title=`"A`" DocsPage=`"configuration/nowhere.md`">A.</PageInfo>`n"
+        $missingAnchor = "@page `"/b`"`n<PageInfo Title=`"B`" DocsPage=`"administration/configuration.md#nowhere`">B.</PageInfo>`n"
+        $r = Invoke-Coverage -Root (New-Repository -Files @{ 'src/JIM.Web/Pages/A.razor' = $missingPage; 'src/JIM.Web/Pages/B.razor' = $missingAnchor })
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "A\.razor:2\s+COV-5\s+.*'configuration/nowhere\.md'"
+        $r.Output | Should -Match "B\.razor:2\s+COV-5\s+.*'#nowhere'"
+    }
+
+    It 'reads a DocsPage given across lines, and checks every page an expression can choose' {
+        $page = "@page `"/c`"`n<PageInfo Title=`"C`"`n          DocsPage=`"@(_x ? `"administration/configuration.md#logging`" : `"configuration/gone.md`")`">C.</PageInfo>`n"
+        $r = Invoke-Coverage -Root (New-Repository -Files @{ 'src/JIM.Web/Pages/C.razor' = $page })
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "C\.razor:3\s+COV-5\s+.*'configuration/gone\.md'"
+        $r.Output | Should -Not -Match "'administration/configuration\.md#logging'"
+    }
+
+    It 'fails a DocsPage expression holding no docs page, since there is nothing in it to check' {
+        $page = "@page `"/d`"`n<PageInfo Title=`"D`" DocsPage=`"@(DocsPageFor(_x))`">D.</PageInfo>`n"
+        $r = Invoke-Coverage -Root (New-Repository -Files @{ 'src/JIM.Web/Pages/D.razor' = $page })
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "D\.razor:2\s+COV-5\s+.*names no docs page"
+    }
+
+    It 'passes an allow-listed page, and fails an entry with no reason, one for a page that is gone and one for a page that now names its docs' {
+        $bare = "@page `"/bare`"`n<MudText>Bare</MudText>`n"
+        $allow = @{ PortalPages = @{
+                    'src/JIM.Web/Pages/Bare.razor'   = 'A developer specimen page with nothing to document.'
+                    'src/JIM.Web/Pages/Empty.razor'  = ''
+                    'src/JIM.Web/Pages/Gone.razor'   = 'Was a page once.'
+                    'src/JIM.Web/Pages/Things.razor' = 'Documented now.'
+                } }
+        $r = Invoke-Coverage -Root (New-Repository -Files @{ 'src/JIM.Web/Pages/Bare.razor' = $bare; 'src/JIM.Web/Pages/Empty.razor' = $bare } -Allow $allow)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Not -Match 'Bare\.razor:\d+\s+COV-5'
+        $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Empty.razor' gives no reason"
+        $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Gone.razor' names a page that no longer exists"
+        $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Things.razor' is no longer needed"
     }
 }
 

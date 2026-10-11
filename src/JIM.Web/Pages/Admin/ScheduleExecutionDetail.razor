@@ -17,6 +17,9 @@
 <MudText Typo="Typo.h3">
     <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />
     <span>Schedule Execution:</span> <span class="mud-primary-text">@(_detail?.Execution.ScheduleName ?? "Not Found")</span>
+    <PageInfo Title="Schedule Execution" DocsPage="configuration/schedules.md#the-schedule-execution-view">
+        One run of a Schedule: each of its steps, the Activity each step started, and how the run ended.
+    </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
