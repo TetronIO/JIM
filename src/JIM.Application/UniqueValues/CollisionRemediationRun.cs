@@ -432,13 +432,12 @@ internal sealed class CollisionRemediationRun
             return (GeneratedValueAnchoringVerdict.Unanchored, null);
 
         (GeneratedValueAnchoringVerdict Verdict, string? Name) cannotTell = (GeneratedValueAnchoringVerdict.Unanchored, null);
-        foreach (var value in builtValues)
+        var heldValues = builtValues
+            .Select(value => (Value: value, Current: metaverseObject.AttributeValues.FirstOrDefault(av => av.AttributeId == value.MetaverseAttributeId)?.StringValue))
+            .Where(held => !string.IsNullOrEmpty(held.Current));
+        foreach (var (value, current) in heldValues)
         {
-            var current = metaverseObject.AttributeValues.FirstOrDefault(av => av.AttributeId == value.MetaverseAttributeId)?.StringValue;
-            if (string.IsNullOrEmpty(current))
-                continue;
-
-            var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId, current, null, value.ExportedTo, rejectingConnectedSystemId, context.ConnectedSystems);
+            var verdict = await generationServer.IsAnchoredAsync(metaverseObjectId, current!, null, value.ExportedTo, rejectingConnectedSystemId, context.ConnectedSystems);
             if (verdict.Anchoring == GeneratedValueAnchoring.Anchored)
                 return (verdict, value.MetaverseAttributeName);
             if (verdict.Anchoring == GeneratedValueAnchoring.CannotTell && cannotTell.Verdict.Anchoring == GeneratedValueAnchoring.Unanchored)

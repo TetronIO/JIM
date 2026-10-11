@@ -85,15 +85,12 @@ public sealed class GeneratedValueBuiltValues
         if (generatedMapping.Generation == null || !generatedAttributeId.HasValue || ownRule == null)
             return [];
 
-        var built = new List<GeneratedValueBuiltValue>();
-        foreach (var (rule, mapping) in CandidateMappings(ownRule.MetaverseObjectTypeId))
-        {
-            var paths = PathsFrom(rule, mapping, applySwitch: false);
-            if (paths.Any(p => p.GeneratedAttributeId == generatedAttributeId.Value))
-                built.Add(Describe(rule, mapping, paths, generatedMapping, generatedAttributeId.Value, ownRule));
-        }
-
-        return built;
+        var generatedId = generatedAttributeId.Value;
+        return CandidateMappings(ownRule.MetaverseObjectTypeId)
+            .Select(candidate => (candidate.Rule, candidate.Mapping, Paths: PathsFrom(candidate.Rule, candidate.Mapping, applySwitch: false)))
+            .Where(candidate => candidate.Paths.Any(p => p.GeneratedAttributeId == generatedId))
+            .Select(candidate => Describe(candidate.Rule, candidate.Mapping, candidate.Paths, generatedMapping, generatedId, ownRule))
+            .ToList();
     }
 
     /// <summary>
@@ -199,25 +196,26 @@ public sealed class GeneratedValueBuiltValues
     /// <param name="change">The exported attribute change.</param>
     /// <param name="honourSwitch">False to ignore the switch, to tell a switched-off value from one built from no
     /// generated value at all.</param>
-    internal List<GeneratedValueSource> SourcesOf(PendingExportAttributeValueChange change, bool honourSwitch = true)
+    internal List<GeneratedValueSource> SourcesOf(PendingExportAttributeValueChange change, bool honourSwitch = true) =>
+        ExportMappingsProducing(change)
+            .SelectMany(producing => SourcesThrough(producing.Rule, producing.Mapping, honourSwitch))
+            .Distinct()
+            .ToList();
+
+    /// <summary>
+    /// The generated values one export mapping producing a refused value carries: itself when it is generated, nothing when
+    /// it is an expression with its switch off (and the switch is honoured), otherwise every generated value it is built from.
+    /// </summary>
+    private IEnumerable<GeneratedValueSource> SourcesThrough(SyncRule rule, SyncRuleMapping mapping, bool honourSwitch)
     {
-        var sources = new List<GeneratedValueSource>();
-        foreach (var (rule, mapping) in ExportMappingsProducing(change))
-        {
-            if (mapping.Generation != null)
-            {
-                sources.Add(new GeneratedValueSource(null, mapping, ThroughDerivation: false));
-                continue;
-            }
+        if (mapping.Generation != null)
+            return [new GeneratedValueSource(null, mapping, ThroughDerivation: false)];
 
-            if (honourSwitch && IsExpressionMapping(mapping) && !mapping.KeepUnique)
-                continue;
+        if (honourSwitch && IsExpressionMapping(mapping) && !mapping.KeepUnique)
+            return [];
 
-            sources.AddRange(PathsFrom(rule, mapping, applySwitch: honourSwitch)
-                .Select(p => new GeneratedValueSource(p.GeneratedAttributeId, null, p.ThroughDerivation)));
-        }
-
-        return sources.Distinct().ToList();
+        return PathsFrom(rule, mapping, applySwitch: honourSwitch)
+            .Select(p => new GeneratedValueSource(p.GeneratedAttributeId, null, p.ThroughDerivation));
     }
 
     /// <summary>
