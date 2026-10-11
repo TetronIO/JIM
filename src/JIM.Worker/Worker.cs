@@ -1550,29 +1550,27 @@ public class Worker : BackgroundService
             var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
             objectLevelErrorCount = totalWithErrors;
 
-            var hasItems = totalRpeis > 0;
-            var hasErrors = totalWithErrors > 0;
-            var hasUnhandledErrors = totalUnhandledErrors > 0;
-            var allErrors = hasItems && totalWithErrors == totalRpeis;
+            var outcome = RunCompletionEvaluator.Evaluate(totalWithErrors, totalRpeis, totalUnhandledErrors,
+                !string.IsNullOrEmpty(activity.WarningMessage), activity.ConnectedSystemRunType, activity.ObjectsProcessed);
 
-            if (allErrors)
+            if (outcome == RunCompletionOutcome.Failed)
             {
                 await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
                 Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
             }
-            else if (hasUnhandledErrors)
+            else if (outcome == RunCompletionOutcome.CompleteWithError)
             {
                 // UnhandledError RPEIs indicate code/logic bugs, not data issues.
                 // These must escalate to CompleteWithError to ensure visibility and investigation.
                 await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{totalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
                 Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, totalUnhandledErrors);
             }
-            else if (hasErrors)
+            else if (outcome == RunCompletionOutcome.CompleteWithWarning && totalWithErrors > 0)
             {
                 await jim.Activities.CompleteActivityWithWarningAsync(activity);
                 Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
             }
-            else if (!string.IsNullOrEmpty(activity.WarningMessage))
+            else if (outcome == RunCompletionOutcome.CompleteWithWarning)
             {
                 // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the
                 // Activity, not as RPEIs. The activity should still complete with warning status.

@@ -172,7 +172,7 @@ flowchart TD
     HasWarning -->|Yes| WarnActivity
     HasWarning -->|No| CompleteOk
 
-    HasErrors -->|Yes| AllErrors{ALL RPEIs<br/>have errors?}
+    HasErrors -->|Yes| AllErrors{ALL RPEIs have errors,<br/>and for an import, no more<br/>objects read than that?}
     AllErrors -->|Yes| FailActivity[FailActivityWithErrorAsync<br/>Status = FailedWithError<br/>All items experienced an error]
     AllErrors -->|No, some| Unhandled{Any RPEI with<br/>UnhandledError?}
     Unhandled -->|Yes| ErrorActivity[CompleteActivityWithErrorAsync<br/>Status = CompleteWithError]
@@ -183,7 +183,7 @@ flowchart TD
     CalcStats -.->|Exception thrown<br/>during status check| SafeFail[SafeFailActivityAsync<br/>See triple fallback below]
 ```
 
-Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error.
+Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory, and `RunCompletionEvaluator` decides the status from them. An import gives no RPEI to an object it found unchanged, so for an import "every RPEI errored" fails the run only when the import read no more objects than it recorded errors for (its `ObjectsProcessed` at completion is the whole run's count); one bad value among a hundred unchanged objects completes with a warning. Other run types keep the RPEI rule, since their counters describe their last step. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error.
 
 After a Full Import completes, the Worker stamps `LastSuccessfulFullImportCompletedAt` on the Connected System only when `FullImportSuccessEvaluator` agrees the run genuinely succeeded: `Complete`, or `CompleteWithWarning` with no object-level errors, and no deletions withheld (#1605). The stranded-value sweep's gate reads that timestamp.
 

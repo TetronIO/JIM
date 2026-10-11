@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
+- 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 
