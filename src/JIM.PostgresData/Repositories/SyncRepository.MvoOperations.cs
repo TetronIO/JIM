@@ -274,6 +274,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (mvo.DeletionScheduledByRunProfileExecutionItemId.HasValue)
+                await writer.WriteAsync(mvo.DeletionScheduledByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
             if (mvo.CachedDisplayName is not null)
                 await writer.WriteAsync(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
@@ -590,6 +594,7 @@ public partial class SyncRepository
                 mvo.DeletionTriggeredBySystemId = existing.DeletionTriggeredBySystemId;
                 mvo.DeletionTriggeredBySystemName = existing.DeletionTriggeredBySystemName;
                 mvo.DeletionPolicySnapshotJson = existing.DeletionPolicySnapshotJson;
+                mvo.DeletionScheduledByRunProfileExecutionItemId = existing.DeletionScheduledByRunProfileExecutionItemId;
             }
 
             byId[mvo.Id] = mvo;
@@ -632,8 +637,8 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkUpdateMvoRowsViaEfAsync(List<MetaverseObject> objects)
     {
-        // Id plus the twelve updatable columns.
-        const int columnsPerRow = 13;
+        // Id plus the thirteen updatable columns.
+        const int columnsPerRow = 14;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
@@ -654,6 +659,7 @@ public partial class SyncRepository
                     "DeletionTriggeredBySystemId" = v."DeletionTriggeredBySystemId",
                     "DeletionTriggeredBySystemName" = v."DeletionTriggeredBySystemName",
                     "DeletionPolicySnapshotJson" = v."DeletionPolicySnapshotJson",
+                    "DeletionScheduledByRunProfileExecutionItemId" = v."DeletionScheduledByRunProfileExecutionItemId",
                     "CachedDisplayName" = v."CachedDisplayName"
                 FROM (VALUES
                 """);
@@ -664,7 +670,7 @@ public partial class SyncRepository
                 if (i > 0) sql.Append(',');
                 var o = i * columnsPerRow;
                 // Explicit casts give the VALUES columns a definite type even when a whole chunk is null for a column.
-                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::int,{{{o + 10}}}::text,{{{o + 11}}}::text,{{{o + 12}}}::text)");
+                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::int,{{{o + 10}}}::text,{{{o + 11}}}::text,{{{o + 12}}}::uuid,{{{o + 13}}}::text)");
 
                 var mvo = chunk[i];
                 parameters.Add(mvo.Id);
@@ -679,11 +685,12 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionScheduledByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append("""
-                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","DeletionTriggeredBySystemId","DeletionTriggeredBySystemName","DeletionPolicySnapshotJson","CachedDisplayName")
+                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","DeletionTriggeredBySystemId","DeletionTriggeredBySystemName","DeletionPolicySnapshotJson","DeletionScheduledByRunProfileExecutionItemId","CachedDisplayName")
                 WHERE m."Id" = v."Id"
                 """);
 

@@ -745,6 +745,40 @@ public class ConnectedSystemDeletionTests
     }
 
     [Test]
+    public async Task ExecuteDeletionAsync_ZeroJoinMetaverseObject_MarksItWithTheItemRecordingTheMarkingAsync()
+    {
+        // The housekeeping deletion that follows names the item that scheduled it (#1811), so each object is marked
+        // with its own item, not just with the Activity.
+        var userType = new MetaverseObjectType
+        {
+            Id = 7,
+            Name = "User",
+            DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            DeletionGracePeriod = TimeSpan.FromDays(7)
+        };
+        var stray = new MetaverseObject { Id = Guid.NewGuid(), Type = userType };
+        _mockMvRepo.Setup(r => r.GetStateConvergentZeroJoinMetaverseObjectsAsync(Guid.Empty, It.IsAny<int>()))
+            .ReturnsAsync([stray]);
+        List<(Guid MetaverseObjectId, Guid SchedulingItemId)> markings = [];
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedWithNoTriggerAsync(
+                It.IsAny<IReadOnlyCollection<(Guid MetaverseObjectId, Guid SchedulingItemId)>>(),
+                It.IsAny<ActivityInitiatorType>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Callback<IReadOnlyCollection<(Guid MetaverseObjectId, Guid SchedulingItemId)>, ActivityInitiatorType, Guid?, string?, string?>(
+                (marked, _, _, _, _) => markings.AddRange(marked))
+            .ReturnsAsync(1);
+        List<ActivityRunProfileExecutionItem> persistedItems = [];
+        _mockActivityRepo.Setup(r => r.CreateActivityRunProfileExecutionItemsAsync(It.IsAny<IReadOnlyCollection<ActivityRunProfileExecutionItem>>()))
+            .Callback<IReadOnlyCollection<ActivityRunProfileExecutionItem>>(persistedItems.AddRange)
+            .Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity(), evaluateMvoDeletionRules: true);
+
+        var item = persistedItems.Single(i => i.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled));
+        Assert.That(markings, Is.EqualTo(new[] { (stray.Id, item.Id) }));
+    }
+
+    [Test]
     public async Task ExecuteDeletionAsync_WithEvaluateMvoDeletionRulesFalse_DoesNotMarkOrphanedMvosAsync()
     {
         // Arrange

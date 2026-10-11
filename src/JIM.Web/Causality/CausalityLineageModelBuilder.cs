@@ -134,8 +134,10 @@ public static class CausalityLineageModelBuilder
             switch (cohort.EdgeType)
             {
                 // A Metaverse Object deletion is a Metaverse-side fact wherever its consequences land.
+                // So is the scheduling of one, which the housekeeping deletion carried out later (#1811).
                 case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
                 case CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval:
+                case CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion:
                     return GetIdentityColumn();
 
                 // The export this import confirms happened to the page's own record.
