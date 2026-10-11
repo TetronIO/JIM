@@ -14,7 +14,9 @@ namespace JIM.Connectors.LDAP;
 /// <summary>
 /// Searches a directory for generated values already in use (Unique Value Generation, #242, release 3, plan Phase 7
 /// item 3). One search per partition root, from the root down, with one OR filter carrying the object's candidates
-/// and the control value, asking for the probed attribute and nothing else.
+/// and the control value, asking for the probed attribute and nothing else. Several attributes of one object are
+/// probed with one search per route rather than one per attribute (Generated Value Forms, #2023; see
+/// <see cref="ProbeAttributesAsync"/>).
 /// <para>
 /// The partition root, never the selected containers: a value held by an account outside JIM's import scope is
 /// exactly the collision the probe exists to catch, since JIM already knows about everything inside it.
@@ -157,18 +159,8 @@ internal sealed partial class LdapConnectorUniquenessProbe
     /// <paramref name="includeProxyAddresses"/> (see <see cref="IsEmailAttribute"/>). The directory compares that
     /// attribute without regard to case, so <c>smtp:</c> also finds a primary <c>SMTP:</c> address.
     /// </summary>
-    internal static string BuildFilter(string attributeName, IEnumerable<string> values, bool includeProxyAddresses)
-    {
-        var filter = new StringBuilder("(|");
-        foreach (var escaped in values.Select(LdapConnectorUtilities.EscapeLdapFilterValue))
-        {
-            filter.Append('(').Append(attributeName).Append('=').Append(escaped).Append(')');
-            if (includeProxyAddresses)
-                filter.Append('(').Append(ProxyAddressesAttribute).Append('=').Append(SmtpProxyAddressPrefix).Append(escaped).Append(')');
-        }
-
-        return filter.Append(')').ToString();
-    }
+    internal static string BuildFilter(string attributeName, IEnumerable<string> values, bool includeProxyAddresses) =>
+        AppendAssertions(new StringBuilder("(|"), attributeName, values, includeProxyAddresses).Append(')').ToString();
 
     /// <summary>
     /// Whether <paramref name="attributeName"/> holds an email address, which in Active Directory may also be held in any
@@ -177,63 +169,117 @@ internal sealed partial class LdapConnectorUniquenessProbe
     internal static bool IsEmailAttribute(string attributeName) => string.Equals(attributeName, "mail", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Searches for the batch, and reports an outcome per candidate: through the Global Catalog for a forest-wide
-    /// attribute where one is needed and can be searched, otherwise every partition root in
-    /// <paramref name="searchBases"/>. Never throws for a directory fault: a refused, failed or timed-out search of
-    /// the partitions is a <see cref="UniquenessProbeResult.Failed"/> result naming why, so the synchronisation
-    /// carries on with JIM's own records, and one of the Global Catalog falls back to the partitions with a
-    /// <see cref="UniquenessProbeResult.Caveat"/>.
+    /// Searches for the batch, and reports an outcome per candidate (see <see cref="ProbeAttributesAsync"/>, which this
+    /// is with one attribute).
     /// </summary>
     internal Task<UniquenessProbeResult> ProbeAsync(UniquenessProbeRequest request, IReadOnlyList<string> searchBases, CancellationToken cancellationToken)
     {
-        request.Validate();
+        ArgumentNullException.ThrowIfNull(request);
 
-        if (!IsValidAttributeDescription(request.AttributeName))
-            return Task.FromResult(UniquenessProbeResult.Failed(request.Candidates.Count,
-                $"\"{request.AttributeName}\" is not an LDAP attribute name JIM can probe for"));
-
-        if (searchBases.Count == 0)
-            return Task.FromResult(UniquenessProbeResult.Failed(request.Candidates.Count,
-                "No partition is selected, so there is nowhere to probe"));
-
-        // An email address is in use in Active Directory whether an object holds it as mail or as one of its
-        // proxyAddresses, so both are searched; outside Active Directory, mail is an ordinary attribute.
-        var includeProxyAddresses = IsEmailAttribute(request.AttributeName)
-            && (_forest ??= ReadForestLayout(ForestTimeout(request.Timeout))).IsActiveDirectory;
-        var search = new ProbeSearch(
-            BuildFilter(request.AttributeName, request.ControlValue == null ? request.Candidates : request.Candidates.Append(request.ControlValue), includeProxyAddresses),
-            includeProxyAddresses ? [request.AttributeName, ProxyAddressesAttribute] : [request.AttributeName],
-            includeProxyAddresses);
-
-        string? caveat = null;
-        if (_globalCatalogOptions != null && IsForestWideAttribute(request.AttributeName))
-        {
-            var route = ChooseForestRoute(request);
-            caveat = route.Caveat;
-
-            if (route.GlobalCatalog != null)
-            {
-                var forestResult = SearchGlobalCatalog(route.GlobalCatalog, route.Endpoint!, request, search, cancellationToken, out caveat);
-                if (forestResult != null)
-                    return Task.FromResult(forestResult);
-            }
-        }
-
-        // A forest of one domain is that domain, so its search missed nothing, whatever kept a Global Catalog the
-        // administrator named out of reach: that is logged above, and the answer is complete.
-        if (_forest?.DomainCount == 1)
-            caveat = null;
-
-        var result = SearchPartitions(request, searchBases, search, cancellationToken);
-        return Task.FromResult(caveat == null ? result : result.WithCaveat(caveat));
+        return Task.FromResult(Probe([request], searchBases, cancellationToken)[0]);
     }
 
     /// <summary>
-    /// Searches every partition root for the batch (the release 3 probe, unchanged by #1940).
+    /// Searches for several attributes' batches of one object at once (Generated Value Forms, #2023), and reports an
+    /// outcome per candidate of each: one search per route rather than one per attribute. The attributes searched in
+    /// the partitions share one search of each partition root in <paramref name="searchBases"/>; the forest-wide
+    /// attributes that need a Global Catalog, where one can be searched, share one search of it.
+    /// <para>
+    /// Each attribute is answered from its own values only, and against its own control value, so a Global Catalog
+    /// blind to one attribute sends that attribute alone to the partitions. A search the attributes cannot complete
+    /// together (more entries between them than <see cref="SizeLimit"/>, or a refusal) is made again for each attribute
+    /// on its own, which answers each exactly as a search for it alone would have. A directory that cannot be reached
+    /// fails every attribute at once instead: asking again for each would only multiply the wait.
+    /// </para>
+    /// <para>
+    /// Never throws for a directory fault: a refused, failed or timed-out search of the partitions is a
+    /// <see cref="UniquenessProbeResult.Failed"/> result naming why, so the synchronisation carries on with JIM's own
+    /// records, and one of the Global Catalog falls back to the partitions with a <see cref="UniquenessProbeResult.Caveat"/>.
+    /// </para>
     /// </summary>
-    private UniquenessProbeResult SearchPartitions(UniquenessProbeRequest request, IReadOnlyList<string> searchBases, ProbeSearch search, CancellationToken cancellationToken)
+    internal Task<IReadOnlyList<UniquenessProbeResult>> ProbeAttributesAsync(IReadOnlyList<UniquenessProbeRequest> requests, IReadOnlyList<string> searchBases, CancellationToken cancellationToken)
     {
-        var valuesFound = new List<string>();
+        ArgumentNullException.ThrowIfNull(requests);
+
+        return Task.FromResult(Probe(requests, searchBases, cancellationToken));
+    }
+
+    private IReadOnlyList<UniquenessProbeResult> Probe(IReadOnlyList<UniquenessProbeRequest> requests, IReadOnlyList<string> searchBases, CancellationToken cancellationToken)
+    {
+        foreach (var request in requests)
+            request.Validate();
+
+        var probes = requests.Select((request, index) => new PendingProbe(index, request)).ToList();
+        var throughForest = new List<PendingProbe>();
+        var inPartitions = new List<PendingProbe>();
+        ForestRoute forestRoute = default;
+
+        foreach (var probe in probes)
+        {
+            var request = probe.Request;
+            if (!IsValidAttributeDescription(request.AttributeName))
+            {
+                probe.Result = UniquenessProbeResult.Failed(request.Candidates.Count,
+                    $"\"{request.AttributeName}\" is not an LDAP attribute name JIM can probe for");
+                continue;
+            }
+
+            if (searchBases.Count == 0)
+            {
+                probe.Result = UniquenessProbeResult.Failed(request.Candidates.Count, "No partition is selected, so there is nowhere to probe");
+                continue;
+            }
+
+            // An email address is in use in Active Directory whether an object holds it as mail or as one of its
+            // proxyAddresses, so both are searched; outside Active Directory, mail is an ordinary attribute.
+            probe.IncludesProxyAddresses = IsEmailAttribute(request.AttributeName)
+                && (_forest ??= ReadForestLayout(ForestTimeout(request.Timeout))).IsActiveDirectory;
+
+            if (_globalCatalogOptions != null && IsForestWideAttribute(request.AttributeName))
+            {
+                var route = ChooseForestRoute(request);
+                probe.Caveat = route.Caveat;
+
+                // The probe opens one Global Catalog a session, so every attribute routed through it shares the route.
+                if (route.GlobalCatalog != null)
+                {
+                    forestRoute = route;
+                    throughForest.Add(probe);
+                    continue;
+                }
+            }
+
+            inPartitions.Add(probe);
+        }
+
+        if (throughForest.Count > 0)
+            SearchGlobalCatalog(forestRoute.GlobalCatalog!, forestRoute.Endpoint!, throughForest, inPartitions, cancellationToken);
+
+        if (inPartitions.Count > 0)
+        {
+            SearchPartitions([.. inPartitions.OrderBy(p => p.Index)], searchBases, cancellationToken);
+
+            // A forest of one domain is that domain, so its search missed nothing, whatever kept a Global Catalog the
+            // administrator named out of reach: that is logged where it happened, and the answer is complete.
+            if (_forest?.DomainCount != 1)
+            {
+                foreach (var probe in inPartitions.Where(p => p.Caveat != null))
+                    probe.Result = probe.Result!.WithCaveat(probe.Caveat!);
+            }
+        }
+
+        return [.. probes.Select(p => p.Result!)];
+    }
+
+    /// <summary>
+    /// Searches every partition root for <paramref name="group"/> at once, and answers each probe in it (the release 3
+    /// search, unchanged by #1940, for a group of one).
+    /// </summary>
+    private void SearchPartitions(IReadOnlyList<PendingProbe> group, IReadOnlyList<string> searchBases, CancellationToken cancellationToken)
+    {
+        var timeout = group.Max(p => p.Request.Timeout);
+        var search = BuildSearch(group);
+        var responses = new List<SearchResponse>(searchBases.Count);
 
         foreach (var searchBase in searchBases)
         {
@@ -242,112 +288,163 @@ internal sealed partial class LdapConnectorUniquenessProbe
             SearchResponse response;
             try
             {
-                response = (SearchResponse)_executor.SendRequest(CreateSearchRequest(searchBase, search, request.Timeout), request.Timeout);
+                response = (SearchResponse)_executor.SendRequest(CreateSearchRequest(searchBase, search, timeout), timeout);
+            }
+            catch (DirectoryOperationException ex) when (group.Count > 1)
+            {
+                // A limit, or a refusal, the attributes meet together says nothing about any one of them.
+                _logger.Warning(ex, "LdapConnectorUniquenessProbe: The search of {SearchBase} for {Attributes} values at once did not complete ({ResultCode}); searching for each attribute on its own.",
+                    LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(DescribeAttributes(group)), ex.Response?.ResultCode.ToString() ?? "an unknown result");
+                foreach (var probe in group)
+                    SearchPartitions([probe], searchBases, cancellationToken);
+                return;
             }
             catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
             {
                 _logger.Warning("LdapConnectorUniquenessProbe: More than {SizeLimit} entries under {SearchBase} hold {Attribute} values in this batch; the attribute is not unique there, so the probe cannot answer for it.",
-                    SizeLimit, LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(request.AttributeName));
-                return NotUnique(request);
+                    SizeLimit, LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(group[0].Request.AttributeName));
+                group[0].Result = NotUnique(group[0].Request);
+                return;
             }
             catch (DirectoryOperationException ex)
             {
                 var resultCode = ex.Response?.ResultCode.ToString() ?? "an unknown result";
                 _logger.Warning(ex, "LdapConnectorUniquenessProbe: The search of {SearchBase} for {Attribute} values was refused with {ResultCode}.",
-                    LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(request.AttributeName), resultCode);
-                return UniquenessProbeResult.Failed(request.Candidates.Count,
+                    LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(group[0].Request.AttributeName), resultCode);
+                group[0].Result = UniquenessProbeResult.Failed(group[0].Request.Candidates.Count,
                     $"The directory refused the probe of {searchBase} with {resultCode}");
+                return;
             }
             catch (LdapException ex)
             {
-                _logger.Warning(ex, "LdapConnectorUniquenessProbe: The search of {SearchBase} for {Attribute} values failed (LDAP error {ErrorCode}).",
-                    LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(request.AttributeName), ex.ErrorCode);
-                return UniquenessProbeResult.Failed(request.Candidates.Count, DescribeLdapFailure(ex, request.Timeout));
+                // The directory could not be reached, or did not answer: it will not for the next attribute either.
+                _logger.Warning(ex, "LdapConnectorUniquenessProbe: The search of {SearchBase} for {Attributes} values failed (LDAP error {ErrorCode}).",
+                    LogSanitiser.Sanitise(searchBase), LogSanitiser.Sanitise(DescribeAttributes(group)), ex.ErrorCode);
+                foreach (var probe in group)
+                    probe.Result = UniquenessProbeResult.Failed(probe.Request.Candidates.Count, DescribeLdapFailure(ex, timeout));
+                return;
             }
 
             if (response.ResultCode != ResultCode.Success)
             {
-                return UniquenessProbeResult.Failed(request.Candidates.Count,
+                if (group.Count > 1)
+                {
+                    foreach (var probe in group)
+                        SearchPartitions([probe], searchBases, cancellationToken);
+                    return;
+                }
+
+                group[0].Result = UniquenessProbeResult.Failed(group[0].Request.Candidates.Count,
                     $"The directory answered the probe of {searchBase} with {response.ResultCode}");
+                return;
             }
 
-            valuesFound.AddRange(ValuesIn(response, request.AttributeName, search.IncludesProxyAddresses));
+            responses.Add(response);
         }
 
-        _logger.Debug("LdapConnectorUniquenessProbe: Searched {PartitionCount} partition(s) for {CandidateCount} {Attribute} candidate(s); {ValueCount} value(s) returned.",
-            searchBases.Count, request.Candidates.Count, LogSanitiser.Sanitise(request.AttributeName), valuesFound.Count);
+        foreach (var probe in group)
+        {
+            var valuesFound = responses.SelectMany(r => ValuesIn(r, probe.Request.AttributeName, probe.IncludesProxyAddresses)).ToList();
+            probe.Result = UniquenessProbeResult.FromValuesFound(probe.Request, valuesFound);
+        }
 
-        return UniquenessProbeResult.FromValuesFound(request, valuesFound);
+        _logger.Debug("LdapConnectorUniquenessProbe: Searched {PartitionCount} partition(s) for {CandidateCount} candidate(s) of {Attributes}; {EntryCount} entries returned.",
+            searchBases.Count, group.Sum(p => p.Request.Candidates.Count), LogSanitiser.Sanitise(DescribeAttributes(group)), responses.Sum(r => r.Entries.Count));
     }
 
     /// <summary>
-    /// Searches the whole forest through the Global Catalog. Returns the answer, or null with
-    /// <paramref name="caveat"/> set when the Global Catalog cannot give one and the partitions are to be searched
-    /// instead.
+    /// Searches the whole forest through the Global Catalog for <paramref name="group"/> at once, and answers each probe
+    /// in it that the Global Catalog can; each it cannot is added to <paramref name="forPartitions"/>, with its caveat
+    /// saying why, for the partitions to answer instead.
     /// </summary>
-    private UniquenessProbeResult? SearchGlobalCatalog(ILdapOperationExecutor globalCatalog, string endpoint, UniquenessProbeRequest request, ProbeSearch search, CancellationToken cancellationToken, out string? caveat)
+    private void SearchGlobalCatalog(ILdapOperationExecutor globalCatalog, string endpoint, IReadOnlyList<PendingProbe> group, List<PendingProbe> forPartitions, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        caveat = null;
 
         // A share of the batch's time only, so a Global Catalog that does not answer still leaves the partition search
         // time to give the domain's own answer before the caller gives up on the whole Connected System.
-        var timeout = ForestTimeout(request.Timeout);
+        var timeout = ForestTimeout(group.Max(p => p.Request.Timeout));
 
         SearchResponse response;
         try
         {
-            response = (SearchResponse)globalCatalog.SendRequest(CreateSearchRequest(string.Empty, search, timeout), timeout);
+            response = (SearchResponse)globalCatalog.SendRequest(CreateSearchRequest(string.Empty, BuildSearch(group), timeout), timeout);
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded && group.Count > 1)
+        {
+            // A limit the attributes reach together says nothing about any one of them.
+            _logger.Warning("LdapConnectorUniquenessProbe: More than {SizeLimit} entries in the forest hold {Attributes} values in this batch between them; searching the forest for each attribute on its own.",
+                SizeLimit, LogSanitiser.Sanitise(DescribeAttributes(group)));
+            foreach (var probe in group)
+                SearchGlobalCatalog(globalCatalog, endpoint, [probe], forPartitions, cancellationToken);
+            return;
         }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
         {
             _logger.Warning("LdapConnectorUniquenessProbe: More than {SizeLimit} entries in the forest hold {Attribute} values in this batch; the attribute is not unique there, so the probe cannot answer for it.",
-                SizeLimit, LogSanitiser.Sanitise(request.AttributeName));
-            return NotUnique(request);
+                SizeLimit, LogSanitiser.Sanitise(group[0].Request.AttributeName));
+            group[0].Result = NotUnique(group[0].Request);
+            return;
         }
         catch (DirectoryOperationException ex)
         {
             var resultCode = ex.Response?.ResultCode.ToString() ?? "an unknown result";
-            _logger.Warning(ex, "LdapConnectorUniquenessProbe: The Global Catalog on {Endpoint} refused the search for {Attribute} values with {ResultCode}; searching the domain only for the rest of the run.",
-                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(request.AttributeName), resultCode);
-            caveat = GlobalCatalogUnavailable(request.AttributeName, $"the Global Catalog on {endpoint} refused the search with {resultCode}");
-            return null;
+            _logger.Warning(ex, "LdapConnectorUniquenessProbe: The Global Catalog on {Endpoint} refused the search for {Attributes} values with {ResultCode}; searching the domain only for the rest of the run.",
+                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(DescribeAttributes(group)), resultCode);
+            GlobalCatalogUnavailable(group, forPartitions, $"the Global Catalog on {endpoint} refused the search with {resultCode}");
+            return;
         }
         catch (LdapException ex)
         {
-            _logger.Warning(ex, "LdapConnectorUniquenessProbe: Searching the Global Catalog on {Endpoint} for {Attribute} values failed (LDAP error {ErrorCode}); searching the domain only for the rest of the run.",
-                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(request.AttributeName), ex.ErrorCode);
-            caveat = GlobalCatalogUnavailable(request.AttributeName, ex.ErrorCode == 85
+            _logger.Warning(ex, "LdapConnectorUniquenessProbe: Searching the Global Catalog on {Endpoint} for {Attributes} values failed (LDAP error {ErrorCode}); searching the domain only for the rest of the run.",
+                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(DescribeAttributes(group)), ex.ErrorCode);
+            GlobalCatalogUnavailable(group, forPartitions, ex.ErrorCode == 85
                 ? string.Create(CultureInfo.InvariantCulture, $"the Global Catalog on {endpoint} did not answer within {timeout.TotalSeconds:0} seconds")
                 : $"searching the Global Catalog on {endpoint} failed ({ex.Message.TrimEnd('.')})");
-            return null;
+            return;
         }
 
         if (response.ResultCode != ResultCode.Success)
         {
-            caveat = GlobalCatalogUnavailable(request.AttributeName, $"the Global Catalog on {endpoint} answered the search with {response.ResultCode}");
-            return null;
+            GlobalCatalogUnavailable(group, forPartitions, $"the Global Catalog on {endpoint} answered the search with {response.ResultCode}");
+            return;
         }
 
-        var valuesFound = ValuesIn(response, request.AttributeName, search.IncludesProxyAddresses).ToList();
-        var result = UniquenessProbeResult.FromValuesFound(request, valuesFound);
-
-        if (result.Reason != null)
+        foreach (var probe in group)
         {
+            var attributeName = probe.Request.AttributeName;
+            var result = UniquenessProbeResult.FromValuesFound(probe.Request, ValuesIn(response, attributeName, probe.IncludesProxyAddresses));
+            if (result.Reason == null)
+            {
+                probe.Result = result;
+                continue;
+            }
+
             // The control value is in this very domain, which the Global Catalog holds; not seeing it means the Global
             // Catalog is blind to this attribute (a permission, or an attribute withdrawn from its partial attribute
             // set since the schema was read). The domain can still answer, so it does, for the rest of the session.
             _logger.Warning("LdapConnectorUniquenessProbe: The Global Catalog on {Endpoint} did not return a {Attribute} value JIM knows is there; searching the domain only for this attribute for the rest of the run.",
-                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(request.AttributeName));
-            caveat = ForestCaveat(request.AttributeName, $"the Global Catalog on {endpoint} did not return a {request.AttributeName} value JIM knows is in this domain");
-            _attributeCaveats[request.AttributeName] = caveat;
-            return null;
+                LogSanitiser.Sanitise(endpoint), LogSanitiser.Sanitise(attributeName));
+            probe.Caveat = ForestCaveat(attributeName, $"the Global Catalog on {endpoint} did not return a {attributeName} value JIM knows is in this domain");
+            _attributeCaveats[attributeName] = probe.Caveat;
+            forPartitions.Add(probe);
         }
 
-        _logger.Debug("LdapConnectorUniquenessProbe: Searched the forest through the Global Catalog on {Endpoint} for {CandidateCount} {Attribute} candidate(s); {ValueCount} value(s) returned.",
-            LogSanitiser.Sanitise(endpoint), request.Candidates.Count, LogSanitiser.Sanitise(request.AttributeName), valuesFound.Count);
+        _logger.Debug("LdapConnectorUniquenessProbe: Searched the forest through the Global Catalog on {Endpoint} for {CandidateCount} candidate(s) of {Attributes}; {EntryCount} entries returned.",
+            LogSanitiser.Sanitise(endpoint), group.Sum(p => p.Request.Candidates.Count), LogSanitiser.Sanitise(DescribeAttributes(group)), response.Entries.Count);
+    }
 
-        return result;
+    /// <summary>
+    /// Records that the Global Catalog cannot be used for the rest of the session, because of <paramref name="why"/>,
+    /// and hands every probe in <paramref name="group"/> to the partitions with its caveat.
+    /// </summary>
+    private void GlobalCatalogUnavailable(IReadOnlyList<PendingProbe> group, List<PendingProbe> forPartitions, string why)
+    {
+        foreach (var probe in group)
+        {
+            probe.Caveat = GlobalCatalogUnavailable(probe.Request.AttributeName, why);
+            forPartitions.Add(probe);
+        }
     }
 
     /// <summary>
@@ -538,6 +635,44 @@ internal sealed partial class LdapConnectorUniquenessProbe
         return replicated;
     }
 
+    /// <summary>
+    /// Appends an equality assertion per value to <paramref name="filter"/>, every value escaped per RFC 4515, with a
+    /// <c>proxyAddresses</c> assertion beside each when <paramref name="includeProxyAddresses"/>.
+    /// </summary>
+    private static StringBuilder AppendAssertions(StringBuilder filter, string attributeName, IEnumerable<string> values, bool includeProxyAddresses)
+    {
+        foreach (var escaped in values.Select(LdapConnectorUtilities.EscapeLdapFilterValue))
+        {
+            filter.Append('(').Append(attributeName).Append('=').Append(escaped).Append(')');
+            if (includeProxyAddresses)
+                filter.Append('(').Append(ProxyAddressesAttribute).Append('=').Append(SmtpProxyAddressPrefix).Append(escaped).Append(')');
+        }
+
+        return filter;
+    }
+
+    /// <summary>
+    /// One search for every probe in <paramref name="group"/>: an OR of each probe's assertions, in the order asked,
+    /// returning each probed attribute once.
+    /// </summary>
+    private static ProbeSearch BuildSearch(IReadOnlyList<PendingProbe> group)
+    {
+        var filter = new StringBuilder("(|");
+        var attributes = new List<string>();
+        foreach (var probe in group)
+        {
+            AppendAssertions(filter, probe.Request.AttributeName, probe.Values, probe.IncludesProxyAddresses);
+            attributes.Add(probe.Request.AttributeName);
+            if (probe.IncludesProxyAddresses)
+                attributes.Add(ProxyAddressesAttribute);
+        }
+
+        return new ProbeSearch(filter.Append(')').ToString(), [.. attributes.Distinct(StringComparer.OrdinalIgnoreCase)]);
+    }
+
+    private static string DescribeAttributes(IReadOnlyList<PendingProbe> group) =>
+        string.Join(", ", group.Select(p => p.Request.AttributeName));
+
     private static SearchRequest CreateSearchRequest(string searchBase, ProbeSearch search, TimeSpan timeout) =>
         new(searchBase, search.Filter, SearchScope.Subtree, search.Attributes)
         {
@@ -593,9 +728,37 @@ internal sealed partial class LdapConnectorUniquenessProbe
     private static partial Regex AttributeDescriptionPattern();
 
     /// <summary>
-    /// One batch's search: the filter, the attributes to return, and whether proxyAddresses is among them.
+    /// One search: the filter, and the attributes to return.
     /// </summary>
-    private sealed record ProbeSearch(string Filter, string[] Attributes, bool IncludesProxyAddresses);
+    private sealed record ProbeSearch(string Filter, string[] Attributes);
+
+    /// <summary>
+    /// One attribute's batch on its way through <see cref="Probe"/>: where it is searched, what the route could not
+    /// reach, and its answer once it has one.
+    /// </summary>
+    private sealed class PendingProbe(int index, UniquenessProbeRequest request)
+    {
+        public int Index { get; } = index;
+
+        public UniquenessProbeRequest Request { get; } = request;
+
+        /// <summary>
+        /// The candidates, then the control value when there is one.
+        /// </summary>
+        public IEnumerable<string> Values => Request.ControlValue == null ? Request.Candidates : Request.Candidates.Append(Request.ControlValue);
+
+        /// <summary>
+        /// Whether proxyAddresses is searched beside the attribute (see <see cref="IsEmailAttribute"/>).
+        /// </summary>
+        public bool IncludesProxyAddresses { get; set; }
+
+        /// <summary>
+        /// What the partitions could not reach, for a forest-wide attribute searched there; null when nothing.
+        /// </summary>
+        public string? Caveat { get; set; }
+
+        public UniquenessProbeResult? Result { get; set; }
+    }
 
     /// <summary>
     /// What the probe connection showed of the forest (#1940).

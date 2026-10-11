@@ -913,6 +913,49 @@ public class CausalChainWalkTests
 
     #endregion
 
+    /// <summary>
+    /// A grace-period deletion (#1811): housekeeping deleted the object in its own Activity, and its item records
+    /// the synchronisation that scheduled the deletion. The walk follows that edge like any other and continues to
+    /// the import that removed the object from its source, so the chain reads from the source's deletion to the
+    /// Metaverse Object's, however long the grace period between them.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_HousekeepingDeletion_ReachesTheSynchronisationThatScheduledItAndTheImportBehindItAsync()
+    {
+        var housekeepingItemId = Guid.NewGuid();
+        var schedulingItemId = Guid.NewGuid();
+        SeedEdges(housekeepingItemId, new CausalEdge
+        {
+            Id = Guid.NewGuid(),
+            EffectRunProfileExecutionItemId = housekeepingItemId,
+            EffectSyncOutcomeId = Guid.NewGuid(),
+            CauseRunProfileExecutionItemId = schedulingItemId,
+            CauseMetaverseObjectId = Guid.NewGuid(),
+            CauseDisplayName = "Mia Young",
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Yellowstone APAC"
+        });
+        var csoId = SeedSyncCauseSummary(schedulingItemId, ObjectChangeType.Disconnected);
+        var importItemId = SeedImportEvent(csoId, ObjectChangeType.Deleted);
+
+        var chain = await _application.Activities.GetCausalChainAsync(housekeepingItemId);
+
+        var scheduling = chain.Cohorts.Single();
+        var schedulingMember = scheduling.Members.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scheduling.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion));
+            Assert.That(scheduling.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected));
+            Assert.That(schedulingMember.RunProfileExecutionItemId, Is.EqualTo(schedulingItemId));
+            Assert.That(schedulingMember.Resolution, Is.EqualTo(CausalChainResolution.Resolved));
+            var importHop = schedulingMember.Causes.Single();
+            Assert.That(importHop.SourceImportChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+            Assert.That(importHop.Members.Single().RunProfileExecutionItemId, Is.EqualTo(importItemId));
+        }
+    }
+
     private void SeedEdges(Guid effectItemId, params CausalEdge[] edges)
     {
         if (!_edgesByEffectItemId.TryGetValue(effectItemId, out var list))

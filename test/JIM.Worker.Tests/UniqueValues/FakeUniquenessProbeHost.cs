@@ -136,6 +136,12 @@ internal sealed class FakeProbingConnector : IConnector, IConnectorUniquenessPro
 
     public List<UniquenessProbeRequest> Requests { get; } = [];
 
+    /// <summary>How many attributes each call to <see cref="ProbeAttributesAsync"/> carried, in order.</summary>
+    public List<int> BatchSizes { get; } = [];
+
+    /// <summary>Applied to every batch's answers before they are returned, when set.</summary>
+    public Func<IReadOnlyList<UniquenessProbeResult>, IReadOnlyList<UniquenessProbeResult>>? AlterBatchAnswer { get; set; }
+
     public void OpenUniquenessProbeConnection(ConnectedSystem connectedSystem, ILogger logger)
     {
         lock (_lock)
@@ -171,6 +177,21 @@ internal sealed class FakeProbingConnector : IConnector, IConnectorUniquenessPro
         var asked = request.ControlValue == null || BlindToControl ? request.Candidates : request.Candidates.Append(request.ControlValue);
         var found = asked.Where(v => _held.Contains(v) && !(BlindToControl && v == request.ControlValue)).ToList();
         return Task.FromResult(UniquenessProbeResult.FromValuesFound(request, found));
+    }
+
+    /// <summary>
+    /// Answers each attribute in turn, as a Connector that cannot combine them does, recording the batch.
+    /// </summary>
+    public async Task<IReadOnlyList<UniquenessProbeResult>> ProbeAttributesAsync(IReadOnlyList<UniquenessProbeRequest> requests, ILogger logger, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+            BatchSizes.Add(requests.Count);
+
+        var results = new List<UniquenessProbeResult>(requests.Count);
+        foreach (var request in requests)
+            results.Add(await ProbeAsync(request, logger, cancellationToken));
+
+        return AlterBatchAnswer == null ? results : AlterBatchAnswer(results);
     }
 
     public void CloseUniquenessProbeConnection()

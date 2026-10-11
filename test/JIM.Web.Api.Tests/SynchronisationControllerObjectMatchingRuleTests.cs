@@ -197,6 +197,58 @@ public class SynchronisationControllerObjectMatchingRuleTests
     }
 
     [Test]
+    public async Task CreateObjectMatchingRule_CaseSensitiveOmitted_IgnoresCaseAsync()
+    {
+        // The portal always created rules that ignore case while the REST API (and so PowerShell) defaulted to
+        // respecting it, so the same rule joined differently depending on which surface made it (#2051).
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(created(), Is.Not.Null);
+        Assert.That(created()!.CaseSensitive, Is.False, "an Object Matching Rule ignores case unless asked not to");
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveOmitted_IgnoresCaseAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(created(), Is.Not.Null);
+        Assert.That(created()!.CaseSensitive, Is.False, "an Object Matching Rule ignores case unless asked not to");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CreateObjectMatchingRule_CaseSensitiveSupplied_StoresItAsync(bool caseSensitive)
+    {
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.CaseSensitive = caseSensitive;
+
+        await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.EqualTo(caseSensitive));
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task CreateSyncRuleObjectMatchingRule_CaseSensitiveSupplied_StoresItAsync(bool caseSensitive)
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+        var request = SyncRuleScopedRequest();
+        request.CaseSensitive = caseSensitive;
+
+        await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, request);
+
+        Assert.That(created()!.CaseSensitive, Is.EqualTo(caseSensitive));
+    }
+
+    [Test]
     public async Task SwitchObjectMatchingMode_ApiKeyAuthenticated_SwitchesInsteadOfFailingAttributionAsync()
     {
         // The endpoint's auth gate accepts an API key, but it previously handed the application layer a null user,
@@ -212,6 +264,15 @@ public class SynchronisationControllerObjectMatchingRuleTests
         var switchResult = (JIM.Models.Staging.DTOs.ObjectMatchingModeSwitchResult)((OkObjectResult)result).Value!;
         Assert.That(switchResult.Success, Is.True);
         Assert.That(switchResult.NewMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
+    }
+
+    private Func<ObjectMatchingRule?> CaptureCreatedRule()
+    {
+        ObjectMatchingRule? created = null;
+        _connectedSystemRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => created = rule)
+            .Returns(Task.CompletedTask);
+        return () => created;
     }
 
     private static CreateSyncRuleObjectMatchingRuleRequest SyncRuleScopedRequest() => new()

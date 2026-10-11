@@ -28,8 +28,9 @@ function Set-JIMSyncRuleMatchingRule {
 
     .PARAMETER CaseSensitive
         Whether the matching should be case-sensitive.
-        When false (default), 'emp123' matches 'EMP123'.
+        When false, 'emp123' matches 'EMP123'.
         When true, 'emp123' does NOT match 'EMP123'.
+        Omit it to leave the rule's current setting unchanged.
 
     .PARAMETER PassThru
         If specified, returns the updated Matching Rule object.

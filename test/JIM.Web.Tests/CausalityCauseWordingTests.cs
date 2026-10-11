@@ -133,6 +133,34 @@ public class CausalityCauseWordingTests
     }
 
     [Test]
+    public void Sentence_DeletionSchedule_ReadsAsThisRunCarryingOutTheScheduledDeletion()
+    {
+        // A grace-period deletion (#1811): the cause is the run that scheduled it, the effect this housekeeping run.
+        var cohort = new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Yellowstone APAC",
+            ObjectTypeName = "User",
+            ObjectTypePluralName = "Users",
+            Members = [new CausalChainMember { DisplayName = "Tina Adams" }]
+        };
+
+        var sentence = CausalityCauseWording.Sentence(cohort, effectName: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Read(sentence), Is.EqualTo(
+                "Tina Adams was scheduled for deletion, and this run deleted it once the grace period ended"));
+            Assert.That(CausalityCauseWording.Reason(cohort), Is.Not.Null,
+                "the Deletion Rule that scheduled it is attributed exactly as on the deletion's other edges");
+            Assert.That(CausalityCauseWording.ShowConnectedSystemChip(cohort), Is.True,
+                "the triggering system is the reason's subject, so it keeps its chip");
+        }
+    }
+
+    [Test]
     public void Sentence_ExportConfirmation_ReadsAsThisImportConfirmingTheExport()
     {
         var cohort = new CausalChainCohort
