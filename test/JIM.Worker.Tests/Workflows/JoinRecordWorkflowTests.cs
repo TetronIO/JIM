@@ -51,6 +51,8 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
             Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.EqualTo(hrImportRule!.Id));
             Assert.That(hrCso.JoinSyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(hrCso.JoinObjectMatchingRuleId, Is.EqualTo(hrImportRule.ObjectMatchingRules.Single().Id), "#2052: which rule matched");
+            Assert.That(hrCso.JoinMatchValue, Is.EqualTo("EMP001"), "#2052: what it matched on");
         }
     }
 
@@ -62,7 +64,7 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_CsoJoinedByConnectedSystemMatchingWithNoImportRule_RecordsInboundMatchWithNoRuleAsync()
     {
-        var (_, _, _, hrImportRule, hrCso) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: true);
+        var (_, hrType, _, hrImportRule, hrCso) = await ArrangeDirectoryProjectsAndHrJoinsAsync(simpleMode: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -71,6 +73,8 @@ public class JoinRecordWorkflowTests : WorkflowTestBase
             Assert.That(hrCso.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.InboundMatching));
             Assert.That(hrCso.JoinSyncRuleId, Is.Null);
             Assert.That(hrCso.JoinSyncRuleName, Is.Null);
+            Assert.That(hrCso.JoinObjectMatchingRuleId, Is.EqualTo(hrType.ObjectMatchingRules.Single().Id), "#2052: which rule matched");
+            Assert.That(hrCso.JoinMatchValue, Is.EqualTo("EMP001"), "#2052: what it matched on");
         }
     }
 

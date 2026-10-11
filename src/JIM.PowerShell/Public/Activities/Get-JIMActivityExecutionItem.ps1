@@ -21,7 +21,14 @@ function Get-JIMActivityExecutionItem {
     .OUTPUTS
         PSCustomObject with Id, ActivityId, ObjectChangeType, NoChangeReason, ConnectedSystemObjectId,
         MetaverseObjectId, PendingExportId, ExternalIdSnapshot, DisplayNameSnapshot, ObjectTypeSnapshot, ErrorType,
-        ErrorMessage, ErrorStackTrace, AttributeFlowCount and OutcomeSummary.
+        ErrorMessage, ErrorStackTrace, AttributeFlowCount, OutcomeSummary and MatchCandidates.
+
+        MatchCandidates is empty unless the item is an AmbiguousMatch. Then it lists up to 10 of the objects the
+        match found, ordered by display name, each with CandidateKind, CandidateId, DisplayNameSnapshot,
+        TypeNameSnapshot, ConnectedSystemId, ConnectedSystemNameSnapshot, MatchedValue, ObjectMatchingRuleId,
+        ObjectMatchingRuleDescriptionSnapshot, Ordinal, CandidateTotal (how many the match found in all), Exists,
+        and JoinedObjects: the Connected System Objects joined to a Metaverse Object candidate now, each with
+        ConnectedSystemObjectId, ConnectedSystemId, ConnectedSystemName, TypeName, DisplayName and ExternalId.
 
     .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901"
@@ -35,6 +42,13 @@ function Get-JIMActivityExecutionItem {
             Select-Object DisplayNameSnapshot, ErrorType, ErrorMessage
 
         Lists why each object in a Run Profile execution failed.
+
+    .EXAMPLE
+        (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
+            Select-Object DisplayNameSnapshot, MatchedValue, Exists,
+                @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
+
+        Lists the identities an ambiguous match found, the value each matched on, and where each is connected.
 
     .LINK
         Get-JIMActivity

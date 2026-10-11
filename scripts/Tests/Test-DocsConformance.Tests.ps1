@@ -21,6 +21,7 @@
 
 BeforeAll {
     $script:ScriptPath = (Resolve-Path (Join-Path $PSScriptRoot '..' 'Test-DocsConformance.ps1')).Path
+    $script:ShippedConfig = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' '..' 'docs' '.conformance' 'config.psd1')
 
     # The configuration every fixture starts from. Tests override single keys
     # rather than restating the whole shape.
@@ -31,6 +32,8 @@ BeforeAll {
                 'STR-1' = 'Block'; 'STR-2' = 'Ratchet'; 'STR-3' = 'Block'; 'STR-4' = 'Block'; 'STR-5' = 'Block'
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'
+                'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
+                'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
             AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario')
@@ -52,6 +55,14 @@ BeforeAll {
             ConformantFolders   = @()
             ConformantPages     = @()
             ScenarioPathFormat  = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
+            GlossaryPage        = 'reference/glossary.md'
+            # The language patterns are the shipped ones, so these tests exercise what CI runs.
+            AmericanSpellings   = $script:ShippedConfig.AmericanSpellings
+            IzeExceptions       = $script:ShippedConfig.IzeExceptions
+            AllowedSpellings    = $script:ShippedConfig.AllowedSpellings
+            TimeRelativePatterns = $script:ShippedConfig.TimeRelativePatterns
+            FuturePatterns      = $script:ShippedConfig.FuturePatterns
+            MinimiserPatterns   = $script:ShippedConfig.MinimiserPatterns
         }
     }
 
@@ -101,7 +112,8 @@ BeforeAll {
             [hashtable]$ConfigOverrides = @{},
             [string]$Baseline = '',
             [string]$Nav = '',
-            [hashtable]$OtherFiles = @{}
+            [hashtable]$OtherFiles = @{},
+            [hashtable]$Vocabulary = @{ Abbreviations = @{}; Terms = @() }
         )
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $docs = Join-Path $root 'docs'
@@ -123,7 +135,9 @@ BeforeAll {
         $baselinePath = Join-Path $root 'baseline.tsv'
         Set-Content -Path $baselinePath -Value $Baseline -Encoding utf8 -NoNewline
         Set-Content -Path (Join-Path $root 'mkdocs.yml') -Value "site_name: Test`nnav:`n$Nav" -Encoding utf8
-        [pscustomobject]@{ Root = $root; Docs = $docs; Config = $configPath; Baseline = $baselinePath }
+        $vocabularyPath = Join-Path $root 'vocabulary.psd1'
+        Set-Content -Path $vocabularyPath -Value (ConvertTo-Psd1 -Value $Vocabulary) -Encoding utf8
+        [pscustomobject]@{ Root = $root; Docs = $docs; Config = $configPath; Baseline = $baselinePath; Vocabulary = $vocabularyPath }
     }
 
     # Runs the script as CI does (a child pwsh) and returns the exit code and output.
@@ -139,7 +153,7 @@ BeforeAll {
             Push-Location $Fixture.Root
             $output = pwsh -NoProfile -File $script:ScriptPath -DocsPath $Fixture.Docs -ConfigPath $Fixture.Config `
                 -BaselinePath $Fixture.Baseline -MkDocsConfigPath (Join-Path $Fixture.Root 'mkdocs.yml') `
-                -RepositoryRoot $Fixture.Root @ExtraArgs 2>&1
+                -VocabularyPath $Fixture.Vocabulary -RepositoryRoot $Fixture.Root @ExtraArgs 2>&1
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         finally {
@@ -538,5 +552,226 @@ Describe 'Test-DocsConformance: scope and reporting' {
         $text = Get-Content $summary -Raw
         $text | Should -Match '\| STR-2 \|'
         $text | Should -Match 'Docs conformance'
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-1 no em dash, and no -- as a dash' {
+    It 'fails an em dash in running text' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Imports run first $([char]0x2014) then exports.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'cs\.md:10\s+LANG-1.*em dash'
+    }
+
+    It 'fails a spaced double hyphen, which the site shows as two hyphens' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Imports run first -- then exports.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'LANG-1.*two hyphens'
+    }
+
+    It 'fails an unspaced double hyphen in a range' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "PostgreSQL needs a further 1--2 GB.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-1.*'1--2'.*'1 to 2'"
+    }
+
+    It 'passes a double hyphen in code, and a snippet include' {
+        $body = "Run ``jim -- run`` to start.`n`n--8<-- `"includes/note.md`"`n`n``````bash`njim -- run`n```````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-2 British English' {
+    It 'fails American spellings, naming the British form' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Use organization-level consent; the behavior is the same.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-2.*'organization'.*'organisation'"
+        $r.Output | Should -Match "LANG-2.*'behavior'.*'behaviour'"
+    }
+
+    It 'passes British spellings, words that only look American, and protocol names' {
+        $body = "Organisation size is fixed, and the behaviour is the same. Redeem the authorization code against the Global Catalog.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-3 product nouns in Title Case, and TERM-1 the vocabulary' {
+    BeforeAll {
+        $script:Glossary = New-Page -Title 'Glossary' -Description 'The product nouns JIM uses, each defined once, with an anchor to link to.' -Body (
+            "Metaverse { #metaverse }`n:   The central store of every object JIM manages.`n`n" +
+            "Metaverse Object (MVO) { #metaverse-object }`n:   One object in the Metaverse.`n`n" +
+            "Synchronisation Rule { #synchronisation-rule }`n:   How objects flow between systems.`n`n" +
+            "Schedule { #schedule }`n:   When work starts.`n")
+        function New-Vocabulary {
+            param([object[]]$Terms)
+            if (-not $Terms) {
+                $Terms = @(
+                    @{ Anchor = 'metaverse'; Home = 'reference/glossary.md'; TitleCase = $true }
+                    @{ Anchor = 'metaverse-object'; Home = 'reference/glossary.md'; TitleCase = $true }
+                    @{ Anchor = 'synchronisation-rule'; Home = 'reference/glossary.md'; TitleCase = $true; Rejected = @('Sync Rule') }
+                    @{ Anchor = 'schedule'; Home = 'reference/glossary.md'; TitleCase = $false }
+                )
+            }
+            @{ Abbreviations = @{ MVO = 'Metaverse Object' }; Terms = $Terms }
+        }
+        function New-TermFixture {
+            param([string]$Body, [object[]]$Terms)
+            New-Fixture -Pages @{ 'reference/glossary.md' = $script:Glossary; 'cs.md' = (New-Page -Body $Body) } -Vocabulary (New-Vocabulary -Terms $Terms)
+        }
+    }
+
+    It 'fails a product noun in lower case, naming its canonical form' {
+        $r = Invoke-Conformance -Fixture (New-TermFixture -Body "Every object lands in the metaverse first.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "cs\.md:10\s+LANG-3.*'metaverse'.*'Metaverse'"
+    }
+
+    It 'counts a lower-case multi-word noun once, not once per noun inside it' {
+        $r = Invoke-Conformance -Fixture (New-TermFixture -Body "Each metaverse object is checked.`n")
+        $r.ExitCode | Should -Be 1
+        @([regex]::Matches($r.Output, 'LANG-3')).Count | Should -Be 1
+        $r.Output | Should -Match "'metaverse object'.*'Metaverse Object'"
+    }
+
+    It 'passes canonical forms, plurals, code and link targets' {
+        $body = "The Metaverse holds Metaverse Objects; see [the store](metaverse.md) and ``metaverse``.`n"
+        (Invoke-Conformance -Fixture (New-TermFixture -Body $body)).ExitCode | Should -Be 0
+    }
+
+    It 'leaves alone a noun the vocabulary does not hold to Title Case' {
+        (Invoke-Conformance -Fixture (New-TermFixture -Body "Runs start on a schedule.`n")).ExitCode | Should -Be 0
+    }
+
+    It 'fails a rejected variant, naming the canonical term' {
+        $r = Invoke-Conformance -Fixture (New-TermFixture -Body "Each Sync Rule maps attributes.`n")
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-3.*'Sync Rule'.*'Synchronisation Rule'"
+    }
+
+    It 'passes when the vocabulary and the glossary agree' {
+        (Invoke-Conformance -Fixture (New-TermFixture -Body "The Metaverse holds every object.`n")).ExitCode | Should -Be 0
+    }
+
+    It 'fails a glossary entry the vocabulary does not hold' {
+        $terms = @(
+            @{ Anchor = 'metaverse'; Home = 'reference/glossary.md'; TitleCase = $true }
+            @{ Anchor = 'metaverse-object'; Home = 'reference/glossary.md'; TitleCase = $true }
+            @{ Anchor = 'synchronisation-rule'; Home = 'reference/glossary.md'; TitleCase = $true }
+        )
+        $r = Invoke-Conformance -Fixture (New-TermFixture -Body "The Metaverse holds every object.`n" -Terms $terms)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "glossary\.md:\d+\s+TERM-1.*'Schedule'.*vocabulary"
+    }
+
+    It 'fails a vocabulary entry the glossary does not define, and a home page that is not a page' {
+        $terms = @(
+            @{ Anchor = 'metaverse'; Home = 'reference/glossary.md'; TitleCase = $true }
+            @{ Anchor = 'metaverse-object'; Home = 'reference/glossary.md'; TitleCase = $true }
+            @{ Anchor = 'synchronisation-rule'; Home = 'reference/glossary.md'; TitleCase = $true }
+            @{ Anchor = 'schedule'; Home = 'missing.md'; TitleCase = $false }
+            @{ Anchor = 'run-profile'; Home = 'reference/glossary.md'; TitleCase = $true }
+        )
+        $r = Invoke-Conformance -Fixture (New-TermFixture -Body "The Metaverse holds every object.`n" -Terms $terms)
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "vocabulary\.psd1:\d+\s+TERM-1.*'run-profile'.*glossary"
+        $r.Output | Should -Match "vocabulary\.psd1:\d+\s+TERM-1.*'missing\.md'"
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-4 abbreviations only in table headers' {
+    BeforeAll {
+        $script:AbbreviationVocabulary = @{ Abbreviations = @{ MVO = 'Metaverse Object' }; Terms = @() }
+    }
+
+    It 'fails an abbreviation in running text, naming the full term' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Each MVO is checked.`n") } -Vocabulary $script:AbbreviationVocabulary
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-4.*'MVO'.*'Metaverse Object'"
+    }
+
+    It 'passes an abbreviation in a table header, and where the full term introduces it' {
+        $body = "A Metaverse Object (MVO) is one object.`n`n| Type | MVOs |`n|------|------|`n| Person | 12 |`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) } -Vocabulary $script:AbbreviationVocabulary
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'fails an abbreviation in a table body cell' {
+        $body = "Each row is a type.`n`n| Type | Kind |`n|------|------|`n| Person | MVO |`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) } -Vocabulary $script:AbbreviationVocabulary
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'cs\.md:14\s+LANG-4'
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-5 no time-relative words' {
+    It 'fails wording that is relative to when it was written' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Until now, imports ran alone. From this release they run in parallel.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        @([regex]::Matches($r.Output, 'LANG-5')).Count | Should -Be 2
+    }
+
+    It 'passes "now" as an instruction, and the release marker' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Select **Run now**. Available from v0.17.0.`n") }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-6 no promises about the future' {
+    It 'fails a promise' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Group writeback is planned for a later release.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'LANG-6.*roadmap'
+    }
+
+    It 'passes ordinary uses of "planned", and leaves placeholder text to STR-6' {
+        $body = "Arrange a planned outage first.`n`n!!! warning`n    Content will be added in a future update.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) } -Baseline "STR-6`tcs.md`t1`n"
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 0
+        $r.Output | Should -Not -Match 'LANG-6'
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-7 no minimisers' {
+    It 'fails "simply"' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Simply restart the Worker.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-7.*'Simply'"
+    }
+
+    It 'passes "just", which is usually not a minimiser' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The Worker has just restarted.`n") }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-8 no issue or pull request numbers' {
+    It 'fails an issue number in running text' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "This was fixed in #242.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-8.*'#242'"
+    }
+
+    It 'fails a link to an issue' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "See [the issue](https://github.com/TetronIO/JIM/issues/242).`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'LANG-8'
+    }
+
+    It 'passes anchors in link targets, and HTML entities' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "See [Directory servers](ldap.md#389-directory-server) and [above](#settings)&#8203;.`n") }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
     }
 }

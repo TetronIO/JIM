@@ -59,6 +59,12 @@ public class ActivityRunProfileExecutionItemDetailDto
     public string? OutcomeSummary { get; set; }
 
     /// <summary>
+    /// For an <c>AmbiguousMatch</c>, the objects the match found (#2052): up to 10, ordered by display name, each with
+    /// whether it still exists and what is joined to it now. Empty for any other item.
+    /// </summary>
+    public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
+
+    /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.
     /// </summary>
     public static ActivityRunProfileExecutionItemDetailDto FromEntity(ActivityRunProfileExecutionItem entity)

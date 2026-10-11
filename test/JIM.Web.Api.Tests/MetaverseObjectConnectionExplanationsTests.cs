@@ -322,6 +322,36 @@ public class MetaverseObjectConnectionExplanationsTests
         }
     }
 
+    /// <summary>
+    /// A matching join says what it matched on and what the rule compared (#2052), reading the rule once for every
+    /// connection.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinedByMatching_NamesTheValueAndTheRuleAsync()
+    {
+        var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Joined);
+        cso.JoinMethod = ConnectedSystemObjectJoinMethod.InboundMatching;
+        cso.JoinObjectMatchingRuleId = 31;
+        cso.JoinMatchValue = "48213";
+        _connectedSystems.Setup(r => r.GetObjectMatchingRulesAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.Single() == 31)))
+            .ReturnsAsync([new ObjectMatchingRule
+            {
+                Id = 31,
+                TargetMetaverseAttribute = new MetaverseAttribute { Name = "Employee ID" },
+                Sources = [new ObjectMatchingRuleSource { Expression = "Replace(cs[\"employeeNumber\"], \"EMP-\", \"\")" }]
+            }]);
+
+        var join = (await ExplainAsync())!.Connections.Single().Join;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(join.ObjectMatchingRuleId, Is.EqualTo(31));
+            Assert.That(join.MatchValue, Is.EqualTo("48213"));
+            Assert.That(join.Description, Is.EqualTo(
+                "Joined by matching on the Connected System's Object Matching Rules: matched \"48213\" on Employee ID (equals Replace(cs[\"employeeNumber\"], \"EMP-\", \"\"))"));
+        }
+    }
+
     [Test]
     public async Task GetMetaverseObjectConnectionExplanationsAsync_JoinedBeforeRecordingWithHistory_DerivesTheRuleAsync()
     {

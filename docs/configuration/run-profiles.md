@@ -106,7 +106,7 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 
 ## See also
 
-- [Connected Systems](connected-systems.md) -- Run Profiles belong to a Connected System
-- [Schedules](schedules.md) -- automated execution of Run Profiles
-- [Activities](activities.md) -- monitoring Run Profile execution
-- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- what each run type does in detail
+- [Connected Systems](connected-systems.md): Run Profiles belong to a Connected System
+- [Schedules](schedules.md): automated execution of Run Profiles
+- [Activities](activities.md): monitoring Run Profile execution
+- [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): what each run type does in detail

@@ -12,41 +12,41 @@ The pages in this section explain each configuration object in plain terms, desc
 
 The objects that drive identity flow between external systems and the metaverse.
 
-- [Connected Systems](connected-systems.md) -- external directories, databases, SCIM 2.0 services, and files that JIM synchronises with
-- [Run Profiles](run-profiles.md) -- import, sync, and export operations executed against a Connected System
-- [Synchronisation Rules](synchronisation-rules.md) -- the relationship between a Connected System and the metaverse: scoping, joining, projection, and Attribute Flows
-- [Data Flow](data-flow.md) -- every attribute data flow configured across all Connected Systems, in both directions, in one list
+- [Connected Systems](connected-systems.md): external directories, databases, SCIM 2.0 services, and files that JIM synchronises with
+- [Run Profiles](run-profiles.md): import, sync, and export operations executed against a Connected System
+- [Synchronisation Rules](synchronisation-rules.md): the relationship between a Connected System and the metaverse: scoping, joining, projection, and Attribute Flows
+- [Data Flow](data-flow.md): every attribute data flow configured across all Connected Systems, in both directions, in one list
 
 ## Changing configuration safely
 
 How JIM judges a save, and how to see what a change would do before you make it.
 
-- [Configuration Changes](configuration-changes.md) -- which edits JIM confirms, and the Configuration Change Preview that shows which objects a proposed edit would affect
-- [Sync Preview](sync-preview.md) -- what synchronising one object would do with the configuration already saved, changing nothing
+- [Configuration Changes](configuration-changes.md): which edits JIM confirms, and the Configuration Change Preview that shows which objects a proposed edit would affect
+- [Sync Preview](sync-preview.md): what synchronising one object would do with the configuration already saved, changing nothing
 
 ## Metaverse
 
 The central identity store and the searches that surface it.
 
-- [Metaverse](metaverse.md) -- object types, attributes, objects, and pending deletions
-- [Predefined Searches](predefined-searches.md) -- named, reusable searches over Metaverse Objects
+- [Metaverse](metaverse.md): object types, attributes, objects, and pending deletions
+- [Predefined Searches](predefined-searches.md): named, reusable searches over Metaverse Objects
 
 ## Automation and Operations
 
 Scheduled execution, the audit trail of what JIM did, and whether the services doing it are alive.
 
-- [Operations](operations.md) -- the queue, history, Schedules and Passwords tabs in one place, with the Service Health of the Worker and Scheduler
-- [Schedules](schedules.md) -- automated, ordered sequences of operations
-- [Activities](activities.md) -- the audit trail of every operation, with status and execution detail
+- [Operations](operations.md): the queue, history, Schedules and Passwords tabs in one place, with the Service Health of the Worker and Scheduler
+- [Schedules](schedules.md): automated, ordered sequences of operations
+- [Activities](activities.md): the audit trail of every operation, with status and execution detail
 
 ## Security and Configuration
 
 Supporting objects that control access, trust, and runtime behaviour.
 
-- [API Keys](api-keys.md) -- non-interactive credentials for scripts and automation
-- [Certificates](certificates.md) -- trusted CA certificates used by connectors
-- [Service Settings](service-settings.md) -- runtime configuration values
-- [Roles](roles.md) -- role definitions and role membership
+- [API Keys](api-keys.md): non-interactive credentials for scripts and automation
+- [Certificates](certificates.md): trusted CA certificates used by connectors
+- [Service Settings](service-settings.md): runtime configuration values
+- [Roles](roles.md): role definitions and role membership
 
 ## How each page is structured
 

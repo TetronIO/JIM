@@ -190,6 +190,6 @@ There is no way to recover the original secret values without the keys; this is 
 
 ## Related
 
-- [Deployment Guide](deployment.md) -- volumes, production readiness checklist, air-gapped checklist.
-- [Configuration Reference](configuration.md) -- the `JIM_ENCRYPTION_KEY_PATH` variable.
-- [Service Settings](../configuration/service-settings.md) -- encrypted settings and how secret changes are recorded.
+- [Deployment Guide](deployment.md): volumes, production readiness checklist, air-gapped checklist.
+- [Configuration Reference](configuration.md): the `JIM_ENCRYPTION_KEY_PATH` variable.
+- [Service Settings](../configuration/service-settings.md): encrypted settings and how secret changes are recorded.

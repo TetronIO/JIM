@@ -1443,20 +1443,7 @@ public partial class SyncEngine
             }
 
             var attributeName = csotAttribute.Name;
-
-            object? value = csotAttribute.Type switch
-            {
-                AttributeDataType.Text => attributeValue.StringValue,
-                AttributeDataType.Number => attributeValue.IntValue,
-                AttributeDataType.LongNumber => attributeValue.LongValue,
-                AttributeDataType.Decimal => attributeValue.DecimalValue,
-                AttributeDataType.DateTime => attributeValue.DateTimeValue,
-                AttributeDataType.Boolean => attributeValue.BoolValue,
-                AttributeDataType.Guid => attributeValue.GuidValue,
-                AttributeDataType.Binary => attributeValue.ByteValue,
-                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
-                _ => null
-            };
+            var value = ToExpressionValue(attributeValue, csotAttribute.Type);
 
             if (!attributes.ContainsKey(attributeName))
             {
@@ -1466,6 +1453,25 @@ public partial class SyncEngine
 
         return attributes;
     }
+
+    /// <summary>
+    /// The value an expression sees for one Connected System Object attribute value, typed by the attribute's data
+    /// type. Shared with Object Matching (#2052) so a matching expression sees exactly what an Attribute Flow
+    /// expression sees.
+    /// </summary>
+    internal static object? ToExpressionValue(ConnectedSystemObjectAttributeValue attributeValue, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => attributeValue.StringValue,
+        AttributeDataType.Number => attributeValue.IntValue,
+        AttributeDataType.LongNumber => attributeValue.LongValue,
+        AttributeDataType.Decimal => attributeValue.DecimalValue,
+        AttributeDataType.DateTime => attributeValue.DateTimeValue,
+        AttributeDataType.Boolean => attributeValue.BoolValue,
+        AttributeDataType.Guid => attributeValue.GuidValue,
+        AttributeDataType.Binary => attributeValue.ByteValue,
+        AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+        _ => null
+    };
 
     /// <summary>
     /// Flows a processed expression array result to the target attribute. An empty result is the ConnectedNoValue
@@ -1543,6 +1549,15 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
+        // One conversion for every expression consumer (#2052): Object Matching converts its expression results
+        // through the same converter, so an expression yields the same typed value whichever of them evaluates it.
+        if (!ExpressionResultConverter.TryConvert(result, targetAttribute.Type, out var value))
+        {
+            Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to {Type}",
+                LogSanitiser.Sanitise(result?.ToString()), targetAttribute.Type);
+            return null;
+        }
+
         var newMvoValue = new MetaverseObjectAttributeValue
         {
             MetaverseObject = mvo,
@@ -1552,97 +1567,29 @@ public partial class SyncEngine
             ContributedBySyncRuleId = contributingSyncRuleId
         };
 
-        switch (targetAttribute.Type)
+        switch (value)
         {
-            case AttributeDataType.Text:
-                newMvoValue.StringValue = result?.ToString();
+            case int intValue:
+                newMvoValue.IntValue = intValue;
                 break;
-            case AttributeDataType.Number:
-                // A long result only converts when it fits in an int; silently narrowing would corrupt
-                // the value (the #871 lossy-cast class), so an out-of-range long is rejected like any
-                // other unconvertible result.
-                if (result is int intVal)
-                    newMvoValue.IntValue = intVal;
-                else if (result is long longVal && longVal is >= int.MinValue and <= int.MaxValue)
-                    newMvoValue.IntValue = (int)longVal;
-                else if (result is not long && int.TryParse(result?.ToString(), out var parsedInt))
-                    newMvoValue.IntValue = parsedInt;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
+            case long longValue:
+                newMvoValue.LongValue = longValue;
                 break;
-            case AttributeDataType.LongNumber:
-                // int widens to long exactly. String results parse with invariant culture.
-                if (result is long longNumberVal)
-                    newMvoValue.LongValue = longNumberVal;
-                else if (result is int longNumberIntVal)
-                    newMvoValue.LongValue = longNumberIntVal;
-                else if (long.TryParse(result?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLong))
-                    newMvoValue.LongValue = parsedLong;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to LongNumber", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
+            case decimal decimalValue:
+                newMvoValue.DecimalValue = decimalValue;
                 break;
-            case AttributeDataType.Decimal:
-                // int and long widen to decimal exactly. double/float results are deliberately rejected:
-                // binary floating point cannot represent most decimal fractions exactly, so converting
-                // would silently corrupt the value. String results parse with invariant culture and
-                // accept exponent notation (e.g. "1.5E3" becomes 1500).
-                if (result is decimal decimalVal)
-                    newMvoValue.DecimalValue = decimalVal;
-                else if (result is int decimalIntVal)
-                    newMvoValue.DecimalValue = decimalIntVal;
-                else if (result is long decimalLongVal)
-                    newMvoValue.DecimalValue = decimalLongVal;
-                else if (result is not double && result is not float &&
-                         DecimalAttributeValue.TryParse(result?.ToString(), out var parsedDecimal))
-                    newMvoValue.DecimalValue = parsedDecimal;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Decimal", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
+            case DateTime dateTimeValue:
+                newMvoValue.DateTimeValue = dateTimeValue;
                 break;
-            case AttributeDataType.DateTime:
-                if (result is DateTime dtVal)
-                    newMvoValue.DateTimeValue = dtVal;
-                else if (DateTime.TryParse(result?.ToString(), out var parsedDt))
-                    newMvoValue.DateTimeValue = parsedDt;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
+            case bool boolValue:
+                newMvoValue.BoolValue = boolValue;
                 break;
-            case AttributeDataType.Boolean:
-                if (result is bool boolVal)
-                    newMvoValue.BoolValue = boolVal;
-                else if (bool.TryParse(result?.ToString(), out var parsedBool))
-                    newMvoValue.BoolValue = parsedBool;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
-                break;
-            case AttributeDataType.Guid:
-                if (result is Guid guidVal)
-                    newMvoValue.GuidValue = guidVal;
-                else if (Guid.TryParse(result?.ToString(), out var parsedGuid))
-                    newMvoValue.GuidValue = parsedGuid;
-                else
-                {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", LogSanitiser.Sanitise(result?.ToString()));
-                    return null;
-                }
+            case Guid guidValue:
+                newMvoValue.GuidValue = guidValue;
                 break;
             default:
-                Log.Warning("CreateMvoAttributeValueFromExpressionResult: Unsupported target attribute type {Type} for expression result", targetAttribute.Type);
-                return null;
+                newMvoValue.StringValue = (string?)value;
+                break;
         }
 
         return newMvoValue;

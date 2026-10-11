@@ -2082,6 +2082,16 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(i => i.Id == id);
     }
 
+    /// <inheritdoc />
+    public async Task<List<ActivityRunProfileExecutionItemMatchCandidate>> GetMatchCandidatesAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemMatchCandidates
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .OrderBy(c => c.Ordinal)
+            .ToListAsync();
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations

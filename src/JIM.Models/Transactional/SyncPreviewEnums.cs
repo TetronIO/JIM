@@ -48,7 +48,10 @@ public enum SyncPreviewMessageCode
     /// <summary>The enabled Attribute Flows that derive Metaverse attributes from other Metaverse attributes (#1750)
     /// contain a dependency cycle, so no evaluation order exists: the real synchronisation would refuse to start and
     /// process no object at all. The preview evaluates nothing either, and names the cycle.</summary>
-    DerivedFlowCycle
+    DerivedFlowCycle,
+    /// <summary>An Object Matching Rule could not be worked out for the object (#2052); the real sync would neither
+    /// join nor project it, and would record an ObjectMatchingRuleFailed error naming the rule and the fault.</summary>
+    ObjectMatchingRuleFailed
 }
 
 /// <summary>

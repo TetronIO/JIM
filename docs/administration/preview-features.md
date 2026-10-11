@@ -31,5 +31,5 @@ Some feature flags exist purely for JIM's own development and its integration te
 
 ## See also
 
-- [Service Settings](../configuration/service-settings.md) -- how the underlying settings work, including change history and the read-only/configurable distinction
-- [Feature Flags PowerShell cmdlets](../powershell/feature-flags.md) -- `Get-JIMFeature`, `Enable-JIMFeature`, `Disable-JIMFeature`
+- [Service Settings](../configuration/service-settings.md): how the underlying settings work, including change history and the read-only/configurable distinction
+- [Feature Flags PowerShell cmdlets](../powershell/feature-flags.md): `Get-JIMFeature`, `Enable-JIMFeature`, `Disable-JIMFeature`
