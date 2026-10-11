@@ -98,6 +98,7 @@ public static class ConfigurationChangeClassifier
         ["priority"] = B,
         ["nullIsValue"] = B,
         ["initialExportOnly"] = B,
+        ["keepUnique"] = B,
 
         // Unique Value Generation (#242): a generated mapping's base expression is an ordinary mapping source (see
         // below), so it needs no key of its own here; these are the uniqueness token and its settings. Every key

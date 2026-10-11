@@ -65,6 +65,13 @@ public class SyncRuleMappingSettingsUpdate
     public SyncRuleMappingGenerationSettingsUpdate? Generation { get; set; }
 
     /// <summary>
+    /// The "Keep unique with ..." switch on a value built from a generated value (Generated Value Forms, #2023; see
+    /// <see cref="SyncRuleMapping.KeepUnique"/>). Expression mappings only; refused on a direct flow and on a generated
+    /// mapping, which can never build a value from a generated value.
+    /// </summary>
+    public bool? KeepUnique { get; set; }
+
+    /// <summary>
     /// True when the update names at least one setting. A request naming none changes nothing, and is rejected
     /// rather than reported as a successful update.
     /// </summary>
@@ -76,5 +83,6 @@ public class SyncRuleMappingSettingsUpdate
         CaseNormalisation.HasValue ||
         InitialExportOnly.HasValue ||
         Enabled.HasValue ||
+        KeepUnique.HasValue ||
         (Generation?.HasChanges ?? false);
 }

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Exceptions;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -356,6 +358,117 @@ public partial class ConnectedSystemServer
                 Log.Information("ReleaseNeedsDecisionIfGenerationChangedAsync: the generation configuration of flow {GenerationId} changed, so " +
                     "{Count} generated value(s) waiting on a decision were released for the next export to try again", generation.Id, released);
         }
+    }
+
+    /// <summary>
+    /// Why the "Keep unique" switch was refused on a mapping it can never apply to.
+    /// </summary>
+    internal const string KeepUniqueNotApplicableMessage =
+        "Keep unique applies only to an Attribute Flow that builds its value with an Expression (a value built from a generated value), " +
+        "not to a direct flow or to a generated value itself.";
+
+    /// <summary>
+    /// Whether <paramref name="mapping"/> can carry the "Keep unique" switch (Generated Value Forms, #2023): an expression
+    /// mapping that is not itself generated. Whether it is built from a generated value right now depends on the other
+    /// mappings, which may be saved in any order, so the switch is accepted on any such mapping and simply has no effect
+    /// until it is.
+    /// </summary>
+    internal static bool CanKeepUnique(SyncRuleMapping mapping) =>
+        mapping.Generation == null && mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression));
+
+    /// <summary>
+    /// The values built from generated values among the Synchronisation Rules of one Metaverse Object Type (Generated
+    /// Value Forms, #2023): its import rules and every export rule for the type.
+    /// </summary>
+    internal async Task<GeneratedValueBuiltValues> GetGeneratedValueBuiltValuesAsync(int metaverseObjectTypeId)
+    {
+        var importRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
+        var exportRules = (await Application.Repository.ConnectedSystems.GetExportSyncRulesWithAttributeFlowsAsync())
+            .Where(rule => rule.MetaverseObjectTypeId == metaverseObjectTypeId);
+        List<SyncRule> rules = [.. importRules, .. exportRules];
+
+        DerivedFlowGraph? graph = null;
+        try
+        {
+            graph = DerivedFlowGraphFactory.Create(rules, []);
+        }
+        catch (DerivedFlowCycleException)
+        {
+            // A cycle is refused at save time; one that predates that check simply means nothing is followed through a
+            // derivation until it is broken.
+        }
+
+        return GeneratedValueBuiltValues.Create(rules, graph);
+    }
+
+    /// <summary>
+    /// The stored "Keep unique" switch of every saved expression mapping among <paramref name="mappings"/>, read before a
+    /// save can flush, so <see cref="ReleaseNeedsDecisionIfKeepUniqueChangedAsync(IEnumerable{SyncRuleMapping}, IReadOnlyDictionary{int, bool})"/>
+    /// can tell what the save changed. No repository call when none could carry the switch.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, bool>> ReadStoredKeepUniqueAsync(IEnumerable<SyncRuleMapping> mappings)
+    {
+        var ids = mappings.Where(m => m.Id > 0 && CanKeepUnique(m)).Select(m => m.Id).Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, bool>();
+
+        return await Application.Repository.ConnectedSystems.GetSyncRuleMappingKeepUniqueAsync(ids) ?? [];
+    }
+
+    /// <summary>
+    /// Releases the Needs Decision of the generated values whose built values' "Keep unique" switch the save changed
+    /// (Generated Value Forms, #2023): the change is the administrator's answer (a refusal of the value is no longer
+    /// corrected, or now is), so the waiting assignments return to Committed for the next export run to try again, as a
+    /// change to the generated flow's own configuration does.
+    /// </summary>
+    private async Task ReleaseNeedsDecisionIfKeepUniqueChangedAsync(IEnumerable<SyncRuleMapping> mappings, IReadOnlyDictionary<int, bool> previous)
+    {
+        var changed = mappings.Where(m => previous.TryGetValue(m.Id, out var stored) && stored != m.KeepUnique).ToList();
+        foreach (var mapping in changed)
+            await ReleaseNeedsDecisionIfKeepUniqueChangedAsync(mapping);
+    }
+
+    /// <summary>
+    /// Releases the Needs Decision of the generated value <paramref name="mapping"/>'s value is built from, after its
+    /// "Keep unique" switch changed.
+    /// </summary>
+    private async Task ReleaseNeedsDecisionIfKeepUniqueChangedAsync(SyncRuleMapping mapping)
+    {
+        var typeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        if (!typeId.HasValue)
+            return;
+
+        var builtValues = await GetGeneratedValueBuiltValuesAsync(typeId.Value);
+        foreach (var generation in builtValues.GeneratedValuesBuilding(mapping).Select(m => m.Generation).OfType<SyncRuleMappingGeneration>())
+        {
+            var released = await Application.UniqueValues.ReleaseNeedsDecisionForMappingAsync(generation.Id);
+            if (released > 0)
+                Log.Information("ReleaseNeedsDecisionIfKeepUniqueChangedAsync: the Keep unique switch of mapping {MappingId}, built from flow {GenerationId}, " +
+                    "changed, so {Count} generated value(s) waiting on a decision were released for the next export to try again", mapping.Id, generation.Id, released);
+        }
+    }
+
+    /// <summary>
+    /// Refuses a "Keep unique" switch turned off on a mapping it can never apply to (a direct flow, or a generated value
+    /// itself), so an administrator is never left believing a value was opted out when nothing was.
+    /// </summary>
+    /// <exception cref="ArgumentException">The switch is off on a mapping that cannot carry it.</exception>
+    private static void ValidateKeepUnique(SyncRuleMapping mapping)
+    {
+        if (!mapping.KeepUnique && !CanKeepUnique(mapping))
+        {
+            var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+            throw new ArgumentException($"{targetName}: {KeepUniqueNotApplicableMessage}");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="ValidateKeepUnique(SyncRuleMapping)"/> for every mapping of a whole-rule save.
+    /// </summary>
+    private static void ValidateKeepUnique(SyncRule syncRule)
+    {
+        foreach (var mapping in syncRule.AttributeFlowRules)
+            ValidateKeepUnique(mapping);
     }
 
     /// <summary>
