@@ -85,9 +85,9 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 #### The specification
 
-1. The specification lives in one document (proposed: `engineering/DOCUMENTATION_STANDARD.md`; see Open Question 1). `docs/CLAUDE.md` keeps only site mechanics (diagrams, lightbox, dependencies) and points to it; it no longer restates any rule. The "Writing for the Reader" rules move into the specification unchanged in substance.
+1. The specification lives in one document (`engineering/DOCUMENTATION_STANDARD.md`; [Decision 1](#decisions)). `docs/CLAUDE.md` keeps only site mechanics (diagrams, lightbox, dependencies) and points to it; it no longer restates any rule. The "Writing for the Reader" rules move into the specification unchanged in substance.
 2. Every rule has a stable ID (for example `LANG-5`). The ID appears in the lint message, the rubric and the specification, and the lint message links to the rule.
-3. **Audiences.** The specification names the readers and what each needs: evaluator, implementer, administrator, operator, automation author, security assessor. Every page declares one primary audience in front matter (`audience:`). JIM contributors are not an audience of the public site (see Open Question 3).
+3. **Audiences.** The specification names the readers and what each needs: evaluator, implementer, administrator, operator, automation author, security assessor. Every page declares one primary audience in front matter (`audience:`). JIM contributors are not an audience of the public site ([Decision 3](#decisions)).
 4. **Page types and required shapes.** Every page declares `type:` in front matter, and each type has a required shape:
 
     | Type | Title | Required | Forbidden |
@@ -98,7 +98,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
     | `reference` | Noun phrase | One-line scope; consistent tables (setting, default, allowed values, effect, available from); generated where possible | Narrative and instructions |
     | `troubleshooting` | "Troubleshooting <area>" | Entries titled by the symptom or message verbatim, each with cause, fix, check and what is not lost; data-loss entries first; "Still stuck?" with what to collect | Reassurance with no fix |
     | `landing` | Section name | One purpose paragraph, then cards or links | Other content |
-    | `object` (proposed; Open Question 4) | The domain noun ("Connected Systems") | A fixed order: what it is and why it matters, then tasks (each a verb heading), then settings reference, then troubleshooting; split when over the size budget | Anything out of that order |
+    | `object` ([Decision 4](#decisions)) | The domain noun ("Connected Systems") | A fixed order: what it is and why it matters, then tasks (each a verb heading), then settings reference, then troubleshooting; split when over the size budget | Anything out of that order |
 
 5. **Voice.** Present tense, active voice, addressed to "you", JIM as the subject of what JIM does. Name the domain concept, never the implementation. Hedge only where JIM is genuinely uncertain. A failure is named with its remedy; anything destructive or refused says what survives. (These are the existing "Writing for the Reader" rules, kept.)
 6. **What does not belong on a public page:** GitHub issue or pull request numbers; release, upgrade or roadmap narration ("now", "until now", "previously", "this release", "planned"); JIM's own development or test infrastructure (devcontainer, integration lab); design defence ("this is deliberate", "we chose"); class, method, property or table names unless the reader types them.
@@ -140,7 +140,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 #### Migration
 
-23. **Phase 0 corrects the factual defects first**, before any rewriting: the non-existent cmdlets and parameters, the wrong REST route, the broken link, the malformed front matter, the contradictions listed in the audit, the glossary's three factual errors, and the stub tutorial.
+23. **Phase 0 corrects the factual defects first**, before any rewriting: the non-existent cmdlets and parameters, the wrong REST route, the broken link, the malformed front matter, the contradictions listed in the audit, and the glossary's three factual errors. The stub tutorial is not a correction: it is replaced by the tested tutorial (requirements 31 to 35) in the priority wave.
 24. The priority pages (requirement 36) migrate first, as one wave ahead of any folder. The remaining pages then migrate a folder at a time, in order of reader impact: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation. A folder is marked conformant in the conformance configuration when every page declares its type and its baseline is empty; the mark never reverts.
 25. Splitting a page keeps the original URL as the parent and moves sub-features to child pages. Every deep link from the product into the docs (the portal's glossary links and `docs.junctional.io` links in source) keeps resolving, checked by requirement 13.
 26. Customer-relevant behaviour currently explained only in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) is rewritten into `concepts/` before any developer content moves.
@@ -156,13 +156,13 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 31. **Executed every release.** `getting-started/first-synchronisation.md` is backed by an integration scenario (the next scenario number, registered as directory-agnostic so it runs once per pass) in the `-PreRelease` suite. A release cannot be cut while the tutorial is broken, because the suite already gates every release through the `jim-pre-release` status.
 32. **One source.** Each step shows its portal and PowerShell forms side by side (tabbed). The scenario reads the PowerShell steps from the page itself and executes them in order; it keeps no copy of its own, so the page and the test cannot drift apart. Every checkpoint the page states (an object count, a state, a value the reader should see) carries a machine-readable marker that the scenario asserts.
-33. **No external system.** The sample data is a file published with the docs and is also the scenario's input. The tutorial needs nothing but JIM, so it works on an air-gapped evaluation install (recommended shape: an HR file in, through the Metaverse, out to a second file; Open Question 8).
+33. **No external system.** The sample data is a file published with the docs and is also the scenario's input. The tutorial needs nothing but JIM, so it works on an air-gapped evaluation install (an HR file in, through the Metaverse, out to a second file; [Decision 8](#decisions)).
 34. **Portal labels checked.** Every portal control the tutorial names in bold must exist in the portal source; the conformance check fails otherwise. This proves the labels exist, not that the clicks work (see Non-Goals).
 35. **Tutorials declare their test.** A page with `type: tutorial` must name its scenario in front matter (`scenario:`), and the named script must exist. The tutorial's PowerShell steps are checked statically at pull request time like every other example; they are executed at release time. This replaces "tutorials are scarce by design" with "tutorials are few, and tested".
 
 #### Priority pages
 
-36. **The list.** About 15 pages, recorded in the conformance configuration so the stricter rules apply mechanically. Proposed, by the reader's journey (Open Question 7):
+36. **The list.** About 15 pages, recorded in the conformance configuration so the stricter rules apply mechanically. By the reader's journey ([Decision 7](#decisions)):
 
     | Journey | Pages |
     |---------|-------|
@@ -240,9 +240,9 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 ## Constraints
 
 - All automation in PowerShell; no new bash scripts.
-- No new third-party dependency without the user's approval (Open Question 2).
+- No new third-party dependency without the user's approval; lychee is approved, Vale and markdownlint-cli2 are not adopted ([Decision 2](#decisions)).
 - British English, no em dashes, Title Case domain nouns, no competing product names (existing rules).
-- The required status check list stays unchanged unless the user decides otherwise (Open Question 5).
+- The required status check list stays unchanged: the checks run inside `changelog-lint` ([Decision 5](#decisions)).
 - Parallel sessions edit `docs/` constantly; the baseline format and folder-by-folder rollout must not create merge conflicts or block unrelated work.
 
 ## Affected Areas
@@ -276,21 +276,21 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 ## Dependencies
 
-- **[#1083](https://github.com/TetronIO/JIM/issues/1083), generating the PowerShell cmdlet reference,** should be decided before the `powershell/` migration. The 23 PowerShell pages are the largest drift surface; linting them is a stopgap, generating them removes the defect class. To be recorded as a native blocked-by link once this PRD is accepted.
-- **The docs generator's end of support.** Material for MkDocs' maintenance window closes in about four weeks, and MkDocs 2.0 is incompatible with it. No issue tracks this yet; a separate issue is recommended (Open Question 6).
+- **[#1083](https://github.com/TetronIO/JIM/issues/1083), generating the PowerShell cmdlet reference,** should be decided before the `powershell/` migration. The 23 PowerShell pages are the largest drift surface; linting them is a stopgap, generating them removes the defect class. Recorded as a native blocked-by link on #1454.
+- **The docs generator's end of support** is tracked in [#2058](https://github.com/TetronIO/JIM/issues/2058). Material for MkDocs committed to critical and security fixes for at least 12 months from 9.7.0 (11 November 2025), and MkDocs 2.0 is incompatible with it. Not blocking: every check here is generator-agnostic (requirement 17).
 
-## Open Questions
+## Decisions
 
-Each has a recommendation; the product owner decides.
+Decided by the product owner on 2026-10-11, each as recommended in the draft.
 
-1. **Where does the specification live?** Recommended: `engineering/DOCUMENTATION_STANDARD.md`, because its readers are JIM's authors, not customers. The alternative, a public page under `docs/`, only helps outside contributors, and a public page would itself have to conform.
-2. **New tooling.** Recommended: approve **lychee** (link checker; Apache-2.0 or MIT; a single static binary) for the built-site link check, which found the one broken link MkDocs cannot see; and **do not adopt Vale**. Vale is the industry-standard prose linter, but the mechanical style rules it would enforce are already 99% met, its Markdown parser skips indented content after a blank line (every admonition body, about 109 lines in 20 files, exactly where warnings live), and the stock style packages raised 38,998 alerts that mostly contradict JIM's own conventions. PowerShell rules driven by the vocabulary file cover the same ground without the blind spot. markdownlint-cli2 is not recommended (81 npm packages, high false positives on MkDocs syntax).
-3. **What happens to `docs/developer/`?** Recommended: 16 of its 18 pages are for JIM's own contributors (the ten diagram pages alone carry more than 200 issue references); move them to `engineering/`, after the customer-relevant behaviour they hold is rewritten into `concepts/` (requirement 26). Keep connector authoring as a small "Extending JIM" section once its placeholder content is finished. This also stops the Quick Start and Prerequisites pages sending new customers into contributor material.
-4. **What shape are `configuration/` and `connectors/` pages?** Recommended: the `object` type above, a fixed concept, tasks, reference, troubleshooting order on one page per domain object, with the size budget forcing splits. Strict Diátaxis would instead scatter "Connected Systems" across four folders, which is purer but makes an administrator assemble the answer; the fixed-order page is what administrators actually look for, and the order makes each mode findable.
-5. **Run the checks inside `changelog-lint`, or rename the job?** Recommended: inside `changelog-lint` for now, which needs no ruleset change. The job will then run eight unrelated checks under a misleading name; renaming it (for example to `pr-lint`) is a one-time ruleset edit you can make whenever convenient.
-6. **File an issue for the generator's end of support?** Recommended: yes, now. Zensical (the same team's successor) is at an alpha release; the decision between pinning MkDocs 1.6.1 deliberately and moving is better made before the window closes than after.
-7. **Which pages are priority pages?** Recommended: the 15 in requirement 36, chosen along the reader's journey from evaluating to recovering. The list is deliberately short: every page added to it costs a re-validation each release, so a page belongs on it only if an administrator who cannot use it would stall or lose trust in JIM.
-8. **What does the tutorial synchronise?** Recommended: an HR file in, through the Metaverse, out to a second file, using the File Connector only. It needs no directory, works air-gapped and on any evaluation install, and is the cheapest to keep passing. A directory target (Active Directory or LDAP) is what most customers actually want, but it cannot be assumed on an evaluation install; it is better as a second, how-to-style guide once the first tutorial exists.
+1. **The specification lives in `engineering/DOCUMENTATION_STANDARD.md`.** Its readers are JIM's authors, human and Claude, not customers. A public page under `docs/` would only help outside contributors, and would itself have to conform.
+2. **Tooling: lychee is approved; Vale and markdownlint-cli2 are not adopted.** lychee (Apache-2.0 or MIT; a single static binary, pinned by version and SHA-256) checks links in the built site, including the one broken link MkDocs cannot see. Vale was rejected because the mechanical style rules it would enforce are already 99% met, its Markdown parser skips indented content after a blank line (every admonition body, about 109 lines in 20 files, exactly where warnings live), and the stock style packages raised 38,998 alerts that mostly contradict JIM's own conventions; PowerShell rules driven by the vocabulary file cover the same ground without the blind spot. markdownlint-cli2 was rejected for its 81 npm packages and high false-positive rate on MkDocs syntax.
+3. **`docs/developer/` leaves the public site, except connector authoring.** 16 of its 18 pages are for JIM's own contributors (the ten diagram pages alone carry more than 200 issue references); they move to `engineering/` once the customer-relevant behaviour they hold is rewritten into `concepts/` (requirement 26). Connector authoring stays as a small "Extending JIM" section once its placeholder content is finished. The Quick Start and Prerequisites pages stop sending new customers into contributor material.
+4. **`configuration/` and `connectors/` pages use the `object` type.** One page per domain object, in a fixed concept, tasks, reference, troubleshooting order, with the size budget forcing splits. Strict Diátaxis would scatter "Connected Systems" across four folders, which is purer but makes an administrator assemble the answer; the fixed order makes each mode findable on the page administrators actually look for.
+5. **The checks run inside `changelog-lint`.** No ruleset change is needed. The job then runs eight unrelated checks under a misleading name; renaming it (for example to `pr-lint`) remains a one-time ruleset edit for whenever it is convenient.
+6. **The generator's end of support is its own issue,** [#2058](https://github.com/TetronIO/JIM/issues/2058), filed 2026-10-11.
+7. **The priority pages are the 15 in requirement 36,** chosen along the reader's journey from evaluating to recovering. The list stays short on purpose: every page on it costs a re-validation each release, so a page belongs on it only if an administrator who cannot use it would stall or lose trust in JIM.
+8. **The tutorial synchronises an HR file in, through the Metaverse, out to a second file,** using the File Connector only. It needs no directory, works air-gapped and on any evaluation install, and is the cheapest to keep passing. A directory target (Active Directory or LDAP) is what most customers actually want, but it cannot be assumed on an evaluation install; it is better as a second, how-to-style guide once the first tutorial exists.
 
 ## Acceptance Criteria
 
