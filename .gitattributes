@@ -37,6 +37,13 @@
 # the section after a merge.
 CHANGELOG.md merge=union
 
+# The docs conformance baseline (#1454) keeps one sorted line per rule and page, so two pull
+# requests that lower neighbouring entries touch adjacent lines, which git reports as a conflict.
+# A union merge keeps both sides instead; where that leaves two lines for one rule and page,
+# Test-DocsConformance.ps1 takes the lower count, and a line the other side removed comes back
+# only to fail the check until -UpdateBaseline removes it again.
+docs/.conformance/baseline.tsv merge=union
+
 # Binary files
 *.png binary
 *.jpg binary

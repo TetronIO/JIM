@@ -14,11 +14,11 @@ A Run Profile is one of:
 
 - **Full Import**<br /> Read every object from the Connected System and replace the existing connector space view.
 - **Delta Import**<br /> Read only the objects that have changed since the last import. Faster, and only available where the connector supports change tracking.
-- **Full Synchronisation**<br /> Evaluate every connector space object against the Synchronisation Rules; produce projections, joins, Attribute Flows, and Pending Exports. Its preview action shows what it would do without running it; see [Previewing a Full Synchronisation](connected-systems.md#previewing-a-full-synchronisation).
+- **Full Synchronisation**<br /> Evaluate every connector space object against the Synchronisation Rules, skipping a joined object unchanged since the last synchronisation unless Synchronisation Rule configuration has changed since the last Full Synchronisation; produce projections, joins, Attribute Flows, and Pending Exports. Its preview action shows what it would do without running it; see [Previewing a Full Synchronisation](connected-systems.md#previewing-a-full-synchronisation).
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
-## Batch size
+## Page size
 
 Controls how many objects are processed per batch during execution. Larger batches reduce overhead per object but cost more memory and increase the blast radius if a batch fails. Sensible defaults differ per connector; tune as needed for your scale.
 
@@ -101,7 +101,7 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 ## Manage Run Profiles
 
 - **JIM portal**<br /> Run Profiles tab on a Connected System in the admin UI
-- **PowerShell**<br /> [Run Profile cmdlets](../powershell/run-profiles.md) (`Get-JIMRunProfile`, `New-JIMRunProfile`, `Invoke-JIMRunProfile`, etc.)
+- **PowerShell**<br /> [Run Profile cmdlets](../powershell/run-profiles.md) (`Get-JIMRunProfile`, `New-JIMRunProfile`, `Start-JIMRunProfile`, etc.)
 - **REST API**<br /> Run Profile endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also

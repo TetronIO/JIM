@@ -349,6 +349,72 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The queued deprovision names the export Synchronisation Rule whose Deprovisioning Action said Delete, so the
+    /// housekeeping Activity says why the account is being removed rather than left in place (#1811).
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_NamesTheRuleThatQueuedTheDeleteAsync()
+    {
+        // Arrange
+        var (personMvo, _) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var deprovisionOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deprovisionOutcome.SyncRuleId, Is.EqualTo(910));
+            Assert.That(deprovisionOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+        }
+    }
+
+    /// <summary>
+    /// A grace-period deletion under a Disconnect Deprovisioning Action leaves the account in place and queues
+    /// nothing. It used to record nothing about the account either, so it read as untouched when it was in fact now
+    /// unmanaged; it is reported as a Target Disconnected outcome beneath the deletion, naming the rule (#1811).
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDisconnectDeprovisionRule_ReportsTheAccountLeftInPlaceAsync()
+    {
+        // Arrange
+        SeedTargetExportUsersRule(SyncRepo, OutboundDeprovisionAction.Disconnect);
+        var personMvo = CreateEligiblePersonMvo("Dan Disconnected");
+        SyncRepo.SeedMetaverseObject(personMvo);
+        var personTargetCso = SeedProvisionedTargetCso(SyncRepo, personMvo, "uid=dan.disconnected,ou=People,dc=glitterband,dc=local");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var disconnectedOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(disconnectedOutcome, Is.Not.Null, "The account left in place must be reported, not silently disconnected");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disconnectedOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected));
+            Assert.That(disconnectedOutcome.TargetEntityId, Is.EqualTo(personTargetCso.Id));
+            Assert.That(disconnectedOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName));
+            Assert.That(disconnectedOutcome.SyncRuleId, Is.EqualTo(910));
+            Assert.That(disconnectedOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+            Assert.That(activity.TotalPendingExports, Is.Zero, "Nothing was queued, so nothing is counted as a Pending Export");
+        }
+    }
+
+    /// <summary>
     /// Housekeeping must evaluate every batch against the configuration as it stands now, not as the worker first
     /// saw it. The main loop's JimApplication lives for the worker's lifetime on a change-tracking DbContext, and
     /// EF Core serves a tracked entity back from its identity map rather than refreshing it from a later query, so
@@ -507,6 +573,78 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// The grace-period link (#1811): housekeeping deletes the object in its own Activity, days or weeks after the
+    /// run that scheduled the deletion, and the object carries the item that scheduled it. The deletion must record
+    /// that item as its cause, or the deletion cannot say which run decided on it and the run cannot say what its
+    /// decision led to. Recorded whatever the tracking level, because the deletion item exists either way.
+    /// </summary>
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)]
+    public async Task PerformHousekeeping_MvoCarryingItsSchedulingItem_RecordsTheSchedulingItemAsTheDeletionsCauseAsync(
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel trackingLevel)
+    {
+        UseSyncOutcomeTrackingLevel(trackingLevel);
+        var schedulingItemId = Guid.NewGuid();
+        var scheduledMvo = CreateEligiblePersonMvo("Sana Scheduled");
+        scheduledMvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItemId;
+        scheduledMvo.DeletionTriggeredBySystemId = 1;
+        scheduledMvo.DeletionTriggeredBySystemName = "Source HR";
+        scheduledMvo.DeletionPolicySnapshotJson = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            TriggeringSystemId = 9,
+            TriggeringSystemName = "Yellowstone APAC"
+        }.ToJson();
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([scheduledMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        var edge = deletionRpei.CausalEdges.SingleOrDefault(e => e.EdgeType == CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion);
+        Assert.That(edge, Is.Not.Null, "the deletion names the run that scheduled it");
+        var mvoDeleted = deletionRpei.SyncOutcomes.SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(edge!.CauseRunProfileExecutionItemId, Is.EqualTo(schedulingItemId));
+            Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(scheduledMvo.Id));
+            Assert.That(edge!.CauseDisplayName, Is.EqualTo("Sana Scheduled"));
+            Assert.That(edge!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected),
+                "the reason comes from the decision-time snapshot, as on the deletion's other edges");
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9), "the snapshot's triggering system wins over the object's own marker");
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(edge!.EffectSyncOutcome, Is.SameAs(mvoDeleted),
+                "the edge explains the MvoDeleted outcome where one is recorded, and the item as a whole where none is");
+        }
+    }
+
+    /// <summary>
+    /// An object scheduled before the link was recorded carries no scheduling item. Its deletion goes ahead exactly
+    /// as before and records no edge: an edge pointing at nothing would read as a cause that has aged out of history.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_MvoWithoutASchedulingItem_RecordsNoSchedulingEdgeAsync()
+    {
+        var scheduledMvo = CreateEligiblePersonMvo("Sana Scheduled");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([scheduledMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_deletedMvoIds, Does.Contain(scheduledMvo.Id));
+            Assert.That(deletionRpei.CausalEdges.Where(e => e.EdgeType == CausalEdgeType.MetaverseObjectDeletionScheduleCausedDeletion), Is.Empty);
+        }
+    }
+
+    /// <summary>
     /// Idle-tick silence pin: a housekeeping pass with nothing to delete must create no Activity at all, so a
     /// quiet worker does not fill the Activities list with no-op entries.
     /// </summary>
@@ -647,6 +785,23 @@ public class HousekeepingActivityWorkflowTests
             }
         };
         SyncRepo.SeedSyncRule(exportRule);
+    }
+
+    /// <summary>
+    /// Sets the sync outcome tracking level every Service Setting read in the batch sees.
+    /// </summary>
+    private void UseSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel level)
+    {
+        _mockServiceSettingsRepository
+            .Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+                DisplayName = "Sync outcome tracking level",
+                Category = ServiceSettingCategory.History,
+                ValueType = ServiceSettingValueType.Enum,
+                DefaultValue = level.ToString()
+            });
     }
 
     /// <summary>

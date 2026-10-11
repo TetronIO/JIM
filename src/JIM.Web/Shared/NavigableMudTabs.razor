@@ -20,9 +20,14 @@
          SliderColor="SliderColor"
          IconColor="IconColor"
          Header="Header"
+         MinimumTabWidth="120px"
          Ripple="Ripple">
     @ChildContent
 </MudTabs>
+
+@* MudTabs gives every tab 160px whatever its label needs, so a Connected System's nine tabs (1440px) overflowed into
+   a scrolling strip at a common laptop width while each label needed 70 to 156px. 120px keeps short labels a
+   comfortable target and fits those nine tabs in 1122px. *@
 
 @code {
     private MudTabs _mudTabs = null!;

@@ -1229,6 +1229,13 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<int, SyncRuleMappingGeneration>> GetSyncRuleMappingGenerationsAsync(IReadOnlyCollection<int> generationIds);
 
     /// <summary>
+    /// The stored "Keep unique" switch of the given mappings, by mapping id (Generated Value Forms, #2023). Untracked; read
+    /// on the save path, before anything flushes, to tell whether a save changed the switch, which releases the Needs
+    /// Decision of the generated value the mapping's value is built from. Ids with no stored row are absent.
+    /// </summary>
+    public Task<Dictionary<int, bool>> GetSyncRuleMappingKeepUniqueAsync(IReadOnlyCollection<int> mappingIds);
+
+    /// <summary>
     /// Returns the settings that decide which Metaverse Objects a stored Synchronisation Rule covers (enabled,
     /// provisioning, Scoping Criteria at every depth), or null when the rule does not exist (issue #1925).
     /// <para>

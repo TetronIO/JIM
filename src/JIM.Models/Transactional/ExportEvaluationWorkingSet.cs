@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Logic;
 using JIM.Models.Sync;
 
 namespace JIM.Models.Transactional;
@@ -51,6 +52,23 @@ public class ExportEvaluationWorkingSet
     public bool TryGetStagedDeleteExport(Guid connectedSystemObjectId, out PendingExport pendingExport) =>
         _stagedDeleteExportsByCsoId.TryGetValue(connectedSystemObjectId, out pendingExport!);
 
+    private readonly Dictionary<Guid, SyncRule> _deprovisioningRulesByCsoId = [];
+
+    /// <summary>
+    /// Records the export Synchronisation Rule whose Deprovisioning Action queued a Delete for a CSO in this run, so
+    /// the outcome reporting the Delete can name it (#1811). Several rules can cover one CSO and Delete wins, so the
+    /// rule is captured from the decision that staged the Delete rather than looked up again afterwards. Record only
+    /// after the Delete Pending Export is persisted, like <see cref="RecordStagedDeleteExport"/>.
+    /// </summary>
+    public void RecordDeprovisioningRule(Guid connectedSystemObjectId, SyncRule syncRule) =>
+        _deprovisioningRulesByCsoId[connectedSystemObjectId] = syncRule;
+
+    /// <summary>
+    /// Fetches the export Synchronisation Rule whose Deprovisioning Action queued this run's Delete for a CSO, if any.
+    /// </summary>
+    public bool TryGetDeprovisioningRule(Guid connectedSystemObjectId, out SyncRule syncRule) =>
+        _deprovisioningRulesByCsoId.TryGetValue(connectedSystemObjectId, out syncRule!);
+
     private readonly List<CancelledProvisioning> _cancelledProvisionings = [];
 
     /// <summary>
@@ -71,8 +89,9 @@ public class ExportEvaluationWorkingSet
     private readonly List<OutboundDisconnection> _disconnections = [];
 
     /// <summary>
-    /// Records an outbound disconnection this run made (a scope exit under a Disconnect Deprovisioning Action broke
-    /// the join to the target system's object). Record only after the broken join is persisted.
+    /// Records an outbound disconnection this run made (a Disconnect Deprovisioning Action broke the join to the
+    /// target system's object, on a scope exit or a Metaverse Object deletion). Record only after the broken join is
+    /// persisted.
     /// </summary>
     public void RecordDisconnection(OutboundDisconnection disconnection) =>
         _disconnections.Add(disconnection);

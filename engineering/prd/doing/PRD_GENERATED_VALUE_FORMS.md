@@ -1,6 +1,6 @@
 # Generated Value Forms
 
-- **Status:** Planned
+- **Status:** Doing (implementation plan: [GENERATED_VALUE_FORMS.md](../../plans/doing/GENERATED_VALUE_FORMS.md))
 - **Created:** 2026-10-08
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#2023](https://github.com/TetronIO/JIM/issues/2023)
@@ -88,7 +88,7 @@ There is also an understanding problem. To know what is protected, an administra
     - Sync Preview checks every form against JIM's records, and names the Connected Systems and forms it would probe in `generatedValueProbes`.
 12. **REST API and PowerShell.**
     - A generated mapping's `generation.participants` gains the values built from it. Each entry names the value, how it is built, and whether it is checked before issuing or corrected only.
-    - Derived and export expression mappings built from a generated value expose `builtFromGeneratedValue`: the generated attribute, `checkedBeforeIssuing`, and the switch as `keepUnique`. `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` take `-KeepUnique`, and `Get-JIMSyncRuleMapping` returns `KeepUnique` and `CheckedBeforeIssuing`.
+    - Every mapping carries the switch as `keepUnique`. Derived and export expression mappings built from a generated value also expose `builtFromGeneratedValue`: the generated attribute, the attributes it is built through, how it is built, the generated flow's own `collisionRemediation`, and `checkedBeforeIssuing`; a generated mapping's `generation.builtValues` lists every value built from it. `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` take `-KeepUnique`, and `Get-JIMSyncRuleMapping` returns `KeepUnique` and `BuiltFromGeneratedValue`.
 
 ### Non-Functional Requirements
 
@@ -190,6 +190,7 @@ Settled with the product owner on 2026-10-10.
    "Derived values" was rejected: "derived" already covers every flow that reads the Metaverse, including ones this feature leaves out (values built from two generated values), so one word would name two different sets.
 3. **Clashes among values issued before this feature are left alone.** Only values chosen from then on are protected, and the docs and release notes say so. JIM never renames values it has already issued, so a report would be a list with no fix; finding alias clashes means scanning whole directories, a different and much heavier job than checking a candidate; and generated values themselves (#242) shipped the same way. A duplicate values report can be its own feature if customers ask for one.
 4. **A value whose switch is off never holds the generated value back.** It is neither checked nor corrected, and a refusal of it is an ordinary **Value Already in Use** export error (requirement 8).
+5. **Waiting stays (requirement 3), and the docs say how to provision only when everything is ready** (2026-10-11). Holding the generated value until every value built from it can be worked out and is free is preferred to creating an account and renaming it later, which confuses people about which identifier to sign in with. The docs advise scoping export rules that provision on the generated value having a value ("Account Name needs a value"): once forms ship it is issued only when every form can be built and is free, and it is never emptied again, so it gates provisioning without risking a deprovision. Inputs outside the chain need their own criteria, and the docs warn that a scoping criterion also decides whether an object stays provisioned.
 
 ## Acceptance Criteria
 
@@ -205,5 +206,5 @@ Settled with the product owner on 2026-10-10.
 
 ## Additional Context
 
-- Unique Value Generation plan: [`engineering/plans/done/UNIQUE_VALUE_GENERATION.md`](../plans/done/UNIQUE_VALUE_GENERATION.md). Decision 9, as revised on 2026-10-06, is the attribution rule this PRD builds on.
-- Today a derived value is "an ordinary contribution" with no uniqueness guarantee ([Deriving Metaverse attributes](../../docs/configuration/synchronisation-rules.md#deriving-metaverse-attributes)). This PRD keeps that true for values outside a generated value's forms.
+- Unique Value Generation plan: [`engineering/plans/done/UNIQUE_VALUE_GENERATION.md`](../../plans/done/UNIQUE_VALUE_GENERATION.md). Decision 9, as revised on 2026-10-06, is the attribution rule this PRD builds on.
+- Today a derived value is "an ordinary contribution" with no uniqueness guarantee ([Deriving Metaverse attributes](../../../docs/configuration/synchronisation-rules.md#deriving-metaverse-attributes)). This PRD keeps that true for values outside a generated value's forms.

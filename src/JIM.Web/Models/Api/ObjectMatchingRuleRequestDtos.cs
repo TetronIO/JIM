@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
@@ -62,10 +63,10 @@ public class CreateObjectMatchingRuleRequest
     public List<CreateObjectMatchingRuleSourceRequest> Sources { get; set; } = new();
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
+    /// Omitted or null takes the default, which ignores case (see <see cref="ObjectMatchingDefaults"/>).
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 }
 
 /// <summary>
@@ -95,10 +96,10 @@ public class CreateSyncRuleObjectMatchingRuleRequest
     public List<CreateObjectMatchingRuleSourceRequest> Sources { get; set; } = new();
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
+    /// Omitted or null takes the default, which ignores case (see <see cref="ObjectMatchingDefaults"/>).
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool? CaseSensitive { get; set; }
 }
 
 /// <summary>

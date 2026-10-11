@@ -224,12 +224,165 @@ public class GeneratedValueRejectionAttributionTests
         }
     }
 
+    [Test]
+    public void Attribute_NamedExportExpressionReadingTheGeneratedValue_IsAttributedThroughDerivation()
+    {
+        var mapping = _directoryExport.AttributeFlowRules.Single(m => m.TargetConnectedSystemAttributeId == _userPrincipalName.Id);
+        mapping.Sources[0] = new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@corp.local\"" };
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+            Assert.That(result.MetaverseAttributeId, Is.EqualTo(_model.AccountName.Id));
+            Assert.That(result.ThroughDerivation, Is.True);
+        }
+    }
+
+    [Test]
+    public void Attribute_NamedValueDerivedTwoStepsAway_IsAttributedToTheGeneratedValue()
+    {
+        // User Principal Name is now built from Email, which is built from Account Name.
+        Expression(_hrImport, 103, _model.Email, "mv[\"Account Name\"] + \"@corp.local\"");
+        _hrImport.AttributeFlowRules.Single(m => m.Id == 101).Sources[0].Expression = "mv[\"Email\"]";
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+            Assert.That(result.MetaverseAttributeId, Is.EqualTo(_model.AccountName.Id));
+        }
+    }
+
+    [Test]
+    public void Attribute_NamedValueDerivedOnAnotherRule_IsStillAttributed()
+    {
+        // Corrected after a refusal whichever rule builds it; only the check before issuing is limited to the own rule.
+        _hrImport.AttributeFlowRules.RemoveAll(m => m.Id == 101);
+        var directoryImport = ImportRule(3, "Directory Import", DirectorySystemId);
+        directoryImport.MetaverseObjectType = _model.Person;
+        Expression(directoryImport, 110, _model.UserPrincipalName, "mv[\"Account Name\"] + \"@corp.local\"");
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName", directoryImport);
+
+        Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+    }
+
+    [Test]
+    public void Attribute_ChangeFromADisabledExportRule_IsStillResolvedFromThatRule()
+    {
+        // A change queued before its rule was disabled is still about the value that rule produced.
+        _directoryExport.Enabled = false;
+        var export = Export((_sAMAccountName, "joe.bloggs"));
+
+        var result = Attribute(export, "sAMAccountName");
+
+        Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+    }
+
+    [Test]
+    public void Attribute_NamedDerivedValueWhoseKeepUniqueIsOff_IsUnattributable()
+    {
+        _hrImport.AttributeFlowRules.Single(m => m.Id == 101).KeepUnique = false;
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.IsAttributed, Is.False, "a value switched off is an ordinary Value Already in Use error");
+            Assert.That(result.UnattributableReason, Does.Contain("User Principal Name"));
+        }
+    }
+
+    [Test]
+    public void Attribute_NamedValueBuiltThroughASwitchedOffStep_IsStillAttributed()
+    {
+        // The switch is per value: Email off does not stop a User Principal Name built from it being corrected.
+        var email = Expression(_hrImport, 103, _model.Email, "mv[\"Account Name\"] + \"@corp.local\"");
+        email.KeepUnique = false;
+        _hrImport.AttributeFlowRules.Single(m => m.Id == 101).Sources[0].Expression = "mv[\"Email\"]";
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName");
+
+        Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+    }
+
+    [Test]
+    public void Attribute_NamedExportExpressionWhoseKeepUniqueIsOff_IsUnattributable()
+    {
+        var mapping = _directoryExport.AttributeFlowRules.Single(m => m.TargetConnectedSystemAttributeId == _userPrincipalName.Id);
+        mapping.Sources[0] = new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Account Name\"] + \"@corp.local\"" };
+        mapping.KeepUnique = false;
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"));
+
+        var result = Attribute(export, "userPrincipalName");
+
+        Assert.That(result.IsAttributed, Is.False);
+    }
+
+    [Test]
+    public void Attribute_NothingNamedAndTheOnlyBuiltValueCarriedIsSwitchedOff_IsUnattributable()
+    {
+        _hrImport.AttributeFlowRules.Single(m => m.Id == 101).KeepUnique = false;
+        var export = Export((_userPrincipalName, "joe.bloggs@corp.local"), (_displayName, "Joe Bloggs"));
+
+        var result = Attribute(export, null);
+
+        Assert.That(result.IsAttributed, Is.False);
+    }
+
+    [Test]
+    public void Attribute_GeneratedValueCarriedDirectly_IsNeverSwitchedOff()
+    {
+        // The switch lives on values built from a generated value, never on the generated value itself.
+        _hrImport.AttributeFlowRules.Single(m => m.Id == 100).KeepUnique = false;
+        var export = Export((_sAMAccountName, "joe.bloggs"));
+
+        var result = Attribute(export, "sAMAccountName");
+
+        Assert.That(result.IsAttributed, Is.True, result.UnattributableReason);
+    }
+
+    [Test]
+    public void Attribute_AnotherObjectTypesValueOfTheSameAttribute_IsNotFollowedThroughThisTypesDerivations()
+    {
+        // People's Email is built from Account Name; groups' Email from the group's Name. A group's refused Email has no
+        // generated value behind it, even though the attribute is shared.
+        Expression(_hrImport, 103, _model.Email, "mv[\"Account Name\"] + \"@corp.local\"");
+        var groupImport = ImportRule(4, "Group Import", connectedSystemId: 1, GroupTypeId);
+        groupImport.MetaverseObjectType = _model.Group;
+        Expression(groupImport, 130, _model.Email, "mv[\"Name\"] + \"@corp.local\"");
+        var groupExport = ExportRule(5, "Group Export", DirectorySystemId, GroupTypeId);
+        groupExport.MetaverseObjectType = _model.Group;
+        var mail = new ConnectedSystemObjectTypeAttribute { Id = 504, Name = "mail", Type = AttributeDataType.Text };
+        _directoryAttributes.Add(mail);
+        var mapping = new SyncRuleMapping { Id = 230, SyncRule = groupExport, SyncRuleId = groupExport.Id, TargetConnectedSystemAttribute = mail, TargetConnectedSystemAttributeId = mail.Id };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = _model.Email, MetaverseAttributeId = _model.Email.Id });
+        groupExport.AttributeFlowRules.Add(mapping);
+        var export = Export((mail, "engineers@corp.local"));
+        export.AttributeValueChanges[0].SyncRuleId = groupExport.Id;
+
+        SyncRule[] importRules = [_hrImport, groupImport];
+        var graph = DerivedFlowGraphFactory.Create(importRules, _model.Types);
+        var result = GeneratedValueRejectionAttribution.Attribute(export, "mail", _directoryAttributes, [_directoryExport, groupExport], importRules, graph);
+
+        Assert.That(result.IsAttributed, Is.False);
+    }
+
     // ---- Helpers ----
 
-    private GeneratedValueRejectionAttributionResult Attribute(PendingExport export, string? rejectedAttributeName)
+    private GeneratedValueRejectionAttributionResult Attribute(PendingExport export, string? rejectedAttributeName, params SyncRule[] otherImportRules)
     {
-        var graph = DerivedFlowGraphFactory.Create([_hrImport], _model.Types);
-        return GeneratedValueRejectionAttribution.Attribute(export, rejectedAttributeName, _directoryAttributes, [_directoryExport], [_hrImport], graph);
+        SyncRule[] importRules = [_hrImport, .. otherImportRules];
+        var graph = DerivedFlowGraphFactory.Create(importRules, _model.Types);
+        return GeneratedValueRejectionAttribution.Attribute(export, rejectedAttributeName, _directoryAttributes, [_directoryExport], importRules, graph);
     }
 
     private void AddExportMapping(ConnectedSystemObjectTypeAttribute target, MetaverseAttribute source)

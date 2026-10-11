@@ -101,10 +101,9 @@ public class ObjectMatchingRuleDto
     public List<ObjectMatchingRuleSourceDto> Sources { get; set; } = new();
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons respect case. When false, comparisons ignore case differences.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool CaseSensitive { get; set; }
 
     /// <summary>
     /// When the rule was created.

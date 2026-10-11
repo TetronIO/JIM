@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Exceptions;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -392,6 +394,7 @@ public class GeneratedValueDecisionServer
     {
         var rules = await Application.SyncRepo.GetAllSyncRulesAsync();
         var exportRules = rules.Where(r => r.Direction == SyncRuleDirection.Export).ToList();
+        var builtValues = GeneratedValueBuiltValues.Create(rules, TryBuildDerivedFlowGraph(rules));
 
         var flows = rules
             .SelectMany(rule => rule.AttributeFlowRules.Where(m => m.Generation != null).Select(mapping => (Rule: rule, Mapping: mapping)))
@@ -401,13 +404,33 @@ public class GeneratedValueDecisionServer
                 g =>
                 {
                     var (rule, mapping) = g.First();
+                    // An import-mode flow also involves every system receiving a value built from it (Generated Value Forms,
+                    // #2023): a decision about the generated value changes what those systems get too.
                     var systems = mapping.TargetMetaverseAttributeId.HasValue
-                        ? GeneratedValueParticipation.ComputeParticipatingTargets(mapping, exportRules).Select(t => t.ConnectedSystemId).ToHashSet()
+                        ? GeneratedValueParticipation.ComputeParticipatingTargets(mapping, exportRules).Select(t => t.ConnectedSystemId)
+                            .Concat(builtValues.BuiltFrom(mapping).SelectMany(value => value.ExportedTo).Select(t => t.ConnectedSystemId))
+                            .ToHashSet()
                         : [rule.ConnectedSystemId];
                     return new GeneratedFlow(rule.Id, systems);
                 });
 
         return new GeneratedFlows(flows);
+    }
+
+    /// <summary>
+    /// The derived flow graph of <paramref name="rules"/>, or null when they hold a dependency cycle (refused at save time;
+    /// one that predates the check means nothing is followed through a derivation until it is broken).
+    /// </summary>
+    private static DerivedFlowGraph? TryBuildDerivedFlowGraph(IEnumerable<SyncRule> rules)
+    {
+        try
+        {
+            return DerivedFlowGraphFactory.Create(rules, []);
+        }
+        catch (DerivedFlowCycleException)
+        {
+            return null;
+        }
     }
 
     private sealed record GeneratedFlow(int SyncRuleId, HashSet<int> ParticipatingSystemIds);

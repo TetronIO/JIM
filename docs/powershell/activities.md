@@ -154,7 +154,7 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems
 ```
 
 ```powershell title="Pipeline from Start-JIMRunProfile"
-$result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
+$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId
 ```
 
@@ -168,7 +168,7 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Follow -IntervalSeco
 ```
 
 ```powershell title="Review errors in execution items"
-$result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
+$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
     Where-Object { $null -ne $_.ErrorType }
 ```
@@ -209,12 +209,12 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 ```
 
 ```powershell title="Get stats after a Run Profile completes"
-$result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
+$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
 Get-JIMActivityStats -Id $result.ActivityId
 ```
 
 ```powershell title="Check for errors after execution"
-$result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
+$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
 $stats = Get-JIMActivityStats -Id $result.ActivityId
 if ($stats.TotalObjectErrors -gt 0) {
     Write-Warning "Sync completed with $($stats.TotalObjectErrors) errors"

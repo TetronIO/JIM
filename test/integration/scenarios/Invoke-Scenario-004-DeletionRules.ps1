@@ -712,6 +712,118 @@ function Get-LdapCsoHeader {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: Assert the deletion's own outcome tree says what became of the target account and which rule decided it
+# (#1811). Beneath the "Metaverse Object deleted" outcome, a Delete action records Deprovision queued and a Disconnect
+# action records Disconnected from target system, each naming the export Synchronisation Rule. The outcome tree is not
+# on the REST API's execution item list, so it is read from the database, as Get-MvoDeletionMarkers does.
+# -----------------------------------------------------------------------------------------------------------------
+function Assert-DeletionOutcomeNamesDeprovisioningRule {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$DeprovisionAction,
+
+        [Parameter(Mandatory=$true)]
+        [string]$RuleName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$StepName
+    )
+
+    # Interpolated because psql -c over docker exec takes no bind parameters; the names are this scenario's own
+    # constants, and anything else is refused before it reaches SQL.
+    if ($DisplayName -notmatch '^[A-Za-z0-9 ._-]+$') {
+        throw "Assert-DeletionOutcomeNamesDeprovisioningRule: display name '$DisplayName' is not a plain test name."
+    }
+
+    # Ordinals pinned by SyncOutcomeTypeOrdinalTests: MvoDeleted 11, DeprovisionQueued 25, TargetDisconnected 55.
+    $expectedType = if ($DeprovisionAction -eq 'Delete') { 25 } else { 55 }
+    $expectedLabel = if ($DeprovisionAction -eq 'Delete') { 'Deprovision queued' } else { 'Disconnected from target system' }
+    $query = @"
+SELECT COALESCE(child."SyncRuleName", '')
+FROM "ActivityRunProfileExecutionItemSyncOutcomes" child
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" parent ON parent."Id" = child."ParentSyncOutcomeId"
+WHERE parent."OutcomeType" = 11
+  AND parent."TargetEntityDescription" = '$DisplayName'
+  AND child."OutcomeType" = $expectedType;
+"@
+
+    $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-DeletionOutcomeNamesDeprovisioningRule: psql query failed for '$DisplayName'. Output: $rows"
+    }
+
+    $ruleNames = @($rows | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+    if ($ruleNames.Count -eq 0) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "No $expectedLabel outcome under the Metaverse Object deletion" }
+        throw "$TestName failed: the deletion of '$DisplayName' recorded no $expectedLabel outcome naming a rule ($DeprovisionAction action)"
+    }
+    if ($ruleNames -notcontains $RuleName) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "$expectedLabel outcome names '$($ruleNames -join "', '")', expected '$RuleName'" }
+        throw "$TestName failed: the $expectedLabel outcome names '$($ruleNames -join "', '")' rather than export rule '$RuleName'"
+    }
+    Write-Host "  PASSED: The deletion records $expectedLabel, naming export rule '$RuleName'" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Assert a grace-period deletion names the run that scheduled it (#1811). Housekeeping deletes the Metaverse
+# Object in its own Activity, and its deletion item records a MetaverseObjectDeletionScheduleCausedDeletion edge
+# pointing at the item that recorded Metaverse Object deletion scheduled. Edges are not on the REST API's execution
+# item list, so they are read from the database, as Get-MvoDeletionMarkers does.
+# -----------------------------------------------------------------------------------------------------------------
+function Assert-HousekeepingDeletionNamesSchedulingRun {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MvoId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$StepName
+    )
+
+    # Interpolated because psql -c over docker exec takes no bind parameters; a parsed Guid cannot carry SQL.
+    $parsedId = [Guid]::Empty
+    if (-not [Guid]::TryParse($MvoId, [ref]$parsedId)) {
+        throw "Assert-HousekeepingDeletionNamesSchedulingRun: '$MvoId' is not a Metaverse Object id."
+    }
+
+    # Ordinals pinned by CausalEdgeOrdinalTests (MetaverseObjectDeletionScheduleCausedDeletion 5) and
+    # SyncOutcomeTypeOrdinalTests (MvoDeleted 11, MvoDeletionScheduled 17). The edge's effect is the housekeeping item
+    # carrying MvoDeleted; its cause is the item carrying MvoDeletionScheduled, both for this Metaverse Object.
+    $query = @"
+SELECT COUNT(*)
+FROM "CausalEdges" e
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" deleted
+  ON deleted."ActivityRunProfileExecutionItemId" = e."EffectRunProfileExecutionItemId"
+ AND deleted."OutcomeType" = 11 AND deleted."TargetEntityId" = '$parsedId'
+JOIN "ActivityRunProfileExecutionItemSyncOutcomes" scheduled
+  ON scheduled."ActivityRunProfileExecutionItemId" = e."CauseRunProfileExecutionItemId"
+ AND scheduled."OutcomeType" = 17 AND scheduled."TargetEntityId" = '$parsedId'
+WHERE e."EdgeType" = 5 AND e."CauseMetaverseObjectId" = '$parsedId';
+"@
+
+    $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-HousekeepingDeletionNamesSchedulingRun: psql query failed for MVO $MvoId. Output: $rows"
+    }
+
+    $count = [int]("$rows".Trim())
+    if ($count -ne 1) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Expected one scheduling edge on the housekeeping deletion, found $count" }
+        throw "$TestName failed: the housekeeping deletion of MVO $MvoId does not name the run that scheduled it ($count matching edge(s))"
+    }
+    Write-Host "  PASSED: The housekeeping deletion names the run that scheduled it" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Count delete-type Pending Exports on the LDAP system
 # -----------------------------------------------------------------------------------------------------------------
 function Get-DeletePendingExportCount {
@@ -885,6 +997,9 @@ function Invoke-DeprovisionActionTest {
         }
         Write-Host "  PASSED: Delete Pending Export staged for the $CsoOrigin CSO" -ForegroundColor Green
 
+        Assert-DeletionOutcomeNamesDeprovisioningRule -DisplayName $DisplayName -DeprovisionAction Delete `
+            -RuleName (Get-LdapExportSyncRule -Config $Config).name -TestName $TestName -StepName $StepName
+
         # Assert 3: LDAP export removes the account from the directory
         Write-Host "  Running LDAP export to apply the delete..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
@@ -909,6 +1024,9 @@ function Invoke-DeprovisionActionTest {
             throw "$TestName Assert 2 failed: a delete Pending Export was staged for the $CsoOrigin CSO (Disconnect action)"
         }
         Write-Host "  PASSED: No delete Pending Export staged (Disconnect action)" -ForegroundColor Green
+
+        Assert-DeletionOutcomeNamesDeprovisioningRule -DisplayName $DisplayName -DeprovisionAction Disconnect `
+            -RuleName (Get-LdapExportSyncRule -Config $Config).name -TestName $TestName -StepName $StepName
 
         # Assert 3: the CSO was disconnected (join broken, object left in place)
         $csoAfter = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
@@ -1608,6 +1726,9 @@ try {
             throw "Test 4 Assert 2 failed: MVO still exists after grace period should have elapsed"
         }
         Write-Host "  PASSED: MVO deleted after grace period elapsed (housekeeping processed it)" -ForegroundColor Green
+
+        # Assert 2b: the housekeeping deletion names the run that scheduled it (#1811)
+        Assert-HousekeepingDeletionNamesSchedulingRun -MvoId $test4MvoId -TestName "Test 4 Assert 2b" -StepName "AuthoritativeGracePeriod"
 
         # Verify it appears in deleted objects
         $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Grace" -PageSize 10

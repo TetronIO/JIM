@@ -323,14 +323,17 @@ public class DeletionCascadeExportReportingTests
     }
 
     /// <summary>
-    /// A Disconnect deprovisioning action stages no delete Pending Export, so there is nothing to report:
-    /// the flush must not manufacture empty outcomes or execution items.
+    /// A Disconnect action leaves the account in place in the target system and queues nothing, which used to mean
+    /// the deletion recorded nothing about it at all: the account read as untouched when it was in fact now
+    /// unmanaged. It is reported as a Target Disconnected outcome beneath the Metaverse Object deletion, naming the
+    /// rule whose Deprovisioning Action decided to leave it, exactly as a scope exit reports one (#1811, #1966). It
+    /// is still not a Pending Export.
     /// </summary>
     [Test]
-    public async Task FlushPendingMvoDeletions_DisconnectActionOnly_ReportsNothingAsync()
+    public async Task FlushPendingMvoDeletions_DisconnectActionOnly_ReportsTheAccountLeftInPlaceUnderMvoDeletedAsync()
     {
         SeedExportSyncRule(OutboundDeprovisionAction.Disconnect);
-        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        var (mvo, targetCso) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
         Activity activity = null!;
         var processor = await CreateProcessorAsync(a => activity = a);
         var (_, mvoDeletedOutcome) = processor.RecordSourceDisconnection(mvo);
@@ -338,10 +341,41 @@ public class DeletionCascadeExportReportingTests
 
         await processor.CallFlushPendingMvoDeletionsAsync();
 
-        Assert.That(mvoDeletedOutcome.Children, Is.Empty,
-            "A disconnect-only deprovisioning action stages no delete Pending Export to report");
         Assert.That(activity.RunProfileExecutionItems.Any(r => r.ObjectChangeType == ObjectChangeType.PendingExport),
-            Is.False);
+            Is.False, "A disconnect-only deprovisioning action stages no delete Pending Export to report");
+        var disconnectedOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(disconnectedOutcome, Is.Not.Null, "The account left in place must be reported, not silently disconnected");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disconnectedOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected));
+            Assert.That(disconnectedOutcome.TargetEntityId, Is.EqualTo(targetCso.Id));
+            Assert.That(disconnectedOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName));
+            Assert.That(disconnectedOutcome.SyncRuleId, Is.EqualTo(900));
+            Assert.That(disconnectedOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+        }
+    }
+
+    /// <summary>
+    /// The queued deprovision names the export Synchronisation Rule whose Deprovisioning Action said Delete, so an
+    /// administrator can see why the account is being removed rather than left in place (#1811).
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_DeleteExportStaged_NamesTheRuleThatQueuedItAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        var processor = await CreateProcessorAsync(_ => { });
+        var (_, mvoDeletedOutcome) = processor.RecordSourceDisconnection(mvo);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deprovisionOutcome = mvoDeletedOutcome.Children.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deprovisionOutcome.SyncRuleId, Is.EqualTo(900));
+            Assert.That(deprovisionOutcome.SyncRuleName, Is.EqualTo("Target Export Users"));
+        }
     }
 
     #region helpers

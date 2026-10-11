@@ -64,7 +64,20 @@ public enum CausalEdgeType
     /// The two sit in different Activities, so the re-staged export cannot otherwise say why its value
     /// changed from the one first exported.
     /// </summary>
-    ExportRejectionCausedGeneratedValueRevision = 4
+    ExportRejectionCausedGeneratedValueRevision = 4,
+
+    /// <summary>
+    /// The run that scheduled a Metaverse Object's deletion caused the housekeeping deletion that carried it out
+    /// once the grace period ended (#1811). The two sit in different Activities, days or weeks apart, so the
+    /// deletion cannot otherwise say which run decided on it, and the run cannot say what its decision led to.
+    /// </summary>
+    /// <remarks>
+    /// The cause is the item carrying the MvoDeletionScheduled outcome, recorded on the object as
+    /// <see cref="Core.MetaverseObject.DeletionScheduledByRunProfileExecutionItemId"/> when the deletion is
+    /// scheduled. The edge carries the reason code and triggering system from the decision-time policy snapshot,
+    /// the same attribution the deletion's own cascade edges carry.
+    /// </remarks>
+    MetaverseObjectDeletionScheduleCausedDeletion = 5
 }
 
 /// <summary>

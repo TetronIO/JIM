@@ -81,6 +81,12 @@ function New-JIMSyncRuleMapping {
         reviewed before it starts flowing values; a disabled mapping is skipped in both directions until it
         is re-enabled with Set-JIMSyncRuleMapping -Enabled $true.
 
+    .PARAMETER KeepUnique
+        For an Expression mapping whose value is built from a generated value (an Email built from a generated
+        Account Name): whether a target's refusal of that value as already in use is corrected by correcting the
+        generated value. Omit to keep the server default ($true). Supply $false so such a refusal is reported as
+        an ordinary export error and the generated value is left alone. Refused for a generated mapping.
+
     .PARAMETER Generate
         Makes this a "Generated Value" mapping (Unique Value Generation, #242): the mapping's value is its base
         expression (optional; supply with -Expression) plus a uniqueness token. Requires either
@@ -391,7 +397,13 @@ function New-JIMSyncRuleMapping {
         # Create disabled (#1485), import and export mappings alike: omit to create the mapping enabled (the
         # server default); supply $false to create it disabled for ordering and review before it flows values.
         [Parameter()]
-        [bool]$Enabled
+        [bool]$Enabled,
+
+        # Keep unique (Generated Value Forms, #2023), Expression mappings only: omit to keep the server default
+        # (on); supply $false so a target's refusal of a value built from a generated value is an ordinary error.
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [Parameter(ParameterSetName = 'ExportExpression')]
+        [bool]$KeepUnique
     )
 
     process {
@@ -513,6 +525,11 @@ function New-JIMSyncRuleMapping {
         # otherwise.
         if ($PSBoundParameters.ContainsKey('Enabled')) {
             $body.enabled = $Enabled
+        }
+
+        # Keep unique (#2023). Sent only when asked for, so the server's default of on stands otherwise.
+        if ($PSBoundParameters.ContainsKey('KeepUnique')) {
+            $body.keepUnique = $KeepUnique
         }
 
         # "Generated Value" (Unique Value Generation, #242). Only the settings actually supplied are sent;
