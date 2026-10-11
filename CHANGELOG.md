@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Connected System's tabs fit on one line at common laptop widths instead of scrolling with Details and Danger Zone cut off, and a Schedule's trigger writes every time the same way ("Sun at 1:00 AM", where some read "Sun at 1am").
 - 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` now create and retime Schedules from the Specific Times and Interval patterns, which the API used to refuse or ignore; a Sunday-only `New-JIMSchedule` no longer runs every day.
 - 🐛 A Schedule's next run now reads as a time to come ("in 14 hours") on the Home page and on Operations > Schedules, instead of "just now".
 - 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
