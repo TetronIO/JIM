@@ -227,7 +227,15 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 |----|------|------|
 | **PRI-1** | Planned (Phase 3) | Each priority page records the release it was last checked against (`validated: vX.Y.Z`), and `/release` lists every page due for re-validation; the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. |
 | **PRI-2** | Planned (Phase 3) | On a priority page, the advisory review's findings arrive as review threads, each answered by a fix or a reply; the review still never blocks a merge the author has answered. |
-| **TUT-1** | Block (scenario named); Planned (execution, Phase 3) | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
+| **TUT-1** | Block | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
+| **TUT-2** | Block | Every label a tutorial's Portal tab names in bold is one the portal shows: the check finds it in the portal's source (`PortalLabelSources` in `docs/.conformance/config.psd1`), ignoring case. A label the portal builds from data ("Project Users to the Metaverse?") is excused in place with a marker saying so. This proves the labels exist, not that the clicks work. |
+
+**Writing a tutorial.** Give each step's portal and PowerShell forms as content tabs (`=== "Portal"`, `=== "PowerShell"`), the portal form as numbered steps naming each control in bold. The scenario runs every fenced `powershell` block inside a PowerShell tab, in page order and in one session, so a block can use the variables an earlier one set; code anywhere else is not run, so the reader's own setup (`Connect-JIM` in **Before you begin**) and shell commands (copying a file onto the server) sit outside the PowerShell tabs, and the scenario does the same work itself. Mark each thing the page tells the reader to expect, immediately above the sentence that says it:
+
+- `<!-- checkpoint: <PowerShell that returns $true> -->`, run after the steps above it, such as `(Get-JIMPendingExport -ConnectedSystemId $directory.Id -Count) -eq 25`;
+- `<!-- checkpoint-file: /connector-files/<path> rows=<n> -->`, for a file in the connector files volume.
+
+Scope each checkpoint to the tutorial's own objects, since the pre-release suite runs other scenarios in the same environment. The tutorial's sample data is published with the page under `docs/assets/`, and the scenario reads that same file. `test/integration/utils/Tutorial-Helpers.Tests.ps1` reads every tutorial page on each pull request, so a marker that cannot be read, or a block that does not parse, fails there; the scenario runs at release time.
 
 ## Coverage
 
@@ -291,7 +299,8 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
 | PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
-| TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
+| TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |
+| TUT-2 | A tutorial names only labels the portal shows | Block | `Test-DocsConformance.ps1` |
 | COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |
 | COV-3 | Service Settings are documented, and seeded | Block | `ServiceSettingDocsCoverageTests`, `ServiceSettingSeedingCoverageTests` |
 | COV-6 | Connector settings and expression functions are documented | Block | `ConnectorSettingDocsCoverageTests`; `Test-DocsCoverage.ps1` |

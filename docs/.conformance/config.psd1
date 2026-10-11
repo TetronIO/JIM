@@ -29,6 +29,8 @@
         'A11Y-1' = 'Block'
         'A11Y-2' = 'Block'
         'TYP-1'  = 'Block'
+        # A tutorial's Portal tab names only labels the portal shows (Phase 3).
+        'TUT-2'  = 'Block'
         # The language rules (Phase 2a). Small debt was fixed before they landed, so they block;
         # lower-case product nouns, prose abbreviations and minimisers ratchet down from the baseline.
         'LANG-1' = 'Block'
@@ -109,6 +111,10 @@
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
     ScenarioPathFormat      = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
+
+    # TUT-2: where the portal's labels live. Its markup and code, the Connectors' setting names and
+    # options, the names JIM seeds (the built-in Metaverse Object Types) and the comparison wording. Never the tests.
+    PortalLabelSources      = @('src/JIM.Web', 'src/JIM.Connectors', 'src/JIM.Application', 'src/JIM.Utilities')
 
     # The glossary: each product noun's canonical form and anchor (LANG-3, TERM-1). What is
     # enforced for each noun is in vocabulary.psd1, beside this file.

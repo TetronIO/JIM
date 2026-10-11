@@ -156,7 +156,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1',
+$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
     'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
@@ -177,7 +177,7 @@ function Read-Configuration {
 
     foreach ($key in 'Exclude', 'Rules', 'RequiredFrontMatter', 'AllowedFrontMatter', 'Audiences', 'PageTypes', 'DescriptionLength',
         'SizeBudgetWords', 'PrioritySizeBudgetWords', 'StubPatterns', 'PriorityPages', 'ConformantFolders', 'ConformantPages', 'ScenarioPathFormat',
-        'GlossaryPage', 'AmericanSpellings', 'IzeExceptions', 'AllowedSpellings', 'TimeRelativePatterns', 'FuturePatterns', 'MinimiserPatterns') {
+        'PortalLabelSources', 'GlossaryPage', 'AmericanSpellings', 'IzeExceptions', 'AllowedSpellings', 'TimeRelativePatterns', 'FuturePatterns', 'MinimiserPatterns') {
         if (-not $config.ContainsKey($key)) { throw "Configuration '$Path' has no '$key'." }
     }
     foreach ($r in $script:KnownRules | Where-Object { $_ -ne 'EXC-1' }) {
@@ -779,6 +779,43 @@ function Test-PageShape {
 # ---------------------------------------------------------------------------
 
 # The glossary's entries: "Term { #anchor }" or "Term (ABBR) { #anchor }" lines of its definition list.
+# TUT-2: every label a tutorial's Portal tab names in bold is one the portal shows. The portal's text
+# lives in its Razor markup and C#, and a Connector's setting names in its own source, so a label is
+# checked by finding it there; case is ignored, since MudBlazor upper-cases buttons and tabs on screen.
+# A label the portal builds from data ("Project Users to the Metaverse?") is excused with a marker.
+function Get-PortalLabelText {
+    param([string]$RepositoryRoot, [string[]]$Sources)
+    $text = [System.Text.StringBuilder]::new()
+    foreach ($source in $Sources) {
+        $full = Join-Path $RepositoryRoot $source
+        if (-not (Test-Path -LiteralPath $full)) { throw "PortalLabelSources names '$source', which does not exist." }
+        Get-ChildItem -LiteralPath $full -Recurse -File -Include '*.razor', '*.cs' |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
+            ForEach-Object { [void]$text.AppendLine([System.IO.File]::ReadAllText($_.FullName)) }
+    }
+    $text.ToString().ToLowerInvariant()
+}
+
+function Test-PortalLabel {
+    param($Page, $Config, [string]$RepositoryRoot)
+
+    if ($Page.FrontMatter.Values['type'] -ne 'tutorial') { return }
+    $inPortalTab = $false
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        $line = $Page.Lines[$i]
+        if ($line -match '^===\s+"(?<tab>[^"]+)"') { $inPortalTab = $Matches.tab -eq 'Portal'; continue }
+        if ($line -match '^\S') { $inPortalTab = $false; continue }
+        if (-not $inPortalTab -or $Page.InFenceLine[$i]) { continue }
+        foreach ($m in [regex]::Matches($line, '\*\*(?<label>[^*]+?)\*\*')) {
+            $label = $m.Groups['label'].Value.Trim()
+            if ($null -eq $script:PortalText) { $script:PortalText = Get-PortalLabelText -RepositoryRoot $RepositoryRoot -Sources @($Config.PortalLabelSources) }
+            if (-not $script:PortalText.Contains($label.ToLowerInvariant())) {
+                New-Finding 'TUT-2' ($i + 1) "the portal shows no '$label'; name each control exactly as the portal labels it, or excuse a label the portal builds from data with a marker saying so."
+            }
+        }
+    }
+}
+
 function Get-GlossaryEntry {
     param($Page)
     for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
@@ -1082,6 +1119,9 @@ $pages = [System.Collections.Generic.List[object]]::new()
 $findings = [System.Collections.Generic.List[object]]::new()
 
 $files = Get-ChildItem -LiteralPath $docsFull -Filter '*.md' -Recurse -File | Sort-Object FullName
+# The portal's text, for TUT-2; read on first use, since only a tutorial's Portal labels need it.
+$script:PortalText = $null
+
 foreach ($file in $files) {
     $relative = [System.IO.Path]::GetRelativePath($docsFull, $file.FullName) -replace '\\', '/'
     if ($relative -split '/' | Where-Object { $_.StartsWith('.') }) { continue }
@@ -1105,6 +1145,7 @@ foreach ($file in $files) {
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
+        Test-PortalLabel -Page $page -Config $config -RepositoryRoot $repositoryFull
         Test-Language -Page $page -Config $config -Language $language
     ) | Where-Object { $_ }
 
