@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Created:** 2026-10-11
 - **Author:** Drafted by Claude Code for product owner review
-- **Issue:** [#207](https://github.com/TetronIO/JIM/issues/207) (parent), with sub-issues [#2051](https://github.com/TetronIO/JIM/issues/2051) (case-sensitivity policy), [#2052](https://github.com/TetronIO/JIM/issues/2052) (Phase 1), [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2), [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3)
+- **Issue:** [#207](https://github.com/TetronIO/JIM/issues/207) (parent), with sub-issues [#2051](https://github.com/TetronIO/JIM/issues/2051) (case-sensitivity policy), [#2052](https://github.com/TetronIO/JIM/issues/2052) (Phase 1), [#2053](https://github.com/TetronIO/JIM/issues/2053) (Phase 2), [#2054](https://github.com/TetronIO/JIM/issues/2054) (Phase 3), [#2055](https://github.com/TetronIO/JIM/issues/2055) (configuration test harness)
 - **UI mocks:** [Matching Expressions (#207)](https://claude.ai/artifact/U7urHxpx49uGm4EBi5Ckme) (Claude artifact, private to the product owner)
 
 ## Problem Statement
@@ -86,7 +86,12 @@ Recorded with the product owner on 2026-10-11.
    - records a dedicated error that names every candidate, for the administrator to resolve.
 
    Helping the administrator resolve the conflict is future work. The non-deterministic behaviour this replaces is listed in [Determinism](#determinism-no-arbitrary-choices).
-7. **All four sub-issues are in the v1.0-ILM-COMPLETE milestone.**
+7. **All sub-issues are in the v1.0-ILM-COMPLETE milestone.**
+8. **A multi-valued attribute reads as all of its values in every expression** (confirmed). Transforms apply to each value. Comparisons are true when any value matches. Where one value is needed and there are several, that is an error. See Phase 2 requirement 8. The earlier `Values(cs["x"])` proposal was withdrawn because it kept reading one arbitrary value.
+9. **A configuration test harness with saved test cases (#2055).**
+   - The harness runs the same code synchronisation runs.
+   - It is available everywhere an expression, criterion or matching rule is written.
+   - It keeps test cases that re-run whenever the configuration they cover changes.
 
 ## Goals
 
@@ -100,6 +105,8 @@ Recorded with the product owner on 2026-10-11.
 - One function library drives the documentation, the expression editor's suggestions and save-time validation. Comparison functions mean exactly what the matching operators mean.
 - One case-sensitivity policy, organised by the question being asked, governs every comparison in JIM. Enforcement makes a culture-sensitive comparison impossible to reintroduce.
 - No measurable regression in the Scenario 014 performance baselines.
+- An administrator can find out whether any expression, scoping criterion or matching rule works before a synchronisation runs it. The answer is the one synchronisation would give, because it comes from the same code.
+- Saved test cases catch a configuration change that breaks something which used to work, at the moment it is saved.
 
 ## Non-Goals
 
@@ -127,6 +134,9 @@ Recorded with the product owner on 2026-10-11.
 9. As an administrator writing expressions, I want the editor to suggest functions and show what they do, so that I don't have to keep the function reference open beside me.
 10. As an administrator scoping a Synchronisation Rule, I want a criterion to compare a reshaped value, so that `Lower(Trim(cs["department"]))` starts with "fin" covers every way HR writes Finance.
 11. As an administrator, I want JIM to treat values that name the same identity the same way everywhere (joining, uniqueness, External IDs and references), so that `JBloggs` and `jbloggs` are never one identity in one place and two in another.
+12. As an administrator writing an Attribute Flow, scope or matching rule, I want to run typed, multi-valued or real object values through it and see exactly what synchronisation would do, so that I find a mistake before it reaches anyone's data.
+13. As an administrator changing a Synchronisation Rule months after it was built, I want the test cases saved with it to tell me when my change breaks something that used to work, so that I don't have to re-test everything by hand or remember why each part was built.
+14. As an administrator promoting configuration between environments, I want to run every test case from PowerShell, so that a pipeline can refuse a promotion that breaks one.
 
 ## Requirements
 
@@ -230,7 +240,7 @@ Recorded with the product owner on 2026-10-11.
      - Directories store multi-valued attributes as unordered sets, so "first" and "last" are arbitrary: the same object can give a different answer after another import.
      - The documented `Join(mv["Group Memberships"], "|")` and `CollectionContains(cs["memberOf"], ...)` therefore see one value during synchronisation.
      - An export expression that returns several values writes the literal text `System.String[]`.
-   - **Proposed model** (see [Open Question 2](#open-questions), awaiting confirmation):
+   - **Model (confirmed 2026-10-11, Decision 8):**
      1. `cs["x"]` and `mv["x"]` read every value of a multi-valued attribute, in every context.
      2. Transform functions (`Trim`, `Upper`, `Lower`, `Replace`, `Left`, `FormatDate`, the conversions and so on) apply to each value and return every result.
      3. Comparison functions (`Eq`, `StartsWith`, `EndsWith`, `Contains`, `IsMatch`) are true when any value satisfies them, exactly as a scoping criterion on a multi-valued attribute is met. `!` therefore means "no value does", which matches the negated scoping operators.
@@ -263,6 +273,62 @@ Recorded with the product owner on 2026-10-11.
 4. **Explanations.** Scoping explanations, previews and connection explanations show the expression, its inputs and the computed value. They never say only that "the expression returned false".
 5. **Failure.** A criterion that cannot be evaluated is an error on the object, and the object's scope state is left as it was.
 6. **Surfaces.** The portal's Add Criteria dialog gains **Compare: Attribute | Expression**, with the same editor and tester as Phase 1. The REST API, PowerShell and the scoping preview reach parity.
+
+#### Configuration test harness (#2055)
+
+1. **One evaluation pipeline.** The harness runs the code synchronisation runs, not a parallel imitation of it. A test asserts the two agree for every kind.
+   - **Attribute Flow:** build the expression context as synchronisation does, evaluate, apply value processing (trim, collapse, case normalisation, whitespace as no value), apply Missing Input Behaviour, then convert to the target attribute's type. The outcome is the final values, no value, or the error.
+   - **Scope:** the scoping evaluator and its explanation.
+   - **Object Matching:** the match values, and, on request, the lookup against the current Metaverse (would join, no match, ambiguous).
+   - **Generated Values:** the base expression.
+   - **Example Data:** template expressions.
+2. **Inputs.**
+   - Each input is typed from the schema (text, number, date and time, Boolean, GUID).
+   - Multi-valued attributes take several values.
+   - "No value" is distinct from empty text.
+   - **Load from an object** fills the inputs from a real Connected System Object (import contexts) or Metaverse Object (export contexts), and the values can then be edited.
+   - **Run as of** fixes the time used by `Now`, `Today` and relative-date criteria.
+3. **Results.**
+   - A step-by-step trace: expression result, value processing, conversion, outcome.
+   - For scope, the criteria tree with each criterion met or not and why, plus, where relevant, when the object would enter or leave scope.
+   - An "if an input has no value" table, making each input absent in turn.
+   - Links to Preview Impact (all objects) and Sync Preview (one object end to end).
+4. **Coverage.** A tester wherever logic is written:
+   - Attribute Flow (import and export);
+   - Generated Values;
+   - Object Matching Rules (both modes);
+   - Scope;
+   - Example Data template expressions (REST API and PowerShell; the portal once authoring exists there).
+5. **Validation on save, everywhere.** Saving refuses, with the message shown:
+   - an expression that does not parse;
+   - an unknown function;
+   - an input read from the wrong side;
+   - a function that returns a different value each time, where that is not allowed;
+   - a result type that cannot suit the target, where that can be determined.
+
+   This closes the portal's Attribute Flow gap.
+6. **Saved test cases.**
+   - **Contents:** a name; what it covers (an Attribute Flow, a Synchronisation Rule's Scope, an Object Matching Rule or a Generated Value); its inputs; an optional run-as-of time; and an expectation.
+   - **Expectations:** exact values, no value, an error, any value (for time-dependent or random expressions), in scope, out of scope, or match values.
+   - **Created from the tester.** The current result becomes the expectation, and can be edited.
+   - **Run on demand:** from a **Tests** tab on the Synchronisation Rule, and from the Object Matching tab for Simple mode rules.
+   - **Run automatically** whenever the configuration a test case covers is saved.
+7. **The save gate.** Saving a change that makes a test case fail asks first, naming each failing test case with its expected and new results. The choices are:
+   - **Keep editing** (the default);
+   - **Accept the new result as expected**, per test case;
+   - **Save anyway**, which records the failing test case with the change in Configuration History. The Tests tab then shows it as failed until it is fixed or its expectation is updated.
+8. **Needs review.** A test case is flagged rather than silently run when:
+   - the configuration it covers now reads an input it has no value for; or
+   - one of its input attributes has left the schema.
+9. **Test cases are configuration.**
+   - They are recorded in Configuration History and included in configuration snapshots.
+   - They are removed with what they cover.
+   - **Personal data:** saving a test case whose values were loaded from a real object says so and offers made-up replacements. A test case keeps its copy of the values until it is deleted.
+10. **Surface parity.**
+    - Test endpoints per kind (extending `test-expression`).
+    - Create, read, update and delete for test cases.
+    - A run endpoint returning per-test results.
+    - Cmdlets suitable for a pipeline, with names settled in the plan: for example `Test-JIMSyncRuleMapping`, `Test-JIMScope`, `Test-JIMMatchingRule`, test case cmdlets, and `Invoke-JIMConfigurationTest`.
 
 #### Case sensitivity: one policy
 
@@ -495,7 +561,7 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 - it records an **Ambiguous Provisioning Match** error on the object, naming both accounts;
 - the error repeats on each synchronisation until the administrator removes the duplicate or changes the rule. No account is chosen for them.
 
-### Scenario 13: A multi-valued attribute in an expression (Phase 2, if the model is confirmed)
+### Scenario 13: A multi-valued attribute in an expression (Phase 2)
 
 **Given:** a Connected System Object whose `proxyAddresses` holds `SMTP:priya.shah@example.org` and `smtp:p.shah@example.org`.
 
@@ -512,6 +578,28 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 | `Where(cs["proxyAddresses"], "starts with", "SMTP:")` | `SMTP:priya.shah@example.org` |
 | `Replace(Where(cs["proxyAddresses"], "starts with", "SMTP:"), "SMTP:", "")` into Email | `priya.shah@example.org` |
 | `cs["proxyAddresses"]` into single-valued Email | error on the object: proxyAddresses has 2 values; use `Where`, `Join` or `Count` to say which |
+
+### Scenario 14: The tester agrees with synchronisation (test harness)
+
+**Given:** an Attribute Flow `FormatDate((DateTime)cs["hireDate"], "yyyy-MM-dd")` into a Text attribute.
+
+**When:** the administrator enters `2026-03-02` as a date in the tester.
+
+**Then:**
+- the tester shows `2026-03-02`, exactly as synchronisation would produce it from the imported date;
+- today's tester fails this expression, because it passes the sample as text and the cast fails.
+
+### Scenario 15: A change that breaks a saved test case (test harness)
+
+**Given:** a Scope test case "Leaver from last quarter is out of scope", whose `leaveDate` is 2 Jul 2026 and whose run-as-of time is 11 Oct 2026, saved against the criterion "leaveDate on or after 30 days ago".
+
+**When:** an administrator changes the criterion to "on or after 120 days ago" and saves.
+
+**Then:**
+- JIM runs the Scope test cases before saving;
+- it reports that this one would now be in scope;
+- it offers Keep editing, Accept the new result as expected, or Save anyway;
+- saving anyway records the failing test case with the change in Configuration History.
 
 ## Constraints
 
@@ -533,7 +621,8 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 | Connectors (LDAP, SCIM, SQL, File) | Case-exact discovery; LDAP case-only rename; CSV headers; SQL anchor collation |
 | API (`SynchronisationController`, `ExampleDataController`, `PredefinedSearchesController`, DTOs) | `Expression` on matching sources; catalogue-driven validation; consistent defaults |
 | UI (`ConnectedSystemObjectMatchingTab`, `SyncRuleMatchingTab`, `SyncRuleDetailScopingCriteriaGroup`, `PredefinedSearchDetail`, `ExpressionEditor`, `ExpressionTester`) | Shared matching rule editor; Match Value column; expression criteria; suggestions and function list |
-| PowerShell (`MatchingRules`, `ScopingCriteria`, `Search`, `ExampleData`, `Previews`, `Expressions`) | `-SourceExpression`; catalogue `ValidateSet`s; case settings preserved on `Set-` |
+| PowerShell (`MatchingRules`, `ScopingCriteria`, `Search`, `ExampleData`, `Previews`, `Expressions`) | `-SourceExpression`; catalogue `ValidateSet`s; case settings preserved on `Set-`; test and test case cmdlets |
+| Test harness (new) | A shared evaluation pipeline used by synchronisation and the testers; test case storage (new tables, audited, snapshotted, cascading from what they cover); a Tests tab on Synchronisation Rules; testers in every editor that writes logic |
 
 ## Documentation Impact
 
@@ -547,7 +636,9 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 | `docs/powershell/previews.md`, `docs/powershell/expressions.md`, `docs/powershell/example-data.md` | Expression in matching previews; remove the non-existent `Mid()`; Example Data operators from the catalogue |
 | `docs/reference/glossary.md`, `docs/reference/roadmap.md` | Object Matching Rule entry; the roadmap's expression engine line |
 | `engineering/EXPRESSION_SECURITY.md` | Matching and scoping expression inputs now reachable; Example Data expressions authorable (already true, inventory stale); package version |
-| `engineering/SYNC_RULE_SCOPING.md`, `engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md` | Expression criteria; classification of matching expressions |
+| `engineering/SYNC_RULE_SCOPING.md`, `engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md` | Expression criteria; classification of matching expressions and of test cases |
+| New `docs/configuration/testing-configuration.md` (and `mkdocs.yml` nav) | Testers, loading from an object, run-as-of, saved test cases, the save gate, running tests from PowerShell |
+| `docs/powershell/expressions.md` (or a new page) | The test and test case cmdlets |
 
 ## Dependencies
 
@@ -555,16 +646,16 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 - #1458 Save-time validation of Object Matching Rules (done): the pattern this extends to expressions.
 - #2051 must settle the case-sensitivity policy before Phase 1 sets defaults for new rules.
 - #2053 before #2054 (native blocked-by).
+- #2055's shared evaluation pipeline before #2053's multi-valued change, so testers show the new behaviour from the start. #2055 builds on #2052's Try it, and #2054 uses its scope tester.
 - Related: #1463 (reference operators in scoping), #1128 (curated transform recipes, which build on the function library).
 
 ## Open Questions
 
 1. **Ambiguous matches on export.** Resolved by Decision 6: a dedicated error, with no join and no provisioning.
-2. **Multi-valued attributes in expressions.** Awaiting confirmation of the model in Phase 2 requirement 8.
-   - The first recommendation was to keep `cs["x"]` as one value and add `Values(cs["x"])`.
-   - That was withdrawn because it keeps an arbitrary value, contrary to Decision 6.
-   - Until Phase 2, a matching rule on a multi-valued Connected System attribute should use an attribute source, which considers every value.
+2. **Multi-valued attributes in expressions.** Resolved by Decision 8. Until Phase 2, a matching rule on a multi-valued Connected System attribute should use an attribute source, which considers every value.
 3. **Phase 3 "compare as".** Should the type be chosen explicitly (proposed), or inferred from a test evaluation? Inference fails for expressions that return null for the sample.
+4. **Should a failing test case ever block a save outright?** For example, a Service Setting that removes **Save anyway** for environments that want it enforced. The proposal ships the save gate with Save anyway, recorded in Configuration History, and leaves enforcement to a later decision.
+5. **Moving test cases between environments.** Should test cases travel with configuration when JIM gains configuration export and import, so a pipeline can run them in the target environment before promoting?
 
 ## Acceptance Criteria
 
@@ -590,6 +681,15 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 - [ ] Scoping criteria accept expression sources across every surface, with explanations showing computed values.
 - [ ] Evaluation failures never change an object's scope.
 
+### Configuration test harness (#2055)
+
+- [ ] The harness and synchronisation agree for every kind (proven by tests), including typed, multi-valued and absent inputs.
+- [ ] Testers exist everywhere listed, with load-from-object and run-as-of.
+- [ ] Every surface validates on save.
+- [ ] Saved test cases are created from the tester and run on demand and on save, with the save gate and needs-review flagging.
+- [ ] Test cases are recorded in Configuration History and snapshots, and removed with what they cover.
+- [ ] The portal, REST API and PowerShell reach parity, with tests. The testing-configuration docs page is published.
+
 ### Case sensitivity (#2051)
 
 - [ ] One policy page with the quick-reference table, and every audited site follows it.
@@ -599,7 +699,15 @@ Decision 6 applies everywhere JIM could resolve one question to several answers.
 ## Additional Context
 
 - **Research, 2026-10-11:** end-to-end maps of Object Matching, the expression engine and every operator-using feature. Findings are summarised in the tables above, with code locations in the sub-issues.
-- **UI mocks:** the reconciliation overview, the Simple and Advanced mode editors, guard rails and errors, Preview Impact and join explanations, the rejected fuzzy-operator design (for the record), Phase 2's function library, and Phase 3's expression criteria.
+- **UI mocks:**
+  - the reconciliation overview;
+  - the Simple and Advanced mode editors;
+  - guard rails and errors;
+  - Preview Impact and join explanations;
+  - the rejected fuzzy-operator design (for the record);
+  - Phase 2's function library;
+  - Phase 3's expression criteria;
+  - the configuration test harness: the Attribute Flow tester, the scope tester, the Tests tab, the save gate, saving a test case, and PowerShell.
 - **Prior decisions this builds on:**
   - `engineering/plans/done/CASE_SENSITIVITY_STRATEGY.md` (superseded in part by the four-question policy, once confirmed);
   - `engineering/plans/done/SIMPLE_MODE_OBJECT_MATCHING_IMPORT_AND_EXPORT.md`;
