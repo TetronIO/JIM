@@ -39,6 +39,9 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 2. **An audience and a page shape.** There is no definition of who each page is for, and no required structure per page type. `configuration/`, the largest customer section, has no Diátaxis mode at all, so every one of its 16 pages decides its own shape, and nearly all mix four modes.
 3. **A check.** Everything is enforced by memory, and the rules that matter most are the ones a reviewer is least likely to catch.
 4. **A migration driver.** "Existing pages will migrate over time" has been the policy since the Diátaxis section was written; without a mechanism, they did not.
+5. **A rule for changing a page, not just writing one.** `changelog-lint` makes every user-facing pull request touch `docs/`, which is right, but nothing says *how*. The path of least resistance is to append a paragraph describing the new behaviour, in the voice of a release note. `configuration/synchronisation-rules.md` was changed by 77 commits in the six months to October 2026 and reached 17,800 words that way, with paragraphs such as "Changes saved before this release". The page-length and changelog-voice defects above are mostly this one mechanism, and no sentence-level rule touches it.
+6. **Tested tutorials.** `docs/CLAUDE.md` makes tutorials "scarce by design" because they break between releases. The cost is real, but avoiding tutorials is the wrong answer to it: the first-run path is the single page that most decides whether an evaluator adopts a product, and JIM's is a 63-word stub. The answer to breakage is a test, and JIM already runs a pre-release integration suite that gates every release.
+7. **Priorities.** Every page is held to the same bar, so the 15 or so pages that decide whether JIM is adopted, installed and trusted got no more care than a cmdlet reference.
 
 ## Goals
 
@@ -48,7 +51,9 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 - Existing debt can only fall: a shrink-only baseline lets every existing page keep working while forbidding new debt, and every new page is conformant from its first commit.
 - "Complete coverage" is defined against inventories generated from source, and each inventory has a check that fails when something exists but is undocumented, or is documented but no longer exists.
 - Every customer-facing folder is migrated to the specification, each finishing with an empty baseline.
-- A new administrator can go from installation to a first working synchronisation using only the docs.
+- A change to documented behaviour leaves the page reading as though the new behaviour had always been true: superseded text is rewritten, not qualified, and a page over its size budget cannot grow.
+- A new administrator can go from installation to a first working synchronisation using only the docs, and the release cannot ship if that tutorial no longer works.
+- A named set of about 15 priority pages, the ones that decide whether JIM is adopted, installed and trusted, is migrated first and held to a stricter bar than the rest of the site.
 
 ## Non-Goals
 
@@ -56,20 +61,23 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 - **A versioned docs site, or shipping docs inside the air-gapped release bundle.** The specification adds version markers to mitigate an unversioned site; versioning the site is a product decision.
 - **Generating the PowerShell cmdlet reference.** That is [#1083](https://github.com/TetronIO/JIM/issues/1083). This work depends on it for the `powershell/` migration (see Dependencies) rather than doing it.
 - **Rewriting the generated REST API reference (Scalar).** Only the `docs/api/` overview pages are in scope.
-- **Blocking a merge on a language model's judgement.** The rubric review is advisory by construction.
+- **Blocking a merge on a language model's judgement.** The rubric review is advisory by construction. On priority pages its findings arrive as review threads, which the author clears by fixing or by replying with a reason (requirement 38); no finding is ever a gate the author cannot clear.
+- **Driving the tutorial's portal steps with a browser.** The tutorial's PowerShell path is executed every release and its portal labels are checked against the portal source (requirements 31 and 34); a browser-driven run of the portal path is the stronger and costlier option, deferred until the cheaper checks prove insufficient.
 - **Screenshots.** The existing rule against them stands.
 - **Translation or localisation.**
 
 ## User Stories
 
 1. As an **evaluator**, I want each concept page to open with what the thing is and why it matters to me, so that I can judge whether JIM fits without reading about its internals.
-2. As an **implementer**, I want a tutorial that takes me from installation to a first working synchronisation, so that I learn JIM by succeeding with it rather than by assembling twenty pages.
+2. As an **implementer**, I want a tutorial that takes me from installation to a first working synchronisation, and that works on the release I installed, so that I learn JIM by succeeding with it rather than by assembling twenty pages.
 3. As an **administrator**, I want every task page to say what I need first, what to do, how to check it worked and what survives anything destructive, so that I can act on production without reading defensively.
 4. As an **operator**, I want troubleshooting entries titled by the exact symptom I am seeing, with cause, fix and check, so that I can recover a failed run without raising a ticket.
 5. As an **automation author**, I want every PowerShell and REST example to run as written, so that I can trust the docs as much as the product.
 6. As a **security assessor**, I want security behaviour stated plainly in one place per fact, so that I can sign off a deployment without reconciling contradictory pages.
 7. As a **JIM author (human or Claude)**, I want the shape of the page I am writing, and to be told at pull request time which rule I broke and where it is defined, so that I do not have to learn the standard by review comments.
 8. As the **product owner**, I want to see each folder's conformance at a glance, so that I know how far the migration has come and where to spend effort.
+9. As the **product owner**, I want the pages that decide whether JIM is adopted to be the best on the site, and to know each was checked against the release I am about to cut, so that the first impression never lags the product.
+10. As a **JIM author**, when my change alters documented behaviour, I want to be told to rewrite what is now wrong rather than add to it, so that the page stays one coherent description instead of a history.
 
 ## Requirements
 
@@ -84,7 +92,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
     | Type | Title | Required | Forbidden |
     |------|-------|----------|-----------|
-    | `tutorial` | Outcome ("Run your first synchronisation") | Time and outcome up front; prerequisites; checkpoints; "What you achieved" | Branches and alternatives |
+    | `tutorial` | Outcome ("Run your first synchronisation") | Time and outcome up front; prerequisites; checkpoints; "What you achieved"; an integration scenario that executes it (requirements 31 to 35) | Branches and alternatives |
     | `how-to` | Imperative ("Configure SSO with Microsoft Entra ID") | When to do this and the outcome; "Before you begin" when there are prerequisites; numbered steps; a warning before any destructive step stating what survives; "Check it worked"; next steps | Teaching digressions (link to the concept) and exhaustive option lists (link to the reference) |
     | `concept` | Noun phrase, never "Overview" | What it is and why it matters, in the first paragraph; a diagram where the shape is the point; links on to tasks and reference | Numbered procedures |
     | `reference` | Noun phrase | One-line scope; consistent tables (setting, default, allowed values, effect, available from); generated where possible | Narrative and instructions |
@@ -97,16 +105,16 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 7. **Version language.** The site is unversioned while customers run several releases, so time-relative words are banned. Behaviour that differs by release carries an `Available from vX.Y.Z` marker, validated against released versions; a `vNEXT` placeholder is resolved by `/release`. Upgrade-specific notes live in `administration/upgrading.md` and the changelog only.
 8. **Terminology.** A machine-readable controlled vocabulary file (proposed `docs/vocabulary.yml`, excluded from the build) is the single source for product nouns: each entry has its canonical form, rejected variants, glossary anchor and home page. It drives the glossary check, the Title Case check and the rejected-synonym check, and it is reconciled with the existing `TermDefinitions` that the portal's `TermHint` shows.
 9. **One home per fact.** Each concept has exactly one home page (recorded in the vocabulary file); other pages link to it rather than restating it.
-10. **Size budget.** Pages over 5,000 words warn; the specification says how to split (one sub-feature per page, the parent keeping its URL and linking on).
+10. **Size budget.** Pages over 5,000 words warn, and cannot grow (requirement 29); priority pages have a budget of 3,000 (requirement 40). The specification says how to split (one sub-feature per page, the parent keeping its URL and linking on).
 11. **Accessibility.** Meaningful link text; one H1 and no skipped heading levels; a text alternative for every non-text element, including an `accTitle`/`accDescr` for every Mermaid diagram (none of the 54 has one today).
 
 #### Enforcement
 
 12. One PowerShell orchestrator (proposed `scripts/Test-DocsConformance.ps1`) runs every check, locally and in CI, inside the existing required `changelog-lint` job so that no new required status check is needed. Each rule has Pester tests with passing and failing fixtures.
 13. Rules are tiered:
-    - **Blocking:** internal links and anchors; built-site links (including the Scalar reference); front matter parses and has the required keys; one H1 and no skipped levels; fenced code declares a language; every page is in the nav; no stub pages in the nav; no em dashes or American spellings; cmdlet parameter aliases (exists today) and unknown cmdlets or parameters in examples; REST routes in examples exist in the OpenAPI document; coverage checks (below); issue numbers on customer pages; every docs URL in product source resolves to a page and anchor.
+    - **Blocking:** internal links and anchors; built-site links (including the Scalar reference); front matter parses and has the required keys; one H1 and no skipped levels; fenced code declares a language; every page is in the nav; no stub pages in the nav; no em dashes or American spellings; cmdlet parameter aliases (exists today) and unknown cmdlets or parameters in examples; REST routes in examples exist in the OpenAPI document; coverage checks (below); issue numbers on customer pages; every docs URL in product source resolves to a page and anchor; an over-budget page does not grow (requirement 29); a tutorial names an existing scenario and its portal labels exist (requirements 34 and 35).
     - **Ratcheted** (blocking for new occurrences, baselined for existing ones): Title Case domain nouns, required front matter keys, title = H1 = nav label, page-type shape, Mermaid text alternatives, glossary coverage.
-    - **Warnings** (annotations, never fail): abbreviations in prose, time-relative words, future promises, minimisers ("simply", "just"), Latin abbreviations, size budget, opening paragraph. A warning is promoted to blocking once its baseline is zero and it has run a release without a false positive.
+    - **Warnings** (annotations, never fail): abbreviations in prose, time-relative words, future promises, minimisers ("simply", "just"), Latin abbreviations, size budget, opening paragraph. A warning is promoted to blocking once its baseline is zero and it has run a release without a false positive. On a priority page every warning is blocking (requirement 39).
     - **Rubric only** (advisory review plus human): audience fit, voice, implementation nouns, "what survives", failure plus remedy, Diátaxis purity, one home per fact, claims about source.
     - **Scheduled** (weekly, non-blocking, one tracking issue): external links, staleness, coverage drift summary.
 14. **Shrink-only baseline.** One sorted line per entry (`rule`, `path`, `count`), so parallel branches touch different lines and merge cleanly. A file absent from the baseline has an allowance of zero. Exceeding a count fails and annotates only that rule's hits in that file; a count that has fallen also fails until the improvement is locked in with `-UpdateBaseline`, so the baseline never silently re-admits debt.
@@ -133,9 +141,44 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 #### Migration
 
 23. **Phase 0 corrects the factual defects first**, before any rewriting: the non-existent cmdlets and parameters, the wrong REST route, the broken link, the malformed front matter, the contradictions listed in the audit, the glossary's three factual errors, and the stub tutorial.
-24. Folders migrate one at a time, in order of reader impact: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation. A folder is marked conformant in the conformance configuration when every page declares its type and its baseline is empty; the mark never reverts.
+24. The priority pages (requirement 36) migrate first, as one wave ahead of any folder. The remaining pages then migrate a folder at a time, in order of reader impact: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation. A folder is marked conformant in the conformance configuration when every page declares its type and its baseline is empty; the mark never reverts.
 25. Splitting a page keeps the original URL as the parent and moves sub-features to child pages. Every deep link from the product into the docs (the portal's glossary links and `docs.junctional.io` links in source) keeps resolving, checked by requirement 13.
 26. Customer-relevant behaviour currently explained only in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) is rewritten into `concepts/` before any developer content moves.
+
+#### Keeping pages integrated: change a page, do not append to it
+
+27. **Integrate, don't append.** A change to documented behaviour rewrites the page so it reads as though the new behaviour had always been true. Superseded sentences are replaced or deleted, never qualified ("previously ... now ..."). New material goes where the page type puts it: a new task under the tasks, a new setting in the settings table, a new failure in troubleshooting. Release history goes in the changelog and `administration/upgrading.md`, and nowhere else.
+28. **Find what is now wrong before writing what is new.** Before adding anything, the author searches `docs/` for the statements the change makes false and rewrites them (the existing "Document shipped behaviour" rule, given an ID). The coupling check proves *a* page changed; this rule is about the *right* page.
+29. **An over-budget page cannot grow.** A pull request may not increase the word count of a page that was over its size budget on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch rather than a baseline file, so trimming a large page never needs a baseline update. An exception marker with a reason allows an urgent safety note.
+30. **Prompted where the change is made.** The pull request template's Documentation section asks which existing statements the change made wrong and where new material went. The advisory review reads the docs diff for appended release-note voice and for superseded text left standing beside its replacement.
+
+#### The tested tutorial
+
+31. **Executed every release.** `getting-started/first-synchronisation.md` is backed by an integration scenario (the next scenario number, registered as directory-agnostic so it runs once per pass) in the `-PreRelease` suite. A release cannot be cut while the tutorial is broken, because the suite already gates every release through the `jim-pre-release` status.
+32. **One source.** Each step shows its portal and PowerShell forms side by side (tabbed). The scenario reads the PowerShell steps from the page itself and executes them in order; it keeps no copy of its own, so the page and the test cannot drift apart. Every checkpoint the page states (an object count, a state, a value the reader should see) carries a machine-readable marker that the scenario asserts.
+33. **No external system.** The sample data is a file published with the docs and is also the scenario's input. The tutorial needs nothing but JIM, so it works on an air-gapped evaluation install (recommended shape: an HR file in, through the Metaverse, out to a second file; Open Question 8).
+34. **Portal labels checked.** Every portal control the tutorial names in bold must exist in the portal source; the conformance check fails otherwise. This proves the labels exist, not that the clicks work (see Non-Goals).
+35. **Tutorials declare their test.** A page with `type: tutorial` must name its scenario in front matter (`scenario:`), and the named script must exist. The tutorial's PowerShell steps are checked statically at pull request time like every other example; they are executed at release time. This replaces "tutorials are scarce by design" with "tutorials are few, and tested".
+
+#### Priority pages
+
+36. **The list.** About 15 pages, recorded in the conformance configuration so the stricter rules apply mechanically. Proposed, by the reader's journey (Open Question 7):
+
+    | Journey | Pages |
+    |---------|-------|
+    | Evaluate | `index.md`, `concepts/index.md`, `concepts/synchronisation-pipeline.md` |
+    | Install | `getting-started/prerequisites.md`, `administration/deployment.md` |
+    | Learn | `getting-started/first-synchronisation.md` |
+    | Configure | `configuration/connected-systems.md`, `configuration/synchronisation-rules.md`, `connectors/jim-ldap-connector.md`, `concepts/jml-lifecycle.md` |
+    | Operate | `configuration/run-profiles.md`, `configuration/activities.md` |
+    | Recover | `administration/troubleshooting.md`, `administration/upgrading.md`, `administration/backup-recovery.md` |
+
+    Three of these are the site's largest pages; when one is split, the list names whichever resulting pages carry its core tasks.
+37. **First.** Priority pages migrate ahead of every folder (requirement 24).
+38. **Every finding answered.** On a priority page the advisory review posts each finding as a review thread rather than a summary comment. Unresolved threads already block a merge, so each finding is either fixed or answered with a reason; the review still cannot block a merge the author has answered.
+39. **Zero tolerance.** Every mechanical rule, warnings included, is blocking on a priority page, and priority pages have no baseline allowance once migrated.
+40. **Tighter budget.** 3,000 words, and the opening-paragraph rule is blocking.
+41. **Validated each release.** Each priority page records the release it was last checked against (`validated: vX.Y.Z` in front matter). `/release` lists every priority page last validated before the previous minor release, and the release proceeds only once each is re-validated or explicitly deferred, with a reason, in the release pull request.
 
 ### Non-Functional Requirements
 
@@ -176,6 +219,24 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 **When**: the checks run
 **Then**: `LANG-5` annotates the line as a warning, and the advisory review suggests "JIM stops after three attempts", with an `Available from` marker if the release matters to the reader
 
+### Scenario 6: Appending to an over-budget page
+
+**Given**: `configuration/synchronisation-rules.md` is 17,800 words on the base branch, over its 5,000-word budget
+**When**: a feature pull request adds a 400-word section to it and removes nothing
+**Then**: the check fails, naming the page's size on the base branch and on the head; the author splits the new sub-feature onto its own page and links to it, or rewrites the superseded section the feature replaces so the page does not grow
+
+### Scenario 7: A product change breaks the tutorial
+
+**Given**: a pull request changes how a new Connected System's Object Matching Rule is proposed, so the tutorial's HR records no longer join; every cmdlet and parameter on the page still exists, so the static checks pass
+**When**: the release pull request merges and the pre-release suite runs
+**Then**: the tutorial scenario fails at the checkpoint where the page tells the reader the Metaverse now holds 25 people, `jim-pre-release` goes red on that commit, and the release is not cut until the page (and with it the scenario, which reads the page) or the product is corrected
+
+### Scenario 8: Release-note voice on a priority page
+
+**Given**: a pull request adds "JIM now retries three times" to `administration/troubleshooting.md`, a priority page
+**When**: the checks run
+**Then**: `LANG-5` fails rather than warns, and the advisory review's finding arrives as a review thread that must be resolved before the pull request can merge
+
 ## Constraints
 
 - All automation in PowerShell; no new bash scripts.
@@ -196,13 +257,19 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 | `mkdocs.yml` | Stricter `validation:` settings; `overrides/` excluded from the published files |
 | UI | `PageInfo` gains a docs page parameter so every routable page declares where it is documented |
 | Tests | Coverage assertions that need reflection (connector settings, seeded Service Settings) as NUnit tests beside `GlossaryTermConsistencyTests` |
+| `test/integration/` | A new directory-agnostic scenario that executes the tutorial's PowerShell steps from the page and asserts its checkpoints; registered in the `-PreRelease` suite |
+| `docs/assets/` | The tutorial's sample data file, shared with the scenario |
+| `.github/pull_request_template.md` | The Documentation section asks what the change made wrong and where new material went |
+| `.claude/skills/release/` | Lists priority pages due for validation; the release pull request records each re-validation or deferral |
 
 ## Documentation Impact
 
 | Doc | Change |
 |-----|--------|
 | `engineering/DOCUMENTATION_STANDARD.md` | New: the specification |
-| `docs/CLAUDE.md` | Rules move out; pointer and site mechanics remain |
+| `docs/CLAUDE.md` | Rules move out; pointer and site mechanics remain; "Tutorials are scarce by design" is replaced by requirement 35 |
+| `test/CLAUDE.md` and `engineering/INTEGRATION_TESTING.md` | The tutorial scenario, and that it reads its steps from the page |
+| `engineering/RELEASE_PROCESS.md` | Priority page validation as a release step |
 | `engineering/CLAUDE.md` | "Keeping Documentation Current" links the standard |
 | `engineering/prompts/api-docs-section.md` | Retire or rewrite: it tells authors to create per-endpoint pages that `docs/CLAUDE.md` forbids |
 | Every page under `docs/` | Migrated per requirement 24 |
@@ -222,6 +289,8 @@ Each has a recommendation; the product owner decides.
 4. **What shape are `configuration/` and `connectors/` pages?** Recommended: the `object` type above, a fixed concept, tasks, reference, troubleshooting order on one page per domain object, with the size budget forcing splits. Strict Diátaxis would instead scatter "Connected Systems" across four folders, which is purer but makes an administrator assemble the answer; the fixed-order page is what administrators actually look for, and the order makes each mode findable.
 5. **Run the checks inside `changelog-lint`, or rename the job?** Recommended: inside `changelog-lint` for now, which needs no ruleset change. The job will then run eight unrelated checks under a misleading name; renaming it (for example to `pr-lint`) is a one-time ruleset edit you can make whenever convenient.
 6. **File an issue for the generator's end of support?** Recommended: yes, now. Zensical (the same team's successor) is at an alpha release; the decision between pinning MkDocs 1.6.1 deliberately and moving is better made before the window closes than after.
+7. **Which pages are priority pages?** Recommended: the 15 in requirement 36, chosen along the reader's journey from evaluating to recovering. The list is deliberately short: every page added to it costs a re-validation each release, so a page belongs on it only if an administrator who cannot use it would stall or lose trust in JIM.
+8. **What does the tutorial synchronise?** Recommended: an HR file in, through the Metaverse, out to a second file, using the File Connector only. It needs no directory, works air-gapped and on any evaluation install, and is the cheapest to keep passing. A directory target (Active Directory or LDAP) is what most customers actually want, but it cannot be assumed on an evaluation install; it is better as a second, how-to-style guide once the first tutorial exists.
 
 ## Acceptance Criteria
 
@@ -236,10 +305,15 @@ Each has a recommendation; the product owner decides.
 - [ ] Every customer-facing folder is marked conformant with an empty baseline
 - [ ] The advisory review comments on documentation pull requests citing rule IDs
 - [ ] Every product deep link into the docs resolves, and stays checked
+- [ ] A pull request that grows an over-budget page fails, and the pull request template asks what the change made wrong
+- [ ] The tutorial scenario reads its steps from the page, asserts its checkpoints, and runs in the `-PreRelease` suite
+- [ ] A `type: tutorial` page without an existing `scenario:` fails the conformance check
+- [ ] The priority page list is in the conformance configuration, those pages are migrated first, every warning is blocking on them, and each carries `validated:`
+- [ ] `/release` lists priority pages due for validation, and the release pull request records each re-validation or deferral
 
 ## Additional Context
 
 - **Audit evidence:** [`engineering/notes/docs-audit-2026-10/`](../notes/docs-audit-2026-10/README.md): per-page findings with quotes and suggested rewrites, the coverage inventories with every gap, and the tooling evaluation with measured baselines.
 - **Exemplar pages to model the specification on:** `concepts/case-sensitivity.md`, `configuration/data-flow.md`, `configuration/sync-preview.md`, `connectors/jim-sql-connector.md` and its two Delta Import guides, `administration/backup-recovery.md`, `administration/deploying-with-ansible.md`, `powershell/connection.md`, `powershell/password-synchronisation.md`.
 - **Sources:** [Diátaxis](https://diataxis.fr/); [Google developer documentation style guide](https://developers.google.com/style); [Microsoft Writing Style Guide](https://learn.microsoft.com/style-guide/welcome/); [GitLab documentation topic types](https://docs.gitlab.com/development/documentation/topic_types/) and its Vale-based enforcement; Mark Baker, *Every Page is Page One*; [ESLint bulk suppressions](https://eslint.org/blog/2025/04/introducing-bulk-suppressions/) (the model for the shrink-only baseline). Full list with notes in the research file.
-- **Effort.** The issue is sized Medium. Phases 0 to 2 (corrections, specification, enforcement framework) are about that; the migration of about 222,000 words across 80 pages, including splitting the five largest pages, is substantially larger and is best delivered as one pull request per folder.
+- **Effort.** The issue is sized Medium. Phases 0 to 2 (corrections, specification, enforcement framework) are about that; the migration of about 222,000 words across 80 pages, including splitting the five largest pages, is substantially larger and is best delivered as one pull request per folder. The priority wave is where most of the value lands and should be planned as its own pull requests: the tutorial with its scenario, the troubleshooting synchronisation section, and the splits of the three largest priority pages. Re-validating the priority pages adds a recurring cost to each release, which is why the list is kept short.
