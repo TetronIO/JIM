@@ -90,7 +90,7 @@ internal class LdapConnectorExport
     /// <summary>
     /// How many value changes this export run found already in the state their export asked for (a value to add that
     /// was already present, one to remove that was already absent), counted where the directory refused a modify for
-    /// that reason and the connector applied it one value at a time instead. A directory that honours Permissive Modify
+    /// that reason and the connector applied it in parts instead. A directory that honours Permissive Modify
     /// accepts such changes without saying so, and they are not counted.
     /// </summary>
     internal int ValuesAlreadyInDesiredState => Volatile.Read(ref _valuesAlreadyInDesiredState);
@@ -129,7 +129,14 @@ internal class LdapConnectorExport
 
     #region Sequential execution (sync path)
 
-    internal List<ConnectedSystemExportResult> Execute(IList<PendingExport> pendingExports)
+    /// <summary>
+    /// Executes Pending Exports one after another.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to execute.</param>
+    /// <param name="cancellationToken">The export run's cancellation. A cancelled run stops between Pending Exports,
+    /// and between the requests of an update, and the cancellation propagates rather than being reported as a failure of
+    /// the Pending Export under way.</param>
+    internal List<ConnectedSystemExportResult> Execute(IList<PendingExport> pendingExports, CancellationToken cancellationToken = default)
     {
         _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} Pending Exports", pendingExports.Count);
 
@@ -143,12 +150,13 @@ internal class LdapConnectorExport
 
         foreach (var pendingExport in pendingExports)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var result = ProcessPendingExport(pendingExport);
+                var result = ProcessPendingExport(pendingExport, cancellationToken);
                 results.Add(result);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 LogExportFailure(ex, "LdapConnectorExport.Execute", pendingExport);
 
@@ -238,7 +246,7 @@ internal class LdapConnectorExport
     private bool IsCarvedOutByAnExclusion(string targetDn) =>
         LdapConnectorUtilities.ResolveMostSpecificContainerScope(targetDn, _managedScope) is { Excluded: true };
 
-    private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
@@ -257,7 +265,7 @@ internal class LdapConnectorExport
                 result = ProcessCreate(pendingExport);
                 break;
             case PendingExportChangeType.Update:
-                result = ProcessUpdate(pendingExport);
+                result = ProcessUpdate(pendingExport, cancellationToken);
                 break;
             case PendingExportChangeType.Delete:
                 result = ProcessDelete(pendingExport);
@@ -321,9 +329,12 @@ internal class LdapConnectorExport
             return HandlePlaceholderRejection(dn, ex);
         }
 
-        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size. A create runs to
+        // completion once the object exists, cancelled or not: stopping here would leave an object JIM has no record
+        // of creating, which the next run would try to create again.
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         foreach (var modifyRequest in overflowModifyRequests)
-            SendModify(modifyRequest, dn);
+            SendModify(modifyRequest, dn, singleValuedAttributes, CancellationToken.None);
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -365,7 +376,7 @@ internal class LdapConnectorExport
         }
     }
 
-    private ConnectedSystemExportResult ProcessUpdate(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessUpdate(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         var currentDn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(currentDn))
@@ -405,8 +416,10 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         for (var i = 0; i < modifyRequests.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var request = modifyRequests[i];
             if (modifyRequests.Count > 1)
             {
@@ -416,7 +429,7 @@ internal class LdapConnectorExport
 
             try
             {
-                SendModify(request, workingDn);
+                SendModify(request, workingDn, singleValuedAttributes, cancellationToken);
             }
             catch (DirectoryOperationException ex) when (hasPlaceholderModifications && IsPlaceholderConstraintViolation(ex))
             {
@@ -666,7 +679,7 @@ internal class LdapConnectorExport
         // If concurrency is 1, fall back to synchronous sequential processing
         // for maximum compatibility and simplicity
         if (_exportConcurrency <= 1)
-            return Execute(pendingExports);
+            return Execute(pendingExports, cancellationToken);
 
         // Pre-allocate results array to maintain positional ordering.
         // Each task writes to its own unique index - no shared mutable state between tasks.
@@ -685,9 +698,9 @@ internal class LdapConnectorExport
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    results[index] = await ProcessPendingExportAsync(pendingExport);
+                    results[index] = await ProcessPendingExportAsync(pendingExport, cancellationToken);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     LogExportFailure(ex, "LdapConnectorExport.ExecuteAsync", pendingExport);
                     results[index] = FailureFor(ex, pendingExport);
@@ -707,7 +720,7 @@ internal class LdapConnectorExport
         return results.ToList();
     }
 
-    private async Task<ConnectedSystemExportResult> ProcessPendingExportAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessPendingExportAsync(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
@@ -722,7 +735,7 @@ internal class LdapConnectorExport
         var result = pendingExport.ChangeType switch
         {
             PendingExportChangeType.Create => await ProcessCreateAsync(pendingExport),
-            PendingExportChangeType.Update => await ProcessUpdateAsync(pendingExport),
+            PendingExportChangeType.Update => await ProcessUpdateAsync(pendingExport, cancellationToken),
             PendingExportChangeType.Delete => await ProcessDeleteAsync(pendingExport),
             _ => throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}")
         };
@@ -771,9 +784,11 @@ internal class LdapConnectorExport
             ThrowAddFailure(addRequest, dn, response);
         }
 
-        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size. As on the sequential
+        // path, a create runs to completion once the object exists.
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         foreach (var modifyRequest in overflowModifyRequests)
-            await SendModifyAsync(modifyRequest, dn);
+            await SendModifyAsync(modifyRequest, dn, singleValuedAttributes, CancellationToken.None);
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -809,7 +824,7 @@ internal class LdapConnectorExport
         }
     }
 
-    private async Task<ConnectedSystemExportResult> ProcessUpdateAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessUpdateAsync(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         var currentDn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(currentDn))
@@ -845,8 +860,10 @@ internal class LdapConnectorExport
         }
 
         // Execute each chunked modify request sequentially
+        var singleValuedAttributes = GetSingleValuedAttributeNames(pendingExport);
         for (var i = 0; i < modifyRequests.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var request = modifyRequests[i];
             if (modifyRequests.Count > 1)
             {
@@ -854,7 +871,7 @@ internal class LdapConnectorExport
                     i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
-            await SendModifyAsync(request, workingDn);
+            await SendModifyAsync(request, workingDn, singleValuedAttributes, cancellationToken);
         }
 
         return UpdateSucceeded(workingDn, wasRenamed, modifyRequests.Count);
@@ -1392,55 +1409,66 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Splits consolidated modifications into one or more ModifyRequests, chunking any
-    /// multi-valued modifications that exceed the configured batch size.
+    /// The attributes this export changes that the Connected System's schema says hold one value at most, compared
+    /// without regard to case. An attribute counts only when every change to it says so, and objectClass, which is
+    /// multi-valued in every directory, never does.
     /// </summary>
+    internal static HashSet<string> GetSingleValuedAttributeNames(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute != null)
+            .GroupBy(change => change.Attribute!.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(changes => !changes.Key.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase) &&
+                              changes.All(change => change.Attribute!.AttributePlurality == AttributePlurality.SingleValued))
+            .Select(changes => changes.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Splits consolidated modifications into one or more ModifyRequests, chunking any multi-valued modification that
+    /// exceeds the configured batch size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every attribute's first chunk goes into one base request, so small changes to several attributes still land
+    /// together; each later chunk of an attribute is a request of its own, carrying that attribute's next batch of
+    /// deletes and next batch of adds.
+    /// </para>
+    /// <para>
+    /// Within any request, an attribute's delete comes before its add. RFC 4511 applies a modify's changes in order and
+    /// checks the schema once, at the end, so this is always safe within one request, and it is what keeps a value the
+    /// export removes under one case and adds under another (proxyAddresses compares without regard to case): added
+    /// first, the add is refused or, under Permissive Modify, skipped as already present, and the delete then takes the
+    /// value away while the export reports success. The same order lets a single-valued attribute change from its old
+    /// value to its new one in one request.
+    /// </para>
+    /// <para>
+    /// Batching must not separate such a pair either, or the delete could land in a later request than the add. So each
+    /// value deleted and added again under a spelling that compares equal travels with its counterpart: the pairs fill
+    /// the first requests, a pair is never split, and the attribute's other deletes and adds fill the room left, from the
+    /// base request on. A later request therefore only ever deletes values no earlier request added, and the base request
+    /// carries adds whenever the export has any, so an attribute an entry must hold (groupOfNames' member) is never left
+    /// empty between requests. Every modification still respects the batch size, unless one value is deleted or added
+    /// more often under different spellings than the batch size allows, which no directory holds.
+    /// </para>
+    /// </remarks>
     private List<ModifyRequest> ChunkModifyRequests(string workingDn, List<ConsolidatedModification> consolidatedModifications)
     {
-        // Separate modifications into those that fit in a single request and those that need chunking
-        var singleRequestMods = new List<DirectoryAttributeModification>();
-        var chunkedMods = new List<List<DirectoryAttributeModification>>();
+        var baseModifications = new List<DirectoryAttributeModification>();
+        var overflowModifications = new List<List<DirectoryAttributeModification>>();
 
-        foreach (var consolidated in consolidatedModifications)
+        foreach (var chunks in consolidatedModifications
+                     .GroupBy(consolidated => consolidated.AttributeName, StringComparer.OrdinalIgnoreCase)
+                     .Select(attributeChanges => ChunkAttribute([.. attributeChanges]))
+                     .Where(chunks => chunks.Count > 0))
         {
-            var modifications = BuildConsolidatedModification(consolidated);
-
-            if (modifications.Count <= 1)
-            {
-                // Single modification or empty - goes into the base request
-                singleRequestMods.AddRange(modifications);
-            }
-            else
-            {
-                // Multiple chunks from a large multi-valued attribute
-                // First chunk goes into the base request, rest get their own requests
-                singleRequestMods.Add(modifications[0]);
-                for (var i = 1; i < modifications.Count; i++)
-                {
-                    chunkedMods.Add([modifications[i]]);
-                }
-            }
+            baseModifications.AddRange(chunks[0]);
+            overflowModifications.AddRange(chunks.Skip(1));
         }
 
         var requests = new List<ModifyRequest>();
+        if (baseModifications.Count > 0)
+            requests.Add(NewModifyRequest(workingDn, baseModifications));
 
-        // Base request with single-request mods and first chunks
-        if (singleRequestMods.Count > 0)
-        {
-            var baseRequest = new ModifyRequest(workingDn);
-            foreach (var mod in singleRequestMods)
-                baseRequest.Modifications.Add(mod);
-            requests.Add(baseRequest);
-        }
-
-        // Additional requests for overflow chunks
-        foreach (var chunk in chunkedMods)
-        {
-            var request = new ModifyRequest(workingDn);
-            foreach (var mod in chunk)
-                request.Modifications.Add(mod);
-            requests.Add(request);
-        }
+        requests.AddRange(overflowModifications.Select(modifications => NewModifyRequest(workingDn, modifications)));
 
         if (requests.Count > 1)
         {
@@ -1451,8 +1479,207 @@ internal class LdapConnectorExport
         return requests;
     }
 
+    private static ModifyRequest NewModifyRequest(string dn, List<DirectoryAttributeModification> modifications)
+    {
+        var request = new ModifyRequest(dn);
+        request.Modifications.AddRange(modifications.ToArray());
+        return request;
+    }
+
     /// <summary>
-    /// Builds one or more DirectoryAttributeModification objects from a consolidated modification.
+    /// One attribute's modifications, by request: the first list joins the base request, and each later one is a
+    /// request of its own. A replacement keeps its place among the attribute's changes; the deletes and adds are placed
+    /// together, deletes first, where the first of them stood.
+    /// </summary>
+    private List<List<DirectoryAttributeModification>> ChunkAttribute(List<ConsolidatedModification> attributeChanges)
+    {
+        var chunks = new List<List<DirectoryAttributeModification>>();
+        var valueChangesPlaced = false;
+
+        foreach (var consolidated in attributeChanges)
+        {
+            if (consolidated.Operation == DirectoryAttributeOperation.Replace)
+            {
+                PlaceInChunks(chunks, BuildConsolidatedModification(consolidated).Select(modification => new List<DirectoryAttributeModification> { modification }));
+            }
+            else if (!valueChangesPlaced)
+            {
+                valueChangesPlaced = true;
+                PlaceInChunks(chunks, ChunkDeletesAndAdds(
+                    consolidated.AttributeName,
+                    CollectValues(attributeChanges.Where(change => change.Operation == DirectoryAttributeOperation.Delete), consolidated.AttributeName),
+                    CollectValues(attributeChanges.Where(change => change.Operation == DirectoryAttributeOperation.Add), consolidated.AttributeName)));
+            }
+        }
+
+        return chunks;
+    }
+
+    private static void PlaceInChunks(List<List<DirectoryAttributeModification>> chunks, IEnumerable<List<DirectoryAttributeModification>> placed)
+    {
+        var index = 0;
+        foreach (var modifications in placed)
+        {
+            if (index == chunks.Count)
+                chunks.Add([]);
+            chunks[index++].AddRange(modifications);
+        }
+    }
+
+    /// <summary>
+    /// The values one attribute's deletes or adds carry, in order. A remove with no value is skipped, as it always has
+    /// been; an add with none keeps its place in the batch and contributes no value.
+    /// </summary>
+    private List<object?> CollectValues(IEnumerable<ConsolidatedModification> consolidated, string attributeName)
+    {
+        var values = new List<object?>();
+        foreach (var attrChange in consolidated.SelectMany(modification => modification.AttributeChanges))
+        {
+            var value = GetAttributeValue(attrChange);
+            if (value == null && attrChange.ChangeType == PendingExportAttributeChangeType.Remove)
+            {
+                _logger.Warning("LdapConnectorExport.CollectValues: Cannot remove value for '{AttrName}' - no value specified", attributeName);
+                continue;
+            }
+
+            values.Add(value);
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// One attribute's deletes and adds in batches, each batch a delete (if any) followed by an add (if any); see the
+    /// remarks on <see cref="ChunkModifyRequests"/> for why pairs travel together.
+    /// </summary>
+    private List<List<DirectoryAttributeModification>> ChunkDeletesAndAdds(string attributeName, List<object?> deletes, List<object?> adds)
+    {
+        var batches = new List<(List<object?> Deletes, List<object?> Adds)>();
+        var pairedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Only an attribute with both deletes and adds can have pairs; a large group gaining or losing members has one.
+        if (deletes.Count > 0 && adds.Count > 0)
+        {
+            var deletesByKey = GroupByCollisionKey(deletes);
+            var addsByKey = GroupByCollisionKey(adds);
+            pairedKeys.UnionWith(deletesByKey.Keys.Where(addsByKey.ContainsKey));
+
+            foreach (var key in deletesByKey.Keys.Where(pairedKeys.Contains))
+            {
+                var pairDeletes = deletesByKey[key];
+                var pairAdds = addsByKey[key];
+                if (batches.Count == 0 ||
+                    batches[^1].Deletes.Count + pairDeletes.Count > _modifyBatchSize ||
+                    batches[^1].Adds.Count + pairAdds.Count > _modifyBatchSize)
+                {
+                    batches.Add(([], []));
+                }
+
+                batches[^1].Deletes.AddRange(pairDeletes);
+                batches[^1].Adds.AddRange(pairAdds);
+            }
+        }
+
+        FillBatches(batches, pairedKeys.Count == 0 ? deletes : deletes.Where(value => !IsPaired(value, pairedKeys)), batch => batch.Deletes);
+        FillBatches(batches, pairedKeys.Count == 0 ? adds : adds.Where(value => !IsPaired(value, pairedKeys)), batch => batch.Adds);
+
+        if (batches.Count > 1)
+        {
+            _logger.Information("LdapConnectorExport.ChunkDeletesAndAdds: Chunking {DeleteCount} deletes and {AddCount} adds for attribute " +
+                "'{AttrName}' into {BatchCount} batches of up to {BatchSize}",
+                deletes.Count, adds.Count, attributeName, batches.Count, _modifyBatchSize);
+        }
+
+        if (pairedKeys.Count > 0)
+        {
+            _logger.Debug("LdapConnectorExport.ChunkDeletesAndAdds: {PairCount} value(s) of '{AttrName}' are deleted and added again under a " +
+                "spelling the directory may treat as the same; each is deleted before it is added, in the same request",
+                pairedKeys.Count, attributeName);
+        }
+
+        return [.. batches.Select(batch => ToModifications(attributeName, batch.Deletes, batch.Adds))];
+    }
+
+    private void FillBatches(
+        List<(List<object?> Deletes, List<object?> Adds)> batches,
+        IEnumerable<object?> values,
+        Func<(List<object?> Deletes, List<object?> Adds), List<object?>> side)
+    {
+        var index = 0;
+        foreach (var value in values)
+        {
+            while (index < batches.Count && side(batches[index]).Count >= _modifyBatchSize)
+                index++;
+
+            if (index == batches.Count)
+                batches.Add(([], []));
+
+            side(batches[index]).Add(value);
+        }
+    }
+
+    private static List<DirectoryAttributeModification> ToModifications(string attributeName, List<object?> deletes, List<object?> adds)
+    {
+        var modifications = new List<DirectoryAttributeModification>();
+        if (deletes.Count > 0)
+            modifications.Add(NewModification(attributeName, DirectoryAttributeOperation.Delete, deletes));
+        if (adds.Count > 0)
+            modifications.Add(NewModification(attributeName, DirectoryAttributeOperation.Add, adds));
+        return modifications;
+    }
+
+    private static DirectoryAttributeModification NewModification(string attributeName, DirectoryAttributeOperation operation, IEnumerable<object?> values)
+    {
+        var modification = new DirectoryAttributeModification { Name = attributeName, Operation = operation };
+        foreach (var value in values)
+        {
+            if (value is byte[] bytes)
+                modification.Add(bytes);
+            else if (value != null)
+                modification.Add(value.ToString());
+        }
+
+        return modification;
+    }
+
+    private static Dictionary<string, List<object?>> GroupByCollisionKey(List<object?> values)
+    {
+        var groups = new Dictionary<string, List<object?>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in values
+                     .Select(value => (Key: CollisionKey(value), Value: value))
+                     .Where(keyed => keyed.Key != null))
+        {
+            if (!groups.TryGetValue(key!, out var group))
+            {
+                group = [];
+                groups[key!] = group;
+            }
+
+            group.Add(value);
+        }
+
+        return groups;
+    }
+
+    private static bool IsPaired(object? value, HashSet<string> pairedKeys) =>
+        CollisionKey(value) is { } key && pairedKeys.Contains(key);
+
+    /// <summary>
+    /// What a value is compared by when deciding whether a delete and an add name the same value: text without regard
+    /// to case (the comparer of every collection keyed by it), as Active Directory compares proxyAddresses and every
+    /// directory compares a Distinguished Name, and binary exactly. Matching too much is harmless, since a delete sent
+    /// first in the same request as the add reaches the same state either way; matching too little is what loses
+    /// values.
+    /// </summary>
+    private static string? CollisionKey(object? value) => value switch
+    {
+        string text => "s:" + text,
+        byte[] bytes => "b:" + Convert.ToHexString(bytes),
+        _ => null
+    };
+
+    /// <summary>
+    /// Builds one or more DirectoryAttributeModification objects from a consolidated replacement.
     /// If the number of values exceeds the batch size, returns multiple modifications (one per chunk).
     /// </summary>
     private List<DirectoryAttributeModification> BuildConsolidatedModification(ConsolidatedModification consolidated)
@@ -1460,7 +1687,7 @@ internal class LdapConnectorExport
         var results = new List<DirectoryAttributeModification>();
 
         // Collect all values from the attribute changes
-        var values = new List<(object? Value, PendingExportAttributeValueChange Change)>();
+        var values = new List<object?>();
 
         foreach (var attrChange in consolidated.AttributeChanges)
         {
@@ -1475,27 +1702,16 @@ internal class LdapConnectorExport
 
             var value = GetAttributeValue(attrChange);
 
-            // Handle null values for specific change types
-            if (value == null)
+            // Update with no value = clear attribute - handle as standalone
+            if (value == null && attrChange.ChangeType == PendingExportAttributeChangeType.Update)
             {
-                if (attrChange.ChangeType == PendingExportAttributeChangeType.Remove)
-                {
-                    _logger.Warning("LdapConnectorExport.BuildConsolidatedModification: Cannot remove value for '{AttrName}' - no value specified",
-                        consolidated.AttributeName);
-                    continue;
-                }
-
-                if (attrChange.ChangeType == PendingExportAttributeChangeType.Update)
-                {
-                    // Update with no value = clear attribute - handle as standalone
-                    var mod = CreateModification(attrChange);
-                    if (mod != null)
-                        results.Add(mod);
-                    return results;
-                }
+                var mod = CreateModification(attrChange);
+                if (mod != null)
+                    results.Add(mod);
+                return results;
             }
 
-            values.Add((value, attrChange));
+            values.Add(value);
         }
 
         if (values.Count == 0)
@@ -1504,19 +1720,7 @@ internal class LdapConnectorExport
         // If within batch size, create a single modification with all values
         if (values.Count <= _modifyBatchSize)
         {
-            var mod = new DirectoryAttributeModification
-            {
-                Name = consolidated.AttributeName,
-                Operation = consolidated.Operation
-            };
-            foreach (var (value, _) in values)
-            {
-                if (value is byte[] bytes)
-                    mod.Add(bytes);
-                else if (value != null)
-                    mod.Add(value.ToString());
-            }
-            results.Add(mod);
+            results.Add(NewModification(consolidated.AttributeName, consolidated.Operation, values));
             return results;
         }
 
@@ -1526,22 +1730,7 @@ internal class LdapConnectorExport
             values.Count, consolidated.AttributeName, consolidated.Operation, _modifyBatchSize);
 
         for (var i = 0; i < values.Count; i += _modifyBatchSize)
-        {
-            var chunk = values.Skip(i).Take(_modifyBatchSize).ToList();
-            var mod = new DirectoryAttributeModification
-            {
-                Name = consolidated.AttributeName,
-                Operation = consolidated.Operation
-            };
-            foreach (var (value, _) in chunk)
-            {
-                if (value is byte[] bytes)
-                    mod.Add(bytes);
-                else if (value != null)
-                    mod.Add(value.ToString());
-            }
-            results.Add(mod);
-        }
+            results.Add(NewModification(consolidated.AttributeName, consolidated.Operation, values.Skip(i).Take(_modifyBatchSize)));
 
         return results;
     }
@@ -1618,7 +1807,7 @@ internal class LdapConnectorExport
         return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
     }
 
-    #region Modify requests: Permissive Modify and the one-value-at-a-time fallback
+    #region Modify requests: Permissive Modify and the fallback in parts
 
     // Active Directory's ERROR_MEMBER_NOT_IN_GROUP (0x561), which it reports with unwillingToPerform (53) when asked
     // to remove a member a group does not hold.
@@ -1646,11 +1835,16 @@ internal class LdapConnectorExport
     /// <para>
     /// Where the directory advertises Permissive Modify the request carries it, and the directory itself accepts such
     /// values. Where it does not, or where a directory refuses regardless (Samba AD still refuses the removal of an
-    /// absent member, and OpenLDAP the delete of any absent value), the request is applied again one value at a time;
-    /// see <see cref="PlanOneValueAtATime"/>. Any other refusal propagates and fails the export, as it always has.
+    /// absent member, and OpenLDAP the delete of any absent value), the request is applied again in parts, halving any
+    /// part the directory refuses again; see <see cref="LdapModifyBisection"/>. Any other refusal propagates and fails
+    /// the export, as it always has.
     /// </para>
     /// </remarks>
-    private void SendModify(ModifyRequest request, string dn)
+    /// <param name="request">The request to send.</param>
+    /// <param name="dn">The entry it modifies, for the log.</param>
+    /// <param name="singleValuedAttributes">The attributes the Connected System's schema says are single-valued.</param>
+    /// <param name="cancellationToken">Checked between the requests of the fallback, so a cancelled run stops there.</param>
+    private void SendModify(ModifyRequest request, string dn, IReadOnlySet<string> singleValuedAttributes, CancellationToken cancellationToken)
     {
         AttachPermissiveModifyIfOffered(request);
         DirectoryOperationException? refusedForAValueInPlace = null;
@@ -1666,27 +1860,29 @@ internal class LdapConnectorExport
         if (refusedForAValueInPlace == null)
             return;
 
-        var plan = BeginOneValueAtATime(request, dn, refusedForAValueInPlace);
-        var alreadyInDesiredState = 0;
-        foreach (var step in plan)
+        var bisection = BeginBisection(request, dn, singleValuedAttributes, refusedForAValueInPlace);
+        while (bisection.TryTakeNext(out var step))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            AttachPermissiveModifyIfOffered(step);
             try
             {
                 SendModifyOrThrow(step);
+                bisection.Applied();
             }
-            catch (DirectoryOperationException stepRejection) when (IsRefusedForAValueAlreadyInDesiredState(stepRejection, step))
+            catch (DirectoryOperationException stepRejection) when (bisection.IsAlreadyInDesiredState(stepRejection))
             {
-                alreadyInDesiredState++;
+                bisection.RefusedAsAlreadyInDesiredState();
             }
         }
 
-        CompleteOneValueAtATime(dn, plan, alreadyInDesiredState);
+        CompleteBisection(dn, bisection);
     }
 
     /// <summary>
     /// The async form of <see cref="SendModify"/>, for the concurrent export path.
     /// </summary>
-    private async Task SendModifyAsync(ModifyRequest request, string dn)
+    private async Task SendModifyAsync(ModifyRequest request, string dn, IReadOnlySet<string> singleValuedAttributes, CancellationToken cancellationToken)
     {
         AttachPermissiveModifyIfOffered(request);
         DirectoryOperationException? refusedForAValueInPlace = null;
@@ -1702,21 +1898,23 @@ internal class LdapConnectorExport
         if (refusedForAValueInPlace == null)
             return;
 
-        var plan = BeginOneValueAtATime(request, dn, refusedForAValueInPlace);
-        var alreadyInDesiredState = 0;
-        foreach (var step in plan)
+        var bisection = BeginBisection(request, dn, singleValuedAttributes, refusedForAValueInPlace);
+        while (bisection.TryTakeNext(out var step))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            AttachPermissiveModifyIfOffered(step);
             try
             {
                 await SendModifyOrThrowAsync(step);
+                bisection.Applied();
             }
-            catch (DirectoryOperationException stepRejection) when (IsRefusedForAValueAlreadyInDesiredState(stepRejection, step))
+            catch (DirectoryOperationException stepRejection) when (bisection.IsAlreadyInDesiredState(stepRejection))
             {
-                alreadyInDesiredState++;
+                bisection.RefusedAsAlreadyInDesiredState();
             }
         }
 
-        CompleteOneValueAtATime(dn, plan, alreadyInDesiredState);
+        CompleteBisection(dn, bisection);
     }
 
     private void SendModifyOrThrow(ModifyRequest request) =>
@@ -1758,7 +1956,7 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Whether the directory refused this request because a value it adds is already present, or a value it deletes is
-    /// already absent: the only refusal that retrying one value at a time can resolve.
+    /// already absent: the only refusal that applying the request in parts can resolve.
     /// </summary>
     private bool IsRefusedForAValueAlreadyInDesiredState(DirectoryOperationException rejection, ModifyRequest request) =>
         request.Modifications.Cast<DirectoryAttributeModification>()
@@ -1805,119 +2003,27 @@ internal class LdapConnectorExport
                message.Contains(SambaMemberNotPresentWording, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// The requests that apply a refused modify one value at a time, in the order that keeps the entry valid after
-    /// each: object classes added, then every replacement together, then each other value added, then each other value
-    /// deleted, then object classes removed.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Atomically, a directory checks the entry against its schema once, after every change; one value at a time, it
-    /// checks after each. So a class must arrive before the attributes it allows and leave after them, and values are
-    /// added before any are deleted, so an attribute an entry must hold (groupOfNames' member) never passes through
-    /// empty on its way from the old values to the new.
-    /// </para>
-    /// <para>
-    /// Replacements cannot meet a value already in place and stay together in one request. Every add or delete becomes
-    /// a request of its own carrying one value, so that the directory's answer to it speaks for that value alone.
-    /// </para>
-    /// </remarks>
-    private static List<ModifyRequest> PlanOneValueAtATime(ModifyRequest rejected)
+    private LdapModifyBisection BeginBisection(ModifyRequest rejected, string dn, IReadOnlySet<string> singleValuedAttributes, DirectoryOperationException rejection)
     {
-        var modifications = rejected.Modifications.Cast<DirectoryAttributeModification>().ToList();
-        var dn = rejected.DistinguishedName;
-
-        static bool IsObjectClass(DirectoryAttributeModification modification) =>
-            modification.Name.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase);
-
-        var plan = new List<ModifyRequest>();
-        plan.AddRange(OneValueEach(modifications.Where(m => IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Add), dn));
-
-        var replacements = modifications.Where(m => m.Operation == DirectoryAttributeOperation.Replace).Select(CopyOf).ToList();
-        if (replacements.Count > 0)
-        {
-            var replaceRequest = new ModifyRequest(dn);
-            replaceRequest.Modifications.AddRange(replacements.ToArray());
-            plan.Add(replaceRequest);
-        }
-
-        plan.AddRange(OneValueEach(modifications.Where(m => !IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Add), dn));
-        plan.AddRange(OneValueEach(modifications.Where(m => !IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Delete), dn));
-        plan.AddRange(OneValueEach(modifications.Where(m => IsObjectClass(m) && m.Operation == DirectoryAttributeOperation.Delete), dn));
-        return plan;
-    }
-
-    /// <summary>
-    /// One request per value.
-    /// </summary>
-    private static IEnumerable<ModifyRequest> OneValueEach(IEnumerable<DirectoryAttributeModification> modifications, string dn) =>
-        modifications.SelectMany(SplitIntoSingleValues).Select(single => new ModifyRequest(dn) { Modifications = { single } });
-
-    private static IEnumerable<DirectoryAttributeModification> SplitIntoSingleValues(DirectoryAttributeModification modification)
-    {
-        // A delete naming no values removes the attribute whole, and stays one change.
-        if (modification.Count == 0)
-        {
-            yield return CopyOf(modification);
-            yield break;
-        }
-
-        for (var i = 0; i < modification.Count; i++)
-        {
-            var single = new DirectoryAttributeModification { Name = modification.Name, Operation = modification.Operation };
-            AddValue(single, modification[i]);
-            yield return single;
-        }
-    }
-
-    private static DirectoryAttributeModification CopyOf(DirectoryAttributeModification modification)
-    {
-        var copy = new DirectoryAttributeModification { Name = modification.Name, Operation = modification.Operation };
-        for (var i = 0; i < modification.Count; i++)
-            AddValue(copy, modification[i]);
-        return copy;
-    }
-
-    private static void AddValue(DirectoryAttribute attribute, object value)
-    {
-        switch (value)
-        {
-            case byte[] bytes:
-                attribute.Add(bytes);
-                break;
-            case Uri uri:
-                attribute.Add(uri);
-                break;
-            default:
-                attribute.Add(value.ToString());
-                break;
-        }
-    }
-
-    private List<ModifyRequest> BeginOneValueAtATime(ModifyRequest rejected, string dn, DirectoryOperationException rejection)
-    {
-        var plan = PlanOneValueAtATime(rejected);
-        foreach (var step in plan)
-            AttachPermissiveModifyIfOffered(step);
+        var bisection = new LdapModifyBisection(rejected, singleValuedAttributes, MeansAlreadyInDesiredState);
 
         _logger.Information("LdapConnectorExport: The directory refused the whole modify of '{Dn}' ({ResultCode}: {Message}) because a value " +
-            "it carries is already in the state the export asks for, so none of its changes were applied. Applying them one value at a time " +
-            "({RequestCount} requests).",
+            "it carries is already in the state the export asks for, so none of its changes were applied. Applying its {ValueChanges} value changes " +
+            "in parts, halving any part the directory refuses again.",
             LogSanitiser.Sanitise(dn), rejection.Response?.ResultCode,
             LogSanitiser.Sanitise(string.IsNullOrEmpty(rejection.Response?.ErrorMessage) ? rejection.Message : rejection.Response.ErrorMessage),
-            plan.Count);
+            bisection.ValueChanges);
 
-        return plan;
+        return bisection;
     }
 
-    private void CompleteOneValueAtATime(string dn, List<ModifyRequest> plan, int alreadyInDesiredState)
+    private void CompleteBisection(string dn, LdapModifyBisection bisection)
     {
-        Interlocked.Add(ref _valuesAlreadyInDesiredState, alreadyInDesiredState);
-        var valueChanges = plan.Count(CarriesValueChanges);
+        Interlocked.Add(ref _valuesAlreadyInDesiredState, bisection.ValuesAlreadyInDesiredState);
 
-        _logger.Information("LdapConnectorExport: Applied the modify of '{Dn}' one value at a time. {AlreadyInDesiredState} of {ValueChanges} " +
-            "value changes were already in the desired state; the rest were applied.",
-            LogSanitiser.Sanitise(dn), alreadyInDesiredState, valueChanges);
+        _logger.Information("LdapConnectorExport: Applied the modify of '{Dn}' in parts ({RequestCount} requests). {AlreadyInDesiredState} of " +
+            "{ValueChanges} value changes were already in the desired state; the rest were applied.",
+            LogSanitiser.Sanitise(dn), bisection.RequestsSent, bisection.ValuesAlreadyInDesiredState, bisection.ValueChanges);
     }
 
     private void LogValuesAlreadyInDesiredStateSummary(string caller)

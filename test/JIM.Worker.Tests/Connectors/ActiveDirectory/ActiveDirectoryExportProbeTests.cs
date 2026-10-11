@@ -20,7 +20,7 @@ namespace JIM.Worker.Tests.Connectors.ActiveDirectory;
 /// one already absent, and applies none of the others it carried. The connector attaches the Permissive Modify
 /// control where the directory advertises it, which both Active Directory and Samba AD do; the probes marked
 /// "without Permissive Modify" drive the export without it, so the directory's own refusals reach the connector's
-/// one-value-at-a-time fallback exactly as a directory that does not offer the control would send them.
+/// fallback, which applies the refused modify in parts, exactly as a directory that does not offer the control would send them.
 /// </remarks>
 [TestFixture]
 [Category(ActiveDirectoryLab.Category)]

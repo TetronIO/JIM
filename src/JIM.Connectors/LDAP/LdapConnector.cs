@@ -984,7 +984,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             _directoryType = rootDse.DirectoryType;
             _exportDirectoryAdvertisesPermissiveModify = rootDse.AdvertisesPermissiveModify;
             Log.Logger.Information("OpenExportConnection: Directory type {DirectoryType}; Permissive Modify control advertised: {AdvertisesPermissiveModify}. " +
-                "Without it, a modify the directory refuses because a value is already present or already absent is applied one value at a time.",
+                "Without it, a modify the directory refuses because a value is already present or already absent is applied again in parts.",
                 rootDse.DirectoryType, rootDse.AdvertisesPermissiveModify);
 
             // Pin creation (issue #230 Phase 2): export does not re-query rootDSE and re-pin on every run
