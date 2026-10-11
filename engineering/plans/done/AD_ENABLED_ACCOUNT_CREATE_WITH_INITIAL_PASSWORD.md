@@ -1,6 +1,7 @@
 # Creating an Enabled Active Directory Account When an Initial Password Follows
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** Phase 3's Windows Active Directory lab run (Scenario 001 with `-InitialPassword`, and Scenario 017 on the lab) has not yet been performed: the lab was unreachable from the environment that implemented this, so the first lab run is also the first check that Active Directory stores `514` rather than `546` for an explicit `514` create (see Risks & Mitigations).
 - **Issue:** [#2039](https://github.com/TetronIO/JIM/issues/2039)
 - **Created:** 2026-10-10
 
@@ -82,21 +83,23 @@ Caveat: an expired password changes nothing in Active Directory, so a Delta Impo
 
 ## Implementation Phases
 
-### Phase 0: Preserve held changes through merge-replace (own stack layer)
+### Phase 0: Preserve held changes through merge-replace (own stack layer) ✅
 
 Failing test for the clone dropping `Status`, `ExportAttemptCount` and `LastExportedAt`; fix; Scenario 008 at Medium.
 
-### Phase 1: Actionable `0000052D` and the create rewrite
+### Phase 1: Actionable `0000052D` and the create rewrite ✅
 
 New export and execution item error types with labels on every surface; `FailureFor` classification; `InitialPasswordFollows` and the batch lookup; the connector rewrite and its result field. Unit tests first: rewrite 512 to 514 and 66048 to 66050; no rewrite for Samba AD, no Initial Password, already disabled, absent `userAccountControl`, or an Update; the classification in both exception forms.
 
-### Phase 2: Hold and release
+### Phase 2: Hold and release ✅
 
 `AwaitsInitialPassword` (migration, bulk columns, round trip), the reconciliation rule, the owed-password lookup, and the drift and merge guards. Unit tests: confirm, hold, release, unflagged changes unaffected, Parked counts as owed, no `ExportNotConfirmed` item on a hold, no lookup when nothing is flagged.
 
-### Phase 3: Integration and documentation
+### Phase 3: Integration and documentation ✅
 
 `Setup-Scenario-001.ps1 -InitialPassword` (keeps the `userAccountControl` flow, adds a static Initial Password with `EnableAccount`), enabled for the Active Directory lab only; Joiner asserts 512 after the password queue drains. Regression: Samba, OpenLDAP and 389 Directory Server unchanged; Scenario 017 on Samba and Active Directory; Scenario 008 at Medium. Docs: the LDAP Connector page (export features, Setting Passwords, Export failures), Synchronisation Rules (Initial Password), Passwords and JML concepts, the export execution flow diagram, and the comment in `Setup-Scenario-017.ps1` that says the flow must be removed.
+
+Scripts and documentation are done. The Windows Active Directory lab run is not yet performed (see the Note in the header). The setup switch is passed on the Active Directory lab only, so what Scenario 001 configures on Samba AD, OpenLDAP and 389 Directory Server is unchanged.
 
 ## Success Criteria
 
