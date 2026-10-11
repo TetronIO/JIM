@@ -538,6 +538,57 @@ Describe 'Import-JIMConnectedSystemSchema' {
             }
         }
 
+        It 'Writes one warning per Object Type classification change when -Preview is specified' {
+            # A selected Object Type the Connected System reclassifies can move entries between Object Types at the
+            # next import (#2049); a script reviewing the preview must not be able to miss it.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                            = $true
+                        hasChanges                         = $true
+                        hasRemovalsOrDefinitionChanges     = $false
+                        hasObjectTypeClassificationChanges = $true
+                        changedObjectTypeClassifications   = [PSCustomObject]@{
+                            posixAccount  = @(
+                                [PSCustomObject]@{ aspect = 'ClassKind'; oldValues = @('structural'); newValues = @('auxiliary') }
+                            )
+                            inetOrgPerson = @(
+                                [PSCustomObject]@{ aspect = 'ClassKind'; oldValues = @(); newValues = @('structural') },
+                                [PSCustomObject]@{ aspect = 'Inheritance'; oldValues = @('top'); newValues = @('person', 'top') }
+                            )
+                        }
+                    }
+                }
+
+                $result = Import-JIMConnectedSystemSchema -Id 5 -Preview -WarningVariable classificationWarnings -WarningAction SilentlyContinue
+
+                $classificationWarnings.Count | Should -Be 3
+                @($classificationWarnings | Where-Object { "$_" -like "*'posixAccount'*" }).Count | Should -Be 1
+                @($classificationWarnings | Where-Object { "$_" -like "*'inetOrgPerson'*" }).Count | Should -Be 2
+                $result.HasObjectTypeClassificationChanges | Should -BeTrue
+            }
+        }
+
+        It 'Writes no classification warning when -Preview reports none' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        success                            = $true
+                        hasChanges                         = $true
+                        hasObjectTypeClassificationChanges = $false
+                        changedObjectTypeClassifications   = [PSCustomObject]@{}
+                        addedObjectTypes                   = @('device')
+                    }
+                }
+
+                Import-JIMConnectedSystemSchema -Id 5 -Preview -WarningVariable classificationWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $classificationWarnings | Should -BeNullOrEmpty
+            }
+        }
+
         It 'Sends disableDependents in the body when -DisableDependents is specified' {
             # The Apply and Disable Dependents flavour (#1485): the schema is applied and everything the
             # removals invalidate is disabled with a recorded reason.

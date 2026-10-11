@@ -88,6 +88,7 @@ flowchart TD
     Error -->|Duplicate attributes| DupAttrRPEI[RPEI: DuplicateImportedAttributes]
     Error -->|Unknown object type| TypeRPEI[RPEI: CouldNotMatchObjectType]
     Error -->|Duplicate external ID| DupObjRPEI[RPEI: DuplicateObject]
+    Error -->|External ID held under another<br/>Object Type, change not allowed #2049| TypeChangedRPEI[RPEI: ObjectTypeChanged<br/>held CSO kept and excluded<br/>from deletion detection]
     Error -->|Unhandled exception| UnhandledRPEI[RPEI: UnhandledError<br/>+ stack trace]
 
     AddedRPEI --> PostPasses
@@ -97,11 +98,12 @@ flowchart TD
     DupAttrRPEI --> PostPasses
     TypeRPEI --> PostPasses
     DupObjRPEI --> PostPasses
+    TypeChangedRPEI --> PostPasses
     UnhandledRPEI --> PostPasses
 
-    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
+    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO,<br/>never for a CSO refused an Object Type change<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
     PostPasses --> Batches[Save phase, per create and update batch:<br/>FlushImportRpeisAsync bulk-inserts that<br/>batch's RPEIs via raw SQL once its CSOs<br/>have committed, accumulates summary stats,<br/>then releases them]
-    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error]
+    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error<br/>A change held or released while it awaits<br/>an Initial Password adds nothing, #2039]
     Reconcile --> FinalFlush[Flush remaining RPEIs<br/>Activity counters and message<br/>describe the whole run]
 ```
 
@@ -155,7 +157,7 @@ flowchart TD
     Outcome -->|Unresolved reference, under<br/>Error handling| UnresolvedRPEI[RPEI: UnresolvedReference error]
     Outcome -->|Generated value already in use,<br/>corrected by Collision Remediation| CorrectedRPEI[RPEI: ObjectChangeType = PendingExport<br/>GeneratedValueRemediated outcome]
     Outcome -->|Generated value already in use,<br/>needs a decision| DecisionRPEI[RPEI: GeneratedValueCollisionUnresolved error<br/>Pending Export Parked]
-    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet or<br/>UniqueValueAlreadyInUse<br/>Error message + retry count]
+    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet,<br/>UniqueValueAlreadyInUse or<br/>PasswordRequiredToEnableAccount<br/>Error message + retry count]
 ```
 
 ## Activity Status Determination
@@ -183,7 +185,7 @@ flowchart TD
     CalcStats -.->|Exception thrown<br/>during status check| SafeFail[SafeFailActivityAsync<br/>See triple fallback below]
 ```
 
-Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory, and `RunCompletionEvaluator` decides the status from them. An import gives no RPEI to an object it found unchanged, so for an import "every RPEI errored" fails the run only when the import read no more objects than it recorded errors for (its `ObjectsProcessed` at completion is the whole run's count); one bad value among a hundred unchanged objects completes with a warning. Other run types keep the RPEI rule, since their counters describe their last step. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error.
+Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory, and `ActivityOutcomeEvaluator` decides the status from them. An import gives no RPEI to an object it found unchanged, so for an import "every RPEI errored" fails the run only when the import read no more objects than it recorded errors for (its `ObjectsProcessed` at completion is the whole run's count); one bad value among a hundred unchanged objects completes with a warning. Other run types keep the RPEI rule, since their counters describe their last step. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error.
 
 After a Full Import completes, the Worker stamps `LastSuccessfulFullImportCompletedAt` on the Connected System only when `FullImportSuccessEvaluator` agrees the run genuinely succeeded: `Complete`, or `CompleteWithWarning` with no object-level errors, and no deletions withheld (#1605). The stranded-value sweep's gate reads that timestamp.
 

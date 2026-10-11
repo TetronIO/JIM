@@ -30,6 +30,13 @@
     generated for them. Test 1 asserts the generated and derived values, including two same-named
     joiners receiving different suffixes.
 
+    On the Active Directory lab only, the provisioning Synchronisation Rule also carries an Initial
+    Password (Setup-Scenario-001.ps1 -InitialPassword, #2039), and the userAccountControl Attribute Flow
+    stays as it is. Real Active Directory refuses to create an enabled account with no password, so JIM
+    creates each joiner disabled and the password's delivery enables it; Test 1 waits for the deliveries
+    and asserts the account then holds userAccountControl 512. Samba AD, OpenLDAP and 389 Directory
+    Server run without one.
+
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
 
@@ -397,6 +404,89 @@ function Assert-GeneratedIdentity {
     return $directoryUser
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Initial Password on the Active Directory lab (#2039)
+#
+# Real Active Directory refuses to create an enabled account that has no password (0000052D), and this
+# scenario's userAccountControl Attribute Flow asks for an enabled one (512). On the Active Directory lab the
+# provisioning Synchronisation Rule therefore carries an Initial Password (Get-IntegrationScenarioSetupParameters
+# passes -InitialPassword there and nowhere else): JIM creates each joiner disabled (514, the flow's value with
+# ACCOUNTDISABLE added), and the Password Delivery Service enables it once the password is set.
+# ─────────────────────────────────────────────────────────────────────────────
+
+function Wait-ForInitialPasswordDelivery {
+    <#
+    .SYNOPSIS
+        Waits for the Password Delivery Service to deliver every password queued for a Connected System, and
+        throws, naming what is left, when that does not happen.
+    .DESCRIPTION
+        A delivered password leaves the queue, so nothing Pending or Delivering is the signal. A Parked or Expired
+        change will not deliver without a person, and a Held one waits for Password Synchronisation to be switched
+        on for the Connected System, so any of those ends the wait at once rather than at the timeout. The default
+        timeout allows for one retry on JIM's default schedule, whose first backoff is five minutes: a directory
+        that does not yet show an account it has just created answers the first attempt that way.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][int]$ConnectedSystemId,
+        [Parameter(Mandatory=$true)][string]$ConnectedSystemName,
+        [Parameter(Mandatory=$false)][int]$TimeoutSeconds = 420
+    )
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($true) {
+        $outstanding = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Pending) +
+                       @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Delivering)
+        $parked = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Parked)
+        $expired = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Expired)
+        $held = @($outstanding | Where-Object { $_.held })
+
+        if ($outstanding.Count -eq 0 -and $parked.Count -eq 0 -and $expired.Count -eq 0) {
+            Write-Host ("  OK Initial Passwords delivered to {0} {1:N1} s after the export" -f $ConnectedSystemName, $stopwatch.Elapsed.TotalSeconds) -ForegroundColor Green
+            return
+        }
+
+        $cannotDeliver = $parked.Count -gt 0 -or $expired.Count -gt 0 -or $held.Count -gt 0
+        if ($cannotDeliver -or $stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+            # A change's own status, held flag, attempts and target message say far more than "it timed out": a
+            # Parked change carries the directory's refusal in its own words.
+            $details = @(@($parked) + @($expired) + @($outstanding) | Select-Object -First 5 | ForEach-Object {
+                "{0} (status {1}, held {2}, attempts {3}): {4}" -f $_.metaverseObjectDisplayName, $_.status, $_.held, $_.attemptCount, $_.targetMessage
+            })
+            $reason = if ($cannotDeliver) { "they cannot be delivered without a person" } else { "they were still queued after $TimeoutSeconds seconds" }
+            throw ("The Initial Passwords queued for $ConnectedSystemName were not all delivered: $reason. " +
+                "Pending or Delivering: $($outstanding.Count) ($($held.Count) held), Parked: $($parked.Count), Expired: $($expired.Count). " +
+                "Until they are, the accounts stay disabled. First few: $($details -join '; ')")
+        }
+
+        Start-Sleep -Seconds 1
+    }
+}
+
+function Assert-AccountEnabledByInitialPassword {
+    <#
+    .SYNOPSIS
+        Asserts that an account provisioned with an Initial Password on Active Directory holds exactly the
+        userAccountControl value the Attribute Flow asks for (512), enabled, once its password has been delivered.
+    .DESCRIPTION
+        JIM created the account disabled, and the Initial Password's delivery is what enables it. Any other value
+        means the delivery did not enable the account, or JIM no longer writes the flow's value once it has.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$AccountName,
+        [Parameter(Mandatory=$true)][string]$Label
+    )
+
+    $entry = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$AccountName)" -Attributes @('userAccountControl') -AsText
+    if ($entry -notmatch '(?m)^userAccountControl: (\d+)\s*$') {
+        throw "$Label could not read userAccountControl for '$AccountName' from $($DirectoryConfig.ConnectedSystemName). Directory output: $entry"
+    }
+    $userAccountControl = [int]$Matches[1]
+    if ($userAccountControl -ne 512) {
+        throw "$Label expected '$AccountName' to be enabled once its Initial Password was delivered (userAccountControl 512), but it holds $userAccountControl"
+    }
+    Write-Host "    OK '$AccountName' enabled once its Initial Password was delivered (userAccountControl 512)" -ForegroundColor Green
+}
+
 function Add-HrCsvRow {
     <#
     .SYNOPSIS
@@ -501,8 +591,10 @@ try {
     # it (-GenerateAccountName -DeriveFromAccountName). Get-IntegrationScenarioSetupParameters is the one place
     # that says so, for this script and -SetupOnly alike; the switches are not Setup-Scenario-001.ps1's default,
     # because the scenarios that compose that setup as a substrate (004, 005, 006, 007, 017, 020, 021, 022, 024
-    # and others) depend on its sourced identifiers.
-    $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1
+    # and others) depend on its sourced identifiers. On the Active Directory lab it adds -InitialPassword, which
+    # real Active Directory needs before it will create an enabled account (#2039; see the section above).
+    $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryConfig.DirectoryType
+    $initialPasswordConfigured = $scenarioSetupParams.ContainsKey('InitialPassword') -and $scenarioSetupParams.InitialPassword
     $config = & "$PSScriptRoot/../Setup-Scenario-001.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig @scenarioSetupParams
 
     if (-not $config) {
@@ -676,6 +768,15 @@ try {
         Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
         # Outcome graph: validate export outcomes (#363 Phase 4b)
         Assert-ActivityItemsHaveOutcomeSummary -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)" -ExpectedOutcomeType "Exported"
+
+        # With an Initial Password (the Active Directory lab), the export created every joiner disabled and queued its
+        # password. Wait for the deliveries, which enable the accounts, before the confirming import, so the import
+        # reads each account as the Attribute Flow asked for it and confirms it, rather than finding the interim
+        # disabled value and holding the change until a later import.
+        if ($initialPasswordConfigured) {
+            Write-Host "Waiting for the Initial Passwords to be delivered (they enable the new accounts)..." -ForegroundColor Gray
+            Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
+        }
 
         # Wait for AD replication (local AD should be fast, but needs time to process)
         Write-Host "Waiting 5 seconds for AD replication..." -ForegroundColor Gray
@@ -860,6 +961,13 @@ try {
             $testUserIdentity = Get-GeneratedIdentity -EmployeeId $testUser.EmployeeId -Label "Joiner"
             Assert-GeneratedIdentity -Identity $testUserIdentity -FirstName $testUser.FirstName -LastName $testUser.LastName -Label "Joiner" | Out-Null
             Write-Host "  ✓ User '$($testUserIdentity.AccountName)' provisioned to $directoryName" -ForegroundColor Green
+
+            # Created disabled because Active Directory refuses an enabled account with no password, and enabled by
+            # the Initial Password's delivery, which Wait-ForInitialPasswordDelivery saw complete before the
+            # confirming import: the account must now hold the flow's 512, not the interim 514.
+            if ($initialPasswordConfigured) {
+                Assert-AccountEnabledByInitialPassword -AccountName $testUserIdentity.AccountName -Label "Joiner"
+            }
 
             # Two joiners with the same name as each other, and as nobody else, in one batch: the first value is
             # taken by whichever is generated first, so the other gets the next suffix, and each one's Email and

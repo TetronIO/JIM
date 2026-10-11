@@ -23,7 +23,8 @@
                          SearchPlaceholder="Search Run Profiles">
         <ToolBarExtras>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                       StartIcon="@Icons.Material.Filled.Add" OnClick="HandleShowNewRunProfileDialogAsync">
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="HandleShowNewRunProfileDialogAsync"
+                       data-testid="jim-run-profile-create">
                 Create Run Profile
             </MudButton>
         </ToolBarExtras>
@@ -46,6 +47,16 @@
                     {
                         <MudTooltip Text="Verification Mode is enabled: this Full Import performs no content-hash skips and diffs every object." Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Verification Mode</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.AllowObjectTypeChanges)
+                    {
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <TooltipContent><TooltipText Text="@AllowObjectTypeChangesChipExplanation" /></TooltipContent>
+                            <ChildContent>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2"
+                                         data-testid="jim-run-profile-allows-object-type-changes">Object Type changes allowed</MudChip>
+                            </ChildContent>
                         </MudTooltip>
                     }
                     @if (context.Item.MaxCreates.HasValue)
@@ -153,7 +164,8 @@
                         }
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
-                                           Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context.Item)" Class="me-2" />
+                                           Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context.Item)" Class="me-2"
+                                           data-testid="jim-run-profile-edit" />
                         </MudTooltip>
                         <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Variant="Variant.Filled"
@@ -263,6 +275,20 @@
                         </MudTooltip>
                     </div>
 
+                    @if (OffersAllowObjectTypeChanges(_newRunProfile.RunType, alreadyAllowed: false))
+                    {
+                        <div class="d-flex align-center">
+                            <MudCheckBox T="bool" @bind-Value="_newRunProfile.AllowObjectTypeChanges" Label="Allow Object Type Changes"
+                                         data-testid="jim-allow-object-type-changes" />
+                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                <TooltipContent><TooltipText Text="@AllowObjectTypeChangesExplanation" /></TooltipContent>
+                                <ChildContent>
+                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
+                                </ChildContent>
+                            </MudTooltip>
+                        </div>
+                    }
+
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText Typo="Typo.subtitle2">Safeguards</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
@@ -314,7 +340,8 @@
             <MudButton OnClick="@(() => _newRunProfileDialogVisible = false)" DropShadow="false">Cancel</MudButton>
             <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
                        OnClick="HandleNewRunProfileFormSubmitAsync"
-                       Disabled="@(!IsNewRunProfileFormValid || _newRunProfile.RunType == ConnectedSystemRunType.NotSet)">
+                       Disabled="@(!IsNewRunProfileFormValid || _newRunProfile.RunType == ConnectedSystemRunType.NotSet)"
+                       data-testid="jim-run-profile-create-submit">
                 Create Run Profile
             </MudButton>
         </DialogActions>
@@ -374,6 +401,27 @@
                         </MudTooltip>
                     </div>
 
+                    @* Visibility follows the saved value rather than the box being edited, so unticking it does not make it vanish. *@
+                    @if (OffersAllowObjectTypeChanges(_editRunProfile.RunType, alreadyAllowed: _editRunProfileOriginal?.AllowObjectTypeChanges == true))
+                    {
+                        <div class="d-flex align-center">
+                            <MudCheckBox T="bool" @bind-Value="_editRunProfile.AllowObjectTypeChanges" Label="Allow Object Type Changes"
+                                         data-testid="jim-allow-object-type-changes" />
+                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                <TooltipContent><TooltipText Text="@AllowObjectTypeChangesExplanation" /></TooltipContent>
+                                <ChildContent>
+                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
+                                </ChildContent>
+                            </MudTooltip>
+                        </div>
+                        @if (!ConnectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block" data-testid="jim-allow-object-type-changes-no-effect">
+                                This Connector cannot tell an object that has changed Object Type apart from two objects that share an External ID, so this setting has no effect here.
+                            </MudText>
+                        }
+                    }
+
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
                         <MudText Typo="Typo.subtitle2">Safeguards</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">If a Full Import would mark more objects as deleted than either limit, it marks none.</MudText>
@@ -425,7 +473,8 @@
             <MudButton OnClick="@(() => _editRunProfileDialogVisible = false)" DropShadow="false">Cancel</MudButton>
             <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
                        OnClick="HandleEditRunProfileFormSubmitAsync"
-                       Disabled="@(!_isEditRunProfileFormValid)">
+                       Disabled="@(!_isEditRunProfileFormValid)"
+                       data-testid="jim-run-profile-edit-submit">
                 Save Changes
             </MudButton>
         </DialogActions>
@@ -500,6 +549,32 @@
             await _grid.RefreshAsync(invalidateTotals: true);
     }
 
+    /// <summary>
+    /// The "Allow Object Type Changes" explanation, shared by the create and edit dialogs (#2049).
+    /// </summary>
+    private const string AllowObjectTypeChangesExplanation =
+        "By default, an object that comes back from the Connected System under a different Object Type is refused: the Activity reports it as an error, and the existing Connected System Object is kept exactly as it is. " +
+        "Turn this on to carry the change out: this Full Import imports the object as a new Connected System Object of its new Object Type, and retires the old one, which is then disconnected under the usual Deletion Rules. " +
+        "Usually set on a second Full Import Run Profile, run by hand when the change is intended.";
+
+    /// <summary>
+    /// The grid chip's explanation for a Run Profile that allows Object Type changes (#2049).
+    /// </summary>
+    private const string AllowObjectTypeChangesChipExplanation =
+        "This Full Import carries out Object Type changes rather than refusing them. " +
+        "An object that comes back under a different Object Type is imported as a new Connected System Object, and the old one is retired.";
+
+    /// <summary>
+    /// Whether "Allow Object Type Changes" is offered (#2049): on a Full Import only, and only where the Connector vouches
+    /// that an External ID names one object across every Object Type, the one case in which an import can tell an
+    /// Object Type change from two objects that share a value. Anywhere else the setting does nothing, so it is not
+    /// offered. A Run Profile that already allows the change (set through the REST API or PowerShell, say) always shows
+    /// it, so a value that changes what a run does is never hidden from the person editing it.
+    /// </summary>
+    private bool OffersAllowObjectTypeChanges(ConnectedSystemRunType runType, bool alreadyAllowed) =>
+        runType == ConnectedSystemRunType.FullImport &&
+        (ConnectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes || alreadyAllowed);
+
     private static bool IsImportRunType(ConnectedSystemRunType runType) =>
         runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
 
@@ -539,6 +614,7 @@
             PageSize = _newRunProfile.PageSize,
             FilePath = _newRunProfile.FilePath,
             VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes,
+            AllowObjectTypeChanges = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.AllowObjectTypeChanges,
             MaxCreates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxCreates : null,
             MaxUpdates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxUpdates : null,
             MaxDeletes = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxDeletes : null,
@@ -580,6 +656,7 @@
             FilePath = runProfile.FilePath,
             Partition = runProfile.Partition,
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
+            AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges,
             MaxCreates = runProfile.MaxCreates,
             MaxUpdates = runProfile.MaxUpdates,
             MaxDeletes = runProfile.MaxDeletes,
@@ -602,6 +679,7 @@
         _editRunProfileOriginal.FilePath = _editRunProfile.FilePath;
         _editRunProfileOriginal.Partition = selectedPartition;
         _editRunProfileOriginal.VerifyImportContentHashes = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.VerifyImportContentHashes;
+        _editRunProfileOriginal.AllowObjectTypeChanges = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.AllowObjectTypeChanges;
 
         if (_editRunProfileOriginal.RunType == ConnectedSystemRunType.Export)
         {

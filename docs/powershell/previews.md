@@ -118,6 +118,8 @@ Without `-Wait`, returns a `PSCustomObject` with `ActivityId`, `ValidationFindin
 
 A proposal carrying a blocking validation finding is never evaluated: `IsBlocked` is `$true`, the findings say why, and `-Wait` returns immediately rather than polling for results that will not arrive.
 
+Each validation finding is also written as it arrives: Blocking and Warning findings with `Write-Warning`, Information findings with `Write-Verbose`. A script that runs with `-WarningAction Stop`, or treats any warning as a failure, therefore stops on a Warning finding too, such as the one a schema preview raises when [selecting or deselecting an overlapping Object Type](../configuration/connected-systems.md#when-an-object-changes-object-type) would change the Object Type of objects already imported. Read `ValidationFindings` to tell the severities apart.
+
 ### Examples
 
 ```powershell title="Preview switching a type to automatic deletion"

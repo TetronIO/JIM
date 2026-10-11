@@ -44,7 +44,11 @@ function New-JIMConfigurationChangePreview {
           Metaverse Objects that would leave eligible for deletion, which attributes would stop being
           refreshed and on how many objects, and whose contributed Metaverse values would be withdrawn, or
           kept, when their obsolete objects are next synchronised. Deselecting an Object Type that an enabled
-          Synchronisation Rule still manages is reported as Blocking, because saving it is refused.
+          Synchronisation Rule still manages is reported as Blocking, because saving it is refused. Selecting
+          or deselecting an Object Type that overlaps another selected one (computer and user in Active
+          Directory, or a structural class and an auxiliary class) is reported as a warning naming both: the
+          objects carrying both classes would change Object Type, which the next import refuses, keeping
+          them as they are, unless a Full Import runs with Allow Object Type Changes enabled.
         - -ConnectedSystemId with -Deletion previews deleting that Connected System by deprovisioning it
           through synchronisation, which is what Remove-JIMConnectedSystem does by default: which Metaverse
           attribute values another system would take over and which would be cleared, which Metaverse
@@ -65,7 +69,9 @@ function New-JIMConfigurationChangePreview {
         polls until the preview reaches a terminal state and returns the finished preview.
 
         A proposal that cannot be applied comes back with a blocking validation finding and is never
-        evaluated: check IsBlocked and ValidationFindings before reading anything else.
+        evaluated: check IsBlocked and ValidationFindings before reading anything else. Blocking and
+        Warning findings are also written to the warning stream as the preview starts; Information findings
+        go to the Verbose stream.
 
         Pass the returned ActivityId to the cmdlet that makes the change (Set-JIMMetaverseObjectType
         -PreviewActivityId, Remove-JIMConnectedSystem -PreviewActivityId for a deletion, or
@@ -718,9 +724,12 @@ function New-JIMConfigurationChangePreview {
         foreach ($finding in $start.ValidationFindings) {
             # Surfaced as they are produced rather than left for the caller to find in the object: a
             # blocking finding means nothing was evaluated, and a script that read straight past it
-            # would treat "this change is impossible" as "this change affects nothing".
+            # would treat "this change is impossible" as "this change affects nothing". A warning is a
+            # consequence the caller did not ask for, such as objects changing Object Type and being
+            # refused at the next import (#2049), and on the Verbose stream nobody would see it.
+            # Information stays there, so it does not bury the findings that matter.
             $message = "Preview validation ($($finding.Severity)): $($finding.Message)"
-            if ($finding.Severity -eq 'Blocking') { Write-Warning $message } else { Write-Verbose $message }
+            if ($finding.Severity -in 'Blocking', 'Warning') { Write-Warning $message } else { Write-Verbose $message }
         }
 
         if (-not $Wait -or $start.IsBlocked -or $start.Failed) {

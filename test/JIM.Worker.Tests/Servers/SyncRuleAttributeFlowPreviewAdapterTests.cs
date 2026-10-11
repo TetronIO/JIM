@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
@@ -46,6 +47,9 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     private const int CsFirstNameAttributeId = 101;
     private const int CsLastNameAttributeId = 102;
     private const int CsEmailAttributeId = 103;
+    private const int CsAccountControlAttributeId = 104;
+    private const int EnabledAccountControl = 512;
+    private const int DisabledAccountControl = 514;
     private const int MvEmailAttributeId = 201;
     private const int MvAlternateEmailAttributeId = 202;
     private const int MappingId = 900;
@@ -439,6 +443,30 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         Assert.That(deltas, Is.Empty);
     }
 
+    [TestCase(66048, TestName = "{m}(ToAnotherValue)")]
+    [TestCase(DisabledAccountControl, TestName = "{m}(ToTheInterimValue)")]
+    public async Task EvaluateDeltasAsync_ProposalChangesTheValueOfAChangeHeldForAnInitialPassword_ReportsTheHeldValueAsTheOldOneAsync(int proposedValue)
+    {
+        // An account created disabled whose Pending Export holds the enabled value until its Initial Password is
+        // delivered (#2039). The stored configuration's evaluation restates the held value, which a real evaluation
+        // drops rather than stages, and the target holds only the interim value, so nothing is skipped as already
+        // current either. The held value is still what the stored configuration asserts, and the old side of the pair,
+        // whether the proposal sets another value or the interim value the target already holds.
+        GivenExportRuleSettingAccountControl(EnabledAccountControl.ToString());
+        var cso = GivenMvoWithJoinedTargetObjectHoldingAccountControl(DisabledAccountControl);
+        GivenAccountControlHeldForAnInitialPassword(cso, EnabledAccountControl);
+
+        var deltas = await EvaluateAsync(ProposalSettingAccountControl(proposedValue.ToString()));
+
+        var delta = deltas.SingleOrDefault(d => d.AttributeName == "userAccountControl");
+        Assert.That(delta, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta!.OldValue, Is.EqualTo(EnabledAccountControl.ToString()), "the held value the stored configuration asserts");
+            Assert.That(delta!.NewValue, Is.EqualTo(proposedValue.ToString()));
+        }
+    }
+
     // ── Contract ─────────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
@@ -766,6 +794,86 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
             MetaverseAttributeId = _mvEmail.Id
         });
         _rule.AttributeFlowRules.Add(mapping);
+    }
+
+    /// <summary>
+    /// Turns the fixture's rule into an export rule setting the target system's userAccountControl attribute from an
+    /// Expression, and nothing else.
+    /// </summary>
+    private void GivenExportRuleSettingAccountControl(string expression)
+    {
+        GivenExportRule();
+        var accountControl = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = CsAccountControlAttributeId, Name = "userAccountControl", Type = AttributeDataType.Number
+        };
+        _csoType.Attributes.Add(accountControl);
+
+        _rule.AttributeFlowRules.Clear();
+        var mapping = new SyncRuleMapping
+        {
+            Id = MappingId,
+            SyncRule = _rule,
+            SyncRuleId = _rule.Id,
+            TargetConnectedSystemAttribute = accountControl,
+            TargetConnectedSystemAttributeId = accountControl.Id
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Id = MappingId, Order = 1, Expression = expression });
+        _rule.AttributeFlowRules.Add(mapping);
+    }
+
+    private static SyncRuleAttributeFlowProposal ProposalSettingAccountControl(string expression) =>
+        new([new SyncRuleMappingProposal(
+            null,
+            CsAccountControlAttributeId,
+            [new SyncRuleMappingSourceProposal(1, null, null, expression)])]);
+
+    private ConnectedSystemObject GivenMvoWithJoinedTargetObjectHoldingAccountControl(int accountControl)
+    {
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada@corp.local", targetStoredEmail: null);
+        var cso = _csos[^1];
+        var attribute = _csoType.Attributes.Single(a => a.Id == CsAccountControlAttributeId);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectedSystemObject = cso,
+            Attribute = attribute,
+            AttributeId = attribute.Id,
+            IntValue = accountControl
+        });
+        return cso;
+    }
+
+    /// <summary>
+    /// Queues an Update Pending Export for <paramref name="cso"/> holding <paramref name="accountControl"/> until the
+    /// account's Initial Password is delivered (#2039): sent with an interim value and awaiting its confirming import.
+    /// </summary>
+    private void GivenAccountControlHeldForAnInitialPassword(ConnectedSystemObject cso, int accountControl)
+    {
+        var attribute = _csoType.Attributes.Single(a => a.Id == CsAccountControlAttributeId);
+        _syncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.CreateVersion7(),
+                    AttributeId = attribute.Id,
+                    Attribute = attribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    IntValue = accountControl,
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
     }
 
     private void GivenMvoWithJoinedTargetObject(string email, string alternateEmail, string? targetStoredEmail)

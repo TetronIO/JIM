@@ -451,7 +451,7 @@ internal class LdapConnectorPassword
         // Active Directory reports a password policy rejection as a constraint violation carrying the Win32 code
         // ERROR_PASSWORD_RESTRICTIONS, and reports the same condition as unwillingToPerform in some cases. The
         // code in the diagnostic message is the reliable signal, so it is checked ahead of the result code.
-        if (errorMessage != null && errorMessage.Contains(ErrorPasswordRestrictions, StringComparison.OrdinalIgnoreCase))
+        if (errorMessage != null && errorMessage.Contains(LdapConnectorConstants.AD_ERROR_PASSWORD_RESTRICTIONS, StringComparison.OrdinalIgnoreCase))
             return PasswordSetFailureReason.PolicyRejection;
 
         return resultCode switch
@@ -502,12 +502,6 @@ internal class LdapConnectorPassword
     /// RFC 3062 LDAP Password Modify extended operation.
     /// </summary>
     internal const string PasswordModifyExtensionOid = "1.3.6.1.4.1.4203.1.11.1";
-
-    /// <summary>
-    /// Win32 ERROR_PASSWORD_RESTRICTIONS, which Active Directory embeds in the diagnostic message when it rejects
-    /// a password for failing the policy in force for the account.
-    /// </summary>
-    private const string ErrorPasswordRestrictions = "0000052D";
 
     private const byte TagSequence = 0x30;
 

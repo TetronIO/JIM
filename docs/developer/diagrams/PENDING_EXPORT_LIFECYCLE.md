@@ -104,10 +104,10 @@ flowchart LR
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
         Success -->|Yes, in part| PartResult[References still owed, #1398<br/>Status = Pending<br/>Create becomes Update<br/>RPEI: Exported]
-        Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning,<br/>or auto-confirmed (#1936):<br/>delete PE + CSO now, #1685]
+        Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning,<br/>or auto-confirmed #1936:<br/>delete PE + CSO now, #1685]
         Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = Pending,<br/>or Failed at MaxRetries]
         ProvResult --> OptimisticApply
-        ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>every export path, #1936;<br/>never stamps LastUpdated/Status]
+        ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>every export path, #1936,<br/>never stamps LastUpdated/Status]
         PartResult --> OptimisticApply
     end
 
@@ -151,6 +151,12 @@ stateDiagram-v2
 
     ExportedPendingConfirmation --> ExportedNotConfirmed: Confirming import<br/>finds value mismatch
 
+    ExportedPendingConfirmation --> ExportedPendingConfirmation: Held while an Initial Password<br/>is still owed (written with<br/>an interim value), judged<br/>at every import
+
+    ExportedPendingConfirmation --> Pending: Released once no password<br/>is owed (interim value still<br/>there; flag cleared, no RPEI),<br/>by any import, returned or not
+
+    ExportedPendingConfirmation --> [*]: A held change withdrawn once<br/>the Metaverse wants what the<br/>target already holds (leaver)
+
     ExportedNotConfirmed --> Pending: Reasserted on<br/>next export run
 
     ExportedNotConfirmed --> Failed: Max retries exceeded
@@ -174,7 +180,9 @@ During sync, drift detection can also create Pending Exports:
 
 ```mermaid
 flowchart TD
-    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
+    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> HeldCheck{CSO holds a change<br/>awaiting an Initial<br/>Password? #2039}
+    HeldCheck -->|Yes| SkipHeld([Skip the whole object:<br/>a correction would make the<br/>page flush replace its PE])
+    HeldCheck -->|No| CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
     CompareCSO --> Drifted{CSO value<br/>differs from<br/>expected?}
     Drifted -->|No| NoDrift([No action])
     Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor:<br/>its winning import flow<br/>reads the diverged<br/>attribute? #1864}
@@ -201,6 +209,8 @@ This prevents silent loss of drift corrections when merging with export evaluati
 - **Three-operation lifecycle**<br /> A Pending Export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
 
 - **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the Pending Export for retry.
+
+- **A change written with an interim value is held, not retried (#2039)**<br /> On real Active Directory the LDAP Connector creates an account disabled when an Initial Password follows the Create, because Active Directory refuses an enabled account with no password, and the export run marks the `userAccountControl` change `AwaitsInitialPassword`. Every import holds such a change (the self-transition above) while a password is owed to the account, so the interim disabled value is neither retried nor reported, and releases it to `Pending` once none is, so the next export writes the flow's value as an ordinary Update. Every import judges every held change, including one whose account it did not return: an expired or cancelled password changes nothing an import reads, so a Full Import skips the account by its content hash and a Delta Import does not return it, and the sweep after reconciliation releases the change anyway, touching nothing else on the object. Drift Detection (and the synchronisation preview) skips an object holding one; export evaluation drops an incoming change restating it in every merge branch, and when nothing else changes keeps the Pending Export rather than rebuilding it, withdrawing from it in place only what the target no longer needs (the synchronisation preview reads the Pending Export and drops the restatement too, so it proposes no export the run will not stage); a held change is withdrawn (the transition to the end state above) when the Metaverse Object now wants what the target already holds, so a leaver's held enabled value can never be released; and optimistic apply records nothing for it. The full rule is under "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
 - **Create-to-Update demotion (#1695)**<br /> Reconciliation only runs for a CSO an import actually returned, so a Create PE reaching it proves the object exists. Whatever remains on it once confirmed changes are removed (unconfirmed attributes, or changes appended while it awaited confirmation) therefore travels as an Update, whichever attributes confirmed. This replaced two narrower triggers (a confirmed secondary external ID, or every original change confirmed with more queued), under which a single unconfirmed attribute left the PE shaped as a Create and the retry sent a second Create for an existing object. A Create written in part for want of a reference (#1398) is demoted at export time instead, since the row now exists.
 
@@ -233,6 +243,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 - **Optimistic export apply** (#1079)<br /> On export success, `ExportExecutionServer.ProcessBatchSuccessAsync` projects the exported attribute changes onto the CSO's attribute values (add-if-absent, replace-on-Update, delete-if-present, delete-all) at export time rather than waiting for the confirming import to re-materialise them. This means the confirming import's "Compare each import attribute against existing CSO values" step (see [Full Import Flow](FULL_IMPORT_FLOW.md)) usually finds nothing to do, avoiding millions of redundant attribute value inserts at scale. Two rules keep this safe:
   - The parent CSO row (`Status`, `LastUpdated`, and every other field) is never touched. `LastUpdated` staying untouched is what lets a no-op confirming import skip the object entirely under the Full Synchronisation unchanged-object watermark; a status transition (e.g. `PendingProvisioning` → `Normal`) is still a genuine change and is stamped by the confirming import as before.
   - An Update with no value (clearing a single-valued attribute) removes the recorded values, as a RemoveAll does. Reconciliation confirms an empty Update when the attribute holds nothing, so this agrees with what the confirming import will find.
+  - Only a value the target was actually given is recorded. A reference change still awaiting resolution (#1398) was not written at all, and a change the connector wrote with an interim value until an Initial Password is delivered (`AwaitsInitialPassword`, #2039) left the target holding something else; both are left out, so the attribute records nothing new until the confirming import reports what the target holds. Recording a held change's asserted value would let a later export evaluation find it already current.
 
   Every export path applies, the file path included (#1936). On the file path it is not only an optimisation: an auto-confirming export (the File Connector auto-confirms in every mode) deletes its Pending Export on success, and a target in Export Only mode is never imported from, so recording what was written is the only way JIM learns what the target holds. Before #1936 the file path was excluded, the CSO held only its External ID for good, and a value later cleared in the Metaverse was never cleared in the file. The file path's loader already includes each CSO's attribute values, because the File Connector writes full rows from them.
 

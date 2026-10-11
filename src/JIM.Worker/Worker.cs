@@ -1547,40 +1547,33 @@ public class Worker : BackgroundService
             // Query the database for precise RPEI error counts.
             // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
             // precise has-errors/all-errors detection for all processor types uniformly.
-            var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
-            objectLevelErrorCount = totalWithErrors;
+            var counts = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
+            objectLevelErrorCount = counts.TotalWithErrors;
 
-            var outcome = RunCompletionEvaluator.Evaluate(totalWithErrors, totalRpeis, totalUnhandledErrors,
-                !string.IsNullOrEmpty(activity.WarningMessage), activity.ConnectedSystemRunType, activity.ObjectsProcessed);
-
-            if (outcome == RunCompletionOutcome.Failed)
+            // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the Activity, not as
+            // RPEIs, and still complete it with a warning.
+            switch (ActivityOutcomeEvaluator.Evaluate(counts, hasWarningMessage: !string.IsNullOrEmpty(activity.WarningMessage),
+                        activity.ConnectedSystemRunType, activity.ObjectsProcessed))
             {
-                await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
-            }
-            else if (outcome == RunCompletionOutcome.CompleteWithError)
-            {
-                // UnhandledError RPEIs indicate code/logic bugs, not data issues.
-                // These must escalate to CompleteWithError to ensure visibility and investigation.
-                await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{totalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
-                Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, totalUnhandledErrors);
-            }
-            else if (outcome == RunCompletionOutcome.CompleteWithWarning && totalWithErrors > 0)
-            {
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
-            }
-            else if (outcome == RunCompletionOutcome.CompleteWithWarning)
-            {
-                // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the
-                // Activity, not as RPEIs. The activity should still complete with warning status.
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warning (connector warning: {WarningMessage})", activity.Id, activity.WarningMessage);
-            }
-            else
-            {
-                await jim.Activities.CompleteActivityAsync(activity);
-                Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                case ActivityStatus.FailedWithError:
+                    await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
+                    break;
+                case ActivityStatus.CompleteWithError:
+                    // UnhandledError RPEIs indicate code/logic bugs, not data issues.
+                    // These must escalate to CompleteWithError to ensure visibility and investigation.
+                    await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{counts.TotalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
+                    Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, counts.TotalUnhandledErrors);
+                    break;
+                case ActivityStatus.CompleteWithWarning:
+                    await jim.Activities.CompleteActivityWithWarningAsync(activity);
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings ({ErrorCount} item error(s), {RefusedObjectTypeChanges} refused Object Type change(s), warning message: {WarningMessage})",
+                        activity.Id, counts.TotalWithErrors, counts.TotalObjectTypeChangeRefusals, activity.WarningMessage);
+                    break;
+                default:
+                    await jim.Activities.CompleteActivityAsync(activity);
+                    Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                    break;
             }
         }
         catch (Exception ex)
