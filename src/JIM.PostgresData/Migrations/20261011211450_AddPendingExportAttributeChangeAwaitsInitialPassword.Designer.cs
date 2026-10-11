@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261011200519_AddObjectTypeChangeSafeguards")]
-    partial class AddObjectTypeChangeSafeguards
+    [Migration("20261011211450_AddPendingExportAttributeChangeAwaitsInitialPassword")]
+    partial class AddPendingExportAttributeChangeAwaitsInitialPassword
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -3282,6 +3282,9 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId", "AttributeId")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
 
+                    b.HasIndex(new[] { "ConnectedSystemObjectId" }, "IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved")
+                        .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL AND \"ReferenceValueId\" IS NULL");
+
                     b.ToTable("ConnectedSystemObjectAttributeValues");
                 });
 
@@ -4507,6 +4510,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AwaitsInitialPassword")
+                        .HasColumnType("boolean");
+
                     b.Property<bool?>("BoolValue")
                         .HasColumnType("boolean");
 
@@ -4567,6 +4573,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PendingExportId")
                         .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+
+                    b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
+                        .HasFilter("\"AwaitsInitialPassword\"");
 
                     b.ToTable("PendingExportAttributeValueChanges");
                 });
