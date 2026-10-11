@@ -91,6 +91,20 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
     }
 
     [Test]
+    public void Render_DeprovisionCard_NamesTheDeprovisioningActionThatDecidedIt()
+    {
+        var cut = RenderLineage(BuildImportLineage(CompleteCascade()));
+
+        var deprovision = cut.FindAll(".ln-later").First(c => c.TextContent.Contains("Deprovision queued"));
+        var setting = deprovision.QuerySelector(".ln-setting")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(setting.QuerySelector(".ln-setting-label")!.TextContent.Trim(), Is.EqualTo("Deprovisioning Action"));
+            Assert.That(setting.QuerySelector(".ln-setting-value")!.TextContent.Trim(), Is.EqualTo("Delete"));
+        }
+    }
+
+    [Test]
     public async Task Render_LargeCohort_PagesMoreMembersOnRequestAsync()
     {
         var removals = LargeRemovalCohort(memberCount: 120);

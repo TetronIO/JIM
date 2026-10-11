@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using JimUtilities = JIM.Utilities.Utilities;
@@ -173,8 +174,12 @@ public static partial class CausalityLineageModelBuilder
                 }
 
                 var isReferenceRemoval = first && removalObject != null;
+                var setting = GetDecidingSetting(causalityEvent, representative);
                 Add(target, new CausalityLineageConsequence
                 {
+                    SettingLabel = setting?.Label,
+                    SettingValue = setting?.Value,
+                    SettingText = setting?.Text,
                     Kind = isConfirmation ? CausalityLineageConsequenceKind.Confirmation : CausalityLineageConsequenceKind.Outcome,
                     Event = causalityEvent,
                     Title = isConfirmation
@@ -574,6 +579,39 @@ public static partial class CausalityLineageModelBuilder
                    && causalityEvent.Lane != CausalityLane.Identity
                 ? "Its Metaverse Object was deleted."
                 : null;
+        }
+
+        /// <summary>
+        /// The configured setting that chose an outcome, as it stood when the run decided: the Deprovisioning Action
+        /// behind a deprovision (read from the outcome itself, since each action records its own), and the Deletion Rule
+        /// and grace period behind a Metaverse Object's deletion (from the policy snapshot the deciding item recorded).
+        /// Those are what an administrator would change to get a different result.
+        /// </summary>
+        private static (string Label, string Value, string Text)? GetDecidingSetting(
+            CausalityEvent causalityEvent, ActivityRunProfileExecutionItem representative)
+        {
+            switch (causalityEvent.OutcomeType)
+            {
+                case ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued:
+                    return ("Deprovisioning Action", "Delete", "This rule removes the objects it deprovisions rather than leaving them in place.");
+                case ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected:
+                    return ("Deprovisioning Action", "Disconnect", "This rule leaves the objects it deprovisions in place, so nothing was exported.");
+                case ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted:
+                case ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled:
+                    if (MvoDeletionPolicySnapshot.FromJson(representative.DeletionPolicySnapshotJson) is not { } policy)
+                        return null;
+
+                    var rule = policy.DeletionRule.ToString().SplitOnCapitalLetters();
+                    var gracePeriod = policy.GracePeriod is { } period && period > TimeSpan.Zero ? period : (TimeSpan?)null;
+                    var text = causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
+                        ? $"Grace period: {gracePeriod?.ToFriendlyDuration() ?? "none"}, so it was scheduled for deletion rather than deleted in the same run."
+                        : gracePeriod is { } grace
+                            ? $"Deleted once its {grace.ToFriendlyDuration()} grace period had ended."
+                            : "No grace period, so it was deleted in the same run.";
+                    return ("Deletion Rule", rule, text);
+                default:
+                    return null;
+            }
         }
 
         private static string ReferenceRemovalTitle(CausalConsequenceCohort cohort, string? deletedName, CohortNoun noun)

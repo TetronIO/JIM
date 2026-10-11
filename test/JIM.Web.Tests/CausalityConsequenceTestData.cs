@@ -80,6 +80,13 @@ public static class CausalityConsequenceTestData
         var scopeExit = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
             parent: null, ordinal: 0, targetEntityId: DeletedMvoId, targetEntityDescription: "Tina Adams",
             syncRuleId: 7, syncRuleName: "Yellowstone APAC Inbound Users");
+        item.DeletionPolicySnapshotJson = new JIM.Models.Sync.MvoDeletionPolicySnapshot
+        {
+            DeletionRule = JIM.Models.Core.MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            GracePeriod = TimeSpan.Zero,
+            TriggeringSystemId = Yellowstone,
+            TriggeringSystemName = "Yellowstone APAC"
+        }.ToJson();
         var deleted = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
             parent: scopeExit, ordinal: 0, targetEntityId: DeletedMvoId, targetEntityDescription: "Tina Adams",
             detailMessage: "Deleted immediately: last authoritative source disconnected");

@@ -128,7 +128,20 @@
                                     HideObjectGlyphs="true"
                                     Operation="consequenceEvent.Operation"
                                     Selected="ReferenceEquals(SelectedEvent, consequenceEvent)"
-                                    OnSelect="OnSelect" />
+                                    OnSelect="OnSelect">
+                    @if (Consequence.SettingLabel != null)
+                    {
+                        @* The setting an administrator would change to get a different result. *@
+                        <div class="ln-setting">
+                            <span class="ln-setting-label">@Consequence.SettingLabel</span>
+                            <span class="ln-setting-value">@Consequence.SettingValue</span>
+                            @if (Consequence.SettingText != null)
+                            {
+                                <div class="ln-setting-text">@Consequence.SettingText</div>
+                            }
+                        </div>
+                    }
+                </CausalityEventCard>
             }
             else
             {

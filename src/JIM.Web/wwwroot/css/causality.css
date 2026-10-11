@@ -1139,6 +1139,33 @@
     font-size: 0.875rem;
 }
 
+/* The setting that decided an outcome: a quiet key and value, with what it meant beneath. */
+.causality-panel .ln-setting {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+}
+
+.causality-panel .ln-setting-label {
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .ln-setting-value {
+    font-weight: 650;
+    color: var(--cz-text);
+}
+
+.causality-panel .ln-setting-text {
+    width: 100%;
+    color: var(--cz-text-dim);
+}
+
 /* A confirmation folds to one line: it changes nothing, so it should cost the column almost nothing. */
 .causality-panel .ln-fold {
     display: flex;

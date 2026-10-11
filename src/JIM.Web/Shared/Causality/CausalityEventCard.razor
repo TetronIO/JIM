@@ -75,6 +75,7 @@
             }
         </div>
     }
+    @ChildContent
     @if (Event.AttributeRows.Count > 0 || actionLinks.Count > 0)
     {
         <div class="evt-foot">
@@ -175,6 +176,13 @@
     /// </summary>
     [Parameter]
     public string? Note { get; set; }
+
+    /// <summary>
+    /// Content placed after the card's entity chips and before its footer (the Lineage's After this run cards, #1811,
+    /// put the setting that decided the outcome here). Carries nothing interactive, since the card itself is clickable.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
 
     /// <summary>
     /// Raised when a clickable card is activated (click, Enter or Space).

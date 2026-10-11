@@ -67,6 +67,22 @@ public sealed class CausalityLineageConsequence
     public string? MembersNoun { get; init; }
 
     /// <summary>
+    /// The configured setting that decided the outcome, where one did ("Deletion Rule", "Deprovisioning Action"): what an
+    /// administrator would change to get a different result. Null where no setting chose it.
+    /// </summary>
+    public string? SettingLabel { get; init; }
+
+    /// <summary>
+    /// What <see cref="SettingLabel"/> was set to when the run decided ("Delete", "When Authoritative Source Disconnected").
+    /// </summary>
+    public string? SettingValue { get; init; }
+
+    /// <summary>
+    /// What that setting meant for the outcome.
+    /// </summary>
+    public string? SettingText { get; init; }
+
+    /// <summary>
     /// A link the card offers (a Pending Export, the queue it sits in).
     /// </summary>
     public string? LinkText { get; init; }

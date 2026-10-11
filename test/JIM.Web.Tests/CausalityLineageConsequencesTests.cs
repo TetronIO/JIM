@@ -76,6 +76,37 @@ public class CausalityLineageConsequencesTests
     }
 
     [Test]
+    public void Build_CompleteCascade_NamesTheSettingThatDecidedEachDeletion()
+    {
+        // The settings an administrator would change to get a different result: the Deletion Rule that deleted the
+        // Metaverse Object, and the Deprovisioning Action that deleted the account rather than leaving it.
+        var lineage = BuildImportLineage(CompleteCascade());
+
+        var deleted = lineage.Columns[1].Objects.Single().Consequences[1];
+        var deprovision = lineage.Columns[2].Objects[0].Consequences[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((deleted.SettingLabel, deleted.SettingValue), Is.EqualTo(("Deletion Rule", "When Authoritative Source Disconnected")));
+            Assert.That(deleted.SettingText, Is.EqualTo("No grace period, so it was deleted in the same run."));
+            Assert.That((deprovision.SettingLabel, deprovision.SettingValue), Is.EqualTo(("Deprovisioning Action", "Delete")));
+            Assert.That(deprovision.SettingText, Is.EqualTo("This rule removes the objects it deprovisions rather than leaving them in place."));
+        }
+    }
+
+    [Test]
+    public void Build_DisconnectAction_NamesItsDeprovisioningAction()
+    {
+        var lineage = BuildImportLineage(Consequences(SynchronisationCohort(disconnect: true)));
+
+        var disconnected = lineage.Columns[2].Objects.Single().Consequences[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((disconnected.SettingLabel, disconnected.SettingValue), Is.EqualTo(("Deprovisioning Action", "Disconnect")));
+            Assert.That(disconnected.SettingText, Is.EqualTo("This rule leaves the objects it deprovisions in place, so nothing was exported."));
+        }
+    }
+
+    [Test]
     public void Build_CompleteCascade_TheGroupsShareOneObjectHeadedByTheirExactCount()
     {
         var lineage = BuildImportLineage(CompleteCascade());
