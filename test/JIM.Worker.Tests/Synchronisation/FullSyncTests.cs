@@ -2706,6 +2706,7 @@ public class FullSyncTests
         Assert.That(mvo.DeletionTriggeredBySystemId, Is.Null, "Cancellation must clear the triggering system id");
         Assert.That(mvo.DeletionTriggeredBySystemName, Is.Null, "Cancellation must clear the triggering system name");
         Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+        Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.Null, "Cancellation must clear the scheduling item");
         Assert.That(mvo.DeletionInitiatedByType, Is.EqualTo(ActivityInitiatorType.NotSet),
             "Cancellation must clear the deletion initiator type");
         Assert.That(mvo.DeletionInitiatedById, Is.Null, "Cancellation must clear the deletion initiator id");
@@ -2778,6 +2779,7 @@ public class FullSyncTests
         Assert.That(mvo.DeletionTriggeredBySystemId, Is.Null, "Cancellation must clear the triggering system id");
         Assert.That(mvo.DeletionTriggeredBySystemName, Is.Null, "Cancellation must clear the triggering system name");
         Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+        Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.Null, "Cancellation must clear the scheduling item");
     }
 
     /// <summary>
@@ -2799,6 +2801,7 @@ public class FullSyncTests
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
             "With no recorded triggering system, any rejoin must cancel the scheduled deletion (fallback)");
         Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+        Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.Null, "Cancellation must clear the scheduling item");
     }
 
     /// <summary>
@@ -2827,6 +2830,7 @@ public class FullSyncTests
         mvo.DeletionTriggeredBySystemId = deletionTriggeredBySystemId;
         mvo.DeletionTriggeredBySystemName = deletionTriggeredBySystemName;
         mvo.DeletionPolicySnapshotJson = @"{""deletionRule"":""WhenAuthoritativeSourceDisconnected""}";
+        mvo.DeletionScheduledByRunProfileExecutionItemId = Guid.NewGuid();
         mvo.ConnectedSystemObjects.Clear();
 
         // CSO that will join to the MVO (not yet joined)

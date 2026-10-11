@@ -434,6 +434,10 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
                 "the Connected System must still be deleted as the run's final step");
             Assert.That(result.MetaverseObjectsDeleted, Is.Zero);
             Assert.That(result.MetaverseObjectsMarkedForDeletion, Is.EqualTo(1));
+            var schedulingItem = DbContext.ActivityRunProfileExecutionItems
+                .Single(item => item.ObjectChangeType == ObjectChangeType.Disconnected);
+            Assert.That(mvo.DeletionScheduledByRunProfileExecutionItemId, Is.EqualTo(schedulingItem.Id),
+                "the housekeeping deletion that follows names the item that scheduled it (#1811)");
         }
     }
 
