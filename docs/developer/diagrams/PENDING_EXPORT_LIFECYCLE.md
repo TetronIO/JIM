@@ -151,6 +151,10 @@ stateDiagram-v2
 
     ExportedPendingConfirmation --> ExportedNotConfirmed: Confirming import<br/>finds value mismatch
 
+    ExportedPendingConfirmation --> ExportedPendingConfirmation: Held while an Initial Password<br/>is still owed (written with<br/>an interim value)
+
+    ExportedPendingConfirmation --> Pending: Released once no password<br/>is owed (interim value still<br/>there; flag cleared, no RPEI)
+
     ExportedNotConfirmed --> Pending: Reasserted on<br/>next export run
 
     ExportedNotConfirmed --> Failed: Max retries exceeded
@@ -174,7 +178,9 @@ During sync, drift detection can also create Pending Exports:
 
 ```mermaid
 flowchart TD
-    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
+    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> HeldCheck{CSO holds a change<br/>awaiting an Initial<br/>Password? #2039}
+    HeldCheck -->|Yes| SkipHeld([Skip the whole object:<br/>a correction would make the<br/>page flush replace its PE])
+    HeldCheck -->|No| CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
     CompareCSO --> Drifted{CSO value<br/>differs from<br/>expected?}
     Drifted -->|No| NoDrift([No action])
     Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor:<br/>its winning import flow<br/>reads the diverged<br/>attribute? #1864}
@@ -201,6 +207,8 @@ This prevents silent loss of drift corrections when merging with export evaluati
 - **Three-operation lifecycle**<br /> A Pending Export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
 
 - **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the Pending Export for retry.
+
+- **A change written with an interim value is held, not retried (#2039)**<br /> On real Active Directory the LDAP Connector creates an account disabled when an Initial Password follows the Create, because Active Directory refuses an enabled account with no password, and the export run marks the `userAccountControl` change `AwaitsInitialPassword`. The confirming import holds such a change (the self-transition above) while a password is owed to the account, so the interim disabled value is neither retried nor reported, and releases it to `Pending` once none is, so the next export writes the flow's value as an ordinary Update. Drift Detection skips an object holding one, and export evaluation drops an incoming change restating it in every merge branch. The full rule is under "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
 - **Create-to-Update demotion (#1695)**<br /> Reconciliation only runs for a CSO an import actually returned, so a Create PE reaching it proves the object exists. Whatever remains on it once confirmed changes are removed (unconfirmed attributes, or changes appended while it awaited confirmation) therefore travels as an Update, whichever attributes confirmed. This replaced two narrower triggers (a confirmed secondary external ID, or every original change confirmed with more queued), under which a single unconfirmed attribute left the PE shaped as a Create and the retry sent a second Create for an existing object. A Create written in part for want of a reference (#1398) is demoted at export time instead, since the row now exists.
 

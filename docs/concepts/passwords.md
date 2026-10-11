@@ -11,7 +11,9 @@ This page covers what JIM does with passwords and why. To actually configure it,
 
 ## 🔑 Giving new Connected System Objects their first password
 
-Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, so the object is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
+Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, typically within seconds of the object existing, so it is complete and enabled without waiting on somebody to do it by hand.
+
+Active Directory goes further and refuses to create an account enabled at all while it has no password. When an Initial Password will follow, JIM creates the account disabled, even where the Synchronisation Rule's `userAccountControl` Attribute Flow asks for it enabled, and the password's delivery enables it; JIM waits for the password before checking the account against what the flow asked for. The [LDAP Connector](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts) describes this, and what happens to the account if its password cannot be delivered.
 
 By default that password is different for every Connected System Object and JIM keeps no copy, so it is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below. One password for every Connected System Object is offered as well, and is [not recommended](#one-password-for-every-connected-system-object).
 

@@ -38,6 +38,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 - **Create, update, and delete**<br /> Operations on directory objects.
 - **Configurable delete behaviour**<br /> Choose between deleting objects outright or disabling them (e.g. via userAccountControl for Active Directory).
+- **New Active Directory accounts enabled by their Initial Password**<br /> Active Directory refuses to create an enabled user account that has no password. When the provisioning Synchronisation Rule has an [Initial Password](../configuration/synchronisation-rules.md#initial-password), JIM creates the account disabled and the password's delivery enables it, so a `userAccountControl` Attribute Flow that enables accounts keeps working. See [Enabling new Active Directory accounts](#enabling-new-active-directory-accounts).
 - **Configurable concurrency**<br /> Parallel batch export support with 1-64 concurrent LDAP operations.
 - **Batched multi-valued modifications**<br /> Large attribute changes (e.g. group membership) are automatically split into configurable batches to avoid exceeding directory server limits.
 - **Values already in place**<br /> Adding a value the directory already holds (a member already in the group) or removing one it no longer holds counts as done, and every other change in the same export is still applied. See [Values already in place](#values-already-in-place).
@@ -489,6 +490,30 @@ Active Directory and Samba AD use `unicodePwd`, which the Connector encodes corr
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
 
+#### Enabling new Active Directory accounts
+
+Active Directory refuses to create a user account enabled while it has no password, and JIM can only set a password once the account exists. A Synchronisation Rule whose `userAccountControl` Attribute Flow asks for an enabled account, such as `512`, therefore needs an [Initial Password](../configuration/synchronisation-rules.md#initial-password) on Active Directory. With one, JIM handles the order for you:
+
+1. **The account is created disabled.**<br /> When the `userAccountControl` value a Create carries is a single number with ACCOUNTDISABLE (`0x2`) clear, JIM sends it with ACCOUNTDISABLE added: `512` is sent as `514`, and `66048` as `66050`. Only the value sent to the directory changes; JIM still records the value your Attribute Flow asked for, and that is what the account is checked against.
+2. **The Initial Password enables it.**<br /> The [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) sets the password and, with **Enable the Connected System Object once the password is set** switched on, enables the account, typically within seconds of it being created.
+3. **The confirming import waits for the password.**<br /> An import that still finds the account disabled while its password is owed (queued, being delivered, or parked) holds the change: it is not retried, no "not confirmed" warning is raised, and [Enforce State](../configuration/synchronisation-rules.md#export-outbound) does not correct the account in the meantime. Once the password is delivered, the next import that returns the account finds the value your Attribute Flow asked for and confirms it.
+
+Your `userAccountControl` Attribute Flow stays exactly as it is, so enabling and disabling accounts from source data keeps working once the account exists. A change to the person while the account waits is exported as usual; only a different `userAccountControl` value (the person leaving before their password arrives, say) replaces the one waiting. JIM decides whether an Initial Password follows from the provisioning Synchronisation Rule's settings at the moment each batch of Creates is sent.
+
+Nothing changes for a Create that carries no `userAccountControl` value (Active Directory creates that account disabled on its own), for one your Attribute Flow already creates disabled, or for an Update. Samba AD accepts an enabled account with no password, so JIM sends it the value unchanged, as it does on every other directory.
+
+If **Enable the Connected System Object once the password is set** is off, the password is still set and the account left disabled. The next import that returns the account stops waiting, since no password is owed any more, and the export after it writes your Attribute Flow's enabled value, which Active Directory now accepts because the account has a password.
+
+**When the password cannot be delivered, the account stays disabled; nothing is lost.**
+
+| Password | What happens to the account | What you do |
+|----------|-----------------------------|-------------|
+| Retrying (the directory could not be reached) | Waits, disabled | Nothing; JIM retries on the Connected System's [Password Synchronisation](../concepts/passwords.md#password-synchronisation) schedule. |
+| Parked (the directory refused the password) | Waits, disabled; nothing is retried or reported against the export meanwhile | Correct the Synchronisation Rule's Initial Password settings, which releases it, or retry it from **Operations > Passwords**. Once it is delivered, the account is enabled and the next import confirms it. |
+| Expired, cancelled, or never queued | The next import that returns the account stops waiting, and the export after it writes your flow's enabled value, which Active Directory refuses: the export reports ["Active Directory will not enable an account that has no password"](#active-directory-will-not-enable-an-account-that-has-no-password) | Set a password on the account with the [set-password action](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object), enabling it there, and the export's next attempt succeeds. |
+
+An expired password changes nothing in Active Directory, so a Delta Import does not return the account, and JIM stops waiting at the next Full Import instead.
+
 ### Password policy discovery
 
 Whenever JIM retrieves or refreshes the schema, and again when the Password Channel preflight runs, the Connector reads the directory's password policy so a generated password satisfies it. [Passwords](../concepts/passwords.md#discovering-the-targets-rules) explains what the figures mean and how to read a blank one; this section says where each directory type keeps its policy, what JIM reads from it, and how it decides that some objects may be governed by a different policy. Discovery never fails a schema refresh: where a search is refused or returns nothing, the Connector records why and the panel says so.
@@ -758,7 +783,9 @@ Active Directory refuses to create a user account enabled, or to enable an exist
 
 Either remedy works:
 
-- **Give the provisioning Synchronisation Rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password).**<br /> On Active Directory, JIM then creates the account disabled, adding ACCOUNTDISABLE to the `userAccountControl` value the Attribute Flow sends, and enables it once the password is set. Your `userAccountControl` Attribute Flow stays as it is, so enabling and disabling accounts from source data keeps working.
+- **Give the provisioning Synchronisation Rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password).**<br /> On Active Directory, JIM then creates the account disabled, adding ACCOUNTDISABLE to the `userAccountControl` value the Attribute Flow sends, and enables it once the password is set. Your `userAccountControl` Attribute Flow stays as it is, so enabling and disabling accounts from source data keeps working. See [Enabling new Active Directory accounts](#enabling-new-active-directory-accounts).
 - **Create the account disabled.**<br /> Have the Attribute Flow write `userAccountControl` with ACCOUNTDISABLE (`0x2`) set, such as `514`, until the account has a password.
 
-If the Synchronisation Rule already has an Initial Password, look under **Operations > Passwords** for one that is parked or has expired: until it is delivered, the account has no password to enable it with. Nothing is lost while you fix it. The Pending Export stays queued and is retried on later export runs, with a growing delay between attempts, and the Metaverse Object is untouched.
+If the Synchronisation Rule already has an Initial Password, the account's password will not now be delivered: it expired or was cancelled before it could be set, and **Operations > Passwords** shows which. JIM stops waiting for a password once none is owed and writes your Attribute Flow's enabled value, which Active Directory refuses for the same reason. Set a password on the account with the [set-password action](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object), enabling it there. A password that is merely parked does not cause this error: the account waits, disabled, until the password is delivered.
+
+Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is retried on later export runs with a growing delay between attempts, up to the ordinary retry limit, and the Metaverse Object is untouched.

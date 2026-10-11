@@ -251,9 +251,9 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs]
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Per page, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
-    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
+    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed /<br/>Held / Released]
     Summary --> Done([Done])
 
     Loop -->|Yes| StatusGate{Pending Export<br/>status? #1826}
@@ -267,10 +267,14 @@ flowchart TD
     PerChange -->|Yes| RemoveConfirmed[Remove the confirmed change<br/>from the Pending Export<br/>RPEI: ExportConfirmed outcome]
     PerChange -->|No, retries remain| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Retried on the next export]
     PerChange -->|No, max retries exceeded| PermanentFail[Status = Failed<br/>RPEI: ExportConfirmationFailed<br/>Manual intervention required]
+    PerChange -->|No, written with an interim value<br/>and a password still owed, #2039| Held[Held: left exactly as it is<br/>No RPEI, not retried<br/>Counted in the summary]
+    PerChange -->|No, written with an interim value<br/>and no password owed any more| Released[Released: Status = Pending<br/>AwaitsInitialPassword cleared, no RPEI<br/>Written as an Update on the next export]
 
     RemoveConfirmed --> Remaining{Any changes<br/>remaining?}
     Retry --> Remaining
     PermanentFail --> Remaining
+    Held --> Remaining
+    Released --> Remaining
     Remaining -->|No| Delete[Queue Pending Export<br/>for batch deletion<br/>Export fully confirmed]
     Remaining -->|Yes| Update[A Create becomes an Update:<br/>the import proved the object exists<br/>Recompute status, queue for batch update]
 

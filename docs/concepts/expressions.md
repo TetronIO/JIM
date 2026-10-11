@@ -352,6 +352,9 @@ IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 
 This reads as: "If the Employee Status is Active, set the value to 512 (enabled), otherwise set it to 514 (disabled)."
 
+!!! note "Creating accounts enabled on Active Directory"
+    Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
+
 **Check if an account is currently disabled:**
 
 ```csharp

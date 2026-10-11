@@ -103,7 +103,7 @@ flowchart TD
 
     PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO<br/>(not a CSO refused an Object Type change)<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
     PostPasses --> Batches[Save phase, per create and update batch:<br/>FlushImportRpeisAsync bulk-inserts that<br/>batch's RPEIs via raw SQL once its CSOs<br/>have committed, accumulates summary stats,<br/>then releases them]
-    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error]
+    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error<br/>A change held or released while it awaits<br/>an Initial Password adds nothing, #2039]
     Reconcile --> FinalFlush[Flush remaining RPEIs<br/>Activity counters and message<br/>describe the whole run]
 ```
 

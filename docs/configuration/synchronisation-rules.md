@@ -334,6 +334,8 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
 - **Enable the Connected System Object once the password is set**<br /> On by default. A provisioned Connected System Object nobody can sign in to is rarely what was wanted, and directories that refuse to enable an object without a policy-compliant password need the enable to follow the password rather than accompany the create.
 
+**An Attribute Flow that enables accounts can stay.** Active Directory refuses to create an enabled account with no password, so a `userAccountControl` Attribute Flow writing `512` on provisioning is refused there unless an Initial Password follows. With one switched on, JIM creates the account disabled (`512` is sent as `514`), the password's delivery enables it, and the confirming import waits for the password rather than reporting the interim value as unconfirmed; the flow goes on enabling and disabling the account from source data afterwards. How this works, and what happens while a password is retrying, parked or expired, is described under [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
+
 **No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
 
 **Nobody receives a generated password, including you.** Its job is to get the Connected System Object into a working state, since most directories will not enable an object or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-connected-system-object) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
@@ -417,6 +419,8 @@ An expression mapping applies a transformation using the JIM [expression languag
 | `Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@company.com"` | `Email Address` |
 | `mv["First Name"] + " " + mv["Last Name"]` | `displayName` |
 | `IIF(Eq(mv["Employee Status"], "Active"), 512, 514)` | `userAccountControl` |
+
+On an export rule that provisions to Active Directory, an enabled value such as `512` needs an [Initial Password](#initial-password) on the same rule: Active Directory refuses to create an enabled account that has no password, and with an Initial Password JIM creates the account disabled and enables it once the password is set.
 
 #### Missing Input Behaviour
 
