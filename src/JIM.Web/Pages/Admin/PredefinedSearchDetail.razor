@@ -15,7 +15,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span>
+    <PageInfo Title="Predefined Search" DocsPage="configuration/predefined-searches.md">
+        A Predefined Search is a saved search over one Metaverse Object Type: the criteria that choose its objects, and the attributes it shows for each.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_predefinedSearch != null)

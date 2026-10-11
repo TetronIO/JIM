@@ -37,6 +37,11 @@
              /api/v1/
       COV-4  every resource group of the API (an OpenAPI tag) has a row in the
              Resource groups table of the API overview, and every row names one
+      COV-5  every routable portal page (a .razor component with an @page
+             directive) names its docs page from its PageInfo
+             (DocsPage="configuration/connected-systems.md#the-connector-space"),
+             and every docs page and heading a DocsPage names exists; where the
+             value is an expression, every page it can choose is checked
 
     ACC-3 and COV-4 read the OpenAPI document, which only a build of JIM.Web
     can produce, so they run where one has been built (build-and-test) and are
@@ -85,7 +90,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3', 'ACC-3', 'COV-4')
+$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3', 'COV-5', 'ACC-3', 'COV-4')
 $script:HttpMethods = @('get', 'post', 'put', 'patch', 'delete')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
 
@@ -291,6 +296,46 @@ function Get-DocsLink {
     }
 }
 
+# The portal's Razor components: whether each is a routable page (and the line of its first @page), and every
+# DocsPage it gives, with the docs pages each can name. A DocsPage written as an expression
+# (DocsPage="@(x ? "a.md" : "b.md")") names every string literal inside it.
+function Get-PortalComponent {
+    param([string]$Root, $Config)
+    foreach ($file in Get-RepoFile -Root $Root -Paths $Config.PortalSources -Extensions @('.razor')) {
+        $text = [System.IO.File]::ReadAllText($file.FullName)
+        $lineOf = { param([int]$Index) ([regex]::Matches($text.Substring(0, $Index), "`n")).Count + 1 }
+        $pageMatch = [regex]::Match($text, '(?m)^\s*@page\s+"')
+        $docsPages = foreach ($m in [regex]::Matches($text, '\bDocsPage\s*=\s*"')) {
+            $start = $m.Index + $m.Length
+            $value = $null
+            if ($start + 1 -lt $text.Length -and $text[$start] -eq '@' -and $text[$start + 1] -eq '(') {
+                # An expression: read to its matching parenthesis, skipping the strings inside it.
+                $depth = 0; $inString = $false
+                for ($i = $start + 1; $i -lt $text.Length; $i++) {
+                    $c = $text[$i]
+                    if ($inString) { if ($c -eq '\') { $i++ } elseif ($c -eq '"') { $inString = $false }; continue }
+                    if ($c -eq '"') { $inString = $true }
+                    elseif ($c -eq '(') { $depth++ }
+                    elseif ($c -eq ')') { $depth--; if ($depth -eq 0) { $value = $text.Substring($start, $i - $start + 1); break } }
+                }
+                $targets = @([regex]::Matches([string]$value, '"(?<t>[^"]*)"') | ForEach-Object { $_.Groups['t'].Value })
+            }
+            else {
+                $end = $text.IndexOf('"', $start)
+                $value = $text.Substring($start, [Math]::Max(0, $end - $start))
+                $targets = @($value)
+            }
+            [pscustomobject]@{ Line = (& $lineOf $m.Index); Targets = $targets }
+        }
+        [pscustomobject]@{
+            Path      = (Get-RelativePath $Root $file.FullName)
+            Routable  = $pageMatch.Success
+            PageLine  = if ($pageMatch.Success) { & $lineOf $pageMatch.Index } else { 0 }
+            DocsPages = @($docsPages)
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -301,10 +346,10 @@ try {
     if (-not (Test-Path -LiteralPath $configFull)) { throw "Configuration file not found at '$ConfigPath'." }
     $config = Import-PowerShellDataFile -LiteralPath $configFull
     foreach ($key in 'ModuleManifest', 'CmdletDocs', 'Constants', 'CodeSources', 'PowerShellSources', 'ComposeFiles', 'EnvExample', 'Installer',
-        'ExpressionEvaluator', 'ExpressionDocs', 'LinkSources', 'DocsBaseUrl', 'DocsPath', 'DocsExclude', 'ApiIndex', 'Allow') {
+        'ExpressionEvaluator', 'ExpressionDocs', 'LinkSources', 'DocsBaseUrl', 'DocsPath', 'DocsExclude', 'ApiIndex', 'PortalSources', 'Allow') {
         if (-not $config.ContainsKey($key)) { throw "Configuration '$ConfigPath' has no '$key'." }
     }
-    foreach ($key in 'Cmdlets', 'EnvironmentVariables', 'ExpressionFunctions', 'DocsLinks', 'ApiRoutes', 'ApiResourceGroups') {
+    foreach ($key in 'Cmdlets', 'EnvironmentVariables', 'ExpressionFunctions', 'DocsLinks', 'ApiRoutes', 'ApiResourceGroups', 'PortalPages') {
         if (-not $config.Allow.ContainsKey($key)) { throw "Configuration '$ConfigPath' has no Allow.$key." }
     }
     foreach ($key in 'ModuleManifest', 'ExpressionEvaluator', 'ExpressionDocs') {
@@ -452,6 +497,55 @@ if ('LNK-3' -in $selected) {
         }
         elseif (-not ($links | Where-Object Url -eq $url)) {
             $findings.Add((New-Finding 'LNK-3' $allowPath 1 "the allow-list entry for '$url' names a link the product no longer has; remove it."))
+        }
+    }
+}
+
+# --- COV-5: portal pages name their docs page ---
+if ('COV-5' -in $selected) {
+    $components = @(Get-PortalComponent -Root $root -Config $config)
+    $pages = @($components | Where-Object Routable)
+    $counts['portal pages'] = $pages.Count
+    $anchorCache5 = @{}
+    foreach ($page in $pages) {
+        if ($page.DocsPages.Count -gt 0 -or $config.Allow.PortalPages.ContainsKey($page.Path)) { continue }
+        $findings.Add((New-Finding 'COV-5' $page.Path $page.PageLine "the portal page names no docs page; give its PageInfo a DocsPage (DocsPage=`"configuration/connected-systems.md#the-connector-space`"), or add it to the allow-list in $allowPath with the reason it has none."))
+    }
+    foreach ($component in $components) {
+        foreach ($docsPage in $component.DocsPages) {
+            if ($docsPage.Targets.Count -eq 0) {
+                $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "the DocsPage expression names no docs page, so there is nothing to check; write each page it can choose as a string literal (DocsPage=`"@(x ? `"a.md`" : `"b.md`")`")."))
+            }
+            foreach ($target in $docsPage.Targets) {
+                $pathPart, $anchor = $target -split '#', 2
+                if (-not $pathPart.EndsWith('.md')) {
+                    $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage '$target' is not a docs page; name the Markdown page under $($config.DocsPath)/, for example 'configuration/connected-systems.md#the-connector-space'."))
+                    continue
+                }
+                $full = Join-Path $docsRoot $pathPart
+                if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+                    $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage names '$pathPart', which is not a page under $($config.DocsPath)/; name the page that covers this one."))
+                    continue
+                }
+                if ($anchor) {
+                    if (-not $anchorCache5.ContainsKey($full)) { $anchorCache5[$full] = Get-PageAnchor -FullPath $full }
+                    if (-not $anchorCache5[$full].Contains($anchor)) {
+                        $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage names '#$anchor' on $pathPart, which has no such heading or anchor; name the heading that covers this page."))
+                    }
+                }
+            }
+        }
+    }
+    foreach ($path in $config.Allow.PortalPages.Keys) {
+        $page = $pages | Where-Object Path -eq $path | Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($config.Allow.PortalPages[$path])) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' gives no reason; say why the page names no docs page."))
+        }
+        elseif (-not $page) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' names a page that no longer exists; remove it."))
+        }
+        elseif ($page.DocsPages.Count -gt 0) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' is no longer needed: the page names its docs page; remove it."))
         }
     }
 }
