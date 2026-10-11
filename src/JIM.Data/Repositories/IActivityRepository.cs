@@ -323,6 +323,48 @@ public interface IActivityRepository
         int connectedSystemId, string externalIdSnapshot, DateTime atOrBeforeActivityExecuted,
         Guid excludeRunProfileExecutionItemId);
 
+    /// <summary>
+    /// Reads one level of the downward causal walk (#1811) in one round trip: every consequence of the frontier's
+    /// items, grouped into cohorts and counted in the database, with each cohort's first page of members and the
+    /// members that carry the walk on; and, for the frontier's items that led nowhere, why.
+    /// </summary>
+    /// <remarks>
+    /// The hops are the recorded edges whose cause is a frontier item; the confirming import of an export a
+    /// frontier item executed; the first synchronisation of the same Connected System Object after a frontier
+    /// import; and outstanding work, read live: a Pending Export a frontier item staged or executed that still
+    /// exists, and a deletion it scheduled that the Metaverse Object still carries.
+    ///
+    /// Bounded by what it reads, never by what is recorded: a cohort's count is exact however large, while its
+    /// members and its continuing items come back capped.
+    /// </remarks>
+    /// <param name="frontier">The items whose consequences to read, each with the cohort it belongs to.</param>
+    /// <param name="memberPageSize">How many members to return per cohort.</param>
+    /// <param name="continuingItemLimit">How many continuing items to return per cohort.</param>
+    public Task<CausalConsequenceLevel> GetCausalConsequenceLevelAsync(
+        IReadOnlyList<CausalConsequenceFrontierMember> frontier, int memberPageSize, int continuingItemLimit);
+
+    /// <summary>
+    /// Pages through one cohort's members (#1811): the consequences of the given frontier items that share the
+    /// cohort's values, earliest first and then by name, optionally narrowed to members whose name contains the search text.
+    /// </summary>
+    /// <param name="frontier">The items whose consequences form the cohort: the parent cohort's members.</param>
+    /// <param name="tuple">The cohort's shared values.</param>
+    /// <param name="skip">How many members to skip.</param>
+    /// <param name="take">How many members to return.</param>
+    /// <param name="search">Text a member's name must contain, case-insensitively, or null for every member.</param>
+    /// <returns>The page of members, and how many members match in total.</returns>
+    public Task<(List<CausalConsequenceMember> Members, int TotalCount)> GetCausalConsequenceCohortMembersAsync(
+        IReadOnlyList<Guid> frontier, CausalConsequenceCohortTuple tuple, int skip, int take, string? search);
+
+    /// <summary>
+    /// Loads the items the downward walk shows its cohorts through (#1811): each with its sync outcomes and its Activity,
+    /// so the portal can place what the item recorded on the objects it happened to and name the run that did it.
+    /// </summary>
+    /// <param name="runProfileExecutionItemIds">One item per cohort.</param>
+    /// <returns>The items found, by id; an item since purged is simply absent.</returns>
+    public Task<Dictionary<Guid, ActivityRunProfileExecutionItem>> GetCausalConsequenceRepresentativesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.

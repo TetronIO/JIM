@@ -72,6 +72,32 @@ public class CausalityPanelTests
     }
 
     [Test]
+    public void Render_ConsequencesArrivingAfterTheFirstRender_AddAfterThisRunToTheLineageAndTheBand()
+    {
+        // The page reads the walk after the panel is on screen (#1811), so its arrival is a parameter change the panel
+        // must pick up: the After this run sections in the Lineage, and the strip in the band.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ObjectChangeType = JIM.Models.Enums.ObjectChangeType.Updated };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, parent: null, ordinal: 0, detailCount: 1);
+        var context = CausalityConsequenceTestData.ImportContext();
+        var cut = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, item)
+            .Add(c => c.Context, context)
+            .Add(c => c.ConsequencesLoading, true));
+        Assert.That(cut.FindAll(".ln-consequences-loading"), Has.Count.EqualTo(1));
+
+        cut.Render(ps => ps
+            .Add(c => c.ConsequencesLoading, false)
+            .Add(c => c.Consequences, CausalityConsequenceTestData.CompleteCascade()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".ln-after"), Is.Not.Empty);
+            Assert.That(cut.Find(".after-strip").TextContent, Does.Contain("Metaverse Object deleted"));
+            Assert.That(cut.FindAll(".ln-consequences-loading"), Is.Empty);
+        }
+    }
+
+    [Test]
     public void Render_ExportHeldForADecision_RendersTheSummaryBandRatherThanTheNoTrackingNotice()
     {
         // A held export (#242, release 4) records no outcome because nothing was exported; the band says why.

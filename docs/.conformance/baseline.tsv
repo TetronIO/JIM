@@ -11,7 +11,7 @@ LANG-3	concepts/expressions.md	2
 LANG-3	concepts/index.md	4
 LANG-3	concepts/jml-lifecycle.md	6
 LANG-3	concepts/synchronisation-pipeline.md	17
-LANG-3	configuration/activities.md	7
+LANG-3	configuration/activities.md	4
 LANG-3	configuration/api-keys.md	1
 LANG-3	configuration/certificates.md	1
 LANG-3	configuration/configuration-changes.md	2
@@ -64,7 +64,7 @@ LANG-7	administration/upgrading.md	1
 LANG-7	concepts/attribute-priority.md	6
 LANG-7	concepts/expressions.md	2
 LANG-7	concepts/synchronisation-pipeline.md	1
-LANG-7	configuration/activities.md	3
+LANG-7	configuration/activities.md	2
 LANG-7	configuration/connected-systems.md	5
 LANG-7	configuration/data-flow.md	1
 LANG-7	configuration/metaverse.md	2

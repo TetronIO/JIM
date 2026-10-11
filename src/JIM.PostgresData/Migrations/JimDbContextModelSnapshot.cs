@@ -652,6 +652,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("CauseMetaverseObjectId")
                         .HasDatabaseName("IX_CausalEdges_CauseMetaverseObjectId");
 
+                    b.HasIndex("CausePendingExportId")
+                        .HasDatabaseName("IX_CausalEdges_CausePendingExportId")
+                        .HasFilter("\"CausePendingExportId\" IS NOT NULL");
+
                     b.HasIndex("CauseRunProfileExecutionItemId")
                         .HasDatabaseName("IX_CausalEdges_CauseRunProfileExecutionItemId");
 
