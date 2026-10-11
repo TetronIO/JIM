@@ -103,6 +103,26 @@ public class SyncImportTaskProcessor
     private int _verificationBenignMismatchCount;
 
     /// <summary>
+    /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
+    /// directory object is still there, so deletion detection must not retire it just because the import did not
+    /// return it under the type JIM holds it as.
+    /// </summary>
+    private readonly HashSet<Guid> _csoIdsHeldUnderAnotherObjectType = new();
+
+    /// <summary>
+    /// #2049: per Object Type id, the other Object Types' External ID attributes an unmatched object is probed
+    /// against. Computed once per type per run; the schema does not change mid-import.
+    /// </summary>
+    private readonly Dictionary<int, List<(ConnectedSystemObjectType ObjectType, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)>> _crossTypeProbeTargets = new();
+
+    /// <summary>
+    /// #2049: Object Type changes this run refused, and those it carried out because the Run Profile allows them.
+    /// Logged in the end-of-import summary.
+    /// </summary>
+    private int _objectTypeChangesRefusedCount;
+    private int _objectTypeChangesAllowedCount;
+
+    /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
     /// Loaded once at import start from service settings.
     /// </summary>
@@ -1011,10 +1031,22 @@ public class SyncImportTaskProcessor
                 _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
         }
 
+        if (_objectTypeChangesRefusedCount > 0)
+        {
+            Log.Warning("PerformImportAsync: Object Type change summary: Refused: {Refused}, Allowed: {Allowed}. Each refused object is reported on its own Run Profile Execution Item; the objects JIM holds were kept as they are.",
+                _objectTypeChangesRefusedCount, _objectTypeChangesAllowedCount);
+        }
+        else if (_objectTypeChangesAllowedCount > 0)
+        {
+            Log.Information("PerformImportAsync: Object Type change summary: Refused: 0, Allowed: {Allowed}.", _objectTypeChangesAllowedCount);
+        }
+
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
         importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
+        importSpan.SetTag("objectTypeChangesRefused", _objectTypeChangesRefusedCount);
+        importSpan.SetTag("objectTypeChangesAllowed", _objectTypeChangesAllowedCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             importSpan.SetTag("verificationDangerousDisagreements", _verificationDangerousDisagreementCount);
@@ -1054,6 +1086,10 @@ public class SyncImportTaskProcessor
         // These should not be marked as obsolete even if their external ID isn't in the import (e.g., because their
         // external ID was updated during import processing and the new value isn't in externalIdsImported)
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+
+        // An object the import returned under another Object Type, and that this run refused to re-type, is still
+        // in the Connected System (#2049): its absence from its own type's External IDs is not a deletion.
+        processedCsoIds.UnionWith(_csoIdsHeldUnderAnotherObjectType);
 
         // have any objects been deleted in the Connected System since our last import? A deselected Object Type is
         // walked here too (see ResolveDeletionDetectionObjectTypesAsync): the import no longer returns its objects,
@@ -1588,6 +1624,7 @@ public class SyncImportTaskProcessor
             return;
 
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+        processedCsoIds.UnionWith(_csoIdsHeldUnderAnotherObjectType);
         var retried = new List<PendingExport>();
 
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -1839,7 +1876,23 @@ public class SyncImportTaskProcessor
         /// already included in <see cref="HydratedCsos"/> above.
         /// </summary>
         public Dictionary<ConnectedSystemImportObject, Guid?> SecondaryMatches { get; } = new();
+
+        /// <summary>
+        /// #2049: import objects with no match under their own Object Type whose External ID JIM already holds
+        /// under another one (see <see cref="FindHeldUnderAnotherObjectType"/>). Only recorded where the Connector
+        /// vouches that an External ID names one object across every Object Type. For a delete, the held object
+        /// is included in <see cref="HydratedCsos"/> above, since the delete is applied to it.
+        /// </summary>
+        public Dictionary<ConnectedSystemImportObject, HeldUnderAnotherObjectType> CrossTypeMatches { get; } = new();
     }
+
+    /// <summary>
+    /// #2049: a Connected System Object JIM holds under one Object Type, matched by External ID to an import object
+    /// arriving under another.
+    /// </summary>
+    /// <param name="Entry">The held object's lookup entry.</param>
+    /// <param name="ObjectType">The Object Type JIM holds it under.</param>
+    private sealed record HeldUnderAnotherObjectType(CsoImportStateLookupEntry Entry, ConnectedSystemObjectType ObjectType);
 
     /// <summary>
     /// SPEC-1082 D5: returns the schema fingerprint for an object type, computing and caching it on
@@ -1938,6 +1991,16 @@ public class SyncImportTaskProcessor
 
             if (!entry.HasValue)
             {
+                if (FindHeldUnderAnotherObjectType(importObject, csObjectType!) is { } heldElsewhere)
+                {
+                    result.CrossTypeMatches[importObject] = heldElsewhere;
+
+                    // A delete is applied to the object JIM holds, so it needs that object's full graph; refusing
+                    // a change of Object Type needs only its identity.
+                    if (importObject.ChangeType == ObjectChangeType.Deleted)
+                        csoIdsToHydrate.Add(heldElsewhere.Entry.CsoId);
+                }
+
                 CollectSecondaryLookupCandidate(importObject, csObjectType!, secondaryLookupCandidates);
                 continue;
             }
@@ -2356,6 +2419,19 @@ public class SyncImportTaskProcessor
                 // When a connector specifies Delete, mark the existing CSO as Obsolete internally
                 if (importObject.ChangeType == ObjectChangeType.Deleted)
                 {
+                    // A Connector types a deleted object from what it last knew of it and from the current Object
+                    // Type selection, which can differ from the type JIM holds it under (#2049). Where External IDs
+                    // name one object across every type, the delete belongs to the object JIM holds; dropping it
+                    // left that object in place until a Full Import noticed it was gone.
+                    if (connectedSystemObject == null
+                        && hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var deletedHeldElsewhere)
+                        && hydratedCsoPage.TryGetValue(deletedHeldElsewhere.Entry.CsoId, out var deletedCso))
+                    {
+                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for an object of type '{ObjectType}', which JIM holds as CSO {CsoId} of type '{HeldObjectType}'. Applying the delete to it.",
+                            LogSanitiser.Sanitise(importObject.ObjectType), deletedCso.Id, LogSanitiser.Sanitise(deletedHeldElsewhere.ObjectType.Name));
+                        connectedSystemObject = deletedCso;
+                    }
+
                     if (connectedSystemObject is { Status: ConnectedSystemObjectStatus.Obsolete })
                     {
                         // The connector is replaying a delete for an object JIM already knows is gone: an
@@ -2403,6 +2479,24 @@ public class SyncImportTaskProcessor
                 // is existing - apply any changes to the cso from the import object
                 if (connectedSystemObject == null)
                 {
+                    // The object is not new: JIM holds it under another Object Type (#2049). Importing it as a new
+                    // object would leave the held one missing from its own type, so deletion detection would retire
+                    // it and its Metaverse Object could be deleted and deprovisioned everywhere. Refuse unless the
+                    // administrator has asked for the change, and keep the held object as it is.
+                    if (hydrationResult.CrossTypeMatches.TryGetValue(importObject, out var heldElsewhere))
+                    {
+                        if (!ObjectTypeChangesAllowed)
+                        {
+                            RefuseObjectTypeChange(activityRunProfileExecutionItem, heldElsewhere, csObjectType);
+                            continue;
+                        }
+
+                        _objectTypeChangesAllowedCount++;
+                        Log.Information("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' and now arrives as type '{ObjectType}'. The Run Profile allows Object Type changes, so it is imported as a new object and the held one is left to deletion detection.",
+                            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), heldElsewhere.Entry.CsoId,
+                            LogSanitiser.Sanitise(heldElsewhere.ObjectType.Name), LogSanitiser.Sanitise(csObjectType.Name));
+                    }
+
                     // Connector said Update but no CSO exists — this is expected behaviour
                     // (e.g. delta import without a prior full import, or CSO was purged)
                     if (importObject.ChangeType == ObjectChangeType.Updated)
@@ -2799,6 +2893,18 @@ public class SyncImportTaskProcessor
             return null;
 
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
+        var externalIdValue = GetExternalIdLookupValue(connectedSystemImportObject, externalIdAttribute);
+        var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
+        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
+    }
+
+    /// <summary>
+    /// The import object's External ID value in the form the pre-fetched lookup keys carry it (the same form
+    /// <c>GetAllCsoExternalIdMappingsAsync</c> builds for stored values). Throws for an import object whose External
+    /// ID attribute is missing, multi-valued or empty, which the per-object loop reports against its own item.
+    /// </summary>
+    private static string GetExternalIdLookupValue(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectTypeAttribute externalIdAttribute)
+    {
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
@@ -2809,8 +2915,7 @@ public class SyncImportTaskProcessor
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-        // Build the cache key in the same format as GetAllCsoExternalIdMappingsAsync
-        var externalIdValue = externalIdAttribute.Type switch
+        return externalIdAttribute.Type switch
         {
             AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
@@ -2830,9 +2935,88 @@ public class SyncImportTaskProcessor
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
             _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
         };
+    }
 
-        var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
-        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
+    /// <summary>
+    /// #2049: the Connected System Object JIM holds under another Object Type with this import object's External ID,
+    /// or null when there is none, or when the Connector does not vouch that an External ID names one object across
+    /// every Object Type.
+    /// </summary>
+    /// <remarks>
+    /// JIM recognises an object by its External ID within one Object Type, so an object whose type changed in the
+    /// Connected System arrives looking like a new object of its new type. Where External IDs are unique across the
+    /// whole Connected System (a directory's objectGUID or entryUUID) the same value under another type can only be
+    /// the same object. Where they are not (a SQL view sharing its table's keys) it is a different object, which is
+    /// why the Connector has to say so. Only called for an object with no match under its own type, which in
+    /// ordinary running is only a genuinely new object, so the probe costs nothing on the objects JIM already knows.
+    /// </remarks>
+    private HeldUnderAnotherObjectType? FindHeldUnderAnotherObjectType(ConnectedSystemImportObject importObject, ConnectedSystemObjectType objectType)
+    {
+        if (_csIsEmpty || _csoExternalIdLookup == null || !_connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
+            return null;
+
+        var lookup = _csoExternalIdLookup;
+        var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
+        var externalIdValue = GetExternalIdLookupValue(importObject, externalIdAttribute);
+
+        return GetCrossTypeProbeTargets(objectType, externalIdAttribute)
+            .Select(target => lookup.TryGetValue($"cso:{_connectedSystem.Id}:{target.ExternalIdAttribute.Id}:{externalIdValue}", out var entry)
+                ? new HeldUnderAnotherObjectType(entry, target.ObjectType)
+                : null)
+            .FirstOrDefault(held => held != null);
+    }
+
+    /// <summary>
+    /// #2049: whether this run carries out an Object Type change rather than refusing it. Only a Full Import can: it
+    /// is the run that returns every object, so it is the run whose deletion detection retires the held object.
+    /// </summary>
+    private bool ObjectTypeChangesAllowed =>
+        _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport && _connectedSystemRunProfile.AllowObjectTypeChanges;
+
+    /// <summary>
+    /// #2049: records an Object Type change this run will not carry out, and protects the held object from deletion
+    /// detection: the import did return it, just not under the type JIM holds it as.
+    /// </summary>
+    private void RefuseObjectTypeChange(ActivityRunProfileExecutionItem activityRunProfileExecutionItem, HeldUnderAnotherObjectType held, ConnectedSystemObjectType arrivingObjectType)
+    {
+        _csoIdsHeldUnderAnotherObjectType.Add(held.Entry.CsoId);
+        _objectTypeChangesRefusedCount++;
+
+        var heldTypeName = held.ObjectType.Name;
+        var arrivingTypeName = arrivingObjectType.Name;
+        activityRunProfileExecutionItem.ObjectTypeSnapshot = arrivingTypeName;
+        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged;
+        activityRunProfileExecutionItem.ErrorMessage =
+            $"JIM holds this object as a '{heldTypeName}', but the Connector now returns it as a '{arrivingTypeName}' (External ID '{activityRunProfileExecutionItem.ExternalIdSnapshot}'). " +
+            $"It has not been imported, and the existing '{heldTypeName}' object has been left as it is, so nothing is deprovisioned. " +
+            $"If the object's type really has changed, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM will retire the '{heldTypeName}' object and import a new '{arrivingTypeName}' one. " +
+            "If it has not, review the Object Types selected on the Connected System.";
+
+        Log.Warning("ProcessImportObjectsAsync: Object with External ID '{ExternalId}' is held as CSO {CsoId} of type '{HeldObjectType}' but arrived as type '{ObjectType}'. Refusing the Object Type change and keeping the held object.",
+            LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot), held.Entry.CsoId,
+            LogSanitiser.Sanitise(heldTypeName), LogSanitiser.Sanitise(arrivingTypeName));
+    }
+
+    /// <summary>
+    /// #2049: every other Object Type's External ID attribute of the same data type, which is what an External ID
+    /// value unique across the Connected System is held under. Deselected types are included: their objects stay in
+    /// JIM until deletion detection retires them, and a type change is exactly what can bring one back.
+    /// </summary>
+    private List<(ConnectedSystemObjectType ObjectType, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)> GetCrossTypeProbeTargets(
+        ConnectedSystemObjectType objectType, ConnectedSystemObjectTypeAttribute externalIdAttribute)
+    {
+        if (_crossTypeProbeTargets.TryGetValue(objectType.Id, out var targets))
+            return targets;
+
+        targets = (_connectedSystem.ObjectTypes ?? [])
+            .Where(other => other.Id != objectType.Id)
+            .SelectMany(other => other.Attributes
+                .Where(attribute => attribute.IsExternalId && attribute.Type == externalIdAttribute.Type)
+                .Select(attribute => (ObjectType: other, ExternalIdAttribute: attribute)))
+            .ToList();
+
+        _crossTypeProbeTargets[objectType.Id] = targets;
+        return targets;
     }
 
     /// <summary>
