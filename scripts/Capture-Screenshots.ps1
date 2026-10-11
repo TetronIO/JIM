@@ -1,0 +1,169 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+<#
+.SYNOPSIS
+    Captures JIM's published screenshots from a running instance, at the exact size they are published.
+
+.DESCRIPTION
+    Every screenshot on the junctional.io product tour is listed in scripts/screenshots/manifest.json: the page, the
+    steps that reach it, the themes it is published in and its geometry profile (#582). This script validates the
+    manifest, signs in to the portal, captures each entry in each of its themes, and fails if any image is not exactly
+    its profile's size, so a low-resolution image can never be published by accident.
+
+    Portal images are 3348x2092: the portal at 1674x1046 CSS pixels and 100% zoom, rendered at 2x density. Navigation
+    groups are expanded and the theme is set through the portal's own preferences before the first page loads.
+
+    The instance should look as a customer sees it: every service running (Web, Worker, Scheduler), Production mode,
+    and the data the published images show. Output goes to <OutputPath>/<Version>/ under the file names junctional.io
+    uses in src/assets/tour/<version>/, so a refresh is a folder copy.
+
+    Browser resolution is shared with the docs checks; see JimPlaywright.ps1.
+
+.PARAMETER Version
+    The folder the images are written to under OutputPath. Defaults to 'v' plus the VERSION file, matching the
+    junctional.io asset folders (for example v0.17.0).
+
+.PARAMETER OutputPath
+    Where to write the images. Defaults to artifacts/screenshots, which is not committed.
+
+.PARAMETER Name
+    Capture only these manifest entries, for iterating on one page.
+
+.PARAMETER BaseUrl
+    The portal to capture. Defaults to http://localhost:5200.
+
+.PARAMETER Credential
+    The account to sign in with. Defaults to the bundled development realm's administrator.
+
+.PARAMETER ManifestPath
+    The manifest to read. Defaults to scripts/screenshots/manifest.json.
+
+.EXAMPLE
+    pwsh ./scripts/Capture-Screenshots.ps1
+    Captures every screenshot into artifacts/screenshots/v<VERSION>/.
+
+.EXAMPLE
+    pwsh ./scripts/Capture-Screenshots.ps1 -Version dev -Name connected-systems-list
+    Captures one page in both themes, for checking a change to it.
+#>
+[CmdletBinding()]
+param(
+    [string]$Version,
+    [string]$OutputPath,
+    [string[]]$Name,
+    [string]$BaseUrl = 'http://localhost:5200',
+    [pscredential]$Credential,
+    [string]$ManifestPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'screenshots' 'ScreenshotManifest.ps1')
+. (Join-Path $PSScriptRoot 'JimPlaywright.ps1')
+
+if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'screenshots' 'manifest.json' }
+if (-not $OutputPath) { $OutputPath = Join-Path $repoRoot 'artifacts' 'screenshots' }
+if (-not $Version) { $Version = 'v' + (Get-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Raw).Trim() }
+if ($Version -notmatch '^[A-Za-z0-9._-]+$') { throw "Version must be a folder name, got '$Version'." }
+if (-not $Credential) {
+    # The bundled development realm's documented administrator (see README and .devcontainer/CLAUDE.md).
+    $Credential = [pscredential]::new('admin', (ConvertTo-SecureString 'admin' -AsPlainText -Force))
+}
+
+$manifest = Read-ScreenshotManifest -Path $ManifestPath
+$screenshots = @($manifest.Screenshots)
+if ($Name) {
+    $unknown = @($Name | Where-Object { $_ -notin $screenshots.name })
+    if ($unknown.Count -gt 0) { throw "Not in the manifest: $($unknown -join ', ')." }
+    $screenshots = @($screenshots | Where-Object { $_.name -in $Name })
+}
+
+$terminal = @($screenshots | Where-Object kind -eq 'terminal')
+if ($terminal.Count -gt 0) {
+    Write-Warning "Terminal screenshots are not captured yet (#582 Phase 3); skipping: $($terminal.name -join ', ')."
+}
+
+$jobs = foreach ($screenshot in @($screenshots | Where-Object kind -eq 'portal')) {
+    foreach ($file in Get-ScreenshotFileNames -Screenshot $screenshot) {
+        [pscustomobject]@{
+            name     = $screenshot.name
+            theme    = $file.Theme
+            fileName = $file.FileName
+            profile  = $screenshot.profile
+            steps    = @($screenshot.steps)
+        }
+    }
+}
+$jobs = @($jobs)
+if ($jobs.Count -eq 0) { throw 'Nothing to capture.' }
+
+$versionPath = Join-Path $OutputPath $Version
+New-Item -ItemType Directory -Path $versionPath -Force | Out-Null
+$versionPath = (Resolve-Path -LiteralPath $versionPath).Path
+$failedPath = Join-Path $versionPath '_failed'
+if (Test-Path -LiteralPath $failedPath) { Remove-Item -LiteralPath $failedPath -Recurse -Force }
+
+$work = Join-Path ([System.IO.Path]::GetTempPath()) "jim-screenshots-$([guid]::NewGuid().ToString('n'))"
+New-Item -ItemType Directory -Path $work | Out-Null
+$configPath = Join-Path $work 'run.json'
+$resultsPath = Join-Path $work 'results.json'
+[pscustomobject]@{
+    baseUrl   = $BaseUrl
+    outputDir = $versionPath
+    profiles  = $manifest.Profiles
+    jobs      = $jobs
+} | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
+
+Write-Host "Capturing $($jobs.Count) image(s) from $BaseUrl into $versionPath ..."
+$started = Get-Date
+try {
+    # The account travels in the child's environment only, never on its command line or on disk.
+    $env:JIM_PLAYWRIGHT_MODULE = Resolve-PlaywrightModule
+    $env:JIM_CAPTURE_USERNAME = $Credential.UserName
+    $env:JIM_CAPTURE_PASSWORD = $Credential.GetNetworkCredential().Password
+    & node (Join-Path $PSScriptRoot 'screenshots' 'capture.cjs') $configPath $resultsPath
+    if ($LASTEXITCODE -ne 0) { throw "The capture driver failed (node exited $LASTEXITCODE)." }
+    $results = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
+}
+finally {
+    Remove-Item Env:JIM_PLAYWRIGHT_MODULE, Env:JIM_CAPTURE_USERNAME, Env:JIM_CAPTURE_PASSWORD -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# Every image must be exactly its profile's size: the guard against publishing a low-resolution capture.
+$problems = [System.Collections.Generic.List[string]]::new()
+foreach ($result in $results) {
+    $job = $jobs | Where-Object fileName -eq $result.fileName | Select-Object -First 1
+    if (-not $result.ok) {
+        $problems.Add("$($result.fileName): $($result.error)")
+        continue
+    }
+    $mismatch = Find-ScreenshotSizeMismatch -Path (Join-Path $versionPath $result.fileName) -ProfileName $job.profile -Profiles $manifest.Profiles
+    if ($mismatch) { $problems.Add($mismatch) }
+}
+foreach ($job in $jobs | Where-Object { $_.fileName -notin $results.fileName }) {
+    $problems.Add("$($job.fileName): no result from the capture driver.")
+}
+
+$elapsed = (Get-Date) - $started
+$written = @($results | Where-Object ok).Count
+Write-Host ''
+Write-Host ("Screenshots: {0} of {1} written in {2:mm\:ss}" -f $written, $jobs.Count, $elapsed)
+foreach ($group in $jobs | Group-Object profile) {
+    $sizeProfile = $manifest.Profiles[$group.Name]
+    $themes = ($group.Group | Group-Object theme | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '
+    Write-Host ("  {0,-14} {1}x{2}  {3}" -f $group.Name, $sizeProfile.ImageWidth, $sizeProfile.ImageHeight, $themes)
+}
+
+if ($problems.Count -gt 0) {
+    Write-Host ''
+    Write-Host "$($problems.Count) problem(s); nothing here is ready to publish until they are fixed:" -ForegroundColor Red
+    foreach ($problem in $problems) { Write-Host "  $problem" -ForegroundColor Red }
+    if (Test-Path -LiteralPath $failedPath) { Write-Host "  What each failed page looked like: $failedPath" -ForegroundColor Red }
+    exit 1
+}
+
+Write-Host "All images are at their published size. Output: $versionPath" -ForegroundColor Green

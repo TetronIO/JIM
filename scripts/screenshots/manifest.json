@@ -1,0 +1,71 @@
+{
+  "profiles": {
+    "portal": { "viewport": { "width": 1674, "height": 1046 }, "deviceScaleFactor": 2 },
+    "api-reference": { "viewport": { "width": 1794, "height": 1121 }, "deviceScaleFactor": 2 },
+    "terminal": { "viewport": { "width": 972, "height": 611 }, "deviceScaleFactor": 2, "transparent": true }
+  },
+  "screenshots": [
+    {
+      "name": "homepage",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: The dashboard", "README hero image"],
+      "steps": [{ "goto": "/" }, { "waitFor": { "text": "Quick Links" } }]
+    },
+    {
+      "name": "connected-systems-list",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: Connected Systems"],
+      "steps": [
+        { "goto": "/admin/connected-systems" },
+        { "waitFor": { "role": "link", "name": "Create Connected System" } }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-list",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: Synchronisation Rules"],
+      "steps": [
+        { "goto": "/admin/sync-rules" },
+        { "waitFor": { "role": "button", "name": "Create Synchronisation Rule" } }
+      ]
+    },
+    {
+      "name": "mvo-users",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: The Metaverse"],
+      "steps": [{ "goto": "/t/users" }, { "waitFor": { "selector": ".mud-table-root" } }]
+    },
+    {
+      "name": "activities-history",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: Operational visibility"],
+      "steps": [{ "goto": "/admin/operations?t=history" }, { "waitFor": { "text": "Execution History" } }]
+    },
+    {
+      "name": "schedules",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": ["dark", "light"],
+      "usedBy": ["junctional.io tour: Automation"],
+      "steps": [{ "goto": "/admin/operations?t=schedules" }, { "waitFor": { "role": "button", "name": "New Schedule" } }]
+    },
+    {
+      "name": "api-documentation",
+      "kind": "portal",
+      "profile": "api-reference",
+      "themes": ["dark"],
+      "usedBy": ["junctional.io tour: Full REST API"],
+      "steps": [{ "goto": "/api/reference" }, { "waitFor": { "text": "Download OpenAPI Document" } }]
+    }
+  ]
+}
