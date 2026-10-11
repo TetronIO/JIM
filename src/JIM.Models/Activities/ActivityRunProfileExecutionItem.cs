@@ -122,6 +122,15 @@ public class ActivityRunProfileExecutionItem
     public int? AttributeFlowCount { get; set; }
 
     /// <summary>
+    /// How many of the object's reference values this import could not resolve to a Connected System Object
+    /// (#959), counting values that match nothing and values that match objects of more than one Object Type
+    /// alike. Recorded under every Unresolved Reference Handling mode and whatever else the item records, so a
+    /// reference is never lost from the Activity because another error already holds <see cref="ErrorType"/>.
+    /// The values themselves stay on the Connected System Object. Null when the run left none unresolved.
+    /// </summary>
+    public int? UnresolvedReferenceCount { get; set; }
+
+    /// <summary>
     /// Denormalised summary of sync outcome types for fast list-view rendering.
     /// Comma-separated outcome types with counts, e.g., "Projected:1,AttributeFlow:12,PendingExportCreated:2".
     /// Populated during outcome tree construction — no separate maintenance path.
@@ -163,6 +172,14 @@ public class ActivityRunProfileExecutionItem
     /// </remarks>
     [NotMapped]
     public List<CausalEdge> CausalEdges { get; set; } = [];
+
+    /// <summary>
+    /// The candidates an ambiguous match found (#2052), for an AmbiguousMatch error. A hand-off buffer to the flush,
+    /// unmapped for exactly the reasons <see cref="CausalEdges"/> is: the flush writes them with the item and empties
+    /// the list, and read paths query the candidate table directly.
+    /// </summary>
+    [NotMapped]
+    public List<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; set; } = [];
 
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {

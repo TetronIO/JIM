@@ -349,7 +349,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 
 ## Related
 
-- [Backup & Disaster Recovery](backup-recovery.md) -- what to back up, how, and how to restore it.
-- [Deployment Guide](deployment.md) -- volumes, compose profiles, production readiness checklist.
-- [Configuration Reference](configuration.md) -- environment variables, including `JIM_VERSION`.
-- [Troubleshooting](troubleshooting.md) -- diagnosing startup and connectivity problems.
+- [Backup & Disaster Recovery](backup-recovery.md): what to back up, how, and how to restore it.
+- [Deployment Guide](deployment.md): volumes, compose profiles, production readiness checklist.
+- [Configuration Reference](configuration.md): environment variables, including `JIM_VERSION`.
+- [Troubleshooting](troubleshooting.md): diagnosing startup and connectivity problems.

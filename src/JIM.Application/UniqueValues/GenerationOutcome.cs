@@ -40,4 +40,18 @@ public sealed record GenerationOutcome(
     string? Value,
     long? NumericValue,
     GeneratedValueAssignment? Assignment,
-    string? FailureMessage);
+    string? FailureMessage)
+{
+    /// <summary>
+    /// For <see cref="GenerationOutcomeKind.Waiting"/> because of a value built from the generated value (Generated Value
+    /// Forms, #2023): the inputs it needs and the object has no value for yet. Empty otherwise, including when the
+    /// generated value waits for its own inputs.
+    /// </summary>
+    public IReadOnlyList<GeneratedValueFormWait> FormWaits { get; init; } = [];
+
+    /// <summary>
+    /// The candidates passed over because a value built from them was already held (Generated Value Forms, #2023), each
+    /// as "candidate: what was held and where", in the order tried. Empty when none was.
+    /// </summary>
+    public IReadOnlyList<string> SkippedCandidates { get; init; } = [];
+}

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The JIM LDAP Connector enables bi-directional synchronisation with LDAP-compliant directory services. It supports a wide range of directories and provides full lifecycle management of identity objects -- from importing existing data to provisioning new accounts and groups.
+The JIM LDAP Connector enables bi-directional synchronisation with LDAP-compliant directory services. It supports a wide range of directories and provides full lifecycle management of identity objects, from importing existing data to provisioning new accounts and groups.
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
@@ -96,7 +96,7 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 
 These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
-Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
+Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
 ## Auxiliary Object Classes
 
@@ -176,11 +176,11 @@ Every control above is available to the REST API and PowerShell:
 
 | Task | REST | PowerShell |
 |------|------|------------|
-| List the classes on offer | `GET /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
-| Set which classes are merged | `PUT /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
-| Set the Structural Carrier Class | `PUT /connected-systems/{id}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
-| Start a discovery run | `POST /connected-systems/{id}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
-| Read the last discovery run | `GET /connected-systems/{id}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| List the classes on offer | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
+| Set which classes are merged | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
+| Set the Structural Carrier Class | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
+| Start a discovery run | `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| Read the last discovery run | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
 
 Setting the merged classes replaces the whole set, so read the current one first if you mean to add to it:
 
@@ -253,7 +253,7 @@ This is deliberate. The platform LDAP client will follow a referral, but it does
 
 In practice this affects Partition discovery on Active Directory and Samba AD, where the search for the forest's domain list can return referrals alongside its results. JIM takes the results and discards the referrals.
 
-**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects today; following referrals with JIM's own credentials, so that the follow-up read is authenticated and every server followed is recorded, is planned.
+**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects.
 
 ### Container Scope
 
@@ -361,7 +361,7 @@ Automation sees the same default. `Get-JIMConnectedSystemObjectType` omits inter
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Skip Hidden Partitions | Skip Configuration, Schema, and DNS zone partitions when refreshing the hierarchy. Improves performance significantly. | `true` |
-| Create Containers as Needed | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
+| Create containers as needed? | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
 
 A naming context or crossRef partition the service account cannot read (a least-privilege account bound against an OpenLDAP server hosting several suffixes, say) is skipped rather than failing the whole hierarchy import, and named in the Worker log alongside the LDAP result code so you can tell which partition to grant access to. Only every naming context being unreadable fails the import outright.
 
@@ -371,8 +371,8 @@ A naming context or crossRef partition the service account cannot read (a least-
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
-| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2--8. | `4` |
-| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100--2000. | `1000` |
+| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2 to 8. | `4` |
+| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
 ### Directory Tuning for Large Groups (OpenLDAP)
@@ -493,7 +493,7 @@ The LDAP service account used by JIM should follow the principle of least privil
 
 - **For import only**<br /> Grant read access to the containers and attributes that JIM needs to import.
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
-- **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
+- **For container provisioning**<br /> If **Create containers as needed?** is enabled, the service account must have permission to create organisational units.
 - **For delta import**<br /> The service account needs read access to where the directory keeps its record of changes: the `uSNChanged` attribute for Active Directory and Samba AD (ordinary read access covers it), `cn=accesslog` for OpenLDAP (the access-control rule under [OpenLDAP](#openldap) below), and the changelog for 389 Directory Server and generic directories (`cn=changelog`, or the DN the root DSE's `changelog` attribute names; on 389 Directory Server the changelog and plug-in rules under [389 Directory Server](#389-directory-server) below, the second of which is what lets JIM confirm that deletions are being recorded). JIM checks this read at Schema Discovery, where a missing right is a warning, and before every Delta Import, where it is a refusal rather than a run that imports nothing.
 - **For importing deletions (Active Directory)**<br /> A Delta Import finds deletions by searching `CN=Deleted Objects,<domain DN>` with the Show Deleted Objects control, so the service account needs **List Contents**, **Read Property** and **Read Permissions** over that container. No delegation on an OU reaches it: its permissions are protected from inheritance and its owner is SYSTEM, so even a domain administrator has to take ownership before granting anything. Withholding this read is not refused by the directory: the search succeeds and returns nothing. JIM does not take that silence at face value: it reads the container's own permissions at Schema Discovery and before every Delta Import, and Read Permissions is what lets that check give a definite answer rather than could not tell. See [Active Directory](#active-directory) below for what JIM does with the answer and for the grant.
 - **For probing generated values**<br /> Read access to each attribute JIM probes (for example `sAMAccountName`, `userPrincipalName`, `uid` or `mail`) across the whole partition, not only the containers JIM imports: a probe searches from the partition root, and an account the service account cannot see is an account the probe cannot find. Where a forest-wide attribute is searched through a Global Catalog, the account needs to read it there too, which authenticated users can by default. JIM detects a probe it cannot trust, because a value it already holds fails to come back, and reports it on the synchronisation's Activity; it then checks that directory against its own records only. See [Probing for values already in use](#probing-for-values-already-in-use).
@@ -535,7 +535,7 @@ dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;o
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:CA;Reset Password;user"
 ```
 
-Leave the `organizationalUnit` lines out unless "Create Containers as Needed" is switched on.
+Leave the `organizationalUnit` lines out unless **Create containers as needed?** is switched on.
 
 The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon".
 
@@ -564,7 +564,7 @@ Apply the access-control files bound as the configuration administrator (`cn=adm
 --8<-- "test/integration/docker/openldap/acl/jim-service-account-access.ldif"
 ```
 
-Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
+Rule `{3}` is what lets JIM create organisational units when **Create containers as needed?** is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
 
 A service account is also subject to the database's search limits, which the rootDN it replaces was not. OpenLDAP applies `olcSizeLimit` (default 500 entries) across a paged search as a whole, so an import of a container holding more than 500 objects stops at the limit with "The size limit was exceeded", whatever page size the Run Profile uses. Exempt the group from the size and time limits on each suffix; every other client keeps the limits you have set:
 
@@ -618,7 +618,7 @@ The suffix rules cover import (read across the suffix), export (add, delete and 
 --8<-- "test/integration/docker/dirsrv/aci/jim-suffix-access.ldif"
 ```
 
-The commented-out rule at the end of the file is the counterpart of the OpenLDAP recipe's rule `{3}`, for "Create Containers as Needed". The ACI language has no one-level scope, so it lets JIM add an organisational unit anywhere in the suffix; leave it out if you create target OUs by hand.
+The commented-out rule at the end of the file is the counterpart of the OpenLDAP recipe's rule `{3}`, for **Create containers as needed?**. The ACI language has no one-level scope, so it lets JIM add an organisational unit anywhere in the suffix; leave it out if you create target OUs by hand.
 
 Delta Import reads `cn=changelog`, which the Retro Changelog plug-in creates with no access control at all, so out of the box only the Directory Manager reads it and a Delta Import as anyone else is refused (see [Delta Import change source checks](../configuration/activities.md#delta-import-change-source-checks)). One changelog serves every suffix on the server, so the rule names every suffix's group:
 

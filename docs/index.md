@@ -55,7 +55,7 @@ hide:
 
     ---
 
-    Fully functional without internet connectivity. No cloud dependencies -- designed for sensitive and high-assurance environments.
+    Fully functional without internet connectivity. No cloud dependencies; designed for sensitive and high-assurance environments.
 
 -   :material-puzzle:{ .lg .middle } **[Extensible Connectors](connectors/index.md)**
 

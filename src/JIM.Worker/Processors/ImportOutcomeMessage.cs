@@ -92,4 +92,77 @@ internal static class ImportOutcomeMessage
                    "or select the Object Type again.";
         }));
     }
+
+    /// <summary>
+    /// The error a Run Profile Execution Item carries when the import left references on its object unresolved
+    /// (#959). Every unresolved value is counted and broken down per attribute, and each cause present gets its own
+    /// remedy. It replaces a message that named the first value and said "there may be more", which left the
+    /// administrator to find the rest and gave no idea how many there were.
+    /// </summary>
+    /// <param name="references">
+    /// Every reference value the object left unresolved: the attribute it is on, the value, and, where the value
+    /// matched objects of more than one Object Type, the names of those types (null where it matched nothing).
+    /// Must not be empty.
+    /// </param>
+    internal static string ForUnresolvedReferences(IReadOnlyList<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)> references)
+    {
+        // Resolution runs in parallel, so the order values arrive in is not stable; sorting here keeps the message,
+        // and the value it gives as an example, the same from one run to the next.
+        var ordered = references
+            .OrderBy(r => r.AttributeName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Value, StringComparer.Ordinal)
+            .ToList();
+        var missing = ordered.Where(r => r.AmbiguousWith == null).ToList();
+        var ambiguous = ordered.Where(r => r.AmbiguousWith != null).ToList();
+        var candidateTypeNames = string.Join(", ", ambiguous
+            .SelectMany(r => r.AmbiguousWith!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
+
+        if (ordered.Count == 1)
+        {
+            var (attributeName, value, _) = ordered[0];
+            return missing.Count == 1
+                ? $"Couldn't resolve a reference on {attributeName} to a Connected System Object: {value}. {ScopeRemedy(1)}"
+                : $"A reference value ({value}) matches objects of more than one Object Type ({candidateTypeNames}), and attribute " +
+                  $"'{attributeName}' does not declare which Object Type it references, so the reference cannot be resolved. {SchemaRemedy}";
+        }
+
+        var breakdown = string.Join(", ", ordered
+            .GroupBy(r => r.AttributeName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => $"{group.Count():N0} on {group.Key}"));
+
+        var sentences = new List<string> { $"Couldn't resolve {ordered.Count:N0} references to Connected System Objects ({breakdown})." };
+        if (missing.Count > 0)
+        {
+            sentences.Add(ambiguous.Count == 0
+                ? $"For example: {missing[0].Value}."
+                : $"{missing.Count:N0} {Matches(missing.Count)} no Connected System Object, for example {missing[0].Value}.");
+            sentences.Add(ScopeRemedy(missing.Count));
+        }
+
+        if (ambiguous.Count > 0)
+        {
+            var whichMatch = missing.Count == 0 ? "Each matches" : $"{ambiguous.Count:N0} {Matches(ambiguous.Count)}";
+            sentences.Add($"{whichMatch} objects of more than one Object Type ({candidateTypeNames}) on an attribute that does not declare " +
+                          "which Object Type it references.");
+            sentences.Add(SchemaRemedy);
+        }
+
+        sentences.Add("The Connected System Object lists every unresolved value.");
+        return string.Join(" ", sentences);
+    }
+
+    /// <summary>
+    /// Both ways an object can be out of scope (#1255): its Container was never selected, or a Container excludes it.
+    /// The second is the harder to spot, because the branch above the referenced object is selected and looks right.
+    /// </summary>
+    private static string ScopeRemedy(int count) => count == 1
+        ? "Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it."
+        : "Make sure that Container Scope for the Connected System includes the locations of the referenced objects, and that no Container excludes them.";
+
+    private const string SchemaRemedy =
+        "Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
+
+    private static string Matches(int count) => count == 1 ? "matches" : "match";
 }

@@ -4,7 +4,7 @@ title: API
 
 # API
 
-JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
+JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the Metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
 ## Where to find what
 
@@ -18,9 +18,39 @@ JIM exposes a REST API for programmatic access to all identity management operat
 
 The interactive API reference is the canonical, up-to-date specification of every endpoint. The pages in this section cover the cross-cutting concerns of using the API itself; the per-object behaviour (what a Connected System is, how a Schedule works) lives in the Configuration section.
 
+## Resource groups
+
+The interactive API reference groups its endpoints by resource. Each group, and the page that explains what it manages:
+
+| Resource group | What it covers |
+|----------------|----------------|
+| Activities | [Activities](../configuration/activities.md), their items and their progress (`/api/v1/activities`) |
+| ApiKeys | The [API keys](../configuration/api-keys.md) scripts and integrations authenticate with (`/api/v1/apikeys`) |
+| Auth | The OIDC settings a client needs before it can sign in (`/api/v1/auth/config`); unauthenticated |
+| Certificates | [Trusted Certificates](../configuration/certificates.md) for connections to Connected Systems (`/api/v1/certificates`) |
+| ExampleData | Example Data templates and sets, for filling a test instance with realistic objects (`/api/v1/example-data`) |
+| FeatureFlags | Turning [Preview features](../administration/preview-features.md) on and off (`/api/v1/features`) |
+| FileSystem | Browsing the files a connector can read inside the container, such as the [File Connector](../connectors/jim-file-connector.md)'s import files (`/api/v1/filesystem`) |
+| GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
+| Health | Health, readiness, liveness and version probes for load balancers and orchestrators (`/api/v1/health`); unauthenticated, and answering for the web tier only |
+| History | Counting and clearing old change history and deleted-object records (`/api/v1/history`) |
+| Logs | Reading JIM's [service logs](../administration/configuration.md#logging) (`/api/v1/logs`) |
+| Metaverse | The [Metaverse](../configuration/metaverse.md) schema, Metaverse Objects, [Attribute Priority](../concepts/attribute-priority.md) and pending deletions (`/api/v1/metaverse`) |
+| PasswordSynchronisation | The [Password Synchronisation queue](../concepts/passwords.md#watching-the-queue) (`/api/v1/password-synchronisation`) |
+| PredefinedSearches | [Predefined Searches](../configuration/predefined-searches.md) and their criteria (`/api/v1/predefined-searches`) |
+| Previews | Reading and cancelling a [Configuration Change Preview](../configuration/configuration-changes.md) (`/api/v1/previews`) |
+| ScheduleExecutions | [Schedule Executions](../configuration/schedules.md#executions): watching and cancelling runs (`/api/v1/schedule-executions`) |
+| Schedules | [Schedules](../configuration/schedules.md), and running one on demand (`/api/v1/schedules`) |
+| Security | [Roles](../configuration/roles.md) and who holds them (`/api/v1/security`) |
+| ServiceSettings | [Service Settings](../configuration/service-settings.md) (`/api/v1/service-settings`) |
+| Synchronisation | [Connected Systems](../configuration/connected-systems.md), the objects in each Connector Space, [Run Profiles](../configuration/run-profiles.md), [Synchronisation Rules](../configuration/synchronisation-rules.md), [Data Flow](../configuration/data-flow.md) and Pending Exports (`/api/v1/synchronisation`) |
+| System | [Service Health](../configuration/operations.md#service-health) for the Worker and the Scheduler, and resetting an instance (`/api/v1/system`) |
+| UserInfo | The signed-in user (`/api/v1/userinfo`) |
+| WorkerTasks | The worker's task queue, and cancelling a task (`/api/v1/worker-tasks`) |
+
 ## Versioning
 
-The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. Future versions will appear under `/api/v2/` etc., with a deprecation period for the previous version.
+The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. A new major version gets its own prefix (`/api/v2/` and so on), and the version before it stays available through a deprecation period.
 
 ## Breaking changes
 
@@ -28,7 +58,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.16.0**
 
-- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) now ends `CompleteWithError`, naming the failed steps in `errorMessage`, where it previously ended `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
+- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) ends `CompleteWithError`, naming the failed steps in `errorMessage`; v0.15.0 and earlier ended it `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
 
 **v0.15.0**
 
@@ -41,7 +71,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **v0.13.0**
 
-- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is now serialised as `"SynchronisationRule"` (previously `"SyncRule"`) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
+- **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is serialised as `"SynchronisationRule"` (`"SyncRule"` in v0.12.0 and earlier) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
 
 ## Authentication
 

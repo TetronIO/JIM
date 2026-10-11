@@ -127,6 +127,13 @@ public sealed record GenerationRequest
     public bool StickyOnly { get; init; }
 
     /// <summary>
+    /// Works out each candidate's forms (Generated Value Forms, #2023): the values built from this generated value that
+    /// are checked with it, all or nothing, before it is issued. Null when there are none (an export-mode request, or a
+    /// generated value nothing checked is built from), and the candidate alone is checked.
+    /// </summary>
+    public IGeneratedValueFormSource? FormSource { get; init; }
+
+    /// <summary>
     /// Opaque caller state, returned unchanged on the resulting <see cref="GenerationOutcome"/> so the caller
     /// can correlate an outcome back to whatever it is processing (for example, the page item the request came
     /// from) without the service needing to know its shape.

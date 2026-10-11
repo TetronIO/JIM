@@ -294,6 +294,123 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         }
     }
 
+    // ---- Generated Value Forms (#2023): values built from the generated value checked with it ----
+
+    private const string AccountNameFromEmployeeId = "Lower(mv[\"EmployeeId\"])";
+
+    [Test]
+    public async Task FullSync_EmailBuiltFromTheGeneratedAccountNameAlreadyHeld_IssuesTheNextCandidateWithFreeValuesAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedMetaverseObjectHolding(ctx.Email, "e1@corp.local");
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single(m => Text(m, ctx.AccountName) != null);
+        var skipped = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped)
+            .Select(o => o.DetailMessage)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e11"), "e1 is passed over: the Email built from it is already held");
+            Assert.That(skipped, Is.EqualTo(new[] { "Account Name: e1: Email (built from Account Name) is already held by another Metaverse Object" }),
+                "the object's item says which candidate was passed over, and why");
+            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("e11@corp.local"));
+            Assert.That(Text(mvo, ctx.Upn), Is.EqualTo("e11@corp.local"));
+        }
+    }
+
+    [Test]
+    public async Task FullSync_EmailsKeepUniqueOff_IsNotCheckedAndDoesNotHoldTheGeneratedValueBackAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        ctx.EmailMapping.KeepUnique = false;
+        await DbContext.SaveChangesAsync();
+        SeedMetaverseObjectHolding(ctx.Email, "e1@corp.local");
+        SeedHr(ctx, "E1", accountName: null);
+
+        await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single(m => Text(m, ctx.AccountName) != null);
+        Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e1"),
+            "the switch is per value: the User Principal Name built through Email is still checked, and is free");
+    }
+
+    [Test]
+    public async Task FullSync_EmailNeedsARegionTheObjectHasNot_AccountNameWaitsAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountNameAndRegion, withUpn: false, withAd: true, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var waiting = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting)
+            .Select(o => o.DetailMessage)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(mvo, ctx.AccountName), Is.Null, "no Account Name until the Email built from it can be worked out");
+            Assert.That(waiting, Is.EqualTo(new[] { "Account Name: Region (needed by Email)" }), "the object's item says what it waits for");
+            Assert.That(activity.WarningMessage, Does.Contain("1 Account Name value").And.Contain("Region (needed by Email)"),
+                "the run says so too, for an object with no other change to record");
+            Assert.That(activity.RunProfileExecutionItems.Where(r => r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty,
+                "waiting is not an error");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_EmailExpressionFailsForTheCandidate_FailsTheObjectWithoutIssuingAnAccountNameAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: "mv[\"Account Name\"] + @@@", withUpn: false, generatedAccountNameBase: AccountNameFromEmployeeId);
+        SeedHr(ctx, "E1", accountName: null);
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        var errors = activity.RunProfileExecutionItems.Where(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors, Has.Count.EqualTo(1));
+            Assert.That(errors.Single().ErrorMessage, Does.Contain("'Email'").And.Contain("Synchronisation Rule 'HR Import'"));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values, Is.Empty, "nothing is issued for a candidate whose Email cannot be worked out");
+        }
+    }
+
+    /// <summary>
+    /// An export expression built from the generated Account Name that also reads Region, which AD supplies: Account Name
+    /// waits for it, and AD's synchronisation flowing Region marks HR's object so its next delta generates Account Name.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_ExportExpressionBuiltFromAccountNameWaitsForAnotherSystemsInput_IsRetriedOnceItArrivesAsync()
+    {
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: false, withAd: true, withDirectoryExport: true,
+            generatedAccountNameBase: AccountNameFromEmployeeId,
+            directoryUpnExpression: "mv[\"Account Name\"] + \"@\" + Lower(mv[\"Region\"]) + \".corp.local\"");
+        var hrCso = SeedHr(ctx, "E1", accountName: null);
+        SeedAd(ctx, "E1", "EMEA");
+
+        await RunFullSyncAsync(ctx.Hr);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(Text(mvo, ctx.AccountName), Is.Null, "precondition: the userPrincipalName built from Account Name needs Region");
+
+        await RunFullSyncAsync(ctx.Ad!);
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "AD flowed Region, which a value built from HR's generated Account Name reads");
+
+        await RunDeltaSyncAsync(ctx.Hr);
+        Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("e1"));
+    }
+
+    private void SeedMetaverseObjectHolding(MetaverseAttribute attribute, string value)
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow, Type = attribute.MetaverseObjectTypes.First() };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = value, MetaverseObject = mvo });
+        SyncRepo.SeedMetaverseObject(mvo);
+    }
+
     // ---- Run-start cycle ----
 
     [Test]
@@ -585,7 +702,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         MissingInputBehaviour emailMissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
         string? generatedAccountNameBase = null,
         bool adContributesEmail = false,
-        bool withOrdinaryFailingMapping = false)
+        bool withOrdinaryFailingMapping = false,
+        string? directoryUpnExpression = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -701,7 +819,21 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
 
             var export = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export", enableProvisioning: true);
             ToAttribute(export, directoryMail, email);
-            ToAttribute(export, directoryUpn, upn);
+            if (directoryUpnExpression == null)
+            {
+                ToAttribute(export, directoryUpn, upn);
+            }
+            else
+            {
+                export.AttributeFlowRules.Add(new SyncRuleMapping
+                {
+                    SyncRule = export,
+                    SyncRuleId = export.Id,
+                    TargetConnectedSystemAttribute = directoryUpn,
+                    TargetConnectedSystemAttributeId = directoryUpn.Id,
+                    Sources = { new SyncRuleMappingSource { Order = 0, Expression = directoryUpnExpression } }
+                });
+            }
             await DbContext.SaveChangesAsync();
         }
 

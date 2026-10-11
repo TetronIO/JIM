@@ -55,8 +55,21 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>How many Metaverse attributes changed alongside a join, projection or disconnection.</summary>
     public int? AttributeFlowCount { get; set; }
 
+    /// <summary>
+    /// How many of the object's reference values the import could not resolve to a Connected System Object, under
+    /// any Unresolved Reference Handling and whatever error the item carries; null when none were left unresolved.
+    /// The values themselves are on the Connected System Object.
+    /// </summary>
+    public int? UnresolvedReferenceCount { get; set; }
+
     /// <summary>Outcome types with counts, for example <c>Projected:1,AttributeFlow:12</c>.</summary>
     public string? OutcomeSummary { get; set; }
+
+    /// <summary>
+    /// For an <c>AmbiguousMatch</c>, the objects the match found (#2052): up to 10, ordered by display name, each with
+    /// whether it still exists and what is joined to it now. Empty for any other item.
+    /// </summary>
+    public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
 
     /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.
@@ -79,6 +92,7 @@ public class ActivityRunProfileExecutionItemDetailDto
             ErrorMessage = entity.ErrorMessage,
             ErrorStackTrace = entity.ErrorStackTrace,
             AttributeFlowCount = entity.AttributeFlowCount,
+            UnresolvedReferenceCount = entity.UnresolvedReferenceCount,
             OutcomeSummary = entity.OutcomeSummary
         };
     }

@@ -130,6 +130,7 @@ nav:
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
+      - Causality: configuration/causality.md
       - API Keys: configuration/api-keys.md
       - Certificates: configuration/certificates.md
       - Service Settings: configuration/service-settings.md
@@ -172,6 +173,7 @@ nav:
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
+      - Data Flow: powershell/data-flow.md
       - Metaverse: powershell/metaverse.md
       - Password Synchronisation: powershell/password-synchronisation.md
       - Predefined Searches: powershell/predefined-searches.md

@@ -3,6 +3,8 @@
 
 using JIM.Models.Logic;
 
+using JIM.Models.Staging;
+
 namespace JIM.Models.Sync;
 
 /// <summary>
@@ -46,6 +48,13 @@ public sealed class PendingGeneratedValue
     /// The Connected System Object whose Attribute Flow recorded this request.
     /// </summary>
     public Guid? SourceConnectedSystemObjectId { get; init; }
+
+    /// <summary>
+    /// The Connected System Object itself, as it stood when it recorded this request: what the values built from the
+    /// generated value on the same Synchronisation Rule read when they are worked out with a candidate (Generated Value
+    /// Forms, #2023), including when the request reaches the run through another system's re-election.
+    /// </summary>
+    public ConnectedSystemObject? SourceConnectedSystemObject { get; init; }
 
     /// <summary>
     /// The generated mapping's base expression, evaluated and inbound-processed exactly as an ordinary expression

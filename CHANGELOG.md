@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
@@ -35,7 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
 - ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
 - ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
+- ✨ JIM now issues a generated Account Name only when the Email and User Principal Name built from it are free too, waiting while one needs an input the person doesn't have yet. Values issued before this release are left as they are. (#2023)
 - ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
+- ✨ An execution item's Lineage now shows what its change went on to cause in later runs, down to the accounts and Groups it reached, and where each branch stopped or what it waits for. Check again appears only while something is still to happen. (#1811)
+- ✨ The REST API and PowerShell can read what caused an Activity's execution item and what it went on to cause, with exact counts and where each branch ended (`Get-JIMActivityExecutionItem -Causes` and `-Consequences`, `Get-JIMCausalCohortMember`). (#1811)
+- ✨ An **Ambiguous Match** now lists the Metaverse Objects it found on the Activity item, each linked, with the value it matched on and what it's joined to; REST, `Get-JIMActivityExecutionItem` and Sync Preview return them too. (#2052)
+- ✨ A connection joined by an Object Matching Rule now says which rule matched and on what value, on the Connections tab, in REST and in `Get-JIMMetaverseObjectConnection`. (#2052)
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 
 ### Changed
@@ -46,13 +52,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
 - 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
 - 🔄 Object Matching Rules created through the REST API or PowerShell now ignore case by default, as the portal always has; existing rules are unchanged. (#2051)
+- 🔄 An object whose values match different Metaverse Objects, such as two email addresses held by two people, is now an **Ambiguous Match** instead of joining whichever value happened to be checked first. (#2052)
 - 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
 - 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 - 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
 - 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
+- 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 
 ### Fixed
+
+- 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 
 - 🐛 A Connected System's tabs fit on one line at common laptop widths instead of scrolling with Details and Danger Zone cut off, and a Schedule's trigger writes every time the same way ("Sun at 1:00 AM", where some read "Sun at 1am").
 - 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` now create and retime Schedules from the Specific Times and Interval patterns, which the API used to refuse or ignore; a Sunday-only `New-JIMSchedule` no longer runs every day.
@@ -107,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 - 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
 - 🐛 Deleting a Metaverse Object now reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**; previously the deletion recorded nothing about those accounts, so one JIM no longer manages looked untouched. (#1811)
+- 🐛 An Object Matching Rule that can't be worked out for an object now stops it with an **Object Matching Rule Failed** error naming the rule, instead of trying the next rule and, with none left, projecting a duplicate identity. (#2052)
 - 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
 
 ### Performance

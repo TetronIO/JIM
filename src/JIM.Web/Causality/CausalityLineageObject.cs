@@ -55,6 +55,18 @@ public sealed class CausalityLineageObject
     public IReadOnlyList<CausalityLineageCard> Cards { get; init; } = [];
 
     /// <summary>
+    /// What later runs did to the object, and where each branch through it stopped (#1811): the After this run
+    /// section, oldest first. Empty where the item caused nothing here, or its consequences have not loaded yet.
+    /// </summary>
+    public IReadOnlyList<CausalityLineageConsequence> Consequences { get; init; } = [];
+
+    /// <summary>
+    /// How many objects a role head speaks for, where the consequences reached a cohort of them ("Groups 4"); null for a
+    /// single object and for the objects this run itself reached.
+    /// </summary>
+    public int? MemberCount { get; init; }
+
+    /// <summary>
     /// The chain endings that close under this object, one per distinct resolution: the walk's
     /// terminal states rendered as quiet footers, never warnings.
     /// </summary>

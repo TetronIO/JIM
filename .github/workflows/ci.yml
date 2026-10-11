@@ -63,6 +63,17 @@ jobs:
     - name: Test .NET
       run: dotnet test JIM.sln --no-build --verbosity normal
 
+    # The docs' REST routes (ACC-3) and the API resource groups docs/api/index.md lists (COV-4) are checked
+    # against the OpenAPI document, which only a build can produce, so they run here rather than with the
+    # other coverage rules in changelog-lint. Generation reuses the build above and takes seconds.
+    - name: Check the docs' REST routes against the OpenAPI document
+      shell: pwsh
+      run: |
+        $openApi = Join-Path $env:RUNNER_TEMP 'openapi-v1.json'
+        pwsh -File ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath $openApi
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        pwsh -File ./scripts/Test-DocsCoverage.ps1 -OpenApiPath $openApi -Rule ACC-3,COV-4
+
     # Every source file must carry the Tetron copyright notice. .editorconfig
     # only ever covered .cs (and only as a suggestion), so this is the gate for
     # .razor, .ps1, .psm1, .psd1 and .sh.

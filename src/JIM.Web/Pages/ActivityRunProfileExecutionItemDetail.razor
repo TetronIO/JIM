@@ -210,7 +210,7 @@
                     else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
                     {
                         @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
-                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                        @if (RecordsRejection())
                         {
                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                 <TooltipContent>
@@ -302,7 +302,11 @@
                                 Timestamp="@_activity?.Executed"
                                 Chain="_causalChain"
                                 DeletionPolicySnapshot="_deletionPolicySnapshot"
-                                IsSynchronisationRun="IsSyncContext()" />
+                                IsSynchronisationRun="IsSyncContext()"
+                                Consequences="_consequences"
+                                ConsequencesLoading="_consequencesLoading"
+                                OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
+                                LoadConsequenceMembers="LoadConsequenceMembersAsync" />
             </div>
 
             @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
@@ -324,6 +328,50 @@
         }
 
 
+
+        @* ─── What went wrong ─── *@
+        @* Before what changed: an import's attribute table can run to thousands of rows, and an error below it was
+           an error nobody scrolled to. An error is part of the item's own story, so it stays on this tab; the Pending
+           Export it produced is a separate subject and has its own tab. *@
+        @if (_activityRunProfileExecutionItem.ErrorType is { } errorType
+             and not ActivityRunProfileExecutionItemErrorType.NotSet
+             && _unresolvedReferenceTone != UnresolvedReferenceTone.Error)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3">
+                Error Details
+            </MudText>
+
+            <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                    @Helpers.GetErrorTypeChipLabel(errorType)
+                </MudText>
+                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
+                {
+                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
+                }
+            </MudAlert>
+
+            <MatchCandidatesPanel Candidates="@_matchCandidates" />
+
+            <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
+        }
+
+        @* References the import left unresolved (#959), listed with the likely cause of each. Red where the run
+           counted them as the item's error, in place of the Error Details above; amber where it left them unresolved
+           without doing so. Export items keep their Error Details: what an export could not resolve is a Metaverse
+           reference, which this section does not describe. *@
+        @if (_unresolvedReferenceTone != UnresolvedReferenceTone.None && _connectedSystemHeader != null)
+        {
+            <UnresolvedReferencesSection ConnectedSystemId="@_connectedSystemHeader.Id"
+                                         ConnectedSystemObjectId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
+                                         IsRunContext="true"
+                                         Tone="@_unresolvedReferenceTone"
+                                         RunCount="@_activityRunProfileExecutionItem.UnresolvedReferenceCount"
+                                         ItemErrorType="@_activityRunProfileExecutionItem.ErrorType"
+                                         RecordedMessage="@_activityRunProfileExecutionItem.ErrorMessage"
+                                         ObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                                         Class="mb-5" />
+        }
 
                     @* Attribute Changes Section - hide when:
                        - deletions (no attribute changes to show)
@@ -422,27 +470,6 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                             </MudAlert>
                         }
 
-                        @* An error is part of the item's own story, so it stays here; the Pending Export it
-                           produced is a separate subject and has its own tab. *@
-                        @if (_activityRunProfileExecutionItem.ErrorType is { } errorType
-                             and not ActivityRunProfileExecutionItemErrorType.NotSet)
-                        {
-                            <MudText Typo="Typo.h6" Class="mb-3">
-                                Error Details
-                            </MudText>
-
-                            <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
-                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                    @Helpers.GetErrorTypeChipLabel(errorType)
-                                </MudText>
-                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
-                                {
-                                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
-                                }
-                            </MudAlert>
-
-                            <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
-                        }
         </MudTabPanel>
 
         @* Shown only where there is one: an empty tab invites a click that answers nothing. *@
@@ -483,6 +510,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
 
+    // How the Unresolved References section presents itself (#959); None outside an import, and where the run left
+    // every reference resolved.
+    private UnresolvedReferenceTone _unresolvedReferenceTone;
+
     // The Identity this item acted on, looked up once by id (#1495). A header answers both of the panel's
     // questions in one read: it carries the type plural name the Metaverse Object route is keyed on, and its
     // absence is what proves the Identity has since been deleted.
@@ -500,6 +531,15 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // The upward causal chain (#1223): why the changes on this item happened. Loaded here rather than in
     // the panel so the panel stays a rendering component with no data access of its own.
     private CausalChain? _causalChain;
+
+    // The downward walk (#1811): what this item went on to cause. Read after the first render, so the panel never waits
+    // on it, and read again only when the reader asks to check while a branch is waiting.
+    private CausalConsequences? _consequences;
+    private bool _consequencesLoading;
+    private Guid? _consequencesReadFor;
+
+    /// <summary>The objects an ambiguous match found (#2052); empty for any other item.</summary>
+    private IReadOnlyList<MatchCandidateDetail> _matchCandidates = [];
 
     // Decision-time deletion policy snapshot (#119): the deletion rule context panels render from the facts
     // recorded when the decision was made, never from the object type's current configuration, so the
@@ -640,6 +680,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_consequencesReadFor != Id)
+        {
+            _consequences = null;
+            _consequencesReadFor = null;
+        }
+
         using var jim = JimFactory.Create();
         _activityRunProfileExecutionItem = await jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
         if (_activityRunProfileExecutionItem == null)
@@ -649,6 +695,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+        _unresolvedReferenceTone = IsImportContext()
+            ? UnresolvedReferenceDisplay.ToneFor(_activityRunProfileExecutionItem.ErrorType, _activityRunProfileExecutionItem.UnresolvedReferenceCount)
+            : UnresolvedReferenceTone.None;
 
         // Parse the decision-time deletion policy snapshot (#119); null for legacy records (which fall
         // back to current-configuration rendering) and for items with no deletion rule evaluation.
@@ -723,6 +772,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         await LoadLivePendingExportIdsAsync(jim);
         await LoadProvisionedConnectedSystemObjectNamesAsync(jim);
 
+        _matchCandidates = ActivityRunProfileExecutionItemMatchCandidate.AreRecordedFor(_activityRunProfileExecutionItem.ErrorType)
+            ? await jim.Activities.GetMatchCandidatesAsync(Id)
+            : [];
+
         // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.
         if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
@@ -787,6 +840,57 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
             }
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Every render, not only the first: the page is reused across navigations between items, and each item's walk
+        // is read once, after its panel is already on screen.
+        if (_activityRunProfileExecutionItem is not { } item || _consequencesReadFor == Id || _consequencesLoading
+            || !ShowsCausality(item))
+            return;
+
+        await ReadConsequencesAsync();
+    }
+
+    /// <summary>
+    /// Reads what this item went on to cause, a reading taken now: consequences can still be happening.
+    /// </summary>
+    private async Task ReadConsequencesAsync()
+    {
+        var itemId = Id;
+        _consequencesLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var consequences = await jim.Activities.GetCausalConsequencesAsync(itemId);
+            // A navigation to another item while this one was being read must not show this one's consequences there.
+            if (itemId == Id)
+            {
+                _consequences = consequences;
+                _consequencesReadFor = itemId;
+            }
+        }
+        finally
+        {
+            _consequencesLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task CheckConsequencesAgainAsync()
+    {
+        _consequences = null;
+        _consequencesReadFor = null;
+        return ReadConsequencesAsync();
+    }
+
+    private async Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?> LoadConsequenceMembersAsync(string cohortKey, int page, string? search)
+    {
+        using var jim = JimFactory.Create();
+        return await jim.Activities.GetCausalConsequenceCohortMembersAsync(Id, cohortKey, page,
+            JIM.Application.Servers.ActivityServer.CausalConsequenceMemberPageSize, search);
     }
 
     /// <summary>
@@ -877,6 +981,16 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullSynchronisation
         or ConnectedSystemRunType.DeltaSynchronisation;
+    }
+
+    /// <summary>
+    /// Whether the parent activity is an import Run Profile, the only kind that records unresolved references on the
+    /// Connected System Object it imported.
+    /// </summary>
+    private bool IsImportContext()
+    {
+        return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullImport
+            or ConnectedSystemRunType.DeltaImport;
     }
 
     /// <summary>
@@ -979,6 +1093,16 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _connectedSystemHeader?.Name);
 
     /// <summary>
+    /// Whether the item's error means the object was rejected rather than imported. An unresolved reference never
+    /// rejects one (#959): the object is added or updated and only its references wait, so where it has since gone, it
+    /// was deleted, not rejected.
+    /// </summary>
+    private bool RecordsRejection() =>
+        _activityRunProfileExecutionItem?.ErrorType is { } errorType
+        and not ActivityRunProfileExecutionItemErrorType.NotSet
+        and not ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+
+    /// <summary>
     /// Returns the appropriate label for the object field based on context.
     /// </summary>
     private string GetObjectFieldLabel()
@@ -1001,7 +1125,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem?.ExternalIdSnapshot))
         {
             // If there's an error (rejected), show "External ID (from source data)" for clarity
-            if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            if (RecordsRejection())
                 return "External ID (from source data)";
 
             return "External ID";
@@ -1015,9 +1139,45 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         // The Connected System Object's external ID is rendered as a separate chip immediately
         // below this summary line, so we deliberately omit it from the prose to avoid duplication.
+        if (_unresolvedReferenceTone == UnresolvedReferenceTone.Error)
+            return GetUnresolvedReferenceStatusDescription();
+
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return "An error occurred while synchronising the Connected System Object.";
 
+        var description = GetOperationStatusDescription();
+        return _unresolvedReferenceTone == UnresolvedReferenceTone.Warning
+            ? $"{description} {GetUnresolvedReferenceClause()} could not be linked to Connected System Objects."
+            : description;
+    }
+
+    /// <summary>
+    /// The summary line for an import whose unresolved references are the item's error (#959): what the import did to
+    /// the object, then what it could not do.
+    /// </summary>
+    private string GetUnresolvedReferenceStatusDescription()
+    {
+        var typeName = _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+                       ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot
+                       ?? "object";
+        var imported = _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            ObjectChangeType.Added => "was added to the Connector Space",
+            ObjectChangeType.Updated => "was updated",
+            _ => "was imported"
+        };
+
+        return $"The {typeName} {imported}, but {GetUnresolvedReferenceClause().ToLowerInvariant()} could not be linked to Connected System Objects.";
+    }
+
+    /// <summary>"3 of its references", or "Some of its references" for an item recorded before the count existed.</summary>
+    private string GetUnresolvedReferenceClause() =>
+        _activityRunProfileExecutionItem?.UnresolvedReferenceCount is { } count
+            ? $"{count:N0} of its references"
+            : "Some of its references";
+
+    private string GetOperationStatusDescription()
+    {
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations

@@ -97,6 +97,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             ErrorMessage = "the connector rejected the change",
             ErrorStackTrace = "at Foo.Bar()",
             AttributeFlowCount = 3,
+            UnresolvedReferenceCount = 4,
             OutcomeSummary = "Updated 3 attributes",
             PendingExportId = pendingExportId,
             DeletionPolicySnapshotJson = snapshotJson
@@ -155,6 +156,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRpei.ErrorMessage, Is.EqualTo("the connector rejected the change"));
             Assert.That(storedRpei.ErrorStackTrace, Is.EqualTo("at Foo.Bar()"));
             Assert.That(storedRpei.AttributeFlowCount, Is.EqualTo(3));
+            Assert.That(storedRpei.UnresolvedReferenceCount, Is.EqualTo(4));
             Assert.That(storedRpei.OutcomeSummary, Is.EqualTo("Updated 3 attributes"));
             Assert.That(storedRpei.PendingExportId, Is.EqualTo(pendingExportId));
             Assert.That(storedRpei.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson));

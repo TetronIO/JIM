@@ -980,6 +980,29 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithUnresolvedReferences_ReturnsTheCountAsync()
+    {
+        // #959: the count travels on every item it applies to, including one whose error slot holds another error,
+        // so a script reading the item learns about the references as the portal does.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Added,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            ErrorMessage = "Failed to parse 'startDate' as DateTime.",
+            UnresolvedReferenceCount = 2
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.UnresolvedReferenceCount, Is.EqualTo(2));
+    }
+
+    [Test]
     public async Task GetActivityExecutionItemAsync_WithNonExistentId_ReturnsNotFoundAsync()
     {
         var itemId = Guid.NewGuid();
@@ -1004,6 +1027,89 @@ public class ActivitiesControllerTests
 
         _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
     }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_AmbiguousMatch_ListsEachCandidateWithWhetherItExistsAndWhatIsJoinedToItAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch
+        };
+        var live = Candidate(Guid.NewGuid(), "Ann Bloggs", ordinal: 0);
+        var deleted = Candidate(Guid.NewGuid(), "Zoe Bloggs", ordinal: 1);
+        var joinedCsoId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetMatchCandidatesAsync(item.Id)).ReturnsAsync([live, deleted]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        metaverse.Setup(r => r.GetExistingMetaverseObjectTypePluralNamesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [live.CandidateId] = "People" });
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetExistingConnectedSystemObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
+        connectedSystems.Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync([new ConnectedSystemObject
+            {
+                Id = joinedCsoId,
+                ConnectedSystemId = 7,
+                ConnectedSystem = new ConnectedSystem { Id = 7, Name = "Corporate Directory" },
+                Type = new ConnectedSystemObjectType { Name = "user" },
+                MetaverseObjectId = live.CandidateId
+            }]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        var candidates = dto!.MatchCandidates;
+        Assert.That(candidates.Select(c => c.CandidateId), Is.EqualTo(new[] { live.CandidateId, deleted.CandidateId }));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates[0].Exists, Is.True);
+            Assert.That(candidates[0].DisplayNameSnapshot, Is.EqualTo("Ann Bloggs"));
+            Assert.That(candidates[0].CandidateKind, Is.EqualTo(MatchCandidateKind.MetaverseObject));
+            Assert.That(candidates[0].MatchedValue, Is.EqualTo("48213"));
+            Assert.That(candidates[0].ObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(candidates[0].ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(candidates[0].CandidateTotal, Is.EqualTo(2));
+            Assert.That(candidates[0].JoinedObjects.Select(j => j.ConnectedSystemObjectId), Is.EqualTo(new[] { joinedCsoId }));
+            Assert.That(candidates[0].JoinedObjects[0].ConnectedSystemName, Is.EqualTo("Corporate Directory"));
+            Assert.That(candidates[1].Exists, Is.False);
+            Assert.That(candidates[1].JoinedObjects, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithAnErrorThatRecordsNoCandidates_DoesNotAskForThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+
+        Assert.That((result?.Value as ActivityRunProfileExecutionItemDetailDto)?.MatchCandidates, Is.Empty);
+        _mockActivityRepo.Verify(r => r.GetMatchCandidatesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    private static ActivityRunProfileExecutionItemMatchCandidate Candidate(Guid id, string name, int ordinal) => new()
+    {
+        CandidateKind = MatchCandidateKind.MetaverseObject,
+        CandidateId = id,
+        DisplayNameSnapshot = name,
+        TypeNameSnapshot = "Person",
+        MatchedValue = "48213",
+        ObjectMatchingRuleId = 3,
+        ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeNumber",
+        Ordinal = ordinal,
+        CandidateTotal = 2
+    };
 
     #endregion
 

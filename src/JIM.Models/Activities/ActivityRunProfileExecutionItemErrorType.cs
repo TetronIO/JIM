@@ -44,7 +44,9 @@ public enum ActivityRunProfileExecutionItemErrorType
     UnexpectedAttribute,
     /// <summary>
     /// An attribute contains a reference to another Connected System Object that could not be found.
-    /// This may occur when the referenced object is outside the configured container scope.
+    /// This may occur when the referenced object is outside the configured container scope. On import, one error
+    /// covers every reference the object was left with; the item's <c>UnresolvedReferenceCount</c> records how many,
+    /// and is set even when another error holds the item's error slot (#959).
     /// </summary>
     UnresolvedReference,
     /// <summary>
@@ -202,5 +204,14 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// classify such rejections (<c>SupportsUniquenessRejectionClassification</c>); a data conflict for an
     /// administrator to resolve, not a JIM defect, so it does not count as an unhandled error.
     /// </summary>
-    UniqueValueAlreadyInUse
+    UniqueValueAlreadyInUse,
+
+    /// <summary>
+    /// An Object Matching Rule could not be worked out for the object (#2052): its expression threw, its result could
+    /// not be converted to the Metaverse attribute's type, or the rule's shape cannot be compared. The object was
+    /// neither joined nor projected (on export, not provisioned), so a broken rule cannot flood the Metaverse with
+    /// duplicate identities. The message names the rule and the fault; the object is retried on the next
+    /// synchronisation.
+    /// </summary>
+    ObjectMatchingRuleFailed
 }

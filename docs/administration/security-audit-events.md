@@ -51,7 +51,7 @@ Each returned Activity for a failure carries its aggregation window start, first
 
 ## See also
 
-- [Activities](../configuration/activities.md) -- the general Activity system this feature is built on
-- [Rate Limiting](../api/rate-limiting.md) -- the primary throttle in front of authentication attempts
-- [Security Headers](security-headers.md) -- the other application-layer control from the same security assessment
-- [Service Settings](../configuration/service-settings.md) -- how to change the retention period
+- [Activities](../configuration/activities.md): the general Activity system this feature is built on
+- [Rate Limiting](../api/rate-limiting.md): the primary throttle in front of authentication attempts
+- [Security Headers](security-headers.md): the other application-layer control from the same security assessment
+- [Service Settings](../configuration/service-settings.md): how to change the retention period

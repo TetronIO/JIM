@@ -625,6 +625,18 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync"/>, for several Metaverse Objects in one
+    /// read: what an ambiguous match's candidate identities are joined to (#2052).
+    /// </summary>
+    /// <param name="metaverseObjectIds">The Metaverse Objects to find joined Connected System Objects for.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Which of the given Connected System Object ids still exist (#2052).
+    /// </summary>
+    public Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets the enabled Synchronisation Rules of a Metaverse Object Type, in both directions, with what explaining a
     /// Metaverse Object's connections needs (#348): the Connected System's name and status, the Connected System Object
     /// Type's name, whether the rule provisions, and the complete scoping criteria tree at whatever depth it was built,
@@ -699,7 +711,7 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Finds a Connected System Object that matches the given Metaverse Object using the specified matching rule.
-    /// This is the reverse of FindMetaverseObjectUsingMatchingRuleAsync - it looks up CSOs by MVO attribute values.
+    /// This is the export-side counterpart of the import join lookup (FindMetaverseObjectIdsByMatchValuesAsync): it looks up CSOs by MVO attribute values.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
@@ -1523,6 +1535,50 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
 
+    /// <summary>
+    /// The Object Type of a Connected System Object in the given Connected System, or null where no such object
+    /// exists there. A light lookup for callers that need only the type, not the object's values.
+    /// </summary>
+    public Task<int?> GetConnectedSystemObjectTypeIdAsync(int connectedSystemId, Guid connectedSystemObjectId);
+
+    /// <summary>
+    /// A window of one Connected System Object's unresolved reference values (#959): the values whose
+    /// <c>UnresolvedReferenceValue</c> is set while <c>ReferenceValueId</c> is not, ordered by attribute name, then
+    /// value, then id.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The object.</param>
+    /// <param name="offset">The absolute index of the first value wanted.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the value and the attribute's name.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set; the total is then null.</param>
+    public Task<RangeResultSet<ConnectedSystemObjectUnresolvedReferenceValue>> GetUnresolvedReferenceValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
+    /// How many unresolved reference values one Connected System Object holds (#959).
+    /// </summary>
+    public Task<int> GetUnresolvedReferenceValueCountAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
+    /// Every unresolved reference value one Connected System Object holds on the given attributes (#959), for the
+    /// summaries that must consider all of them rather than a window.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectUnresolvedReferenceValue>> GetUnresolvedReferenceValuesAsync(
+        Guid connectedSystemObjectId,
+        IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
+    /// One Connected System Object's unresolved reference values grouped by their parent in the Connected System's
+    /// hierarchy (#959): each group holds the values whose identifiers differ only in their first component, with one
+    /// of them as its sample and how many it holds. For a Distinguished Name, the parent is what follows the first
+    /// unescaped comma, compared without regard to case.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectUnresolvedReferenceValueGroup>> GetUnresolvedReferenceValueGroupsAsync(Guid connectedSystemObjectId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
@@ -1758,6 +1814,12 @@ public interface IConnectedSystemRepository
     /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
+
+    /// <summary>
+    /// The Object Matching Rules with these ids that still exist, each with its source's Connected System attribute
+    /// and its Target Metaverse Attribute: what an explanation needs to say what a rule compares (#2052).
+    /// </summary>
+    Task<List<ObjectMatchingRule>> GetObjectMatchingRulesAsync(IReadOnlyCollection<int> ids);
     #endregion
 
     #region Connected System Deletion

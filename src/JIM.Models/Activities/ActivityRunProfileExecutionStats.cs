@@ -103,6 +103,14 @@ public class ActivityRunProfileExecutionStats
     public int TotalGeneratedValuesRemediated { get; set; }
 
     /// <summary>
+    /// Count of generated values held back because a value built from them needs another input the object has no
+    /// value for yet (Generated Value Forms, #2023):
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting"/> outcomes. Not a failure;
+    /// a later synchronisation generates the value once the input arrives.
+    /// </summary>
+    public int TotalGeneratedValuesWaiting { get; set; }
+
+    /// <summary>
     /// Count of generated values a target rejected that could not safely be corrected, so they wait on an
     /// administrator's decision (Unique Value Generation, #242, release 4): Run Profile Execution Items whose error
     /// type is <see cref="ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved"/>.

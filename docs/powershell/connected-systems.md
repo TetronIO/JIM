@@ -1400,6 +1400,81 @@ Get-JIMConnectedSystem | ForEach-Object {
 ### Notes
 
 - A non-zero count indicates data integrity issues in the connector space. This commonly occurs after a partial import. Running a full import typically resolves outstanding references.
+- To see which references are unresolved on an object, and why, use [`Get-JIMConnectedSystemObjectUnresolvedReference`](#get-jimconnectedsystemobjectunresolvedreference).
+
+---
+
+## Get-JIMConnectedSystemObjectUnresolvedReference
+
+Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+
+### Syntax
+
+```powershell
+# Page (default)
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid>
+    [-Search <string>] [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid>
+    [-Search <string>] -All [-Force] [-PageSize <int>]
+
+# Summary
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid> -Summary
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes | | Connected System Object identifier. Accepts pipeline input by property name. |
+| `Search` | `string` | No | | Case-insensitive text matched against each reference's value and attribute name. Not valid with `-Summary`. |
+| `Summary` | `switch` | No | `$false` | Return the summary instead of the references. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling. Only valid with `-All`. |
+| `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
+| `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
+
+### Output
+
+Without `-Summary`, one `PSCustomObject` per unresolved reference, ordered by attribute name and then value:
+
+| Property | Description |
+|----------|-------------|
+| `AttributeName` | The attribute the value is on. |
+| `Value` | The reference value as imported, for example a Distinguished Name. |
+| `Cause` | The likely cause: `NotFound`, `NotFoundInScope`, `ContainerNotInScope`, `ContainerExcluded`, `PartitionNotSelected`, `OutsideConnectedSystem` or `AmbiguousObjectType`. |
+| `FixLocation` | `Jim` where a change to JIM's configuration fixes it, `SourceSystem` where the fix lies in the Connected System. |
+| `ContainerExternalId` | The Container the cause concerns (the one to select, or the one excluding the value), or `$null`. |
+| `PartitionExternalId` | The partition the cause concerns: the one to select, for `PartitionNotSelected`, or the one holding a value that no Container JIM knows of holds. Otherwise `$null`. |
+| `CandidateObjectTypeNames` | The Object Types an ambiguous value matches; empty for every other cause. |
+| `Finding` | What is wrong, naming the Container or partition concerned exactly as `ContainerExternalId` or `PartitionExternalId` holds it. |
+| `Remedy` | What to do about it. |
+
+With `-Summary`, one `PSCustomObject` with `TotalCount`; `Causes`, each with `Cause`, `FixLocation` and `Count`; `Fixes`, every distinct next step with `Cause`, `FixLocation`, `ContainerExternalId`, `PartitionExternalId`, `Count`, `Finding` and `Remedy`, most values first; and `LargestFix`, the change to JIM's configuration that would fix the most references (the same shape as a `Fixes` entry), or `$null` where every cause lies in the Connected System.
+
+### Examples
+
+```powershell title="List an object's unresolved references"
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="See what would fix them"
+(Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-..." -Summary).Fixes |
+    Select-Object Count, FixLocation, Finding, Remedy
+```
+
+```powershell title="Every reference a Container Scope change would fix, by Container"
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-..." -All |
+    Where-Object { $_.Cause -eq 'ContainerNotInScope' } |
+    Group-Object ContainerExternalId |
+    Select-Object Count, Name
+```
+
+### Notes
+
+- The references are read as they stand now on the object, so an import that resolves some of them shortens the list. To see how many references a particular import left unresolved, read `UnresolvedReferenceCount` from `Get-JIMActivityExecutionItem`.
 
 ---
 

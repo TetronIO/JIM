@@ -724,6 +724,13 @@ public class ActivityRunProfileExecutionStatsDto
     /// decision (Unique Value Generation, #242, release 4).
     /// </summary>
     public int TotalGeneratedValuesNeedingDecision { get; set; }
+
+    /// <summary>
+    /// Number of generated values held back because a value built from them needs another input the object has no
+    /// value for yet (Generated Value Forms, #2023). Not a failure: a later synchronisation generates the value once
+    /// the input arrives.
+    /// </summary>
+    public int TotalGeneratedValuesWaiting { get; set; }
     #endregion
 
     #region Export Stats
@@ -826,6 +833,7 @@ public class ActivityRunProfileExecutionStatsDto
             TotalGeneratedValueFailures = stats.TotalGeneratedValueFailures,
             TotalGeneratedValuesRemediated = stats.TotalGeneratedValuesRemediated,
             TotalGeneratedValuesNeedingDecision = stats.TotalGeneratedValuesNeedingDecision,
+            TotalGeneratedValuesWaiting = stats.TotalGeneratedValuesWaiting,
 
             // Export
             TotalExported = stats.TotalExported,

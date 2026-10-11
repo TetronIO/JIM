@@ -373,6 +373,16 @@ Beside the five tiers, which test JIM's code, one check tests how JIM is deploye
 
 **Status**: a required check on `main` since 2026-09-29, after 40 green runs and none failed (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`). It pulls Keycloak from quay.io and PostgreSQL from Docker Hub on every run, so an outage at either blocks merges while it lasts; an administrator can take it out of the ruleset for the duration.
 
+### Deployment lab
+
+**Location**: `test/ci/deployment/lab/`, run on a dedicated LXD host, not in CI (see its README; the host's setup is in `TetronIO/ci-runners`).
+
+**Purpose**: What `deployment-boot` cannot reach from GitHub's Ubuntu runners: Red Hat Enterprise Linux (AlmaLinux 9, SELinux enforcing, firewalld, NetworkManager), a host with no route to the internet, a host reboot, and a sign-in from another machine. It found most of #1876's defects, among them #1953 (AppArmor crashing .NET on Ubuntu's rootful Podman) and #2009 (NetworkManager unplugging rootful Podman's pods on AlmaLinux).
+
+**What it does**: installs a bundle on a fresh VM per cell of a matrix (`Cells.psd1`) of operating system, runtime and network, as many cells at once as the host's memory holds. Each cell checks the bundle's checksums, runs `Invoke-DeploymentBoot.ps1` inside the VM (so the lab and CI check the same things), then from the lab host checks readiness over HTTPS, an OIDC sign-in by the initial administrator, a reboot, and that nothing crashed. Upgrade cells install the latest release with real data (an LDAP Connected System whose stored credential must still decrypt), upgrade by the Upgrading guide, reboot, and roll back by it, running every command the guide gives as written there (`Get-DocumentedCommand.ps1`). The matrix, scheduling, sign-in parsing and report have Pester tests in `test/ci/deployment/lab/Tests/`, which `build-and-test` runs.
+
+**Status**: run by hand against a release candidate, pending a release workflow that runs it on the lab host.
+
 ## The Watermark Bug: A Case Study
 
 **The Bug**: Delta Sync processed ALL 10,000 CSOs instead of just the 1 modified CSO

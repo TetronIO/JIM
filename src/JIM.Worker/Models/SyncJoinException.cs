@@ -16,6 +16,12 @@ public class SyncJoinException : Exception
     /// </summary>
     public ActivityRunProfileExecutionItemErrorType ErrorType { get; }
 
+    /// <summary>
+    /// For an ambiguous match, the candidates to record on the Activity item, so the administrator can open each
+    /// identity the object matched (#2052).
+    /// </summary>
+    public IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; init; } = [];
+
     public SyncJoinException(ActivityRunProfileExecutionItemErrorType errorType, string message)
         : base(message)
     {

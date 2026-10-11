@@ -58,4 +58,4 @@ Open a certificate's history from the Change History action on its row, or retri
 
 ## See also
 
-- [Connectors](../connectors/index.md) -- the connectors that use the certificate trust set
+- [Connectors](../connectors/index.md): the connectors that use the certificate trust set
