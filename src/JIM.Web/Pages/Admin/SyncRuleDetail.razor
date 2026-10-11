@@ -23,7 +23,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span>
+    <PageInfo Title="Synchronisation Rule" DocsPage="configuration/synchronisation-rules.md">
+        A Synchronisation Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.
+    </PageInfo>
+</MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_syncRule is { Id: > 0 })
