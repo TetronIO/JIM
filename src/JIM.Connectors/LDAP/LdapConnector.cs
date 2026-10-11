@@ -132,6 +132,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     public bool SupportsUniquenessRejectionClassification => true;
 
+    // objectGUID, entryUUID and nsUniqueId are each unique within a directory whatever class an entry has, so an
+    // entry arriving under a different Object Type is the same object having changed type (#2049).
+    public bool ExternalIdsUniqueAcrossObjectTypes => true;
+
     // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
     // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
     public AttributeStandard SchemaStandard => AttributeStandard.Ldap;

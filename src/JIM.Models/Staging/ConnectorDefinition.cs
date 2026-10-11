@@ -167,6 +167,13 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsUniquenessRejectionClassification { get; set; }
 
     /// <summary>
+    /// Does an External ID identify one object across every Object Type of a Connected System using this Connector?
+    /// When true, an import refuses to treat an object that has changed Object Type as a deletion plus a new object,
+    /// unless the Full Import Run Profile allows Object Type changes (#2049).
+    /// </summary>
+    public bool ExternalIdsUniqueAcrossObjectTypes { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary Connected Systems using this Connector follow, as declared by the
     /// Connector itself and reconciled on every startup. Advisory metadata: the portal uses it to decide
     /// which Standard Mapping hints to show in the Attribute Flow editor. Never read by the synchronisation

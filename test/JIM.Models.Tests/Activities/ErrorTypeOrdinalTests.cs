@@ -56,7 +56,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = 26,
 
         // A Connected System rejected an export because a value is already in use there (#242, release 4).
-        [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27
+        [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = 27,
+
+        // An imported External ID already belongs to a Connected System Object of another Object Type (#2049).
+        [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = 28
     };
 
     [Test]

@@ -660,6 +660,12 @@ public class JimDbContext : DbContext
             .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
+        // #2049: Allow Object Type Changes defaults to false, so an object that changes Object Type is refused
+        // rather than retired and recreated; the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.AllowObjectTypeChanges)
+            .HasDefaultValue(false);
+
         // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
         // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
         // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either

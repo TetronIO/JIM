@@ -3631,6 +3631,11 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AllowObjectTypeChanges")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
@@ -3796,6 +3801,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<bool>("ExternalIdsUniqueAcrossObjectTypes")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");

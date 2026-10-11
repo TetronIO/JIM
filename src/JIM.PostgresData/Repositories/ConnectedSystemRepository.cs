@@ -4294,6 +4294,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
         tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
+        // #2049: copied by hand like every other property here; one left out is accepted and never written.
+        tracked.AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges;
         // Run Profile Safeguards (#1618). Every property the entity carries has to be copied here by
         // hand; one left out is accepted by the API, reported as saved, and never written, which is
         // exactly how the first Scenario 021 run found these three missing.

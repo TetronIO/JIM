@@ -335,6 +335,7 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.

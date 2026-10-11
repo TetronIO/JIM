@@ -202,5 +202,17 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// classify such rejections (<c>SupportsUniquenessRejectionClassification</c>); a data conflict for an
     /// administrator to resolve, not a JIM defect, so it does not count as an unhandled error.
     /// </summary>
-    UniqueValueAlreadyInUse
+    UniqueValueAlreadyInUse,
+
+    /// <summary>
+    /// An imported object's External ID already belongs to a Connected System Object of another Object Type in the
+    /// same Connected System, so the object has changed Object Type (an overlapping Object Type was selected or
+    /// deselected, the schema changed, or the entry was converted in the directory). JIM creates nothing and leaves
+    /// the existing Connected System Object and its join untouched, rather than retire it and create a new one,
+    /// which could delete its Metaverse Object. Raised only for Connectors whose External IDs identify one object
+    /// across every Object Type (<c>ExternalIdsUniqueAcrossObjectTypes</c>), and only while the Run Profile does
+    /// not allow Object Type changes (#2049). A configuration conflict for an administrator to resolve, not a JIM
+    /// defect, so it does not count as an unhandled error.
+    /// </summary>
+    ObjectTypeChanged
 }
