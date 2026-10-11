@@ -32,7 +32,10 @@ public readonly struct MvoDeletionExportDecision : IEquatable<MvoDeletionExportD
     public MvoDeletionExportReason Reason { get; init; }
 
     /// <summary>
-    /// The rule whose Delete action won, when <see cref="ShouldStageDeleteExport"/> is true.
+    /// The matching rule whose Deprovisioning Action decided the verdict: the rule whose Delete won when
+    /// <see cref="ShouldStageDeleteExport"/> is true, or the first matching rule when every one of them says Disconnect
+    /// (<see cref="MvoDeletionExportReason.MatchingRulesDeclineDeletion"/>). Null when no rule matched, since then no
+    /// Deprovisioning Action decided anything.
     /// </summary>
     public SyncRule? WinningRule { get; init; }
 

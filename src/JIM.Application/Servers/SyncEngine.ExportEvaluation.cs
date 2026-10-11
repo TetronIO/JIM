@@ -54,8 +54,12 @@ public partial class SyncEngine
 
         var deleteRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete);
         if (deleteRule == null)
+        {
+            // Every matching rule says Disconnect, so the first of them is named as the one that decided: the account
+            // is left in place, and the outcome reporting that says which rule's action did it (#1811).
             return MvoDeletionExportDecision.DisconnectOnly(
-                MvoDeletionExportReason.MatchingRulesDeclineDeletion, matchingRules.Count);
+                MvoDeletionExportReason.MatchingRulesDeclineDeletion, matchingRules.Count) with { WinningRule = matchingRules[0] };
+        }
 
         // Captured now because the CSO is disconnected immediately after this decision and may be deleted by
         // housekeeping before the export runs; connectors like LDAP need the identifier preserved to delete the

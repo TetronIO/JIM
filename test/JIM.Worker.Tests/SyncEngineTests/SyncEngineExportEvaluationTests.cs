@@ -73,6 +73,29 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
+    public void DecideMvoDeletionExport_MatchingRulesAllSayDisconnect_NamesTheRuleThatDecided()
+    {
+        // A Disconnect leaves the account in place, and the administrator needs to know which rule's
+        // Deprovisioning Action did that, exactly as they do for a Delete (#1811).
+        var disconnectRule = ExportRule(1, 5, OutboundDeprovisionAction.Disconnect);
+        var rules = RulesByMvoType(100, disconnectRule, ExportRule(1, 5, OutboundDeprovisionAction.Disconnect));
+
+        var decision = _engine.DecideMvoDeletionExport(Cso(), 100, rules, existingPendingExport: null);
+
+        Assert.That(decision.WinningRule, Is.SameAs(disconnectRule));
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_NoRuleMatchesTheCso_NamesNoRule()
+    {
+        var rules = RulesByMvoType(100, ExportRule(connectedSystemId: 99, csoTypeId: 5, OutboundDeprovisionAction.Disconnect));
+
+        var decision = _engine.DecideMvoDeletionExport(Cso(), 100, rules, existingPendingExport: null);
+
+        Assert.That(decision.WinningRule, Is.Null);
+    }
+
+    [Test]
     public void DecideMvoDeletionExport_ADeleteRuleMatches_StagesADeleteCarryingTheSecondaryExternalId()
     {
         // The secondary external id (the DN, for LDAP) must travel on the decision: the CSO is disconnected
