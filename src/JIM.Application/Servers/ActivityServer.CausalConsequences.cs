@@ -113,6 +113,8 @@ public partial class ActivityServer
             frontier = nextFrontier;
         }
 
+        await AttachRepresentativesAsync(rootCohorts);
+
         return new CausalConsequences
         {
             RunProfileExecutionItemId = runProfileExecutionItemId,
@@ -170,6 +172,31 @@ public partial class ActivityServer
             PageSize = pageSize,
             CurrentPage = page
         };
+    }
+
+    /// <summary>
+    /// Gives each cohort of items its first member in full (<see cref="CausalConsequenceCohort.Representative"/>), in one
+    /// read for the whole walk however many cohorts and levels it found.
+    /// </summary>
+    private async Task AttachRepresentativesAsync(List<CausalConsequenceCohort> rootCohorts)
+    {
+        var representativeIds = new Dictionary<CausalConsequenceCohort, Guid>();
+        var pending = new Stack<CausalConsequenceCohort>(rootCohorts);
+        while (pending.Count > 0)
+        {
+            var cohort = pending.Pop();
+            if (cohort.Members.FirstOrDefault(m => m.RunProfileExecutionItemId.HasValue)?.RunProfileExecutionItemId is { } itemId)
+                representativeIds[cohort] = itemId;
+            foreach (var consequence in cohort.Consequences)
+                pending.Push(consequence);
+        }
+
+        if (representativeIds.Count == 0)
+            return;
+
+        var items = await Application.Repository.Activity.GetCausalConsequenceRepresentativesAsync(representativeIds.Values.Distinct().ToList());
+        foreach (var (cohort, itemId) in representativeIds)
+            cohort.Representative = items.GetValueOrDefault(itemId);
     }
 
     /// <summary>

@@ -350,6 +350,15 @@ public interface IActivityRepository
     public Task<(List<CausalConsequenceMember> Members, int TotalCount)> GetCausalConsequenceCohortMembersAsync(
         IReadOnlyList<Guid> frontier, CausalConsequenceCohortTuple tuple, int skip, int take, string? search);
 
+    /// <summary>
+    /// Loads the items the downward walk shows its cohorts through (#1811): each with its sync outcomes and its Activity,
+    /// so the portal can place what the item recorded on the objects it happened to and name the run that did it.
+    /// </summary>
+    /// <param name="runProfileExecutionItemIds">One item per cohort.</param>
+    /// <returns>The items found, by id; an item since purged is simply absent.</returns>
+    public Task<Dictionary<Guid, ActivityRunProfileExecutionItem>> GetCausalConsequenceRepresentativesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
 
     /// <summary>
     /// Gets all activities associated with a schedule execution.

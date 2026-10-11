@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
 using JIM.Models.Enums;
 using JIM.Models.Transactional;
 
@@ -108,6 +109,19 @@ public class CausalConsequenceCohort
     /// The first page of members; page through the rest with <see cref="CohortKey"/>.
     /// </summary>
     public List<CausalConsequenceMember> Members { get; init; } = [];
+
+    /// <summary>
+    /// One of the members' items in full, with its sync outcomes and its Activity: the first member that is an item.
+    /// Every member shares the cohort's outcome summary, so what one recorded is what each did to its own object, and
+    /// it is what the portal places the cohort's cards from. Null for a cohort of Pending Exports or scheduled
+    /// deletions, which are not items, and where the item has since been purged.
+    /// </summary>
+    /// <remarks>
+    /// Not part of the REST contract, which carries the outcome summary instead: an item graph has no place in a wire
+    /// shape, and ignoring it here means a serialiser can never walk into its Activity.
+    /// </remarks>
+    [JsonIgnore]
+    public ActivityRunProfileExecutionItem? Representative { get; set; }
 
     /// <summary>
     /// Where this cohort's branch ends, for a cohort that ends one: a confirmation, or outstanding work. Null where

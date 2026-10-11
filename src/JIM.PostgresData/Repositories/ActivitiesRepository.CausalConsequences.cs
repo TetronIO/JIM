@@ -271,6 +271,29 @@ public partial class ActivityRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// EF rather than raw SQL: one item per cohort, so the set is small, and the portal renders the entity as it would
+    /// any item of its own.
+    /// </remarks>
+    public async Task<Dictionary<Guid, ActivityRunProfileExecutionItem>> GetCausalConsequenceRepresentativesAsync(
+        IReadOnlyCollection<Guid> runProfileExecutionItemIds)
+    {
+        ArgumentNullException.ThrowIfNull(runProfileExecutionItemIds);
+        if (runProfileExecutionItemIds.Count == 0)
+            return [];
+
+        var ids = runProfileExecutionItemIds.Distinct().ToList();
+        var items = await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(i => i.Activity)
+            .Include(i => i.SyncOutcomes)
+            .Where(i => ids.Contains(i.Id))
+            .ToListAsync();
+        return items.ToDictionary(i => i.Id);
+    }
+
+    /// <inheritdoc />
     public async Task<(List<CausalConsequenceMember> Members, int TotalCount)> GetCausalConsequenceCohortMembersAsync(
         IReadOnlyList<Guid> frontier, CausalConsequenceCohortTuple tuple, int skip, int take, string? search)
     {

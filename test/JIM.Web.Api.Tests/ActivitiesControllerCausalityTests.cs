@@ -54,6 +54,8 @@ public class ActivitiesControllerCausalityTests
             .ReturnsAsync([]);
         _activityRepository.Setup(r => r.GetRunProfileExecutionItemCausalSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
             .ReturnsAsync([]);
+        _activityRepository.Setup(r => r.GetCausalConsequenceRepresentativesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync([]);
         _application = new JimApplication(_repository.Object);
         _controller = new ActivitiesController(new Mock<ILogger<ActivitiesController>>().Object, _application,
             new Mock<IActivityEtaTracker>().Object);

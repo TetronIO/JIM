@@ -86,6 +86,10 @@ public class CausalConsequenceWalkTests
                 return (matching.Skip(skip).Take(take).ToList(), matching.Count);
             });
 
+        _mockActivityRepository
+            .Setup(r => r.GetCausalConsequenceRepresentativesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.ToDictionary(id => id, id => new ActivityRunProfileExecutionItem { Id = id }));
+
         _application = new JimApplication(_mockRepository.Object);
     }
 
@@ -201,6 +205,42 @@ public class CausalConsequenceWalkTests
             Assert.That(consequences.IsTruncatedByDepth, Is.False);
             Assert.That(new[] { removals.CohortKey, exports.CohortKey, confirmations.CohortKey }.Distinct().Count(), Is.EqualTo(3));
         }
+    }
+
+    [Test]
+    public async Task GetCausalConsequences_CohortsOfItems_CarryTheirFirstMemberAsARepresentativeFromOneReadAsync()
+    {
+        // The portal places a consequence's cards from what its items recorded, so each cohort of items carries one of
+        // them whole. One read for the whole walk, not one per cohort or per level.
+        var deletion = Guid.NewGuid();
+        var pulse = Item("Project Pulse");
+        var atlas = Item("Project Atlas");
+        AddHop(deletion, RemovalTuple, pulse);
+        AddHop(deletion, RemovalTuple, atlas);
+        var export = Item("Project Pulse", T0.AddHours(1));
+        AddHop(pulse.RunProfileExecutionItemId!.Value, ExportTuple("Exported:1"), export);
+        AddHop(atlas.RunProfileExecutionItemId!.Value, OutstandingTuple(PendingExportStatus.Pending), Pseudo("Project Atlas"));
+
+        var consequences = await _application.Activities.GetCausalConsequencesAsync(deletion);
+
+        var removals = consequences.Cohorts.Single();
+        var exports = removals.Consequences.Single(c => c.HopKind == CausalConsequenceHopKind.Edge);
+        var outstanding = removals.Consequences.Single(c => c.HopKind == CausalConsequenceHopKind.OutstandingPendingExport);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(removals.Representative?.Id, Is.EqualTo(atlas.RunProfileExecutionItemId), "the first member, by name at a shared time");
+            Assert.That(exports.Representative?.Id, Is.EqualTo(export.RunProfileExecutionItemId));
+            Assert.That(outstanding.Representative, Is.Null, "a cohort of Pending Exports has no item to show");
+        }
+        _mockActivityRepository.Verify(r => r.GetCausalConsequenceRepresentativesAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GetCausalConsequences_NoCohortsOfItems_DoesNotReadRepresentativesAsync()
+    {
+        await _application.Activities.GetCausalConsequencesAsync(Guid.NewGuid());
+
+        _mockActivityRepository.Verify(r => r.GetCausalConsequenceRepresentativesAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Never);
     }
 
     [Test]

@@ -450,6 +450,36 @@ public class CausalConsequenceReadDatabaseTests
         Assert.That(page!.Results.Single().DisplayName, Is.EqualTo("Project Pulse"));
     }
 
+    // ─── Representatives ───
+
+    [Test]
+    public async Task GetCausalConsequenceRepresentativesAsync_ItemsByIdWithTheirOutcomesAndActivityAsync()
+    {
+        // The portal places each cohort's cards from one item's outcomes and names the run from its Activity, so both
+        // must arrive with the item; a purged item is simply absent rather than an error.
+        var glitterband = await SeedConnectedSystemAsync("Glitterband EMEA");
+        var sync = await SeedActivityAsync(glitterband.SystemId, ConnectedSystemRunType.FullSynchronisation, T0);
+        var item = await SeedItemAsync(sync, ObjectChangeType.Disconnected, "Tina Adams", "person");
+        await SeedOutcomeAsync(item, ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, Guid.NewGuid());
+        await SeedOutcomeAsync(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, Guid.NewGuid());
+        var purged = Guid.NewGuid();
+
+        await using var ctx = NewContext();
+        var representatives = await new PostgresDataRepository(ctx).Activity.GetCausalConsequenceRepresentativesAsync([item, purged]);
+
+        var representative = representatives[item];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(representatives.Keys, Is.EquivalentTo(new[] { item }));
+            Assert.That(representative.SyncOutcomes.Select(o => o.OutcomeType), Is.EquivalentTo(new[]
+            {
+                ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+            }));
+            Assert.That(representative.Activity.ConnectedSystemRunType, Is.EqualTo(ConnectedSystemRunType.FullSynchronisation));
+            Assert.That(representative.Activity.ConnectedSystemId, Is.EqualTo(glitterband.SystemId));
+        }
+    }
+
     // ─── Index ───
 
     [Test]
