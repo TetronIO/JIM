@@ -62,6 +62,10 @@ An example that deletes or clears data must not understate its scope in its titl
 - **Name the multiplicity when a filter is a wildcard.** `-Name "Decommissioned*"` piped into a removal deletes everything matching, and Connected System deletion cascades to the whole connector space.
 - **Suggest a dry run.** For any forced bulk delete, tell the reader to run it without `-Force` first, or to inspect the `Get-` output, before committing.
 
+## Every exported cmdlet is documented
+
+A new exported cmdlet needs a heading (or a row in the first column of a table) on a `docs/powershell/` page in the same pull request, and a removed one must leave the docs with it: `scripts/Test-DocsCoverage.ps1` (COV-1) fails the `changelog-lint` check otherwise. Before it existed, `Get-JIMDataFlow` shipped with no reference page at all.
+
 ## Documentation and behaviour must agree
 
 Where a cmdlet and its documentation disagree, fix the cmdlet if the documented behaviour is the desirable one; three cmdlets had promised behaviour they did not have. Where the behaviour cannot honestly exist, remove the parameter rather than documenting a broken one: `Invoke-JIMExampleDataTemplate -Wait` claimed to block until generation finished but only emitted a warning saying it was unimplemented, and it could not be implemented because the execute endpoint returns a bare `202` with no handle to poll.

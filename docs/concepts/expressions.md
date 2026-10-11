@@ -172,6 +172,7 @@ Eq(Lower(mv["Status"]), "active")
 |----------|-------------|---------|
 | `ToString(value)` | Convert a value to text | `ToString(mv["EmployeeId"])` |
 | `ToInt(value)` | Convert text to a whole number (returns 0 if not a valid number) | `ToInt(mv["Age"])` |
+| `ToDecimal(value)` | Convert to an exact decimal number: text is read with `.` as the decimal point, and accepts exponent notation (`1.5E3` is 1500). Returns 0 if not a valid number | `ToDecimal(cs["Salary"])` |
 
 ### Date Functions
 
