@@ -203,6 +203,51 @@ public class LdapObjectTypeMatcherTests
     }
 
     [Test]
+    public void Match_TwoAuxiliaryClassesAndNoStructuralOne_KeepsTheFirstListed()
+    {
+        // Nothing in the schema ranks two auxiliary classes, so the order the entry lists them in stands.
+        var shadowAccount = AuxiliaryType("shadowAccount");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapObjectTypeMatcher.Match(["top", "posixAccount", "shadowAccount"], [_posixAccount, shadowAccount]), Is.SameAs(_posixAccount));
+            Assert.That(LdapObjectTypeMatcher.Match(["top", "shadowAccount", "posixAccount"], [_posixAccount, shadowAccount]), Is.SameAs(shadowAccount));
+        }
+    }
+
+    [Test]
+    public void Match_AgreesWithTakesEntriesFrom_ForEveryPairTheSchemaRanks()
+    {
+        // #2049: the schema selection preview predicts which Object Type an entry becomes with TakesEntriesFrom, so
+        // the import must resolve every pair it ranks the same way, whatever order the entry lists the classes in.
+        // Otherwise a preview could promise objects stay where they are while the import moves them.
+        var user = StructuralType("user", inheritsFrom: ["organizationalPerson", "person", "top"]);
+        var computer = StructuralType("computer", inheritsFrom: ["user", "organizationalPerson", "person", "top"]);
+        var unclassified = new ConnectedSystemObjectType { Name = "device", Selected = true };
+        ConnectedSystemObjectType[] schema = [_person, user, computer, unclassified, _posixAccount, _inetOrgPerson];
+
+        var rankedPairs = schema
+            .SelectMany(winner => schema
+                .Where(loser => !ReferenceEquals(winner, loser) && winner.TakesEntriesFrom(loser))
+                .Select(loser => (Winner: winner, Loser: loser)))
+            .ToList();
+
+        Assert.That(rankedPairs, Is.Not.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var (winner, loser) in rankedPairs)
+            {
+                Assert.That(LdapObjectTypeMatcher.Match([winner.Name, loser.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} listed first over {loser.Name}");
+                Assert.That(LdapObjectTypeMatcher.Match([loser.Name, winner.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} listed last over {loser.Name}");
+                Assert.That(LdapObjectTypeMatcher.Match(["top", loser.Name, winner.Name], [winner, loser]), Is.SameAs(winner),
+                    $"{winner.Name} over {loser.Name} with top listed first");
+            }
+        }
+    }
+
+    [Test]
     public void Match_TheOnlyMatchingTypeIsNotSelected_ReturnsNull()
     {
         _inetOrgPerson.Selected = false;

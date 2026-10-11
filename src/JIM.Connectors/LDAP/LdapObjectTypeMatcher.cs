@@ -34,16 +34,20 @@ internal static class LdapObjectTypeMatcher
 
         // A structural class is what an entry is; an auxiliary class is only something it also carries. Settling
         // that by class kind rather than by position is what makes an entry resolve to the same Object Type
-        // whatever order the directory lists its classes in, which RFC 4512 leaves entirely open.
+        // whatever order the directory lists its classes in, which RFC 4512 leaves entirely open. With only
+        // auxiliary classes to choose from, nothing in the schema ranks them, so the first listed stands.
         var structural = candidates.Where(candidate => !candidate.IsAuxiliary()).ToList();
         if (structural.Count == 0)
             return candidates.FirstOrDefault();
 
-        // An entry's structural classes form one inheritance chain, so when several are selected the entry is the
-        // most specific of them: user rather than the person it inherits from, computer rather than user (#2043).
-        // The schema says which that is wherever discovery recorded inheritance, whatever the order.
-        var mostSpecific = structural
-            .Where(candidate => !structural.Any(other => !ReferenceEquals(other, candidate) && other.InheritsFrom(candidate.Name)))
+        // Every candidate another one takes the entry from is out (TakesEntriesFrom, which the schema selection
+        // preview predicts by as well, #2049): each auxiliary class, since a structural one is present, and each
+        // structural class a more specific selected one inherits from. An entry's structural classes form one
+        // inheritance chain, so what is left is the most specific of them: user rather than the person it inherits
+        // from, computer rather than user (#2043). The schema says which that is wherever discovery recorded
+        // inheritance, whatever the order.
+        var mostSpecific = candidates
+            .Where(candidate => !candidates.Any(other => !ReferenceEquals(other, candidate) && other.TakesEntriesFrom(candidate)))
             .ToList();
 
         // Where it did not (Object Types discovered before JIM recorded inheritance), the order decides, read from
