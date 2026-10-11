@@ -1,0 +1,1235 @@
+{
+  "profiles": {
+    "portal": {
+      "viewport": {
+        "width": 1674,
+        "height": 1046
+      },
+      "deviceScaleFactor": 2
+    },
+    "api-reference": {
+      "viewport": {
+        "width": 1794,
+        "height": 1121
+      },
+      "deviceScaleFactor": 2
+    },
+    "terminal": {
+      "viewport": {
+        "width": 972,
+        "height": 611
+      },
+      "deviceScaleFactor": 2,
+      "transparent": true
+    }
+  },
+  "screenshots": [
+    {
+      "name": "homepage",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: The dashboard",
+        "README hero image"
+      ],
+      "steps": [
+        {
+          "goto": "/"
+        },
+        {
+          "waitFor": {
+            "text": "Quick Links"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-list",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Connected Systems"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "waitFor": {
+            "role": "link",
+            "name": "Create Connected System"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-schema",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Schema discovery"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Schema"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "jimPerson"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Attribute Selection"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-object-matching",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Object Matching"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Matching"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Matching Rules for"
+          }
+        }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-list",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Synchronisation Rules"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "waitFor": {
+            "text": "Create Synchronisation Rule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-detail-edit-flow",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Attribute Flow"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "EMEA LDAP Export Users"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Attribute Flow"
+          }
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Expression Mapping') button"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Edit Attribute Flow"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mvo-users",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: The Metaverse"
+      ],
+      "steps": [
+        {
+          "goto": "/t/users"
+        },
+        {
+          "waitFor": {
+            "selector": ".mud-table-root"
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-mvo-changes",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Full causality"
+      ],
+      "steps": [
+        {
+          "goto": "/t/groups?q=Company-NexusDynamics"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Company-NexusDynamics"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Changes"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Projected"
+          }
+        }
+      ]
+    },
+    {
+      "name": "activities-history",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Operational visibility"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=history"
+        },
+        {
+          "waitFor": {
+            "text": "Execution History"
+          }
+        }
+      ]
+    },
+    {
+      "name": "schedules",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour: Automation"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=schedules"
+        },
+        {
+          "waitFor": {
+            "role": "button",
+            "name": "New Schedule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "api-documentation",
+      "kind": "portal",
+      "profile": "api-reference",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour: Full REST API"
+      ],
+      "steps": [
+        {
+          "goto": "/api/reference"
+        },
+        {
+          "waitFor": {
+            "text": "Download OpenAPI Document"
+          }
+        }
+      ]
+    },
+    {
+      "name": "administration",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin"
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Administration"
+          }
+        }
+      ]
+    },
+    {
+      "name": "activities-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/activity?cat=SyncRuns&desc=0"
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Execute Yellowstone APAC → Full Sync')"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Projected to the Metaverse"
+          }
+        }
+      ]
+    },
+    {
+      "name": "activities-rpei-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/activity?cat=SyncRuns&desc=0"
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Execute Yellowstone APAC → Full Sync')"
+          }
+        },
+        {
+          "waitFor": {
+            "selector": "tbody tr:has-text('View')"
+          }
+        },
+        {
+          "fill": {
+            "selector": "input[placeholder^='Search']",
+            "value": "Alice Smith (S8-20)"
+          }
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Alice Smith (S8-20)') a:has-text('View')"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Execution Summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "operations-history",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=history&h-desc=0"
+        },
+        {
+          "waitFor": {
+            "text": "Execution History"
+          }
+        }
+      ]
+    },
+    {
+      "name": "schedules-new",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=schedules"
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "New Schedule"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "New Schedule"
+          }
+        }
+      ]
+    },
+    {
+      "name": "schedules-edit-schedule",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=schedules"
+        },
+        {
+          "click": {
+            "text": "Delta Synchronisation Schedule"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Edit Schedule"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Trigger"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "every 1 hour"
+          }
+        }
+      ]
+    },
+    {
+      "name": "schedules-steps",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/operations?t=schedules"
+        },
+        {
+          "click": {
+            "text": "Delta Synchronisation Schedule"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Edit Schedule"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Steps"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Step 1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-objects",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Connector Space"
+          }
+        },
+        {
+          "waitFor": {
+            "selector": "tbody tr:has-text('View')"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-object-detail-user",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Connector Space"
+          }
+        },
+        {
+          "waitFor": {
+            "selector": "tbody tr:has-text('View')"
+          }
+        },
+        {
+          "fill": {
+            "selector": "input[placeholder^='Search']",
+            "value": "Alice Smith (S8-20)"
+          }
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Alice Smith (S8-20)') a:has-text('View')"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Connected System Object"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-object-detail-group",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Connector Space"
+          }
+        },
+        {
+          "waitFor": {
+            "selector": "tbody tr:has-text('View')"
+          }
+        },
+        {
+          "fill": {
+            "selector": "input[placeholder^='Search']",
+            "value": "Company-NexusDynamics"
+          }
+        },
+        {
+          "click": {
+            "selector": "tr:has-text('Company-NexusDynamics') a:has-text('View')"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Connected System Object"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-containers",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Scope"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "dc=yellowstone,dc=local"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connected-systems-detail-run-profiles",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/connected-systems"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Yellowstone APAC"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Run Profiles"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Full Import (Scoped)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-detail-top",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "EMEA LDAP Export Users"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Synchronisation Rule: EMEA LDAP Export Users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "synchronisation-rules-detail-bottom",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/sync-rules"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "EMEA LDAP Export Users"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Attribute Flow"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Expression Mapping"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mvo-users-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/t/users?q=Alice%20Smith%20(S8-20)"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Alice Smith (S8-20)",
+            "exact": true
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "User: Alice Smith (S8-20)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-mvo",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/t/groups?q=Company-NexusDynamics"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Company-NexusDynamics"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Group: Company-NexusDynamics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-mvo-change-item",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/t/groups?q=Company-NexusDynamics"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Company-NexusDynamics"
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Changes"
+          }
+        },
+        {
+          "click": {
+            "text": "Projected"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Projected"
+          }
+        }
+      ]
+    },
+    {
+      "name": "metaverse-object-types-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/schema"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "User",
+            "exact": true
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Metaverse Object Type: User"
+          }
+        }
+      ]
+    },
+    {
+      "name": "predefined-searches",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/predefined-searches"
+        },
+        {
+          "waitFor": {
+            "role": "link",
+            "name": "Distribution Groups"
+          }
+        }
+      ]
+    },
+    {
+      "name": "predefined-searches-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/predefined-searches"
+        },
+        {
+          "click": {
+            "selector": "tbody a:text-is('Groups')"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Predefined Search: Groups"
+          }
+        }
+      ]
+    },
+    {
+      "name": "data-generation-templates-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/example-data"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Users & Groups"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Data Generation Template"
+          }
+        }
+      ]
+    },
+    {
+      "name": "api-keys-create",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/apikeys"
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Create API Key"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Create API Key"
+          }
+        }
+      ]
+    },
+    {
+      "name": "api-keys-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/apikeys"
+        },
+        {
+          "click": {
+            "role": "link",
+            "name": "Infrastructure Key"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "API Key: Infrastructure Key"
+          }
+        }
+      ]
+    },
+    {
+      "name": "trusted-certificates-upload",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/certificates"
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Upload Certificate"
+          }
+        },
+        {
+          "waitFor": {
+            "role": "dialog",
+            "name": "Upload Certificate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "service-settings",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/settings"
+        },
+        {
+          "waitFor": {
+            "role": "heading",
+            "name": "Service Settings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "logs",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/logs"
+        },
+        {
+          "waitFor": {
+            "selector": "tbody tr:has-text('database')"
+          }
+        }
+      ]
+    },
+    {
+      "name": "logs-detail",
+      "kind": "portal",
+      "profile": "portal",
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "steps": [
+        {
+          "goto": "/admin/logs"
+        },
+        {
+          "click": {
+            "selector": "tbody tr:has-text('database')"
+          }
+        },
+        {
+          "waitFor": {
+            "text": "Log Entry Details"
+          }
+        }
+      ]
+    },
+    {
+      "name": "powershell-1",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour: PowerShell"
+      ],
+      "commands": [
+        "Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey"
+      ]
+    },
+    {
+      "name": "powershell-2",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "commands": [
+        "!Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey",
+        "Get-JIMMetaverseObjectType | Select-Object id, name, pluralName, builtIn",
+        "(Get-JIMSchedule)[0] | Select-Object id, name, triggerType, patternType, isEnabled",
+        "Get-JIMSchedule | Select-Object name, isEnabled"
+      ]
+    },
+    {
+      "name": "powershell-3",
+      "kind": "terminal",
+      "profile": "terminal",
+      "themes": [
+        "dark"
+      ],
+      "usedBy": [
+        "junctional.io tour assets; not on a tour page today"
+      ],
+      "commands": [
+        "!Connect-JIM -Url '{BaseUrl}' -ApiKey $apiKey",
+        "Get-JIMSyncRule"
+      ]
+    }
+  ]
+}
