@@ -476,13 +476,15 @@ public interface IMetaverseRepository
     /// attribute it to) and the decision-time policy snapshot. MVOs already pending deletion are skipped so
     /// an earlier decision's markers are never overwritten.
     /// </summary>
-    /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
+    /// <param name="markings">Each Metaverse Object to mark, with the Run Profile Execution Item recording its
+    /// marking. The item is recorded on the object so the housekeeping deletion that follows can name the run that
+    /// scheduled it (#1811).</param>
     /// <param name="initiatedByType">The initiator type of the run that found the object had no connector remaining.</param>
     /// <param name="initiatedById">The initiator id, when the initiator is a Person.</param>
     /// <param name="initiatedByName">The initiator's display name snapshot.</param>
     /// <param name="deletionPolicySnapshotJson">The serialised decision-time MvoDeletionPolicySnapshot, or null when the policy facts could not be determined.</param>
     /// <returns>The number of MVOs updated.</returns>
-    public Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IEnumerable<Guid> mvoIds, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson);
+    public Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IReadOnlyCollection<(Guid MetaverseObjectId, Guid SchedulingItemId)> markings, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson);
 
     /// <summary>
     /// Pages through Projected Metaverse Objects that hold no joined Connected System Object at all, are not

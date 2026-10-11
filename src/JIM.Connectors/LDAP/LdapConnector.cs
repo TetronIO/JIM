@@ -1562,6 +1562,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<UniquenessProbeResult>> ProbeAttributesAsync(IReadOnlyList<UniquenessProbeRequest> requests, ILogger logger, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        if (_uniquenessProbe == null)
+            throw new InvalidOperationException("Must call OpenUniquenessProbeConnection() before ProbeAttributesAsync()!");
+
+        return _uniquenessProbe.ProbeAttributesAsync(requests, _probeSearchBases, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public void CloseUniquenessProbeConnection()
     {
         _uniquenessProbe = null;

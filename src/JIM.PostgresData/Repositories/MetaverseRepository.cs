@@ -3415,11 +3415,13 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
-    public async Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IEnumerable<Guid> mvoIds, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson)
+    public async Task<int> MarkMvosAsDisconnectedWithNoTriggerAsync(IReadOnlyCollection<(Guid MetaverseObjectId, Guid SchedulingItemId)> markings, ActivityInitiatorType initiatedByType, Guid? initiatedById, string? initiatedByName, string? deletionPolicySnapshotJson)
     {
-        var mvoIdList = mvoIds.ToList();
-        if (mvoIdList.Count == 0)
+        if (markings.Count == 0)
             return 0;
+
+        var mvoIds = markings.Select(marking => marking.MetaverseObjectId).ToArray();
+        var schedulingItemIds = markings.Select(marking => marking.SchedulingItemId).ToArray();
 
         var now = DateTime.UtcNow;
 
@@ -3429,31 +3431,36 @@ public class MetaverseRepository : IMetaverseRepository
         // path's MarkMvoForDeletionAsync for a synchronisation-triggered marking.
         if (Repository.Database.Database.IsRelational())
         {
+            // Each object carries its own scheduling item, so the two arrays are unnested side by side (#1811).
             return await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjects""
+                @"UPDATE ""MetaverseObjects"" AS m
                   SET ""LastConnectorDisconnectedDate"" = {0},
                       ""DeletionTriggeredBySystemId"" = NULL,
                       ""DeletionTriggeredBySystemName"" = NULL,
                       ""DeletionInitiatedByType"" = {1},
                       ""DeletionInitiatedById"" = {2},
                       ""DeletionInitiatedByName"" = {3},
-                      ""DeletionPolicySnapshotJson"" = {4}
-                  WHERE ""Id"" = ANY({5})
-                    AND ""LastConnectorDisconnectedDate"" IS NULL",
+                      ""DeletionPolicySnapshotJson"" = {4},
+                      ""DeletionScheduledByRunProfileExecutionItemId"" = marking.scheduling_item_id
+                  FROM unnest({5}::uuid[], {6}::uuid[]) AS marking(mvo_id, scheduling_item_id)
+                  WHERE m.""Id"" = marking.mvo_id
+                    AND m.""LastConnectorDisconnectedDate"" IS NULL",
                 now,
                 (int)initiatedByType,
                 BulkSqlHelpers.NullableParam(initiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
                 BulkSqlHelpers.NullableParam(initiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
                 BulkSqlHelpers.NullableParam(deletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text),
-                mvoIdList.ToArray());
+                mvoIds,
+                schedulingItemIds);
         }
 
         // The in-memory test provider does not support raw SQL; narrow tracked fallback with the same
         // idempotency (skip anything already pending deletion) and the same fields written.
         var markedCount = 0;
+        var schedulingItemIdsByMvoId = markings.ToDictionary(marking => marking.MetaverseObjectId, marking => marking.SchedulingItemId);
         foreach (var mvo in await Repository.Database.MetaverseObjects
                      .AsTracking()
-                     .Where(m => mvoIdList.Contains(m.Id) && m.LastConnectorDisconnectedDate == null)
+                     .Where(m => mvoIds.Contains(m.Id) && m.LastConnectorDisconnectedDate == null)
                      .ToListAsync())
         {
             mvo.LastConnectorDisconnectedDate = now;
@@ -3463,6 +3470,7 @@ public class MetaverseRepository : IMetaverseRepository
             mvo.DeletionInitiatedById = initiatedById;
             mvo.DeletionInitiatedByName = initiatedByName;
             mvo.DeletionPolicySnapshotJson = deletionPolicySnapshotJson;
+            mvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItemIdsByMvoId[mvo.Id];
             markedCount++;
         }
         await Repository.Database.SaveChangesAsync();

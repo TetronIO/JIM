@@ -770,6 +770,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DeletionPolicySnapshotJson")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("DeletionScheduledByRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("DeletionTriggeredBySystemId")
                         .HasColumnType("integer");
 
