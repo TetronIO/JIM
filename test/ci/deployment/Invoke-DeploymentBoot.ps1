@@ -52,7 +52,14 @@
     Where to write the installer's log, the inspect output and, on failure, the containers' logs.
 
 .PARAMETER KeepRunning
-    Leave JIM running at the end, for looking at by hand.
+    Leave JIM running at the end, for looking at by hand, or for the deployment lab's own checks from outside the host.
+
+.PARAMETER HostName
+    The name JIM's certificate is issued for, and which the checks reach JIM at. Defaults to jim.ci.test.
+
+.PARAMETER OpenFirewall
+    Accept the installer's offer to open JIM's port in the host's firewall, as a customer reaching JIM from other
+    machines does. Left out, the port stays closed, which the checks here, all made on the host itself, do not need.
 
 .EXAMPLE
     ./test/ci/deployment/Invoke-DeploymentBoot.ps1 -BundlePath ./release-output/jim-release-ci -Runtime podman -Rootless -Authority $authority -OutputPath ./deployment-boot
@@ -74,7 +81,11 @@ param(
     [Parameter(Mandatory)]
     [string]$OutputPath,
 
-    [switch]$KeepRunning
+    [switch]$KeepRunning,
+
+    [string]$HostName = 'jim.ci.test',
+
+    [switch]$OpenFirewall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,7 +96,6 @@ if ($Rootless -and $Runtime -ne 'podman') {
 
 $leg = if ($Runtime -eq 'docker') { 'docker' } elseif ($Rootless) { 'podman-rootless' } else { 'podman-rootful' }
 $installPath = "/opt/jim-$leg"
-$hostName = 'jim.ci.test'
 $account = 'jim'
 $containers = if ($Runtime -eq 'docker') {
     [ordered]@{ web = 'jim.web'; worker = 'jim.worker'; scheduler = 'jim.scheduler'; database = 'jim.database' }
@@ -347,7 +357,7 @@ try {
         "JIM_INFRASTRUCTURE_API_KEY=$infrastructureKey"
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
-        'JIM_SETUP_OPEN_FIREWALL=false'
+        "JIM_SETUP_OPEN_FIREWALL=$(if ($OpenFirewall) { 'true' } else { 'false' })"
         # On Ubuntu 24.04, GitHub's runners among them, the installer must add the network and signal rules that
         # rootful Podman's AppArmor profiles need.
         'JIM_SETUP_FIX_APPARMOR=true'
