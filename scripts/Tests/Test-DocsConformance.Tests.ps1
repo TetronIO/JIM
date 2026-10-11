@@ -31,7 +31,7 @@ BeforeAll {
             Rules               = @{
                 'STR-1' = 'Block'; 'STR-2' = 'Ratchet'; 'STR-3' = 'Block'; 'STR-4' = 'Block'; 'STR-5' = 'Block'
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
-                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'
+                'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
             }
@@ -55,6 +55,7 @@ BeforeAll {
             ConformantFolders   = @()
             ConformantPages     = @()
             ScenarioPathFormat  = 'test/integration/scenarios/Invoke-Scenario-{0}.ps1'
+            PortalLabelSources  = @('src')
             GlossaryPage        = 'reference/glossary.md'
             # The language patterns are the shipped ones, so these tests exercise what CI runs.
             AmericanSpellings   = $script:ShippedConfig.AmericanSpellings
@@ -468,6 +469,62 @@ Describe 'Test-DocsConformance: TYP-1 page shape' {
         $r = Invoke-Conformance -Fixture $f
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match "TYP-1.*'Settings'.*'Troubleshooting'"
+    }
+}
+
+Describe 'Test-DocsConformance: TUT-2 portal labels a tutorial names exist' {
+    BeforeAll {
+        $script:Portal = @{
+            'src/JIM.Web/Pages/Systems.razor' = "<MudButton>Create Connected System</MudButton>`n<MudTab Text=`"Run Profiles`" />`n"
+            'src/JIM.Connectors/File/FileConnector.cs' = "Name = `"File Path`",`n"
+            'test/Fake.razor' = "<MudButton>Only In A Test</MudButton>`n"
+        }
+        function New-Tutorial {
+            param([string]$Steps)
+            $body = "You will run a synchronisation.`n`n## Before you begin`n`nSign in as an administrator.`n`n## Step 1: Create it`n`n$Steps`n`n## What you achieved`n`nA synchronisation.`n"
+            New-Page -Type 'tutorial' -Title 'First Sync' -Body $body -ExtraFrontMatter @{ scenario = '027-First' }
+        }
+        $script:Scenario = @{ 'test/integration/scenarios/Invoke-Scenario-027-First.ps1' = '# scenario' }
+    }
+
+    It 'passes bold labels in a Portal tab that the portal source has, whatever their case' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Create Connected System**, then the **run profiles** tab.`n    2. Set **File Path**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'TUT-2'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a bold label in a Portal tab that the portal source does not have, naming it and its line' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Create Connected System**.`n    2. Select **Import Schema**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "first\.md:\d+\s+TUT-2\s+.*'Import Schema'"
+        $r.Output | Should -Not -Match "'Create Connected System'"
+    }
+
+    It 'reads only the portal sources it is given, not the tests' {
+        $steps = "=== `"Portal`"`n`n    1. Select **Only In A Test**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        (Invoke-Conformance -Fixture $f).Output | Should -Match "TUT-2.*'Only In A Test'"
+    }
+
+    It 'leaves bold text outside a Portal tab, and on other page types, alone' {
+        $steps = "**Nothing here** is a portal label.`n`n=== `"PowerShell`"`n`n    Run **this** cmdlet.`n"
+        $f = New-Fixture -Pages @{
+            'first.md' = (New-Tutorial $steps)
+            'ref.md'   = (New-Page -Title 'Reference' -Body "A reference page.`n`n=== `"Portal`"`n`n    Select **Not A Label**.`n")
+        } -OtherFiles ($script:Portal + $script:Scenario)
+        (Invoke-Conformance -Fixture $f).Output | Should -Not -Match 'TUT-2'
+    }
+
+    It 'lets a marker excuse a label the portal builds from data' {
+        $steps = "=== `"Portal`"`n`n    <!-- conformance: allow TUT-2 `"the switch names the Metaverse Object Type`" -->`n    1. Turn on **Project Users to the Metaverse?**.`n"
+        $f = New-Fixture -Pages @{ 'first.md' = (New-Tutorial $steps) } -OtherFiles ($script:Portal + $script:Scenario)
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'TUT-2'
+        $r.ExitCode | Should -Be 0
     }
 }
 
