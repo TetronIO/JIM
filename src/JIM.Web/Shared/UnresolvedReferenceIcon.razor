@@ -15,7 +15,7 @@ else
 {
     <MudTooltip Arrow="true" Placement="Placement.Top">
         <TooltipContent>
-            <TooltipText Text="@($"Likely cause: {UnresolvedReferenceDisplay.CauseLabel(Diagnosis.Cause)}. {Diagnosis.Suggestion}")" />
+            <TooltipText Text="@($"Likely cause: {UnresolvedReferenceDisplay.CauseLabel(Diagnosis.Cause)}. {Diagnosis.Finding} {Diagnosis.Remedy}")" />
         </TooltipContent>
         <ChildContent>
             <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="jim-explained" />

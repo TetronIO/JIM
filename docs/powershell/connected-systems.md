@@ -1406,7 +1406,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## Get-JIMConnectedSystemObjectUnresolvedReference
 
-Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies and the next step, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
 ### Syntax
 
@@ -1447,11 +1447,12 @@ Without `-Summary`, one `PSCustomObject` per unresolved reference, ordered by at
 | `Cause` | The likely cause: `NotFound`, `NotFoundInScope`, `ContainerNotInScope`, `ContainerExcluded`, `PartitionNotSelected`, `OutsideConnectedSystem` or `AmbiguousObjectType`. |
 | `FixLocation` | `Jim` where a change to JIM's configuration fixes it, `SourceSystem` where the fix lies in the Connected System. |
 | `ContainerExternalId` | The Container the cause concerns (the one to select, or the one excluding the value), or `$null`. |
-| `PartitionExternalId` | The partition to select, for `PartitionNotSelected`; otherwise `$null`. |
+| `PartitionExternalId` | The partition the cause concerns: the one to select, for `PartitionNotSelected`, or the one holding a value that no Container JIM knows of holds. Otherwise `$null`. |
 | `CandidateObjectTypeNames` | The Object Types an ambiguous value matches; empty for every other cause. |
-| `Suggestion` | The next step, in words. |
+| `Finding` | What is wrong, naming the Container or partition concerned exactly as `ContainerExternalId` or `PartitionExternalId` holds it. |
+| `Remedy` | What to do about it. |
 
-With `-Summary`, one `PSCustomObject` with `TotalCount`; `Causes`, each with `Cause`, `FixLocation` and `Count`; `Fixes`, every distinct next step with `Cause`, `FixLocation`, `ContainerExternalId`, `PartitionExternalId`, `Count` and `Suggestion`, most values first; and `LargestFix`, the change to JIM's configuration that would fix the most references (the same shape as a `Fixes` entry), or `$null` where every cause lies in the Connected System.
+With `-Summary`, one `PSCustomObject` with `TotalCount`; `Causes`, each with `Cause`, `FixLocation` and `Count`; `Fixes`, every distinct next step with `Cause`, `FixLocation`, `ContainerExternalId`, `PartitionExternalId`, `Count`, `Finding` and `Remedy`, most values first; and `LargestFix`, the change to JIM's configuration that would fix the most references (the same shape as a `Fixes` entry), or `$null` where every cause lies in the Connected System.
 
 ### Examples
 
@@ -1461,7 +1462,7 @@ Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3
 
 ```powershell title="See what would fix them"
 (Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-..." -Summary).Fixes |
-    Select-Object Count, FixLocation, Suggestion
+    Select-Object Count, FixLocation, Finding, Remedy
 ```
 
 ```powershell title="Every reference a Container Scope change would fix, by Container"

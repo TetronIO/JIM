@@ -204,7 +204,8 @@ public class UnresolvedReferenceDiagnosisServerTests
                 (UnresolvedReferenceCause.PartitionNotSelected, UnresolvedReferenceFixLocation.Jim, null, Lab, 12),
                 (UnresolvedReferenceCause.NotFoundInScope, UnresolvedReferenceFixLocation.SourceSystem, $"OU=Staff,{Corp}", null, 2)
             }), "Every distinct next step is listed, most values first, wherever its fix lies.");
-            Assert.That(summary.Fixes.Select(f => f.Suggestion), Has.All.Not.Empty);
+            Assert.That(summary.Fixes.Select(f => f.Finding), Has.All.Not.Empty);
+            Assert.That(summary.Fixes.Select(f => f.Remedy), Has.All.Not.Empty);
         }
     }
 
@@ -294,7 +295,7 @@ public class UnresolvedReferenceDiagnosisServerTests
                 (UnresolvedReferenceCause.NotFound, 2),
                 (UnresolvedReferenceCause.AmbiguousObjectType, 1)
             }));
-            Assert.That(summary.Fixes[1].Suggestion, Does.Not.Contain("''"),
+            Assert.That(summary.Fixes[1].Finding, Does.Not.Contain("''"),
                 "The ambiguous fix speaks of the attributes as a group, not of an attribute with no name.");
         }
     }

@@ -101,54 +101,65 @@ public sealed class UnresolvedReferenceClassifier
             diagnosis.CandidateObjectTypeNames = [.. ambiguousWith.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase)];
             return Conclude(diagnosis, UnresolvedReferenceCause.AmbiguousObjectType,
                 $"This value matches objects of more than one Object Type ({string.Join(", ", diagnosis.CandidateObjectTypeNames)}), and attribute " +
-                $"'{attributeName}' does not declare which one it references. Declare its target Object Type on the Schema tab if the Connector supports doing so.");
+                $"'{attributeName}' does not declare which one it references.",
+                "Declare its target Object Type on the Schema tab if the Connector supports doing so.");
         }
 
         if (_containment == null || _scope == null)
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFound,
-                $"Nothing with this value has been imported into {_connectedSystem.Name}. Run a Full Import to rule out a missed change; if it is still " +
-                "unresolved, the source refers to an object that is not in it, or one whose Object Type is not imported.");
+                $"Nothing with this value has been imported into {_connectedSystem.Name}.",
+                "Run a Full Import to rule out a missed change. If it is still unresolved, the source refers to an object that is not in it, " +
+                "or one whose Object Type is not imported.");
 
         var partitionBoundary = ContainerSpecificity.ResolveMostSpecific(value, _partitionBoundaries, _containment.IsWithinContainer);
         if (partitionBoundary == null)
             return Conclude(diagnosis, UnresolvedReferenceCause.OutsideConnectedSystem,
-                $"This value is in none of {_connectedSystem.Name}'s partitions, so JIM cannot import the object it names. If references like this " +
-                "are expected, set Unresolved Reference Handling to Warn.");
+                $"This value is in none of {_connectedSystem.Name}'s partitions, so JIM cannot import the object it names.",
+                "If references like this are expected, set Unresolved Reference Handling to Warn.");
 
         var partition = _partitionsById[partitionBoundary.Id];
         if (!partition.Selected)
         {
             diagnosis.PartitionExternalId = partition.ExternalId;
             return Conclude(diagnosis, UnresolvedReferenceCause.PartitionNotSelected,
-                $"Partition {partition.ExternalId} is not selected. Select it on the Scope tab, then run a Full Import.");
+                $"Partition {partition.ExternalId} is not selected.",
+                "Select it on the Scope tab, then run a Full Import.");
         }
 
         var nearest = NearestKnownContainer(partition.Id, value);
         if (_scope.Contains(partition.Id, value) is not { } inScope)
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFound,
-                $"Nothing with this value has been imported into {_connectedSystem.Name}. Run a Full Import to rule out a missed change.");
+                $"Nothing with this value has been imported into {_connectedSystem.Name}.",
+                "Run a Full Import to rule out a missed change.");
+
+        // Where no known Container holds the value, the partition is the place a finding can point at.
+        diagnosis.ContainerExternalId = nearest?.ExternalId;
+        if (nearest == null)
+            diagnosis.PartitionExternalId = partition.ExternalId;
 
         if (inScope)
-        {
-            diagnosis.ContainerExternalId = nearest?.ExternalId;
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFoundInScope,
-                $"{nearest?.ExternalId ?? partition.ExternalId} is in Container Scope, but nothing with this value has been imported. Run a Full Import " +
-                $"to rule out a missed change; if it is still unresolved, the object no longer exists in {_connectedSystem.Name}, or its Object Type is not imported.");
-        }
+                $"{nearest?.ExternalId ?? partition.ExternalId} is in Container Scope, but nothing with this value has been imported.",
+                $"Run a Full Import to rule out a missed change. If it is still unresolved, the object no longer exists in {_connectedSystem.Name}, " +
+                "or its Object Type is not imported.");
 
         var decider = ContainerSpecificity.ResolveMostSpecific(value, _scopeDecidingContainers, _containment.IsWithinContainer);
         if (decider != null && _scope.ExcludedContainers.Contains(decider))
         {
             diagnosis.ContainerExternalId = decider.ExternalId;
+            diagnosis.PartitionExternalId = null;
             return Conclude(diagnosis, UnresolvedReferenceCause.ContainerExcluded,
-                $"{decider.ExternalId} is excluded from Container Scope. If its objects belong in JIM, lift the exclusion on the Scope tab, then run a Full Import.");
+                $"{decider.ExternalId} is excluded from Container Scope.",
+                "If its objects belong in JIM, lift the exclusion on the Scope tab, then run a Full Import.");
         }
 
-        diagnosis.ContainerExternalId = nearest?.ExternalId;
-        return Conclude(diagnosis, UnresolvedReferenceCause.ContainerNotInScope, nearest != null
-            ? $"{nearest.ExternalId} is not in Container Scope. Select it on the Scope tab, then run a Full Import."
-            : $"The object sits in {partition.ExternalId} outside every Container JIM knows of. Refresh the hierarchy on the Scope tab, then select " +
-              "the Container that holds it and run a Full Import.");
+        return nearest != null
+            ? Conclude(diagnosis, UnresolvedReferenceCause.ContainerNotInScope,
+                $"{nearest.ExternalId} is not in Container Scope.",
+                "Select it on the Scope tab, then run a Full Import.")
+            : Conclude(diagnosis, UnresolvedReferenceCause.ContainerNotInScope,
+                $"The object sits in {partition.ExternalId}, outside every Container JIM knows of.",
+                "Refresh the hierarchy on the Scope tab, then select the Container that holds it and run a Full Import.");
     }
 
     /// <summary>
@@ -165,11 +176,12 @@ public sealed class UnresolvedReferenceClassifier
     };
 
     private static ConnectedSystemObjectUnresolvedReference Conclude(
-        ConnectedSystemObjectUnresolvedReference diagnosis, UnresolvedReferenceCause cause, string suggestion)
+        ConnectedSystemObjectUnresolvedReference diagnosis, UnresolvedReferenceCause cause, string finding, string remedy)
     {
         diagnosis.Cause = cause;
         diagnosis.FixLocation = FixLocationFor(cause);
-        diagnosis.Suggestion = suggestion;
+        diagnosis.Finding = finding;
+        diagnosis.Remedy = remedy;
         return diagnosis;
     }
 

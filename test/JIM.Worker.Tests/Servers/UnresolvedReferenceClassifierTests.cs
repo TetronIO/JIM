@@ -47,7 +47,8 @@ public class UnresolvedReferenceClassifierTests
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.ContainerNotInScope));
             Assert.That(diagnosis.ContainerExternalId, Is.EqualTo($"OU=Contractors,{Corp}"));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.Jim));
-            Assert.That(diagnosis.Suggestion, Does.Contain($"OU=Contractors,{Corp}"));
+            Assert.That(diagnosis.Finding, Does.Contain($"OU=Contractors,{Corp}"), "The finding names the Container, so the portal can set it as a value.");
+            Assert.That(diagnosis.Remedy, Is.Not.Empty);
         }
     }
 
@@ -82,6 +83,7 @@ public class UnresolvedReferenceClassifierTests
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.ContainerExcluded));
             Assert.That(diagnosis.ContainerExternalId, Is.EqualTo($"OU=Leavers,OU=Staff,{Corp}"));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.Jim));
+            Assert.That(diagnosis.Finding, Does.Contain($"OU=Leavers,OU=Staff,{Corp}"));
         }
     }
 
@@ -108,7 +110,8 @@ public class UnresolvedReferenceClassifierTests
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.NotFoundInScope));
             Assert.That(diagnosis.ContainerExternalId, Is.EqualTo($"OU=Staff,{Corp}"));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.SourceSystem));
-            Assert.That(diagnosis.Suggestion, Does.Contain("Full Import"));
+            Assert.That(diagnosis.Finding, Does.Contain($"OU=Staff,{Corp}"));
+            Assert.That(diagnosis.Remedy, Does.Contain("Full Import"));
         }
     }
 
@@ -122,6 +125,7 @@ public class UnresolvedReferenceClassifierTests
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.PartitionNotSelected));
             Assert.That(diagnosis.PartitionExternalId, Is.EqualTo(Lab));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.Jim));
+            Assert.That(diagnosis.Finding, Does.Contain(Lab));
         }
     }
 
@@ -148,7 +152,7 @@ public class UnresolvedReferenceClassifierTests
         {
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.OutsideConnectedSystem));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.SourceSystem));
-            Assert.That(diagnosis.Suggestion, Does.Contain("Warn"));
+            Assert.That(diagnosis.Remedy, Does.Contain("Warn"));
         }
     }
 
@@ -162,7 +166,7 @@ public class UnresolvedReferenceClassifierTests
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.AmbiguousObjectType));
             Assert.That(diagnosis.CandidateObjectTypeNames, Is.EqualTo(new[] { "contact", "user" }));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.Jim));
-            Assert.That(diagnosis.Suggestion, Does.Contain("member"));
+            Assert.That(diagnosis.Finding, Does.Contain("member"));
         }
     }
 
@@ -176,7 +180,22 @@ public class UnresolvedReferenceClassifierTests
         {
             Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.NotFound));
             Assert.That(diagnosis.FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.SourceSystem));
-            Assert.That(diagnosis.Suggestion, Does.Contain("Full Import"));
+            Assert.That(diagnosis.Remedy, Does.Contain("Full Import"));
+        }
+    }
+
+    [Test]
+    public void Diagnose_ValueOutsideEveryKnownContainer_NamesItsPartition()
+    {
+        // No Container JIM knows of holds it, so the partition is the place the finding can point at.
+        var diagnosis = Classifier().Diagnose("member", $"CN=Pat Lee,OU=Unknown,{Corp}");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(diagnosis.Cause, Is.EqualTo(UnresolvedReferenceCause.ContainerNotInScope));
+            Assert.That(diagnosis.ContainerExternalId, Is.Null);
+            Assert.That(diagnosis.PartitionExternalId, Is.EqualTo(Corp));
+            Assert.That(diagnosis.Finding, Does.Contain(Corp));
         }
     }
 

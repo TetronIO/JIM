@@ -95,7 +95,8 @@ public class UnresolvedReferenceEndpointTests
             Assert.That(page.Items.Single().Value, Is.EqualTo("EMP-48213"));
             Assert.That(page.Items.Single().Cause, Is.EqualTo(UnresolvedReferenceCause.NotFound));
             Assert.That(page.Items.Single().FixLocation, Is.EqualTo(UnresolvedReferenceFixLocation.SourceSystem));
-            Assert.That(page.Items.Single().Suggestion, Is.Not.Empty);
+            Assert.That(page.Items.Single().Finding, Is.Not.Empty);
+            Assert.That(page.Items.Single().Remedy, Is.Not.Empty);
         }
     }
 

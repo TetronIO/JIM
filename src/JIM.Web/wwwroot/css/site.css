@@ -6386,21 +6386,62 @@ td.jim-connection-detail-cell {
     background: color-mix(in srgb, var(--mud-palette-warning) 7%, transparent);
 }
 
-/* Each distinct next step as a row of three columns: where the fix lies, the step in full, and the tab to take it on.
-   A grid rather than a flex row per step, so the steps' text starts at one edge whichever location chip ("JIM" or
-   "Source system") precedes it. */
+/* The next steps (#959), grouped by where each is taken: one grid of three columns (how many references, the step,
+   the tab to take it on) shared by both groups, so the columns line up across them. Each cell stretches to its row's
+   height, so the row's divider is one unbroken line, and its content starts at the top: the count chip and the link
+   are one text line tall, so whatever the step's text wraps to, the row reads from its first line rather than floating
+   its ends between lines. The space between columns is the step's own padding, not a grid gap, which would cut the
+   divider into pieces. */
 .jim-unresolved-fixes {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr) max-content;
-    align-items: center;
-    column-gap: 12px;
-    row-gap: 8px;
+    grid-template-columns: 4rem minmax(0, 1fr) max-content;
 }
 
-.jim-unresolved-fix {
-    display: contents;
+.jim-unresolved-fix-group {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0 8px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-unresolved-fix-cell {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+    line-height: 1.5rem;
 }
 
 .jim-unresolved-fix-text {
+    padding-left: 16px;
+    padding-right: 16px;
     overflow-wrap: anywhere;
+}
+
+/* A flex box rather than a line box, so the chip's top is the cell's padding edge, level with the step's first line. */
+.jim-unresolved-fix-count-cell {
+    display: flex;
+    align-items: flex-start;
+}
+
+.jim-unresolved-fix-remedy {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The count chip sized to one text line and to the widest count likely, so the counts of a group read as a column.
+   Qualified: MudBlazor's own chip sizing loads after this sheet (see "Custom CSS in site.css" in JIM.Web/CLAUDE.md). */
+html[lang] .mud-chip.jim-unresolved-fix-count {
+    height: 1.5rem;
+    min-width: 2.75rem;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-unresolved-fix-action {
+    white-space: nowrap;
+}
+
+.jim-unresolved-fix-more {
+    grid-column: 1 / -1;
+    padding: 8px 0 4px;
 }

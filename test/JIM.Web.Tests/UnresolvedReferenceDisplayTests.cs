@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Web.Models;
 using NUnit.Framework;
 
@@ -83,6 +84,46 @@ public class UnresolvedReferenceDisplayTests
         var action = UnresolvedReferenceDisplay.ActionFor(UnresolvedReferenceCause.AmbiguousObjectType, ConnectedSystemId, null);
 
         Assert.That(action.Href, Is.EqualTo($"/admin/connected-systems/{ConnectedSystemId}?t=schema"));
+    }
+
+    [TestCase("OU=Contractors,DC=corp is not in Container Scope.", "OU=Contractors,DC=corp", "", " is not in Container Scope.")]
+    [TestCase("Partition DC=lab,DC=corp is not selected.", "DC=lab,DC=corp", "Partition ", " is not selected.")]
+    public void SplitFinding_FindingNamingTheIdentifier_SetsItApart(string finding, string identifier, string before, string after)
+    {
+        var parts = UnresolvedReferenceDisplay.SplitFinding(finding, identifier);
+
+        Assert.That(parts, Is.EqualTo((before, (string?)identifier, after)));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("OU=Elsewhere,DC=corp")]
+    public void SplitFinding_NoIdentifierInTheFinding_LeavesItWhole(string? identifier)
+    {
+        const string finding = "This value is in none of Corp AD's partitions.";
+
+        Assert.That(UnresolvedReferenceDisplay.SplitFinding(finding, identifier), Is.EqualTo((finding, (string?)null, "")));
+    }
+
+    [Test]
+    public void GroupFixes_StepsForBothPlaces_GroupsThemJimFirstKeepingTheirOrder()
+    {
+        UnresolvedReferenceFix Fix(UnresolvedReferenceFixLocation location, int count) =>
+            new() { FixLocation = location, Count = count, Finding = "f", Remedy = "r" };
+
+        var groups = UnresolvedReferenceDisplay.GroupFixes(
+        [
+            Fix(UnresolvedReferenceFixLocation.SourceSystem, 9),
+            Fix(UnresolvedReferenceFixLocation.Jim, 5),
+            Fix(UnresolvedReferenceFixLocation.SourceSystem, 2),
+            Fix(UnresolvedReferenceFixLocation.Jim, 1)
+        ]);
+
+        Assert.That(groups.Select(g => (g.FixLocation, g.Fixes.Select(f => f.Count).ToArray())), Is.EqualTo(new[]
+        {
+            (UnresolvedReferenceFixLocation.Jim, new[] { 5, 1 }),
+            (UnresolvedReferenceFixLocation.SourceSystem, new[] { 9, 2 })
+        }), "What the administrator can change in JIM comes first, whatever the counts.");
     }
 
     [Test]

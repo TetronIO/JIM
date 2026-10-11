@@ -28,12 +28,21 @@ public class ConnectedSystemObjectUnresolvedReference
     /// </summary>
     public string? ContainerExternalId { get; set; }
 
-    /// <summary>The partition the cause concerns, for a value in a partition that is not selected; otherwise null.</summary>
+    /// <summary>
+    /// The partition the cause concerns: the one to select, for a value in a partition that is not selected, or the one
+    /// holding a value that no Container JIM knows of holds. Null otherwise.
+    /// </summary>
     public string? PartitionExternalId { get; set; }
 
     /// <summary>The Object Types an ambiguous value matches; empty for every other cause.</summary>
     public List<string> CandidateObjectTypeNames { get; set; } = [];
 
-    /// <summary>The next step, in words.</summary>
-    public string Suggestion { get; set; } = null!;
+    /// <summary>
+    /// What is wrong, in words: why the value most likely did not resolve. Names the Container or partition concerned
+    /// exactly as <see cref="ContainerExternalId"/> or <see cref="PartitionExternalId"/> holds it, where there is one.
+    /// </summary>
+    public string Finding { get; set; } = null!;
+
+    /// <summary>What to do about it, in words.</summary>
+    public string Remedy { get; set; } = null!;
 }

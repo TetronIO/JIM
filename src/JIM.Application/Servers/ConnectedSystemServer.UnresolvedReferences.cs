@@ -170,8 +170,10 @@ public partial class ConnectedSystemServer
         // Values on several attributes can be ambiguous, so the per-value sentence (which names one attribute) does
         // not fit the whole group; say it of them all. LargestFix is one of the Fixes, so this reaches both.
         foreach (var fix in summary.Fixes.Where(f => f.Cause == UnresolvedReferenceCause.AmbiguousObjectType))
-            fix.Suggestion = "These values match objects of more than one Object Type, on attributes that do not declare which one they reference. " +
-                             "Declare each attribute's target Object Type on the Schema tab if the Connector supports doing so.";
+        {
+            fix.Finding = "These values match objects of more than one Object Type, on attributes that do not declare which one they reference.";
+            fix.Remedy = "Declare each attribute's target Object Type on the Schema tab if the Connector supports doing so.";
+        }
 
         return summary;
     }
@@ -203,7 +205,8 @@ public partial class ConnectedSystemServer
                 ContainerExternalId = group.Key.ContainerExternalId,
                 PartitionExternalId = group.Key.PartitionExternalId,
                 Count = group.Sum(e => e.Count),
-                Suggestion = group.First().Diagnosis.Suggestion
+                Finding = group.First().Diagnosis.Finding,
+                Remedy = group.First().Diagnosis.Remedy
             })
             // Most values first; at equal counts, the steps an administrator can take in JIM before those that lie in
             // the Connected System.

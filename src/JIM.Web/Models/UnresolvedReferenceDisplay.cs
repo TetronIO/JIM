@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -43,6 +44,34 @@ public static class UnresolvedReferenceDisplay
 
         return nowCount < run ? UnresolvedReferenceSinceRun.Fewer : UnresolvedReferenceSinceRun.More;
     }
+
+    /// <summary>
+    /// A finding split around the Container or partition it names, so the identifier can be set in the same code style
+    /// as the values it is drawn from. A finding that does not contain the identifier comes back whole.
+    /// </summary>
+    /// <param name="finding">The finding, as the diagnosis states it.</param>
+    /// <param name="identifier">The Container or partition the cause concerns, or null.</param>
+    public static (string Before, string? Identifier, string After) SplitFinding(string finding, string? identifier)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+
+        var index = string.IsNullOrEmpty(identifier) ? -1 : finding.IndexOf(identifier, StringComparison.Ordinal);
+        return index < 0
+            ? (finding, null, string.Empty)
+            : (finding[..index], identifier, finding[(index + identifier!.Length)..]);
+    }
+
+    /// <summary>
+    /// The next steps grouped by where they are taken, JIM's configuration first: what an administrator can change
+    /// themselves comes before what needs the Connected System's owners. Each group keeps the steps' own order.
+    /// </summary>
+    public static IReadOnlyList<UnresolvedReferenceFixGroup> GroupFixes(IEnumerable<UnresolvedReferenceFix> fixes) =>
+    [
+        .. fixes
+            .GroupBy(fix => fix.FixLocation)
+            .OrderBy(group => group.Key == UnresolvedReferenceFixLocation.Jim ? 0 : 1)
+            .Select(group => new UnresolvedReferenceFixGroup(group.Key, [.. group]))
+    ];
 
     /// <summary>The likely cause's label, for chips and table cells.</summary>
     public static string CauseLabel(UnresolvedReferenceCause cause) => cause switch

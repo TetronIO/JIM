@@ -24,6 +24,12 @@ public class UnresolvedReferenceFix
     /// <summary>How many values the step addresses.</summary>
     public int Count { get; set; }
 
-    /// <summary>The step, in words.</summary>
-    public string Suggestion { get; set; } = null!;
+    /// <summary>
+    /// What is wrong, in words. Names the Container or partition concerned exactly as <see cref="ContainerExternalId"/> or
+    /// <see cref="PartitionExternalId"/> holds it, where there is one.
+    /// </summary>
+    public string Finding { get; set; } = null!;
+
+    /// <summary>What to do about it, in words.</summary>
+    public string Remedy { get; set; } = null!;
 }

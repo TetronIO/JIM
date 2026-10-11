@@ -9,7 +9,7 @@ function Get-JIMConnectedSystemObjectUnresolvedReference {
     .DESCRIPTION
         Retrieves the reference values on a Connected System Object that could not be linked to another
         Connected System Object (for example group members outside Container Scope), each with its likely
-        cause, where the fix lies (JIM's configuration or the source system) and the next step in words.
+        cause, where the fix lies (JIM's configuration or the source system), what is wrong and what to do.
 
         Likely causes are judged against the Connected System's current Container Scope, so they describe
         the object as it stands now: widening the scope changes the answer the next time you ask.
@@ -32,7 +32,7 @@ function Get-JIMConnectedSystemObjectUnresolvedReference {
 
     .PARAMETER Summary
         Return the summary instead of the references: TotalCount, Causes (each a Cause, FixLocation and
-        Count), Fixes (every distinct next step with its Count and Suggestion, most values first) and
+        Count), Fixes (every distinct next step with its Count, Finding and Remedy, most values first) and
         LargestFix (the change to JIM's configuration that would address the most values, or null).
 
     .PARAMETER All
@@ -50,7 +50,8 @@ function Get-JIMConnectedSystemObjectUnresolvedReference {
 
     .OUTPUTS
         Without -Summary, PSCustomObject per reference: AttributeName, Value, Cause, FixLocation,
-        ContainerExternalId, PartitionExternalId, CandidateObjectTypeNames and Suggestion.
+        ContainerExternalId, PartitionExternalId, CandidateObjectTypeNames, Finding (what is wrong) and
+        Remedy (what to do).
         With -Summary, one PSCustomObject: TotalCount, Causes, Fixes and LargestFix.
 
     .EXAMPLE
