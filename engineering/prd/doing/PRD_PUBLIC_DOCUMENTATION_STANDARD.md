@@ -1,10 +1,11 @@
 # Public Documentation Standard
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 complete: factual corrections, and link and example checks at pull request time)
 - **Created:** 2026-10-11
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
-- **Evidence:** [`engineering/notes/docs-audit-2026-10/`](../notes/docs-audit-2026-10/README.md) (every page read in full; product surfaces inventoried from source)
+- **Plan:** [`PUBLIC_DOCUMENTATION_STANDARD.md`](../../plans/doing/PUBLIC_DOCUMENTATION_STANDARD.md)
+- **Evidence:** [`engineering/notes/docs-audit-2026-10/`](../../notes/docs-audit-2026-10/README.md) (every page read in full; product surfaces inventoried from source)
 
 ## Problem Statement
 
@@ -313,7 +314,7 @@ Decided by the product owner on 2026-10-11, each as recommended in the draft.
 
 ## Additional Context
 
-- **Audit evidence:** [`engineering/notes/docs-audit-2026-10/`](../notes/docs-audit-2026-10/README.md): per-page findings with quotes and suggested rewrites, the coverage inventories with every gap, and the tooling evaluation with measured baselines.
+- **Audit evidence:** [`engineering/notes/docs-audit-2026-10/`](../../notes/docs-audit-2026-10/README.md): per-page findings with quotes and suggested rewrites, the coverage inventories with every gap, and the tooling evaluation with measured baselines.
 - **Exemplar pages to model the specification on:** `concepts/case-sensitivity.md`, `configuration/data-flow.md`, `configuration/sync-preview.md`, `connectors/jim-sql-connector.md` and its two Delta Import guides, `administration/backup-recovery.md`, `administration/deploying-with-ansible.md`, `powershell/connection.md`, `powershell/password-synchronisation.md`.
 - **Sources:** [Diátaxis](https://diataxis.fr/); [Google developer documentation style guide](https://developers.google.com/style); [Microsoft Writing Style Guide](https://learn.microsoft.com/style-guide/welcome/); [GitLab documentation topic types](https://docs.gitlab.com/development/documentation/topic_types/) and its Vale-based enforcement; Mark Baker, *Every Page is Page One*; [ESLint bulk suppressions](https://eslint.org/blog/2025/04/introducing-bulk-suppressions/) (the model for the shrink-only baseline). Full list with notes in the research file.
 - **Effort.** The issue is sized Medium. Phases 0 to 2 (corrections, specification, enforcement framework) are about that; the migration of about 222,000 words across 80 pages, including splitting the five largest pages, is substantially larger and is best delivered as one pull request per folder. The priority wave is where most of the value lands and should be planned as its own pull requests: the tutorial with its scenario, the troubleshooting synchronisation section, and the splits of the three largest priority pages. Re-validating the priority pages adds a recurring cost to each release, which is why the list is kept short.

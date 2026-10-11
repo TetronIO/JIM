@@ -46,7 +46,7 @@ When an Export activity withholds anything, it completes as **Complete with warn
 
 ### Run Profile Safeguards (Full Import deletion detection limits)
 
-Every Full Import activity that ran deletion detection carries a `detectedDeletionsWithheld` counter: `0` when its Run Profile has no deletion detection limit, or the count of newly-detected deletions did not exceed either limit; otherwise it is how many Connected System Objects deletion detection found missing but marked as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+Every Full Import activity that ran deletion detection carries a `detectedDeletionsWithheld` counter: `0` when its Run Profile has no deletion detection limit, or the count of newly-detected deletions did not exceed either limit; otherwise it is how many Connected System Objects deletion detection found missing but did not mark as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
 
 When a Full Import activity's deletion detection is refused, it completes as **Complete with warning**, and its warning message names the limit that tripped, for example:
 

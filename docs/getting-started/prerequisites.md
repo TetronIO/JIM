@@ -1,6 +1,6 @@
 ---
 title: Prerequisites
-description: What you need before deploying JIM: container runtime, identity provider, and hardware requirements.
+description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
 ---
 
 # Prerequisites
