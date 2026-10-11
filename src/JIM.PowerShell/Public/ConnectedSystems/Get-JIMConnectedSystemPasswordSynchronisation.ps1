@@ -47,7 +47,7 @@ function Get-JIMConnectedSystemPasswordSynchronisation {
         Shows whether Connected System 3 receives synchronised passwords.
 
     .EXAMPLE
-        Get-JIMConnectedSystem -All | ForEach-Object {
+        Get-JIMConnectedSystem | ForEach-Object {
             $p = Get-JIMConnectedSystemPasswordSynchronisation -Id $_.Id
             [PSCustomObject]@{ System = $_.Name; Configured = $p.configured; Enabled = $p.enabled }
         }

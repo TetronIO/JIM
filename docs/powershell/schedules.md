@@ -122,6 +122,7 @@ New-JIMSchedule [-Name] <String>
     [-CronExpression <String>]
     [-Enabled]
     [-OnStepFailure <String>]
+    [-ChangeReason <String>]
     [-PassThru]
     [-WhatIf] [-Confirm]
 ```
@@ -143,6 +144,7 @@ New-JIMSchedule [-Name] <String>
 | `CronExpression` | `String` | No | | A cron expression for `Custom` pattern or `Cron` trigger type (e.g. `"0 6 * * 1-5"`). |
 | `Enabled` | `Switch` | No | | Enables the schedule immediately upon creation. |
 | `OnStepFailure` | `String` | No | `Stop` | What the Schedule does when a step fails: `Stop` or `Continue`. Steps follow it unless they have a setting of their own. See [When a step fails](#when-a-step-fails). |
+| `ChangeReason` | `String` | No | | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | | Returns the created schedule object. |
 
 #### Output
@@ -220,6 +222,7 @@ Set-JIMSchedule -Id <Guid>
     [-CronExpression <String>]
     [-OnStepFailure <String>]
     [-Steps <Object[]>]
+    [-ChangeReason <String>]
     [-PassThru]
     [-WhatIf] [-Confirm]
 ```
@@ -242,6 +245,7 @@ Set-JIMSchedule -Id <Guid>
 | `CronExpression` | `String` | No | No | Updated cron expression. |
 | `OnStepFailure` | `String` | No | No | What the Schedule does when a step fails: `Stop` or `Continue`. Omit to leave it unchanged. A built-in Schedule, such as Temporal Scope Reconciliation, always stops; JIM refuses a change to it. See [When a step fails](#when-a-step-fails). |
 | `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. Give each step its failure setting as `OnFailure`: a step object that carries `OnFailure` ignores its `ContinueOnFailure`, so to change one step's setting, use [`Set-JIMScheduleStep`](#set-jimschedulestep) or change the step's `OnFailure`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -285,7 +289,7 @@ Supports `ShouldProcess` with high impact; prompts for confirmation by default. 
 #### Syntax
 
 ```powershell
-Remove-JIMSchedule -Id <Guid> [-Force] [-WhatIf] [-Confirm]
+Remove-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-Force] [-WhatIf] [-Confirm]
 ```
 
 #### Parameters
@@ -293,6 +297,7 @@ Remove-JIMSchedule -Id <Guid> [-Force] [-WhatIf] [-Confirm]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to delete. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the deletion, recorded in the Schedule's change history. |
 | `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
 
 #### Output
@@ -324,7 +329,7 @@ Enables a schedule so it will execute according to its configured trigger.
 #### Syntax
 
 ```powershell
-Enable-JIMSchedule -Id <Guid> [-PassThru]
+Enable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
 ```
 
 #### Parameters
@@ -332,6 +337,7 @@ Enable-JIMSchedule -Id <Guid> [-PassThru]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to enable. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -358,7 +364,7 @@ Disables a schedule, preventing it from executing on its configured trigger. The
 #### Syntax
 
 ```powershell
-Disable-JIMSchedule -Id <Guid> [-PassThru]
+Disable-JIMSchedule -Id <Guid> [-ChangeReason <String>] [-PassThru]
 ```
 
 #### Parameters
@@ -366,6 +372,7 @@ Disable-JIMSchedule -Id <Guid> [-PassThru]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to disable. Alias: `ScheduleId`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -448,6 +455,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -RunProfileId <Int32>
     [-Parallel]
     [-OnFailure <String> | -ContinueOnFailure]
+    [-ChangeReason <String>]
     [-PassThru]
 
 # ByName
@@ -457,6 +465,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -RunProfileName <String>
     [-Parallel]
     [-OnFailure <String> | -ContinueOnFailure]
+    [-ChangeReason <String>]
     [-PassThru]
 ```
 
@@ -473,6 +482,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
 | `Parallel` | `Switch` | No | Both | Runs this step in parallel with the previous step. |
 | `OnFailure` | `String` | No | Both | What the step does when it fails: `FollowSchedule` (the default; the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. See [When a step fails](#when-a-step-fails). |
 | `ContinueOnFailure` | `Switch` | No | Both | Shorthand for `-OnFailure Continue`. Supplying both `-OnFailure` and `-ContinueOnFailure` is an error, and nothing is changed. |
+| `ChangeReason` | `String` | No | Both | A reason for the change, recorded in the Schedule's change history. |
 | `PassThru` | `Switch` | No | Both | Returns the updated schedule object. |
 
 #### Output
@@ -597,7 +607,7 @@ Supports `ShouldProcess` with high impact. Use `-Force` to suppress the confirma
 #### Syntax
 
 ```powershell
-Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-Force] [-PassThru]
+Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-ChangeReason <String>] [-Force] [-PassThru]
 ```
 
 #### Parameters
@@ -606,6 +616,7 @@ Remove-JIMScheduleStep -ScheduleId <Guid> -StepIndex <Int32> [-Force] [-PassThru
 |---|---|---|---|---|
 | `ScheduleId` | `Guid` | Yes | ByValue, ByPropertyName | The schedule to remove the step from. Alias: `Id`. |
 | `StepIndex` | `Int32` | Yes | No | The zero-based index of the step to remove. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
 | `Force` | `Switch` | No | No | Suppresses the confirmation prompt. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 

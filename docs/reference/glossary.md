@@ -33,10 +33,10 @@ Container Scope { #container-scope }
 :   How far beneath a selected Container objects are imported from: the whole subtree beneath it (the default), or only the objects held directly within it. Set per Container when configuring a Connected System's partitions.
 
 Delta Synchronisation { #delta-synchronisation }
-:   The Run Profile type that processes only the Connected System Objects that changed since the last Full Synchronisation or Delta Synchronisation, applying Object Matching Rules, Projection, Join and Attribute Flow. Faster than a Full Synchronisation, at the cost of relying on the Connected System's own change tracking.
+:   The Run Profile type that processes only the Connected System Objects that changed since the last Full Synchronisation or Delta Synchronisation, applying Object Matching Rules, Projection, Join and Attribute Flow. Faster than a Full Synchronisation, because it works only from changes already imported into the Connector Space.
 
 Deprovisioning { #deprovisioning }
-:   The process of removing or disabling accounts in target systems when an identity no longer meets the criteria for access. Deprovisioning ensures that stale or revoked accounts are cleaned up across all Connected Systems.
+:   The process of removing or releasing accounts in target systems when an identity no longer meets the criteria for access. Deprovisioning ensures that stale or revoked accounts are cleaned up across all Connected Systems.
 
 Deprovisioning Action { #deprovisioning-action }
 :   What an export Synchronisation Rule does to a Connected System Object when its identity is deleted or leaves the rule's scope. **Disconnect** (the default) unlinks the objects and leaves the target account in place; **Delete** removes the account from the target system, whether JIM originally provisioned it or matched a pre-existing one.
@@ -51,7 +51,7 @@ Expression { #expression }
 :   A formula for transforming attribute values during Attribute Flow. Expressions enable string manipulation, conditional logic, and value mapping so that data arriving from one system can be adapted to the format required by another.
 
 Full Synchronisation { #full-synchronisation }
-:   The Run Profile type that processes every Connected System Object in scope, applying Object Matching Rules, Projection, Join and Attribute Flow. Confirms the Metaverse and every Connected System agree, and re-applies configuration changes that a Delta Synchronisation does not pick up.
+:   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, except a joined object unchanged since the last synchronisation, which it skips unless Synchronisation Rule configuration has changed since the last Full Synchronisation. Re-applies configuration changes that a Delta Synchronisation does not pick up.
 
 Grace Period { #grace-period }
 :   The configurable time window before a scheduled deletion is executed. Grace periods provide a safety net, allowing administrators to recover objects that were marked for deletion before they are permanently removed.
@@ -63,7 +63,7 @@ Import { #import }
 :   The two Run Profile types, Full Import and Delta Import, that bring a Connected System's objects into the Connector Space. A Full Import reads everything the connection scope covers; a Delta Import reads only what has changed since the last one, where the Connected System supports it.
 
 Initial Export Only { #initial-export-only }
-:   An Attribute Flow option on export Synchronisation Rules. The attribute is set once, when JIM provisions the object, and is then treated as unmanaged: the Connected System owns the value from that point on and Drift Correction leaves it alone. Intended for initial passwords, one-time tokens, and other set-once values.
+:   An Attribute Flow option on export Synchronisation Rules. The attribute is set once, when JIM provisions the object, and is then treated as unmanaged: the Connected System owns the value from that point on and Drift Correction leaves it alone. Intended for one-time setup values and other set-once values; initial passwords are set on an export Synchronisation Rule's Initial Password tab, never through Attribute Flow.
 
 Join { #join }
 :   Linking a Connected System Object to an existing Metaverse Object. A Join happens when an Object Matching Rule finds that an incoming Connected System Object corresponds to one that already exists.
@@ -84,7 +84,7 @@ Obsoletion { #obsoletion }
 :   The process of marking a Connected System Object as no longer existing in its source system. Obsoletion is detected during import when an object that was previously present is no longer returned by the Connected System.
 
 Partition { #partition }
-:   A logical division within a Connected System. Partitions allow JIM to scope imports and exports to specific segments of a directory or data source, such as organisational units in an LDAP directory.
+:   A logical division within a Connected System. Partitions allow JIM to scope imports and exports to specific segments of a directory or data source, such as the naming contexts an LDAP directory hosts; organisational units within a partition are Containers.
 
 Password Synchronisation { #password-synchronisation }
 :   Delivery of one password change to every Connected System configured to receive it that the Metaverse Object has a Connected System Object in. Each system gets its own queued, encrypted change, delivered and retried independently by the Password Delivery Service, so one unavailable system cannot hold up the rest. Configured per Connected System. See [Passwords](../concepts/passwords.md).
