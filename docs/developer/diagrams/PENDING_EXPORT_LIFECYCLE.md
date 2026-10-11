@@ -104,10 +104,10 @@ flowchart LR
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
         Success -->|Yes, in part| PartResult[References still owed, #1398<br/>Status = Pending<br/>Create becomes Update<br/>RPEI: Exported]
-        Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning,<br/>or auto-confirmed (#1936):<br/>delete PE + CSO now, #1685]
+        Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning,<br/>or auto-confirmed #1936:<br/>delete PE + CSO now, #1685]
         Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = Pending,<br/>or Failed at MaxRetries]
         ProvResult --> OptimisticApply
-        ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>every export path, #1936;<br/>never stamps LastUpdated/Status]
+        ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>every export path, #1936,<br/>never stamps LastUpdated/Status]
         PartResult --> OptimisticApply
     end
 

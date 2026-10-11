@@ -137,7 +137,7 @@ flowchart TD
     SetRetry --> Persist
 
     Persist[Batch persist via ParallelBatchWriter<br/>CSO updates, RPEIs, Pending Export status<br/>split across N concurrent PostgreSQL connections]
-    Persist --> Optimistic[Optimistic export apply #1079:<br/>write the exported values onto the CSO now<br/>rather than waiting for the confirming import<br/>Delete change types skipped, and so are<br/>changes written with an interim value #2039;<br/>failures self-heal on the next import]
+    Persist --> Optimistic[Optimistic export apply #1079:<br/>write the exported values onto the CSO now<br/>rather than waiting for the confirming import<br/>Delete change types skipped, and so are<br/>changes written with an interim value #2039.<br/>Failures self-heal on the next import]
     Optimistic --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
     CaptureItems --> Done([Batch complete<br/>DbContext and connector disposed])
 ```
