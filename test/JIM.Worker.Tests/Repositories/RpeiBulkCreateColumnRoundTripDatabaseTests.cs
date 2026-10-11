@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -100,7 +101,13 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             UnresolvedReferenceCount = 4,
             OutcomeSummary = "Updated 3 attributes",
             PendingExportId = pendingExportId,
-            DeletionPolicySnapshotJson = snapshotJson
+            DeletionPolicySnapshotJson = snapshotJson,
+            AttributeValueErrorsJson = new ImportedAttributeValueErrors
+            {
+                Total = 2,
+                Values = [new ImportedAttributeValueError { AttributeName = "startDate", AttributeType = AttributeDataType.DateTime, Value = "31/02/2026", Reason = "Not a valid date and time." }]
+            }.ToJson(),
+            SourceLocation = "hr-users.csv, row 4,182"
         };
         var rootOutcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -160,6 +167,13 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRpei.OutcomeSummary, Is.EqualTo("Updated 3 attributes"));
             Assert.That(storedRpei.PendingExportId, Is.EqualTo(pendingExportId));
             Assert.That(storedRpei.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson));
+            Assert.That(storedRpei.SourceLocation, Is.EqualTo("hr-users.csv, row 4,182"));
+
+            // jsonb normalises the document's layout, so it is compared by what it says rather than by its text.
+            var storedErrors = ImportedAttributeValueErrors.FromJson(storedRpei.AttributeValueErrorsJson);
+            Assert.That(storedErrors?.Total, Is.EqualTo(2));
+            Assert.That(storedErrors?.Values.Select(v => (v.AttributeName, v.AttributeType, v.Value, v.Reason)),
+                Is.EqualTo(new[] { ("startDate", (AttributeDataType?)AttributeDataType.DateTime, (string?)"31/02/2026", "Not a valid date and time.") }));
         }
 
         var storedOutcomes = await readContext.ActivityRunProfileExecutionItemSyncOutcomes

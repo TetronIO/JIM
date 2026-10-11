@@ -139,6 +139,42 @@ public class ImportUnreadableAttributeValueTests
     }
 
     [Test]
+    public async Task FullImport_UnreadableValues_AreRecordedOnTheItemWithTheirTypesAndWhereTheyWereReadAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var person = Person(hrId, "Sam Okafor");
+        person.AddAttributeValueError(StartDate, "31/02/2026", "Not a valid date and time.");
+        person.AddAttributeValueError(ContractedWeeklyHours, "37.5h", "Not a valid whole number.");
+        person.SourceLocation = "hr-users.csv, row 4,182";
+        var activity = await RunFullImportAsync(person);
+
+        var item = activity.RunProfileExecutionItems.Single();
+        var recorded = ImportedAttributeValueErrors.FromJson(item.AttributeValueErrorsJson);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded?.Total, Is.EqualTo(2));
+            Assert.That(recorded?.Values.Select(v => (v.AttributeName, v.AttributeType, v.Value, v.Reason)), Is.EqualTo(new[]
+            {
+                (StartDate, (AttributeDataType?)AttributeDataType.DateTime, (string?)"31/02/2026", "Not a valid date and time."),
+                (ContractedWeeklyHours, (AttributeDataType?)AttributeDataType.Number, (string?)"37.5h", "Not a valid whole number.")
+            }), "The type is recorded as it stood, so the item still says what was expected after the schema changes.");
+            Assert.That(item.SourceLocation, Is.EqualTo("hr-users.csv, row 4,182"));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_UnreadableExternalId_IsRecordedOnTheItemAsync()
+    {
+        var unidentifiable = Person(Guid.NewGuid(), "Alex Byrne");
+        unidentifiable.Attributes.RemoveAll(a => a.Name == HrId);
+        unidentifiable.AddAttributeValueError(HrId, "not-a-guid", "Not a valid GUID.");
+        var activity = await RunFullImportAsync(unidentifiable);
+
+        var recorded = ImportedAttributeValueErrors.FromJson(activity.RunProfileExecutionItems.Single().AttributeValueErrorsJson);
+        Assert.That(recorded?.Values.Select(v => v.Value), Is.EqualTo(new[] { "not-a-guid" }));
+    }
+
+    [Test]
     public async Task FullImport_FlaggedObjectWhoseReadableContentIsUnchanged_IsStillReportedAsync()
     {
         // The first import stamps the object's content hash with a start date genuinely absent. The second carries the

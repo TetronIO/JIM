@@ -270,6 +270,18 @@
                         <MudText Class="mud-text-secondary">The Connected System Object has been deleted.</MudText>
                     }
                 </MudItem>
+
+                @* Where the Connector read the object from, such as a file and row (#2066), where it said. *@
+                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.SourceLocation))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Source</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Outlined.Description" Class="mud-text-secondary" />
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.SourceLocation</MudText>
+                        </MudStack>
+                    </MudItem>
+                }
             </MudGrid>
         </MudPaper>
 
@@ -339,7 +351,8 @@
            Export it produced is a separate subject and has its own tab. *@
         @if (_activityRunProfileExecutionItem.ErrorType is { } errorType
              and not ActivityRunProfileExecutionItemErrorType.NotSet
-             && _unresolvedReferenceTone != UnresolvedReferenceTone.Error)
+             && _unresolvedReferenceTone != UnresolvedReferenceTone.Error
+             && _attributeValueErrors == null)
         {
             <MudText Typo="Typo.h6" Class="mb-3">
                 Error Details
@@ -358,6 +371,18 @@
             <MatchCandidatesPanel Candidates="@_matchCandidates" />
 
             <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
+        }
+
+        @* Values the Connector could not read (#2066), laid out one per row, in place of the Error Details above. An
+           item without them recorded (from before they were kept, or a Connector that reports a message alone) keeps
+           its Error Details. *@
+        @if (_attributeValueErrors is { } attributeValueErrors)
+        {
+            <AttributeValuesNotImportedSection Errors="@attributeValueErrors"
+                                               SourceLocation="@_activityRunProfileExecutionItem.SourceLocation"
+                                               ConnectedSystemId="@_connectedSystemHeader?.Id"
+                                               ObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                                               Class="mb-5" />
         }
 
         @* References the import left unresolved (#959), listed with the likely cause of each. Red where the run
@@ -517,6 +542,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // How the Unresolved References section presents itself (#959); None outside an import, and where the run left
     // every reference resolved.
     private UnresolvedReferenceTone _unresolvedReferenceTone;
+
+    // The values the Connector could not read (#2066), or null where the item recorded none.
+    private ImportedAttributeValueErrors? _attributeValueErrors;
 
     // The Identity this item acted on, looked up once by id (#1495). A header answers both of the panel's
     // questions in one read: it carries the type plural name the Metaverse Object route is keyed on, and its
@@ -702,6 +730,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _unresolvedReferenceTone = IsImportContext()
             ? UnresolvedReferenceDisplay.ToneFor(_activityRunProfileExecutionItem.ErrorType, _activityRunProfileExecutionItem.UnresolvedReferenceCount)
             : UnresolvedReferenceTone.None;
+
+        _attributeValueErrors = AttributeValueErrorDisplay.ForItem(_activityRunProfileExecutionItem.AttributeValueErrorsJson);
 
         // Parse the decision-time deletion policy snapshot (#119); null for legacy records (which fall
         // back to current-configuration rendering) and for items with no deletion rule evaluation.

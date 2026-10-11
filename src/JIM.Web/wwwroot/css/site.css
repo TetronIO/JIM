@@ -6404,6 +6404,41 @@ td.jim-connection-detail-cell {
     background: color-mix(in srgb, var(--mud-palette-warning) 7%, transparent);
 }
 
+/* The Attribute Values Not Imported section (#2066), on a Run Profile Execution Item's page: the values an import
+   could not read. Always the item's error, so it takes the Unresolved References section's red head. The value
+   received is tinted red so it reads as the thing that was refused, and the next step sits in a quiet panel beneath
+   the table, as the item page's mocks drew it. */
+.jim-attribute-values-not-imported.mud-paper {
+    overflow: hidden;
+}
+
+.jim-attribute-values-not-imported-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    border-top: 3px solid var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
+}
+
+.jim-attribute-value-unreadable {
+    background: color-mix(in srgb, var(--mud-palette-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mud-palette-error) 30%, transparent);
+    border-radius: 3px;
+    padding: 1px 6px;
+}
+
+.jim-attribute-values-next-step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
+}
+
 /* The next steps (#959), grouped by where each is taken: one grid of three columns (how many references, the step,
    the tab to take it on) shared by both groups, so the columns line up across them. Each cell stretches to its row's
    height, so the row's divider is one unbroken line, and its content starts at the top: the count chip and the link

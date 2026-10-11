@@ -2399,6 +2399,13 @@ public class SyncImportTaskProcessor
                         ? ImportOutcomeMessage.ForUnreadableAttributeValues(unreadableValues)
                         : importObject.ErrorMessage;
 
+                    // The values themselves, each with its attribute's type, and where the object was read from, so the
+                    // item can show what came in and the administrator can find it in the source (#2066).
+                    activityRunProfileExecutionItem.AttributeValueErrorsJson = ImportedAttributeValueErrors.Record(
+                        importObject.AttributeValueErrors,
+                        _connectedSystem.ObjectTypes.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase)))?.ToJson();
+                    activityRunProfileExecutionItem.SourceLocation = importObject.SourceLocation;
+
                     if (importObject.ErrorType != ConnectedSystemImportObjectError.AttributeValueError)
                     {
                         Log.Warning("ProcessImportObjectsAsync: Connector reported {ErrorType} for the imported object at index {Index}. Skipping it: {ErrorMessage}",
