@@ -12,7 +12,7 @@ using JIM.Models.Utility;
 using Serilog;
 namespace JIM.Application.Servers;
 
-public class ActivityServer
+public partial class ActivityServer
 {
     private JimApplication Application { get; }
 

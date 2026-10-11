@@ -147,6 +147,7 @@
         'Get-JIMActivity',
         'Get-JIMActivityChildren',
         'Get-JIMActivityExecutionItem',
+        'Get-JIMCausalCohortMember',
         'Get-JIMActivityStats',
 
         # Predefined Searches

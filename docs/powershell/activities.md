@@ -231,10 +231,19 @@ if ($stats.TotalObjectErrors -gt 0) {
 
 Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
 
+With `-Causes` it returns what caused the item instead, and with `-Consequences` what the item went on to cause, in later runs as well as its own: the same story the [Lineage view](../configuration/causality.md) tells, one row per cohort.
+
 ### Syntax
 
 ```powershell
+# Get one execution item (default)
 Get-JIMActivityExecutionItem -Id <guid>
+
+# Get what caused it
+Get-JIMActivityExecutionItem -Id <guid> -Causes
+
+# Get what it went on to cause
+Get-JIMActivityExecutionItem -Id <guid> -Consequences
 ```
 
 ### Parameters
@@ -242,6 +251,8 @@ Get-JIMActivityExecutionItem -Id <guid>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | ID of the execution item. Accepts pipeline input by property name, so the rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. |
+| `Causes` | `switch` | No | | Return what caused the item, one row per cohort of causes. |
+| `Consequences` | `switch` | No | | Return what the item went on to cause, one row per cohort of consequences. |
 
 ### Output
 
@@ -283,6 +294,27 @@ An object can join only one Metaverse Object, so when its Object Matching Rule f
 | `Exists` | Whether the candidate still exists. |
 | `JoinedObjects` | For a Metaverse Object candidate, the Connected System Objects joined to it now, each with `ConnectedSystemObjectId`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
 
+With `-Causes` or `-Consequences`, each row is a cohort: objects sharing a cause, its reason, Connected System and Synchronisation Rule read as one row with a `Count`. `Level` is 1 for the nearest cohorts and one more per step away.
+
+| Property | `-Causes` | `-Consequences` | Description |
+|----------|:---:|:---:|-------------|
+| `ExecutionItemId` | ✅ | ✅ | The item the walk started from. |
+| `Level` | ✅ | ✅ | How many steps from the item. A `-Consequences` row at level 0 gives the item's own ending when it caused nothing. |
+| `HopKind` | ❌ | ✅ | How the consequence was reached: `Edge`, `Confirmation`, `NextSynchronisation`, `OutstandingPendingExport` or `ScheduledDeletion`. |
+| `EdgeType`, `ReasonCode` | ✅ | ✅ | The recorded cause and why it produced its effect. |
+| `SourceImportChangeType`, `MetaverseChangeType` | ✅ | ❌ | For the import that fed a synchronisation, or the Metaverse Object's creation. |
+| `Count` | ✅ | ✅ | How many objects the cohort holds, counted exactly. |
+| `ObjectType`, `Attribute` | ✅ | ✅ | The objects' type, and the reference attribute a removal acted through. |
+| `ConnectedSystem`, `SyncRule` | ✅ | ✅ | The Connected System and Synchronisation Rule the cohort is attributed to. |
+| `OutcomeSummary`, `PendingExportStatus` | ❌ | ✅ | The members' shared outcomes, and the live status of work not yet finished. |
+| `Ending` | ❌ | ✅ | Where the branch stopped, for example `Confirmed`, `WaitingForExport`, `NeedsAttention` or `NoFurtherConsequences (2)`; empty where it carries on. |
+| `FirstOccurred`, `LastOccurred`, `DueAt` | ❌ | ✅ | When the members happened, and when outstanding work is next due (a retry, or a scheduled deletion). |
+| `Members` | ✅ | ✅ | The first members' names. Page through all of a consequence cohort with `Get-JIMCausalCohortMember`. |
+| `Resolution` | ✅ | ❌ | Why the walk stopped at these causes, for example `CauseNotRetained`; empty where it carries on. |
+| `CohortKey` | ❌ | ✅ | The cohort's key, for `Get-JIMCausalCohortMember`. |
+
+Consequences can still be happening, so `-Consequences` is a reading taken now: an `Ending` that starts with `Waiting` or reads `DeletionScheduled` will move on without anyone acting, and a later call can show more. `NeedsAttention` will not; open the Pending Export it names.
+
 ### Examples
 
 ```powershell title="Get one execution item"
@@ -300,6 +332,58 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
     Select-Object DisplayNameSnapshot, MatchedValue, Exists,
         @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
+```
+
+```powershell title="Show what caused an execution item"
+Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
+    Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
+```
+
+```powershell title="Show which consequences are still waiting, and on what"
+Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequences |
+    Where-Object Ending -like 'Waiting*' |
+    Format-Table Level, HopKind, Count, ObjectType, ConnectedSystem, Ending, DueAt
+```
+
+---
+
+## Get-JIMCausalCohortMember
+
+Pages through every member of one cohort of an execution item's consequences. `Get-JIMActivityExecutionItem -Consequences` counts a cohort exactly ("4218 Groups") but returns only its first members; this returns the rest, earliest first and then by name.
+
+### Syntax
+
+```powershell
+# Get a page of members (default)
+Get-JIMCausalCohortMember -ExecutionItemId <guid> -CohortKey <string> [-Search <string>] [-Page <int>] [-PageSize <int>]
+
+# Get every member, paginating automatically
+Get-JIMCausalCohortMember -ExecutionItemId <guid> -CohortKey <string> [-Search <string>] -All [-PageSize <int>] [-Force]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ExecutionItemId` | `guid` | Yes | | The execution item the consequences were read for. Accepts pipeline input by property name. |
+| `CohortKey` | `string` | Yes | | The cohort's key, from `Get-JIMActivityExecutionItem -Consequences`. Accepts pipeline input by property name, so consequence rows can be piped straight in. |
+| `Search` | `string` | No | | Text a member's name must contain, case-insensitively. |
+| `Page` | `int` | No | `1` | The page to return. |
+| `PageSize` | `int` | No | `50` (`100` with `-All`) | Members per page, from 1 to 100. |
+| `All` | `switch` | No | | Return every member, fetching page after page. |
+| `Force` | `switch` | No | | With `-All`, continue past the page ceiling. |
+
+### Output
+
+Returns one `PSCustomObject` per member, with `RunProfileExecutionItemId` (the item that recorded the consequence, where it is one), `PendingExportId` (outstanding work), `MetaverseObjectId` (a pending deletion), `DisplayName`, `Occurred` and `DueAt`.
+
+### Examples
+
+```powershell title="List every Group a deletion removed a member from"
+Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequences |
+    Where-Object { $_.Level -eq 1 -and $_.Attribute -eq 'Static Members' } |
+    Get-JIMCausalCohortMember -All |
+    Select-Object DisplayName, Occurred
 ```
 
 ---
