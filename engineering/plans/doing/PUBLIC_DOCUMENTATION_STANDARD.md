@@ -1,6 +1,6 @@
 # Public Documentation Standard: Implementation Plan
 
-- **Status:** Doing (Phase 0 complete)
+- **Status:** Doing (Phases 0 and 1 complete)
 - **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
 - **PRD:** [`PRD_PUBLIC_DOCUMENTATION_STANDARD.md`](../../prd/doing/PRD_PUBLIC_DOCUMENTATION_STANDARD.md)
 - **Evidence:** [`engineering/notes/docs-audit-2026-10/`](../../notes/docs-audit-2026-10/README.md)
@@ -30,20 +30,22 @@ Administrators in high-trust environments decide whether to trust JIM with produ
                       |
               changelog-lint job (required; no new required check)
                       |
-   +------------------+-------------------+----------------------+
-   |                  |                   |                      |
-Lint-Changelog   Lint-DocsCoupling   Test-DocsConformance.ps1   Test-DocsSite.ps1
-                                      (orchestrator, Phase 1)   (strict build + lychee,
-                                       |                         Phase 0)
-             +-------------+-----------+------------+
-             |             |           |            |
-        structure     language     coverage     Lint-DocExamples
-        (front matter, (vocabulary, (inventories  (aliases, unknown
-         page shape,    issue refs,  from source,  cmdlets and
-         size, a11y)    time words)  both ways)    parameters)
-             |
-       shrink-only baseline  +  in-page exception markers  +  conformance config
-       (rule, path, count)      (reason required)             (priority pages, migrated folders)
+   +---------------+--+-------------+------------------+------------------+
+   |               |                |                  |                  |
+Lint-Changelog  Lint-DocsCoupling  Lint-DocExamples   Test-DocsConformance  Test-DocsSite
+                                   (aliases, unknown  (this standard's    (strict build +
+                                    cmdlets and        mechanical rules)   lychee)
+                                    parameters)              |
+                                              +--------------+-------------+
+                                              |              |             |
+                                          structure      language      coverage
+                                          (front matter, (vocabulary,  (inventories
+                                           page shape,    issue refs,   from source,
+                                           size, a11y)    time words)   both ways)
+                                              |
+                       shrink-only baseline  +  in-page exception markers  +  conformance config
+                       (rule, page, count)      (reason required)             (tiers, priority and
+                                                                               conformant pages)
 ```
 
 Advisory, non-blocking, outside the required job: `docs-review.yml` (rubric review; review threads on priority pages), and a weekly docs health workflow (external links, staleness, coverage drift). Release time: the tutorial scenario in the `-PreRelease` suite, and `/release` listing priority pages due for validation.
@@ -61,14 +63,21 @@ Delivered on `claude/bold-gauss-yt9ekg`.
 - **`Test-DocsSite.ps1` (rules LNK-1, LNK-2)** in `changelog-lint`, path-filtered to docs sources: `mkdocs build --strict` with `anchors`, `absolute_links` and `omitted_files` raised to warnings, then lychee 0.24.2 (official image, digest-pinned) offline over the built site. 20,802 links checked in under a second.
 - `overrides/` excluded from the published files; stale "no link checker in CI" statements corrected in `docs/CLAUDE.md`, the root `CLAUDE.md` and `docs.yml`; lychee recorded as row 10 of `engineering/DEPENDENCY_PINNING.md`.
 
-### Phase 1: The standard and the conformance framework
+### Phase 1: The standard and the conformance framework ✅
 
-- `engineering/DOCUMENTATION_STANDARD.md`: audiences; page types and required shapes, including `object`; voice (the "Writing for the Reader" rules, moved unchanged in substance); what does not belong on a public page; version language; terminology; one home per fact; size budget; accessibility; integrate-don't-append; priority pages; tested tutorials. Every rule carries an ID.
-- `docs/CLAUDE.md` reduced to site mechanics plus an imperative pointer to the standard; the PR template's Documentation section asks what the change made wrong and where new material went; `engineering/prompts/api-docs-section.md` retired.
-- `scripts/Test-DocsConformance.ps1`: orchestrator, rule modules, Pester pass and fail fixtures per rule; the shrink-only baseline (`rule`, `path`, `count`, one sorted line per entry) with `-UpdateBaseline`; exception markers that require a reason; `::error`/`::warning` annotations and a job-summary table; the conformance configuration (priority pages, migrated folders).
-- Structural rules: front matter parses and declares `title`, `description`, `type`, `audience` (ratcheted); title = H1 = nav label; one H1, no skipped levels; fences declare a language; no stub pages in the nav; non-text alternatives (Mermaid `accTitle`/`accDescr` ratcheted); page shape per type for pages that declare one.
-- **MNT-3:** a page over its size budget on the base branch cannot grow.
-- Wired into `changelog-lint` alongside the existing steps.
+Delivered on `claude/bold-gauss-yt9ekg` (second pull request).
+
+- **`engineering/DOCUMENTATION_STANDARD.md`:** audiences; page types and their required shapes, including `object`; front matter and structure (STR); voice (VOI, SAFE, HOME: the "Writing for the Reader" rules, moved unchanged in substance); language (LANG); maintenance (MNT, including integrate-don't-append); accuracy and links (ACC, LNK); accessibility (A11Y); style (STY); priority pages and tutorials (PRI, TUT); coverage (COV, TERM); and a rule index giving every rule its tier and checker. Rules not yet checked say so (Review, or Planned with their phase).
+- **`docs/CLAUDE.md`** reduced to site mechanics plus a "Before you change a page" pointer; the root `CLAUDE.md`, `engineering/CLAUDE.md` and `src/JIM.PowerShell/CLAUDE.md` point at the standard; the PR template's Documentation section asks for MNT-1 and MNT-2; `engineering/prompts/api-docs-section.md` retired.
+- **`scripts/Test-DocsConformance.ps1`** with 41 Pester tests written red first: STR-1 to STR-8, MNT-3, A11Y-1, A11Y-2, TYP-1 and EXC-1; tiers from `docs/.conformance/config.psd1`; the shrink-only baseline (`docs/.conformance/baseline.tsv`, `-UpdateBaseline`, `-SeedBaseline`, `merge=union` with the lower count winning); in-page exception markers; conformant and priority pages; annotations and a job-summary table. About three seconds over the whole site, so it runs on every pull request.
+- **Seeded** with 81 STR-2 entries (258 missing front matter keys) and the two stub pages (STR-6). Everything else blocks from day one, after fixing what it found: ten pages given one name (title, H1 and nav label), seven code blocks given a language, and one heading skip excused in place until the PowerShell pages migrate.
+
+Differences from the plan as first written:
+
+- **No single orchestrator.** `Lint-DocExamples.ps1` and `Test-DocsSite.ps1` stay separate `changelog-lint` steps rather than running under `Test-DocsConformance.ps1`: the site check needs MkDocs and Docker, and each step's annotations stay attributable.
+- **The conformance data lives in `docs/.conformance/`**, which MkDocs never publishes because the folder starts with a dot.
+- **STR-3 accepts a nav label that drops leading words of the page's name** ("Authentication" under API for "API Authentication"), after the first run showed the stricter rule flagging legitimate section-qualified names.
+- **A11Y-1 blocks rather than ratchets:** every one of the site's 53 Mermaid diagrams is on a contributor page leaving in Phase 5, so customer pages already conform.
 
 ### Phase 2: Coverage and language
 

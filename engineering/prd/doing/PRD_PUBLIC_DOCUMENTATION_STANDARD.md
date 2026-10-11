@@ -1,6 +1,6 @@
 # Public Documentation Standard
 
-- **Status:** Doing (Phase 0 complete: factual corrections, and link and example checks at pull request time)
+- **Status:** Doing (Phases 0 and 1 complete: factual corrections, link and example checks, the standard, and the conformance check with its baseline)
 - **Created:** 2026-10-11
 - **Author:** Drafted by Claude Code for product owner review
 - **Issue:** [#1454](https://github.com/TetronIO/JIM/issues/1454)
@@ -194,7 +194,7 @@ The October 2026 audit read all 99 authored pages (about 222,000 words on the 80
 
 **Given**: an author adds `docs/configuration/generated-values.md` with no `type:` in its front matter
 **When**: the pull request runs `changelog-lint`
-**Then**: it fails with `STR-1: front matter has no 'type' (docs/configuration/generated-values.md:1)` and a link to the rule; new files have no baseline allowance
+**Then**: it fails with `STR-2: front matter has no 'type' (docs/configuration/generated-values.md:1)` and a link to the rule; new files have no baseline allowance
 
 ### Scenario 2: Editing a large legacy page without adding debt
 

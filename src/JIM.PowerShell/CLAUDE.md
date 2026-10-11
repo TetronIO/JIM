@@ -83,5 +83,5 @@ pwsh -NoProfile -Command '$c = New-PesterConfiguration; $c.Run.Path = @("./src/J
 ## Related
 
 - `src/CLAUDE.md` - API endpoint identifier rules and the clearing-optional-values convention, both of which bind cmdlets as well as the REST API.
-- `docs/CLAUDE.md` - documentation style and the Diátaxis split.
+- `engineering/DOCUMENTATION_STANDARD.md` - the documentation standard, including ACC-1 and ACC-2, which `Lint-DocExamples.ps1` enforces on the module's own `.EXAMPLE` help as well as on `docs/`.
 - `test/CLAUDE.md` - the repository-wide TDD workflow.
