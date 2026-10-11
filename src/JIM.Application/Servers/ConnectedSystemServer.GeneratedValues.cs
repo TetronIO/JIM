@@ -644,7 +644,8 @@ public partial class ConnectedSystemServer
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList(),
-            MoveToSyncRuleName = MoveToSyncRuleName(value)
+            MoveToSyncRuleName = MoveToSyncRuleName(value),
+            Expression = value.Mapping.Sources.Count == 1 ? value.Mapping.Sources[0].Expression : null
         };
 
         /// <summary>

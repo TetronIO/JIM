@@ -98,4 +98,10 @@ public sealed class GeneratedValueBuiltValueDescription
     /// generated flow's own rule: moving the flow there would have the value checked before issuing. Null otherwise.
     /// </summary>
     public string? MoveToSyncRuleName { get; init; }
+
+    /// <summary>
+    /// The expression that builds the value, for the generated flow's preview to work it out from a candidate; null when
+    /// the Attribute Flow has no single expression source.
+    /// </summary>
+    public string? Expression { get; init; }
 }

@@ -249,6 +249,8 @@ public class ConnectedSystemServerKeepUniqueTests
             Assert.That(values.Select(v => v.CheckedBeforeIssuing), Is.EqualTo(new[] { true, true }));
             Assert.That(values[0].ProbedIn, Is.EqualTo(new[] { "Corp AD" }), "Email is probed where it is exported");
             Assert.That(values[1].ProbedIn, Is.Empty, "the User Principal Name is exported nowhere, so JIM's records alone");
+            Assert.That(values.Select(v => v.Expression), Is.EqualTo(new[] { _email.Sources[0].Expression, "mv[\"Email\"]" }),
+                "the expression that builds each, for the generated flow's preview to work them out from a candidate");
             Assert.That(values.Select(v => v.MoveToSyncRuleName), Is.All.Null);
         }
     }
