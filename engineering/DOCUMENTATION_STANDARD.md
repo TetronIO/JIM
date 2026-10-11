@@ -50,7 +50,7 @@ Every rule has one of four tiers. The [Rule index](#rule-index) gives each rule'
 | **Block** | Every finding fails the pull request. Used only where the defect class is proven and false positives are near zero. |
 | **Ratchet** | Findings are compared with the baseline, per rule and page. Exceeding the baseline fails. A new page has no allowance, so it is conformant from its first commit. |
 | **Warn** | Reported as an annotation on the pull request diff (for the pages it changes), never fails. |
-| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by an advisory rubric review once it exists (planned, Phase 2); never a merge gate. |
+| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by the advisory rubric review (`.github/workflows/docs-review.yml`): one summary comment, citing rule IDs, on a pull request that changes customer pages, when it opens or is marked ready and again whenever the `docs-review` label is added. Never a merge gate. |
 
 ### The baseline only shrinks
 
