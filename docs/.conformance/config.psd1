@@ -118,6 +118,8 @@
         'configuration/run-profiles.md'
         'administration/troubleshooting-synchronisation.md'
         'administration/backup-recovery.md'
+        'concepts/synchronisation-pipeline.md'
+        'concepts/jml-lifecycle.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
