@@ -110,7 +110,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         }
 
         // Get initiator info
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
 
         // Create the schedule entity
         var schedule = new Schedule
@@ -226,7 +226,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         }
 
         // Get initiator info
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
 
         // Update schedule properties
         existingSchedule.Name = request.Name;
@@ -295,7 +295,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be deleted." });
         }
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
         await _application.Scheduler.DeleteScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Deleted schedule {ScheduleId}", id);
@@ -323,7 +323,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
         }
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
 
         schedule.IsEnabled = true;
         schedule.LastUpdated = DateTime.UtcNow;
@@ -358,7 +358,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
         }
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
 
         schedule.IsEnabled = false;
         schedule.LastUpdated = DateTime.UtcNow;
@@ -398,7 +398,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return BadRequest(new ApiErrorResponse { Message = "Cannot run a schedule with no steps" });
         }
 
-        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
 
         var execution = await _application.Scheduler.StartScheduleExecutionAsync(
             schedule,
