@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ An **Ambiguous Match** now lists the Metaverse Objects it found on the Activity item, each linked, with the value it matched on and what it's joined to; REST, `Get-JIMActivityExecutionItem` and Sync Preview return them too. (#2052)
 - ✨ A connection joined by an Object Matching Rule now says which rule matched and on what value, on the Connections tab, in REST and in `Get-JIMMetaverseObjectConnection`. (#2052)
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
+- ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
+- ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
 
 ### Changed
 
@@ -68,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
 - 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
+- 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 
 ### Removed
 

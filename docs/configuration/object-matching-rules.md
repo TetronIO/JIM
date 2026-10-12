@@ -7,18 +7,19 @@ audience: administrator
 
 # Object Matching Rules
 
-Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
+Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Each rule compares one source, a Connected System attribute or an expression over the Connected System Object, with one Metaverse attribute:
 
-| Connected System Object Attribute | Metaverse Object Attribute | Description |
+| Matches on | Metaverse Object Attribute | Description |
 |---------------|---------------|-------------|
 | `employeeId` | `Employee ID` | Match on employee identifier |
 | `mail` | `Email Address` | Match on email address |
+| `"E" + Trim(cs["employeeId"])` | `Employee ID` | Match on an identifier this system holds without its prefix |
 
 JIM tries the matching rules in order; a rule with no value, or no match, passes to the next. Configure several as a fallback strategy:
 
 1. First, try to match on `employeeId` (most reliable)
 2. If no match, try `mail` (secondary)
-3. If no match, try `firstName` + `lastName` (least reliable)
+3. If no match, try an expression combining first and last name, against a Metaverse attribute derived the same way (least reliable)
 
 A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on **Case sensitive** only where a system treats them as different objects; see [Case Sensitivity](../concepts/case-sensitivity.md#object-matching-rules).
 
@@ -31,6 +32,52 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 | **Ambiguous Match** | The rule's values, every value of a multi-valued attribute counting, match several Metaverse Objects; the Activity item lists them, and nothing joins or projects |
 | **Ambiguous Provisioning Match** | Before provisioning, the rule's values match several existing Connected System Objects; the Activity item lists them, and nothing joins or provisions for that export rule. See [Ambiguous Provisioning Match](../administration/troubleshooting-synchronisation.md) |
 | **Object Matching Rule Failed** | The rule cannot be worked out; nothing joins, projects or provisions, and no later rule is tried |
+
+## Matching on an expression
+
+Two systems often hold the same identifier in different formats: a directory stores `1007` where HR has `E1007`, pads
+it to `001007`, keeps stray spaces, or joins two fields into one key. Matching those attribute to attribute finds
+nothing, and each mismatch becomes a duplicate identity or a duplicate account. An expression rule computes the value
+the Metaverse holds instead.
+
+In **Add Matching Rule**, choose **Match on: Expression**, write the expression (or use **Insert attribute** to add
+an attribute), and pick the Metaverse attribute it equals:
+
+| This system holds | Metaverse holds | Expression |
+|---|---|---|
+| `1007` | `E1007` | `"E" + Trim(cs["employeeId"])` |
+| `1007` | `001007` | `Right("000000" + Trim(cs["employeeId"]), 6)` |
+| `JBLOGGS@CORP.LOCAL ` | `jbloggs@corp.local` | `Lower(Trim(cs["mail"]))` |
+| `Sales` and `1007` | `Sales-1007` | `Trim(cs["department"]) + "-" + Trim(cs["employeeId"])` |
+
+How the expression is read:
+
+- **It reads the Connected System Object only**, as `cs["attributeName"]`. The Metaverse Object is what the rule is
+  looking for, so there is nothing on that side to read yet. To normalise the Metaverse side too,
+  [derive a Metaverse attribute](derived-attributes.md) that holds the normalised value, and match on that.
+- **Its result is converted to the Metaverse attribute's type**, as an Attribute Flow's would be. A result that will
+  not convert (text where a number is expected) stops the object with an **Object Matching Rule Failed** error rather
+  than letting it match nothing.
+- **A list of text values is matched value by value**, as every value of a multi-valued attribute is.
+- **No value** (null, empty or whitespace) passes the object to the next rule.
+
+A rule compares for equality, and only equality. Each value is looked up in the Metaverse by an index, which is what
+lets a rule find one identity among millions; "starts with" or "contains" would match many identities and could not
+be looked up that way. Put the normalising in the expression instead, so the value it computes is exactly the value
+the Metaverse holds.
+
+**Try it**, under the editor, shows what the rule would match on for an object holding values you type, worked out
+exactly as a synchronisation would. Leave a value empty to see what happens to an object that has none.
+
+JIM refuses to save an expression that does not parse, reads `mv["..."]`, reads no `cs["..."]` attribute, reads an
+attribute the Object Type does not have, or calls a function that returns a different value each time it runs
+(`Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `Guid.NewGuid()`): each would match a different
+identity, or none, on every run. The editor shows the same reason before you save.
+
+Before provisioning, the rule works the other way round: JIM works out the expression once per run for each Connected
+System Object of the type not yet joined, and compares the Metaverse Object's value with the results. Where the
+expression could not be worked out for some of those objects, a Metaverse Object that finds no match stops with an
+**Object Matching Rule Failed** error naming one of them, rather than provisioning an account that may already exist.
 
 ## Simple vs advanced matching mode
 
