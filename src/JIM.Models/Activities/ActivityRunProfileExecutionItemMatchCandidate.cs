@@ -15,7 +15,7 @@ namespace JIM.Models.Activities;
 /// </remarks>
 public class ActivityRunProfileExecutionItemMatchCandidate : MatchCandidateSnapshot
 {
-    /// <summary>The most candidates recorded on one item; <see cref="CandidateTotal"/> carries the full count.</summary>
+    /// <summary>The most candidates recorded on one item; <see cref="MatchCandidateSnapshot.CandidateTotal"/> carries the full count.</summary>
     public const int MaxRecorded = 10;
 
     /// <summary>
