@@ -135,11 +135,13 @@ nav:
       - Object Matching Rules: configuration/object-matching-rules.md
       - Attribute Mappings: configuration/attribute-mappings.md
       - Generated Values: configuration/generated-values.md
+      - Generated Values in Target Systems: configuration/generated-values-in-target-systems.md
       - Deriving Metaverse Attributes: configuration/derived-attributes.md
       - Deprovisioning: configuration/deprovisioning.md
       - Initial Password: configuration/initial-password.md
       - Data Flow: configuration/data-flow.md
       - Metaverse: configuration/metaverse.md
+      - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md

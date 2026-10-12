@@ -1,10 +1,13 @@
 ---
 title: Predefined Searches
+description: Define named, reusable searches over Metaverse Objects, choose their columns and criteria, and make one the default for an Object Type.
+type: object
+audience: administrator
 ---
 
 # Predefined Searches
 
-A **predefined search** is a named, reusable search over [metaverse](metaverse.md) objects. Predefined searches drive the portal's list views and back the fast named-search endpoint that end-user search consumers call.
+A **predefined search** is a named, reusable search over [Metaverse Objects](metaverse-objects.md). Predefined searches drive the portal's list views and back the fast named-search endpoint that end-user search consumers call.
 
 Predefined searches are administrator-managed: end users do not author new searches, they consume the ones that already exist.
 
@@ -42,7 +45,7 @@ There are two distinct surfaces:
 - **Running** a search to get matching objects (the portal does this every time an end user opens a list view, and integrations can call it directly to retrieve a curated set of identities)
 - **Administering** the catalogue of searches: listing, retrieving, enabling, disabling, creating, and editing definitions
 
-The administrative surface is what this page describes. The running surface is part of the [metaverse](metaverse.md) endpoints.
+The administrative surface is what this page describes. The running surface is part of the [Metaverse](metaverse.md) endpoints.
 
 ## Common workflows
 
@@ -107,7 +110,7 @@ On the Predefined Search detail page in the portal, the **Criteria** panel lets 
 
 ## Change history
 
-Changes to a Predefined Search, including its criteria groups and criteria, are tracked as versioned [configuration change history](activities.md#configuration-change-history): who changed what, and when. A **Changes** tab on the Predefined Search detail page shows each change as an audit-style field history, and lets you compare any two versions.
+Changes to a Predefined Search, including its criteria groups and criteria, are tracked as versioned [Configuration Change History](activities.md#configuration-change-history): who changed what, and when. A **Changes** tab on the Predefined Search detail page shows each change as an audit-style field history, and lets you compare any two versions.
 
 Retrieve the same history with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch` or the equivalent `change-history` endpoint in the [interactive API reference](../../api/reference/). Enabling or disabling a search from the admin portal offers an optional "Reason for change" prompt; automation can pass the same reason with `-ChangeReason` on `Set-JIMPredefinedSearch` or the corresponding REST request field. Adding, editing, or removing a criteria group or criterion is captured as its own version rolled up into the owning search's history, without prompting for a reason on each edit.
 
@@ -117,6 +120,6 @@ Retrieve the same history with `Get-JIMConfigurationChangeHistory -Type Predefin
 - **PowerShell**<br /> [Predefined Searches cmdlets](../powershell/predefined-searches.md) (`Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, and the criteria cmdlets such as `New-JIMPredefinedSearchCriterion`)
 - **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../../api/reference/), including the criteria-group and criteria endpoints
 
-## See also
+## Related
 
 - [Metaverse](metaverse.md): predefined searches return Metaverse Objects; the running endpoint lives with the Metaverse Object endpoints

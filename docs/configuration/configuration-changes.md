@@ -1,3 +1,10 @@
+---
+title: Configuration Changes
+description: How JIM judges each configuration save, which edits it asks you to confirm, and how to preview what an edit would affect.
+type: concept
+audience: administrator
+---
+
 # Configuration Changes
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
@@ -28,7 +35,7 @@ Cancelling the confirmation abandons the save. Nothing is written.
 
 ## Previewing a change before you make it
 
-A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
+A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the Metaverse and reports which of them would be affected, changing nothing.
 
 This is a preview of a **proposed edit**, across every affected object. For "what would synchronising *this one object* do with the configuration already saved?", see [Sync Preview](sync-preview.md) instead.
 
@@ -89,9 +96,9 @@ Automation gets the same evaluation. Start a preview with [`New-JIMConfiguration
 
 The confirmation appears only when JIM can tell what changed, which means [configuration change tracking](service-settings.md) must be switched on. With tracking off there is no recorded baseline to compare against, so JIM says nothing rather than guessing. Creating a new object is never confirmed either: there is no prior state, so nothing existing is at risk.
 
-Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the configuration change history exactly as a portal change is.
+Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the Configuration Change History exactly as a portal change is.
 
-## See also
+## Related
 
 - [Sync Preview](sync-preview.md): previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
 - [Activities](activities.md): every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
