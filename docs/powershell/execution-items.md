@@ -35,13 +35,13 @@ Get-JIMActivityExecutionItem -Id <guid> -Causes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes |  | The execution item to get. The rows of Get-JIMActivity -ExecutionItems can be piped straight in. Accepts pipeline input by property name. |
-| `Causes` | `switch` | Yes (Causes) |  | Returns what caused the item instead, one row per cohort of causes. |
-| `Consequences` | `switch` | Yes (Consequences) |  | Returns what the item went on to cause instead, one row per cohort of consequences. |
+| `Id` | `guid` | Yes |  | The execution item to get. The rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. Accepts pipeline input by property name. |
+| `Causes` | `switch` | Yes (Causes) |  | Return what caused the item instead, one row per cohort of causes. |
+| `Consequences` | `switch` | Yes (Consequences) |  | Return what the item went on to cause instead, one row per cohort of consequences. |
 
 ### Output
 
-Without a switch, the item. With -Causes, what caused it, and with -Consequences what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step.
+Without a switch, the item. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step.
 
 **`ActivityRunProfileExecutionItemDetailDto`** (Item):
 
@@ -57,13 +57,13 @@ Without a switch, the item. With -Causes, what caused it, and with -Consequences
 | `ExternalIdSnapshot` | `string` | The object's external ID when the item was recorded. |
 | `DisplayNameSnapshot` | `string` | The object's display name when the item was recorded. |
 | `ObjectTypeSnapshot` | `string` | The object's type name when the item was recorded. |
-| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or null when the object did not fail. |
-| `ErrorMessage` | `string` | What went wrong, in words; null when the object did not fail. |
+| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or empty when the object did not fail. |
+| `ErrorMessage` | `string` | What went wrong, in words; empty when the object did not fail. |
 | `ErrorStackTrace` | `string` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | `int` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
-| `UnresolvedReferenceCount` | `int` | How many of the object's reference values the import could not resolve to a Connected System Object, under any Unresolved Reference Handling and whatever error the item carries; null when none were left unresolved. The values themselves are on the Connected System Object. |
+| `UnresolvedReferenceCount` | `int` | How many of the object's reference values the import could not resolve to a Connected System Object, under any Unresolved Reference Handling and whatever error the item carries; empty when none were left unresolved. The values themselves are on the Connected System Object. |
 | `AttributeValueErrors` | `AttributeValueErrorDto[]` | Every value the import found on the object but could not read as its attribute's type, in the order the Connector reported them; JIM left each attribute as it already held it. Empty when there were none. |
-| `AttributeValueErrorTotal` | `int` | How many values could not be read, which can exceed AttributeValueErrors where the item keeps only the first thousand; null when there were none. |
+| `AttributeValueErrorTotal` | `int` | How many values could not be read, which can exceed AttributeValueErrors where the item keeps only the first thousand; empty when there were none. |
 | `SourceLocation` | `string` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | `MatchCandidateDetailDto[]` | For an `AmbiguousMatch`, the Metaverse Objects the match found, and for an `AmbiguousProvisioningMatch`, the Connected System Objects: up to 10, ordered by display name, each with whether it still exists and, for a Metaverse Object, what is joined to it now. Empty for any other item. |
@@ -101,18 +101,18 @@ Without a switch, the item. With -Causes, what caused it, and with -Consequences
 | `ConnectedSystem` | `string` | The Connected System the consequences are attributed to. |
 | `SyncRule` | `string` | The Synchronisation Rule the cause names, where it names one. |
 | `OutcomeSummary` | `string` | The outcomes the consequences share. |
-| `PendingExportStatus` | `PendingExportStatus` | For outstanding Pending Exports, their status now. |
+| `PendingExportStatus` | `PendingExportStatus` | For outstanding Pending Exports, their live status. |
 | `Ending` | `string` | Where the branch stops: the cohort's own ending (Confirmed, WaitingForExport, WaitingForRetry, NeedsAttention, WaitingForConfirmingImport or DeletionScheduled), else how many consequences led nowhere further and why, for example "NoFurtherConsequences (2)", else FurtherThanShown where the walk reached its bound. Empty where every consequence carries on. |
 | `FirstOccurred` | `datetime` | When the earliest consequence happened, in UTC. |
 | `LastOccurred` | `datetime` | When the latest consequence happened, in UTC. |
 | `DueAt` | `datetime` | When the soonest outstanding work is due, in UTC: a retry, or a deletion becoming eligible. |
-| `Members` | `string[]` | The first consequences' names; Get-JIMCausalCohortMember pages through them all. |
-| `CohortKey` | `string` | The cohort's key, which Get-JIMCausalCohortMember pages its members with. |
+| `Members` | `string[]` | The first consequences' names; `Get-JIMCausalCohortMember` pages through them all. |
+| `CohortKey` | `string` | The cohort's key, which `Get-JIMCausalCohortMember` pages its members with. |
 <!-- END GENERATED: Get-JIMActivityExecutionItem -->
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 
-An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object, and its `AmbiguousProvisioningMatch` item lists them in `MatchCandidates`:
+An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object. Each candidate in `MatchCandidates` carries:
 
 | Property | Description |
 |----------|-------------|
@@ -201,12 +201,12 @@ Get-JIMCausalCohortMember -ExecutionItemId <guid> -CohortKey <string> -All [-Sea
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ExecutionItemId` | `guid` | Yes |  | The execution item whose consequences the cohort belongs to. Accepts pipeline input by property name. |
-| `CohortKey` | `string` | Yes |  | The cohort's key, from Get-JIMActivityExecutionItem -Consequences, whose rows can be piped straight in. Accepts pipeline input by property name. |
+| `CohortKey` | `string` | Yes |  | The cohort's key, from `Get-JIMActivityExecutionItem -Consequences`, whose rows can be piped straight in. Accepts pipeline input by property name. |
 | `Search` | `string` | No |  | Text a member's name must contain, case-insensitively. |
 | `Page` | `int` | No (Page) | `1` | The page to return. At least 1. |
-| `PageSize` | `int` | No | `50` | How many members per page. With -All, 100 unless it is given. From 1 to 100. |
+| `PageSize` | `int` | No | `50` | How many members per page. With `-All`, 100 unless it is given. From 1 to 100. |
 | `All` | `switch` | Yes (All) |  | Return every member, fetching page after page. |
-| `Force` | `switch` | No (All) |  | With -All, fetches every page however many there are. |
+| `Force` | `switch` | No (All) |  | With `-All`, fetches every page however many there are. |
 
 ### Output
 

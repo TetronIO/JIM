@@ -527,30 +527,30 @@ public class ActivityDetailDto
     public int? ClearedJoinRecordCount { get; set; }
 
     /// <summary>
-    /// How many creates the Run Profile's Max creates limit withheld this run. Populated (zero when nothing was
-    /// withheld) on every Export Activity; null otherwise.
+    /// How many creates the Run Profile's Max creates limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
     /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportCreatesWithheld { get; set; }
 
     /// <summary>
-    /// How many updates the Run Profile's Max updates limit withheld this run. Populated (zero when nothing was
-    /// withheld) on every Export Activity; null otherwise.
+    /// How many updates the Run Profile's Max updates limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
     /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportUpdatesWithheld { get; set; }
 
     /// <summary>
-    /// How many deletes the Run Profile's Max deletes limit withheld this run. Populated (zero when nothing was
-    /// withheld) on every Export Activity; null otherwise.
+    /// How many deletes the Run Profile's Max deletes limit withheld this run; they stay pending for a later Export
+    /// run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise.
     /// </summary>
     /// <remarks>Run Profile Safeguards, #1618.</remarks>
     public int? ExportDeletesWithheld { get; set; }
 
     /// <summary>
     /// How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions
-    /// percent limits withheld this run. Populated (zero when nothing was withheld) on every Full Import Activity
-    /// that ran deletion detection; null on every other Activity, including a Full Import that imported zero
+    /// percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero
+    /// when nothing was withheld) on every Full Import Activity that ran deletion detection; null on every other Activity, including a Full Import that imported zero
     /// objects and so skipped detection entirely.
     /// </summary>
     /// <remarks>Run Profile Safeguards (#1618), Layer 2.</remarks>
@@ -775,8 +775,8 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalPendingExportsRetrying { get; set; }
 
     /// <summary>
-    /// Number of Pending Exports that failed after maximum retry attempts.
-    /// Manual intervention may be required to resolve these exports.
+    /// Number of Pending Exports that failed after their last retry. JIM does not attempt one again; it clears once an
+    /// import shows its values in place, for example after the change is made in the Connected System directly.
     /// </summary>
     public int TotalPendingExportsFailed { get; set; }
     #endregion

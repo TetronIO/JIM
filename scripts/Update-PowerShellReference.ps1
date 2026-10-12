@@ -152,6 +152,22 @@ function Split-OutputsHelp {
     [pscustomobject]@{ Prose = @($prose); Lists = $lists }
 }
 
+# Text from help or a DTO comment, made fit for the page: a cmdlet with its parameters, a parameter, and $true,
+# $false and $null in code, which Get-Help cannot show and so the help leaves plain; and "empty" for null, a word
+# from the source the page does not use (VOI-1). Text already in code is left as it is.
+function ConvertTo-PageText {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $code = '(?<![\w-])[A-Z][a-z]+-JIM[A-Za-z0-9]*(?:\s+-[A-Z][A-Za-z0-9]*(?::\$\w+)?)*|(?<![\w-])-[A-Z][A-Za-z0-9]*(?::\$\w+)?(?![\w-])|(?<!\w)\$(?:true|false|null)\b'
+    $parts = foreach ($part in [regex]::Split($Text, '(`[^`]*`)')) {
+        if ($part.StartsWith('`')) { $part; continue }
+        $part = $part -creplace '(?<![\w$-])null\b', 'empty' -creplace '(?<![\w$-])Null\b', 'Empty'
+        [regex]::Replace($part, $code, { param($match) '`' + $match.Value + '`' })
+    }
+    $parts -join ''
+}
+
 function ConvertTo-TableCell {
     param([AllowNull()][string]$Text)
     if ($null -eq $Text) { return '' }
@@ -369,7 +385,7 @@ function Format-Parameters {
         }
         $default = if ($parameter.Default) { "``$($parameter.Default)``" } else { '' }
         '| `{0}` | `{1}` | {2} | {3} | {4} |' -f $parameter.Name, (Get-FriendlyTypeName $parameter.Type),
-            (Format-Required $Reference $parameter), (ConvertTo-TableCell $default), (ConvertTo-TableCell $description)
+            (Format-Required $Reference $parameter), (ConvertTo-TableCell $default), (ConvertTo-TableCell (ConvertTo-PageText $description))
     }
     "### Parameters`n`n| Name | Type | Required | Default | Description |`n|------|------|----------|---------|-------------|`n" + ($rows -join "`n")
 }
@@ -561,7 +577,7 @@ function Format-Output {
     }
 
     $text = "### Output"
-    if ($Reference.Outputs.Count -gt 0) { $text += "`n`n" + ($Reference.Outputs -join "`n`n") }
+    if ($Reference.Outputs.Count -gt 0) { $text += "`n`n" + (@($Reference.Outputs | ForEach-Object { ConvertTo-PageText $_ }) -join "`n`n") }
     if ($sections.Count -eq 0) {
         if ($Reference.Outputs.Count -eq 0) { $text += "`n`nNone." }
         return $text
@@ -575,7 +591,7 @@ function Format-PropertyTable {
     param([string]$Label, [object[]]$Properties)
 
     if (@($Properties | Where-Object Description).Count -gt 0) {
-        $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell $property.Description) }
+        $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell (ConvertTo-PageText $property.Description)) }
         return "${Label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n")
     }
     $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }

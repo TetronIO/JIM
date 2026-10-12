@@ -282,6 +282,27 @@ function Get-JIMWidgetPart {
 }
 '@
 
+    # Help written for Get-Help, which renders no Markdown: names a cmdlet, its parameters and PowerShell's
+    # constants in plain text, and says "null", which the page must not (VOI-1).
+    $script:GetWidgetNote = @'
+function Get-JIMWidgetNote {
+    <#
+    .SYNOPSIS
+        Gets a Widget's note.
+
+    .PARAMETER Kind
+        Pipe it from Get-JIMWidget -Name "x", or give it with -Kind; $true keeps it. Null when the Widget has none,
+        which `Clear-Thing -Now` sets, as $null does.
+
+    .OUTPUTS
+        Each note, or null where there is none; see Get-JIMWidget -Id.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param([string]$Kind)
+}
+'@
+
     # Declares no position, so PowerShell gives its parameter one nobody chose.
     $script:GetWidgetCount = @'
 function Get-JIMWidgetCount {
@@ -647,8 +668,18 @@ function Disconnect-JIMWidget {
         ($rows | Where-Object Name -eq 'Kind').Description | Should -Match 'Also accepted as -PartKind\.'
     }
 
+    It 'puts cmdlets, parameters and PowerShell''s constants in code, and writes empty for null' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetNote) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetNote') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMWidgetNote'
+        $block | Should -Match 'Pipe it from `Get-JIMWidget -Name` "x", or give it with `-Kind`; `\$true` keeps it\.'
+        $block | Should -Match 'Empty when the Widget has none, which `Clear-Thing -Now` sets, as `\$null` does\.'
+        $block | Should -Match 'Each note, or empty where there is none; see `Get-JIMWidget -Id`\.'
+        $block | Should -Not -Match '(?<!`)``(?!`)' -Because 'text already in code is left as it is'
+    }
+
     It 'gives the .OUTPUTS help as prose' {
-        Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; -Id returns the whole Widget\."
+        Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; ``-Id`` returns the whole Widget\."
     }
 
     It 'tables each output type with the sets that return it, and its properties in PascalCase with their types' {

@@ -35,8 +35,8 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <string> -CompareFrom <int>
 |------|------|----------|---------|-------------|
 | `Type` | `string` | Yes |  | The kind of configuration object. One of `SynchronisationRule`, `ConnectedSystem`, `Schedule`, `ServiceSetting`, `MetaverseObjectType`, `MetaverseAttribute`, `TrustedCertificate`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataTemplate` or `ExampleDataSet`. |
 | `Id` | `string` | Yes |  | The ID of the configuration object: an integer for most kinds; a GUID for a Schedule, Trusted Certificate or API Key; or the setting's key for a Service Setting, such as History.RetentionPeriod. Accepts pipeline input by property name. |
-| `All` | `switch` | Yes (All) |  | Returns every change. Stops after 1,000 pages with a warning unless -Force is given. |
-| `Force` | `switch` | No (All) |  | Fetches beyond the -All page ceiling. |
+| `All` | `switch` | Yes (All) |  | Returns every change. Stops after 1,000 pages with a warning unless `-Force` is given. |
+| `Force` | `switch` | No (All) |  | Fetches beyond the `-All` page ceiling. |
 | `Page` | `int` | No (Page) | `1` | The page of changes to return. At least 1. |
 | `PageSize` | `int` | No (Page, All) | `50` | How many changes to return per page. From 1 to 100. |
 | `Version` | `int` | Yes (Version) |  | Returns the change that produced this version, with the object's redacted snapshot and the diff against the previous version. At least 1. |
@@ -47,7 +47,7 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <string> -CompareFrom <int>
 
 ### Output
 
-The list returns one record per change, newest first. -Version returns that change in full, and -CompareFrom with -CompareTo the diff between two versions; with -AsDiff, either is rendered as lines of text instead. A secret is never returned: a changed secret is reported only as changed.
+The list returns one record per change, newest first. `-Version` returns that change in full, and `-CompareFrom` with `-CompareTo` the diff between two versions; with `-AsDiff`, either is rendered as lines of text instead. A secret is never returned: a changed secret is reported only as changed.
 
 **`ConfigurationChangeHistoryItem`** (Page, All):
 
@@ -57,12 +57,12 @@ The list returns one record per change, newest first. -Version returns that chan
 | `Version` | `int` | The object's version this change produced, counting from 1 for its creation. |
 | `Operation` | `ActivityTargetOperationType` | What the change did: Create, Update or Delete. |
 | `InitiatedByType` | `ActivityInitiatorType` | What made the change: a User, an API key, or JIM itself (System). |
-| `InitiatedById` | `guid` | The security principal's id, where one applies (User / API key); null for System or unattributed changes. |
+| `InitiatedById` | `guid` | The security principal's id, where one applies (User / API key); empty for System or unattributed changes. |
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
 | `When` | `datetime` | When the change was made (UTC). |
 | `Reason` | `string` | The reason given for the change, if one was. |
 | `Summary` | `string` | A short description of what the change touched, for example "Scope, Attribute Flow". |
-| `Diff` | `ConfigurationDiff` | The structured diff of this version against its predecessor. For the first version (no predecessor) it shows the whole object as created. Null only when the version carries no deserialisable snapshot. |
+| `Diff` | `ConfigurationDiff` | The structured diff of this version against its predecessor. For the first version (no predecessor) it shows the whole object as created. Empty only when the version carries no deserialisable snapshot. |
 
 **`ConfigurationChangeDetail`** (Version):
 
@@ -84,9 +84,9 @@ The list returns one record per change, newest first. -Version returns that chan
 |----------|------|-------------|
 | `ObjectType` | `string` | The configuration object type, e.g. "SynchronisationRule" or "ConnectedSystem". |
 | `ObjectId` | `int` | The configuration object's numeric ID; zero for an object identified by a GUID (see `ObjectGuidId`). |
-| `ObjectGuidId` | `guid` | The configuration object's GUID, for an object identified by one (a Schedule, for example); null otherwise. |
+| `ObjectGuidId` | `guid` | The configuration object's GUID, for an object identified by one (a Schedule, for example); empty otherwise. |
 | `ObjectName` | `string` | The display name of the configuration object (from the newer snapshot). |
-| `OldVersion` | `int` | The per-object version of the older snapshot, or null when comparing against nothing (a creation). |
+| `OldVersion` | `int` | The per-object version of the older snapshot, or empty when comparing against nothing (a creation). |
 | `NewVersion` | `int` | The per-object version of the newer snapshot, when known. |
 | `Root` | `ConfigurationDiffNode` | The root node of the diff tree. |
 | `AddedCount` | `int` | Count of added items and scalars. |
@@ -319,7 +319,7 @@ Invoke-JIMHistoryCleanup [-PassThru]
 
 ### Output
 
-With -PassThru, what the pass removed and the retention settings it applied; otherwise nothing.
+With `-PassThru`, what the pass removed and the retention settings it applied; otherwise nothing.
 
 **`HistoryCleanupResponse`**:
 

@@ -69,7 +69,7 @@ function Get-JIMActivity {
         Return the Activity's Run Profile Execution Items: what happened to each object.
 
     .PARAMETER Follow
-        Follows the Activity's progress until it finishes, like tail -f, showing the step it is on, object counts,
+        Follow the Activity's progress until it finishes, like tail -f, showing the step it is on, object counts,
         throughput and the estimated time remaining. Ctrl+C stops following early.
 
     .PARAMETER IntervalSeconds

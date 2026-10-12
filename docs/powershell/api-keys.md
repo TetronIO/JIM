@@ -46,7 +46,7 @@ Each API Key. The key itself is never returned; KeyPrefix identifies it.
 | `Description` | `string` | Optional description of the key's purpose. |
 | `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
 | `CreatedAt` | `datetime` | When the API key was created. |
-| `ExpiresAt` | `datetime` | Optional expiry date. Null means the key never expires. |
+| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
@@ -93,7 +93,7 @@ New-JIMApiKey -Name <string> [-Description <string>] [-RoleIds <int[]>] [-Expire
 
 ### Output
 
-With -PassThru, the API Key created, with the key itself in Key; otherwise nothing. This is the only time JIM returns the key, so store it securely: without -PassThru it cannot be retrieved.
+With `-PassThru`, the API Key created, with the key itself in Key; otherwise nothing. This is the only time JIM returns the key, so store it securely: without `-PassThru` it cannot be retrieved.
 
 **`ApiKeyCreateResponseDto`**:
 
@@ -105,7 +105,7 @@ With -PassThru, the API Key created, with the key itself in Key; otherwise nothi
 | `Description` | `string` | Optional description of the key's purpose. |
 | `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
 | `CreatedAt` | `datetime` | When the API key was created. |
-| `ExpiresAt` | `datetime` | Optional expiry date. Null means the key never expires. |
+| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
@@ -155,7 +155,7 @@ Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int
 | `Name` | `string` | No |  | The new name. |
 | `Description` | `string` | No |  | The new description. |
 | `RoleIds` | `int[]` | No |  | The IDs of the Roles the API Key has, replacing those it had. Omit it to keep its Roles. |
-| `ExpiresAt` | `datetime` | No |  | When the API Key expires. $null removes the expiry. |
+| `ExpiresAt` | `datetime` | No |  | When the API Key expires. `$null` removes the expiry. |
 | `Enable` | `switch` | No |  | Enables the API Key. |
 | `Disable` | `switch` | No |  | Disables the API Key without removing it. |
 | `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the API Key's Configuration Change History. |
@@ -163,7 +163,7 @@ Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int
 
 ### Output
 
-With -PassThru, the API Key as updated; otherwise nothing.
+With `-PassThru`, the API Key as updated; otherwise nothing.
 
 **`ApiKeyDto`**: as under [Get-JIMApiKey](#get-jimapikey).
 <!-- END GENERATED: Set-JIMApiKey -->
@@ -218,14 +218,14 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of the API Key to delete. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The API Key to remove, as Get-JIMApiKey returns it. Accepts pipeline input. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The API Key to remove, as `Get-JIMApiKey` returns it. Accepts pipeline input. |
 | `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the API Key's Configuration Change History. |
 | `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 | `PassThru` | `switch` | No |  | Returns the API Key as it was before it was removed. |
 
 ### Output
 
-With -PassThru, the API Key as it was before it was removed; otherwise nothing.
+With `-PassThru`, the API Key as it was before it was removed; otherwise nothing.
 
 **`ApiKeyDto`**: as under [Get-JIMApiKey](#get-jimapikey).
 <!-- END GENERATED: Remove-JIMApiKey -->

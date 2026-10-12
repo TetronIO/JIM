@@ -25,10 +25,10 @@ function Get-JIMActivityExecutionItem {
         The execution item to get. The rows of Get-JIMActivity -ExecutionItems can be piped straight in.
 
     .PARAMETER Causes
-        Returns what caused the item instead, one row per cohort of causes.
+        Return what caused the item instead, one row per cohort of causes.
 
     .PARAMETER Consequences
-        Returns what the item went on to cause instead, one row per cohort of consequences.
+        Return what the item went on to cause instead, one row per cohort of consequences.
 
     .OUTPUTS
         Without a switch, the item. With -Causes, what caused it, and with -Consequences what it went on to cause,
@@ -69,7 +69,7 @@ function Get-JIMActivityExecutionItem {
         ConnectedSystem (string): The Connected System the consequences are attributed to.
         SyncRule (string): The Synchronisation Rule the cause names, where it names one.
         OutcomeSummary (string): The outcomes the consequences share.
-        PendingExportStatus (PendingExportStatus): For outstanding Pending Exports, their status now.
+        PendingExportStatus (PendingExportStatus): For outstanding Pending Exports, their live status.
         Ending (string): Where the branch stops: the cohort's own ending (Confirmed, WaitingForExport,
             WaitingForRetry, NeedsAttention, WaitingForConfirmingImport or DeletionScheduled), else how many
             consequences led nowhere further and why, for example "NoFurtherConsequences (2)", else FurtherThanShown

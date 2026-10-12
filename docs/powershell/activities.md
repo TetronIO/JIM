@@ -40,23 +40,23 @@ Get-JIMActivity -Id <guid>
 | `Operation` | `string[]` | No (List) |  | Return only the Activities that performed one of these operations, for example Execute for a Run Profile execution. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate` or `Preview`. |
 | `Outcome` | `string[]` | No (List) |  | Return only the Activities that recorded at least one of these outcomes, for example Errors for runs that recorded an error. One of `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlows`, `Disconnected`, `DriftCorrections`, `Provisioned`, `Exported`, `Deprovisioned`, `Created`, `PendingExports` or `Errors`. |
 | `Status` | `string[]` | No (List) |  | Return only the Activities with one of these statuses. One of `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
-| `InitiatedById` | `guid` | No (List) |  | Return only the Activities initiated by this principal (a Metaverse Object or API key). -InitiatedBy matches on the recorded name instead. |
+| `InitiatedById` | `guid` | No (List) |  | Return only the Activities initiated by this principal (a Metaverse Object or API key). `-InitiatedBy` matches on the recorded name instead. |
 | `InitiatedBy` | `string` | No (List) |  | Return only the Activities whose initiator's recorded name contains this text, case-insensitively. |
-| `HasChildActivities` | `bool` | No (List) |  | Return only the Activities that have child Activities ($true), or only those that have none ($false). Omit it to return both. |
+| `HasChildActivities` | `bool` | No (List) |  | Return only the Activities that have child Activities (`$true`), or only those that have none (`$false`). Omit it to return both. |
 | `CreatedFrom` | `datetime` | No (List) |  | Return only the Activities created at or after this time, which is converted to UTC. |
 | `CreatedTo` | `datetime` | No (List) |  | Return only the Activities created at or before this time, which is converted to UTC. |
 | `ConnectedSystem` | `string[]` | No (List) |  | Return only the Activities of these Connected Systems, by exact name. |
 | `RunProfile` | `string[]` | No (List) |  | Return only the executions of these Run Profiles, by exact name. |
-| `ScheduledOnly` | `bool` | No (List) |  | Return only the Activities a Schedule produced ($true), or only those nobody scheduled ($false). Omit it to return both. |
+| `ScheduledOnly` | `bool` | No (List) |  | Return only the Activities a Schedule produced (`$true`), or only those nobody scheduled (`$false`). Omit it to return both. |
 | `ScheduleId` | `guid[]` | No (List) |  | Return only the Activities these Schedules produced. |
 | `ExecutionItems` | `switch` | Yes (ExecutionItems) |  | Return the Activity's Run Profile Execution Items: what happened to each object. |
-| `Follow` | `switch` | Yes (Follow) |  | Follows the Activity's progress until it finishes, like tail -f, showing the step it is on, object counts, throughput and the estimated time remaining. Ctrl+C stops following early. |
+| `Follow` | `switch` | Yes (Follow) |  | Follow the Activity's progress until it finishes, like tail -f, showing the step it is on, object counts, throughput and the estimated time remaining. Ctrl+C stops following early. |
 | `IntervalSeconds` | `int` | No (Follow) | `2` | How many seconds to wait between reads of the progress. From 1 to 300. |
 | `MaxPolls` | `int` | No (Follow) |  | How many times to read the progress before following stops, whether or not the Activity has finished, for a script that must not wait indefinitely. Omit it to follow until the Activity finishes. At least 1. |
 
 ### Output
 
-A list returns each Activity's header, and -Id the Activity in full. -ExecutionItems returns each of the Activity's Run Profile Execution Items. -Follow shows progress while it follows, then returns the Activity in full.
+A list returns each Activity's header, and `-Id` the Activity in full. `-ExecutionItems` returns each of the Activity's Run Profile Execution Items. `-Follow` shows progress while it follows, then returns the Activity in full.
 
 **`ActivityHeader`** (List):
 
@@ -96,10 +96,10 @@ A list returns each Activity's header, and -Id the Activity in full. -ExecutionI
 | `TotalPendingExports` | `int` | Count of Pending Exports staged for the next export run. |
 | `TotalErrors` | `int` | Count of Run Profile Execution Items with errors. |
 | `ChildActivityCount` | `int` | The number of direct child Activities linked to this Activity. Zero for Activities with no children. |
-| `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise. |
-| `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Null when no Schedule produced it. |
-| `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise. |
-| `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity. |
+| `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Empty otherwise. |
+| `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
+| `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
+| `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Empty when no Schedule produced this Activity. |
 
 **`ActivityDetailDto`** (Follow, ById):
 
@@ -125,7 +125,7 @@ A list returns each Activity's header, and -Id the Activity in full. -ExecutionI
 | `WarningMessage` | `string` | A warning that did not stop the Activity, for example that a Delta Import fell back to a Full Import. |
 | `ErrorMessage` | `string` | Error message if the Activity failed. |
 | `ErrorStackTrace` | `string` | Error stack trace if the Activity failed. |
-| `ErrorDetail` | `string` | Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the message. An LDAPS connection refused because of the directory server's certificate records that certificate here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check it failed. Null for failures with no structured detail. |
+| `ErrorDetail` | `string` | Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the message. An LDAPS connection refused because of the directory server's certificate records that certificate here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check it failed. Empty for failures with no structured detail. |
 | `ConnectedSystemRunType` | `ConnectedSystemRunType` | The run type, for a Run Profile execution. |
 | `ConnectedSystemId` | `int` | The Connected System ID if applicable. |
 | `ConnectedSystemRunProfileId` | `int` | The Run Profile ID if applicable. |
@@ -134,23 +134,23 @@ A list returns each Activity's header, and -Id the Activity in full. -ExecutionI
 | `ExampleDataTemplateId` | `int` | The data generation template ID if applicable. |
 | `ExecutionStats` | `ActivityRunProfileExecutionStatsDto` | Execution statistics for Run Profile Activities. |
 | `Phases` | `ActivityPhaseDto[]` | The steps the Run Profile execution moved through, in run order, each with how it turned out and how long it took. This is what answers "where did the four hours go?" on a run that finished days ago. Empty for other Activity types, and for runs that predate phase recording. |
-| `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise. |
-| `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Null when no Schedule produced it. |
-| `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise. |
-| `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity. |
+| `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Empty otherwise. |
+| `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
+| `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
+| `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Empty when no Schedule produced this Activity. |
 | `ChangeReason` | `string` | For a configuration-change Activity, the optional reason supplied for the change. |
 | `ConfigurationChangeVersion` | `int` | For a configuration-change Activity, the per-object version number this change produced. |
-| `ConfigurationChangeSnapshot` | `ConfigurationSnapshot` | For a configuration-change Activity, the redacted snapshot of the object's state at this change; null otherwise. |
-| `PreviewActivityId` | `guid` | For a change made after reading a Configuration Change Preview, the preview's Activity id, as recorded by the change's `previewActivityId`; read it with `GET /api/v1/previews/{activityId}`. Null when no preview informed the change, and for every other kind of Activity. |
-| `PreviewOvertakenAt` | `datetime` | When the preview in `PreviewActivityId` had been overtaken by the time the change was made: the latest run or configuration change recorded after the preview started that could change its answer. Null when the preview was current, or when no preview informed the change. |
-| `PreviewOvertakenBy` | `string` | What had overtaken the preview in `PreviewActivityId` by the time the change was made, for example "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Null when `PreviewOvertakenAt` is. |
-| `ClearedPendingExportCount` | `int` | For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded; null for every other kind of Activity. |
-| `ClearedConnectedSystemObjectCount` | `int` | For a Connector Space clear, how many Connected System Objects the clear deleted; null for every other kind of Activity. |
-| `ClearedJoinRecordCount` | `int` | For a Connector Space clear, how many Metaverse Objects were joined at the moment of the clear and so recorded for the post-clear reconciliation to expect back; null for every other kind of Activity. Not a removal: these objects are what the next Full Synchronisation compares against once a Full Import has rebuilt the Connector Space. |
-| `ExportCreatesWithheld` | `int` | How many creates the Run Profile's Max creates limit withheld this run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise. |
-| `ExportUpdatesWithheld` | `int` | How many updates the Run Profile's Max updates limit withheld this run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise. |
-| `ExportDeletesWithheld` | `int` | How many deletes the Run Profile's Max deletes limit withheld this run. Populated (zero when nothing was withheld) on every Export Activity; null otherwise. |
-| `DetectedDeletionsWithheld` | `int` | How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions percent limits withheld this run. Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; null on every other Activity, including a Full Import that imported zero objects and so skipped detection entirely. |
+| `ConfigurationChangeSnapshot` | `ConfigurationSnapshot` | For a configuration-change Activity, the redacted snapshot of the object's state at this change; empty otherwise. |
+| `PreviewActivityId` | `guid` | For a change made after reading a Configuration Change Preview, the preview's Activity id, as recorded by the change's `previewActivityId`; read it with `GET /api/v1/previews/{activityId}`. Empty when no preview informed the change, and for every other kind of Activity. |
+| `PreviewOvertakenAt` | `datetime` | When the preview in `PreviewActivityId` had been overtaken by the time the change was made: the latest run or configuration change recorded after the preview started that could change its answer. Empty when the preview was current, or when no preview informed the change. |
+| `PreviewOvertakenBy` | `string` | What had overtaken the preview in `PreviewActivityId` by the time the change was made, for example "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Empty when `PreviewOvertakenAt` is. |
+| `ClearedPendingExportCount` | `int` | For a Connector Space clear, how many Pending Exports to the Connected System the clear discarded; empty for every other kind of Activity. |
+| `ClearedConnectedSystemObjectCount` | `int` | For a Connector Space clear, how many Connected System Objects the clear deleted; empty for every other kind of Activity. |
+| `ClearedJoinRecordCount` | `int` | For a Connector Space clear, how many Metaverse Objects were joined at the moment of the clear and so recorded for the post-clear reconciliation to expect back; empty for every other kind of Activity. Not a removal: these objects are what the next Full Synchronisation compares against once a Full Import has rebuilt the Connector Space. |
+| `ExportCreatesWithheld` | `int` | How many creates the Run Profile's Max creates limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
+| `ExportUpdatesWithheld` | `int` | How many updates the Run Profile's Max updates limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
+| `ExportDeletesWithheld` | `int` | How many deletes the Run Profile's Max deletes limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
+| `DetectedDeletionsWithheld` | `int` | How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; empty on every other Activity, including a Full Import that imported zero objects and so skipped detection entirely. |
 
 **`ActivityRunProfileExecutionItemHeader`** (ExecutionItems):
 
@@ -161,9 +161,9 @@ A list returns each Activity's header, and -Id the Activity in full. -ExecutionI
 | `DisplayName` | `string` | The object's display name: its Connected System Object's current value, or the name recorded with the item where that object no longer exists. |
 | `ConnectedSystemObjectType` | `string` | The object's type: its Connected System Object's current type, or the type recorded with the item where that object no longer exists. |
 | `ObjectChangeType` | `ObjectChangeType` | What happened to the object. |
-| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or null when the object did not fail. |
-| `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export scope review). Null otherwise. |
-| `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12,PendingExportCreated:2`. Null for an item recorded before outcomes were tracked, or when outcome tracking is disabled. |
+| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or empty when the object did not fail. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export scope review). Empty otherwise. |
+| `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12,PendingExportCreated:2`. Empty for an item recorded before outcomes were tracked, or when outcome tracking is disabled. |
 <!-- END GENERATED: Get-JIMActivity -->
 
 Which of an Activity's properties are filled in depends on what it records. [Schedules](../configuration/schedules.md) explains the Schedule attribution: pass `ScheduleExecutionId` to `Get-JIMScheduleExecution -Id` for the whole Schedule run. [Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space) explains the counts of what a clear removed, and [Safeguards](../configuration/run-profiles.md#safeguards) the counts of what a Run Profile's limits withheld.
@@ -287,7 +287,7 @@ The Run Profile execution's statistics.
 | `TotalPendingExports` | `int` | Number of Pending Exports staged for the next export run. These are exports that were previously executed but not yet confirmed, giving operators visibility into what changes will be made to Connected Systems. |
 | `TotalPendingExportsConfirmed` | `int` | Number of Pending Exports that were fully confirmed and deleted. The exported attribute values matched the imported values. |
 | `TotalPendingExportsRetrying` | `int` | Number of Pending Exports with unconfirmed attributes that will be retried. Some attribute values did not match; they will be re-exported on the next export run. |
-| `TotalPendingExportsFailed` | `int` | Number of Pending Exports that failed after maximum retry attempts. Manual intervention may be required to resolve these exports. |
+| `TotalPendingExportsFailed` | `int` | Number of Pending Exports that failed after their last retry. JIM does not attempt one again; it clears once an import shows its values in place, for example after the change is made in the Connected System directly. |
 | `TotalCreated` | `int` | Number of Metaverse Objects created directly (by example data generation or in the portal) rather than by projection. |
 | `EntriesDiscardedByExcludedContainer` | `hashtable` | How many entries this import read from the Connected System and discarded because an excluded Container carved them out, keyed by that Container's id. |
 | `TotalEntriesDiscardedByExclusion` | `int` | Entries discarded across every exclusion, which is the figure that answers "why was this import slow?". |
@@ -347,8 +347,8 @@ Get-JIMActivityChildren -Id <guid> -All [-Force] [-PageSize <int>]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes |  | The parent Activity. Accepts pipeline input by property name. |
-| `All` | `switch` | Yes (All) |  | Returns every child Activity, fetching page after page. Stops with a warning after 1,000 pages unless -Force is given. |
-| `Force` | `switch` | No (All) |  | With -All, fetches every page however many there are, up to the API's limit of 1,000,000 rows. |
+| `All` | `switch` | Yes (All) |  | Returns every child Activity, fetching page after page. Stops with a warning after 1,000 pages unless `-Force` is given. |
+| `Force` | `switch` | No (All) |  | With `-All`, fetches every page however many there are, up to the API's limit of 1,000,000 rows. |
 | `Page` | `int` | No (Page) | `1` | The page of child Activities to return. At least 1. |
 | `PageSize` | `int` | No | `50` | How many child Activities per page. From 1 to 100. |
 
