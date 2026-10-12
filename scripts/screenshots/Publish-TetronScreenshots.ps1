@@ -11,11 +11,14 @@
     release's capture, after checking the site still shows it. Then commits the result through GitHub's API onto the
     branch screenshots/<Version> and opens a pull request for it (TourPullRequest.ps1), or updates the one already open.
 
-    Nothing merges by itself: tetron.io takes every change through a reviewed pull request, and its preview deployment
-    shows the new image in place before anyone merges.
+    No one reviews it: the capture has already refused a blank image, the pull request's own check builds the site
+    with it, and the pull request merges itself once JIM's release is published and that check has passed. JIM's
+    release workflow merges it then; with -MergeWhenReleased this script merges it straight away if the release is
+    already out.
 
-    The token comes from the GH_TOKEN environment variable, never a parameter, so it cannot reach a log. It needs
-    Contents and Pull requests write access to the repository.
+    The tokens come from environment variables, never parameters, so they cannot reach a log: GH_TOKEN needs Contents
+    and Pull requests write access to the repository, and JIM_RELEASE_TOKEN (for -MergeWhenReleased) reads JIM's
+    releases.
 
 .PARAMETER ScreenshotPath
     The captured library for the version: Capture-Screenshots.ps1's <OutputPath>/<Version> folder.
@@ -28,6 +31,9 @@
 
 .PARAMETER RunUrl
     The workflow run whose artefact holds the whole library, linked from the pull request.
+
+.PARAMETER MergeWhenReleased
+    Once the pull request is open, merges it if JIM's release for the version is already published.
 
 .PARAMETER DryRun
     Updates the checkout and lists what would be committed, without touching GitHub.
@@ -44,6 +50,7 @@ param(
     [string]$Repository = 'TetronIO/tetron.io',
     [string]$BaseBranch = 'main',
     [string]$RunUrl,
+    [switch]$MergeWhenReleased,
     [switch]$DryRun
 )
 
@@ -65,6 +72,7 @@ if ($DryRun) {
     return
 }
 if (-not $env:GH_TOKEN) { throw 'GH_TOKEN is not set; it needs Contents and Pull requests write access to ' + $Repository + '.' }
+if ($MergeWhenReleased -and -not $env:JIM_RELEASE_TOKEN) { throw 'JIM_RELEASE_TOKEN is not set; -MergeWhenReleased reads JIM''s releases with it.' }
 
 $branch = "screenshots/$Version"
 $replaced = ($result.Published | ForEach-Object { "``$_``" }) -join ', '
@@ -77,10 +85,7 @@ The JIM screenshot on tetron.io's homepage for JIM $Version, captured by JIM's r
 
 $library
 
-Before merging:
-
-- [ ] Look at the hero in this pull request's preview deployment.
-- [ ] Merge once JIM $Version is published.
+This pull request merges itself once JIM $Version is published and its checks pass (the preview deployment builds the site with the new image); close it to keep the image off the site.
 "@
 
 $commit = Publish-SiteChangeCommit -Repository $Repository -BaseBranch $BaseBranch -Branch $branch -SitePath $SitePath `
@@ -89,7 +94,13 @@ $url = Open-TourPullRequest -Repository $Repository -BaseBranch $BaseBranch -Bra
     -Title "JIM screenshot for JIM $Version" -Body $body -Token $env:GH_TOKEN
 
 Write-Host "Committed $commit to $branch; pull request: $url"
+$outcome = 'It merges when the release is published.'
+if ($MergeWhenReleased) {
+    $merged = Invoke-ScreenshotMergeIfReleased -Repository $Repository -Branch $branch -Version $Version `
+        -Token $env:GH_TOKEN -ReleaseToken $env:JIM_RELEASE_TOKEN
+    if ($merged) { $outcome = 'The release was already published, so it is merged.' }
+}
 if ($env:GITHUB_STEP_SUMMARY) {
-    "### tetron.io screenshot`n`n[$Repository pull request]($url) for $Version." |
+    "### tetron.io screenshot`n`n[$Repository pull request]($url) for $Version. $outcome" |
         Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
