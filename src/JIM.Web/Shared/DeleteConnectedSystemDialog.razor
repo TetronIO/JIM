@@ -112,7 +112,7 @@
                             A preview is still running. Deleting now cancels it, and the deletion will record that no
                             preview informed it.
                         </MudText>
-                        <MudButton Variant="Variant.Text" Color="Color.Primary" Class="mt-2"
+                        <MudButton Variant="Variant.Text" Class="mt-2"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
                             Wait for the preview
                         </MudButton>
@@ -145,7 +145,7 @@
                             </MudAlert>
                         }
                         <div class="d-flex align-center flex-wrap gap-2 mt-2">
-                            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                            <MudButton Variant="Variant.Text"
                                        OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
                                 Open full preview
                             </MudButton>
@@ -160,7 +160,7 @@
                             It may no longer describe what deleting would do, so run it again for a current answer; a deletion now
                             records that the preview informing it was out of date.
                         </MudText>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false" Class="mt-3"
+                        <MudButton Variant="Variant.Outlined" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
                             Run again
@@ -172,7 +172,7 @@
                             The last preview did not finish, so it says nothing about what deleting would do. The deletion
                             will record that no preview informed it.
                         </MudText>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false" Class="mt-3"
+                        <MudButton Variant="Variant.Outlined" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
                             Preview again
@@ -185,7 +185,7 @@
                             exported, before you delete. The deletion's Activity will record that it went ahead without a
                             preview.
                         </MudText>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false" Class="mt-3"
+                        <MudButton Variant="Variant.Outlined" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
                             Preview first

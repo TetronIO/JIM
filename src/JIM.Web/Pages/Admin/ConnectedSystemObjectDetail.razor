@@ -105,7 +105,7 @@
             }
 
             <MudSpacer />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+            <MudButton Variant="Variant.Outlined" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
@@ -117,7 +117,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                <MudButton Variant="Variant.Outlined" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -354,7 +354,6 @@
                 {
                     <div class="d-flex justify-center mt-3">
                         <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Primary"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)

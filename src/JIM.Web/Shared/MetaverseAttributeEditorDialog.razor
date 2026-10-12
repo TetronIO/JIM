@@ -154,7 +154,7 @@
                 @if (!ReadOnly && _editingMapping == null)
                 {
                     <div>
-                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Color="Color.Primary" OnClick="AddMapping">
+                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" OnClick="AddMapping">
                             Add Standard Mapping
                         </MudButton>
                     </div>
@@ -181,7 +181,7 @@
                     }
                     <div class="d-flex justify-end gap-2">
                         <MudButton OnClick="CancelMappingEdit">Cancel</MudButton>
-                        <MudButton Color="Color.Primary" Variant="Variant.Outlined" Disabled="@(!CanSaveMapping())" OnClick="SaveMapping">
+                        <MudButton Variant="Variant.Outlined" Disabled="@(!CanSaveMapping())" OnClick="SaveMapping">
                             @(_editingMappingIsNew ? "Add" : "Update")
                         </MudButton>
                     </div>
