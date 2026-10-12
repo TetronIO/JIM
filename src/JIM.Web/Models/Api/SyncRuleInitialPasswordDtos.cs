@@ -47,9 +47,9 @@ public class SyncRuleInitialPasswordResponse
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether the account is enabled once the password is set. Applies only where no Attribute Flow sets the account's
-    /// enabled state (such as <c>userAccountControl</c>): where one does, the flow decides and the password's delivery
-    /// leaves the enabled state alone. False leaves the account as it was created.
+    /// Whether the account is enabled once the password is set. Applies only where no export has written the account's
+    /// enabled state (such as <c>userAccountControl</c>) by the time the password is delivered; where one has, the
+    /// Attribute Flow decides. False leaves the account as it was created.
     /// </summary>
     public bool EnableAccount { get; set; }
 
@@ -191,9 +191,9 @@ public class UpdateSyncRuleInitialPasswordRequest
     public PasswordExpiryBehaviour? ExpiryBehaviour { get; set; }
 
     /// <summary>
-    /// Whether the account is enabled once the password is set. Applies only where no Attribute Flow sets the account's
-    /// enabled state (such as <c>userAccountControl</c>): where one does, the flow decides and the password's delivery
-    /// leaves the enabled state alone. False leaves the account as it was created.
+    /// Whether the account is enabled once the password is set. Applies only where no export has written the account's
+    /// enabled state (such as <c>userAccountControl</c>) by the time the password is delivered; where one has, the
+    /// Attribute Flow decides. False leaves the account as it was created.
     /// </summary>
     public bool? EnableAccount { get; set; }
 
