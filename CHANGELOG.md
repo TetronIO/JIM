@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
+- 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
