@@ -31,7 +31,7 @@ The interactive API reference groups its endpoints by resource. Each group, and 
 | ExampleData | Example Data templates and sets, for filling a test instance with realistic objects (`/api/v1/example-data`) |
 | FeatureFlags | Turning [Preview features](../administration/preview-features.md) on and off (`/api/v1/features`) |
 | FileSystem | Browsing the files a connector can read inside the container, such as the [File Connector](../connectors/jim-file-connector.md)'s import files (`/api/v1/filesystem`) |
-| GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
+| GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/generated-values.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
 | Health | Health, readiness, liveness and version probes for load balancers and orchestrators (`/api/v1/health`); unauthenticated, and answering for the web tier only |
 | History | Counting and clearing old change history and deleted-object records (`/api/v1/history`) |
 | Logs | Reading JIM's [service logs](../administration/configuration.md#logging) (`/api/v1/logs`) |

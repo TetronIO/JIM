@@ -24,7 +24,7 @@ A **joiner** event occurs when a new identity appears in a source system for the
 
 1. **Import**<br /> JIM imports the new record from the source system, creating a new Connected System Object in its Connector Space.
 
-2. **Matching**<br /> During inbound synchronisation, JIM uses the [Object Matching Rules](../configuration/synchronisation-rules.md#object-matching-rules) to check whether this person already exists in the Metaverse: a rehire, say, or a record that arrived from another source system first.
+2. **Matching**<br /> During inbound synchronisation, JIM uses the [Object Matching Rules](../configuration/object-matching-rules.md) to check whether this person already exists in the Metaverse: a rehire, say, or a record that arrived from another source system first.
 
 3. **Projection**<br /> If no existing Metaverse Object matches, JIM **projects** a new one. This is the person's arrival in the Metaverse.
 

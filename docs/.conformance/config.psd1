@@ -129,6 +129,7 @@
         'administration/deployment.md'
         'administration/tls-and-reverse-proxy.md'
         'configuration/connected-systems.md'
+        'configuration/synchronisation-rules.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.

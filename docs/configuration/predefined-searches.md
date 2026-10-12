@@ -77,7 +77,7 @@ Each criterion combines:
 
 For **Date/Time** attributes the editor shows the operators in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*. Date/Time values are stored and compared in UTC.
 
-A Date/Time criterion can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to now (a count, a unit of Hours/Days/Weeks/Months/Years, and a direction of Ago or From now). Relative criteria are re-evaluated every time the search runs, so "expiring within the next 7 days" keeps moving with time. Days and coarser units round to midnight UTC; Hours keeps exact-instant precision; month and year offsets are calendar-correct. See [relative dates in scope filters](synchronisation-rules.md#relative-dates-in-scope-filters) for the shared behaviour.
+A Date/Time criterion can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to now (a count, a unit of Hours/Days/Weeks/Months/Years, and a direction of Ago or From now). Relative criteria are re-evaluated every time the search runs, so "expiring within the next 7 days" keeps moving with time. Days and coarser units round to midnight UTC; Hours keeps exact-instant precision; month and year offsets are calendar-correct. See [relative dates in scope filters](scoping-criteria.md#relative-dates-in-scope-filters) for the shared behaviour.
 
 **Text comparisons are case-sensitive by default.** Switch a text criterion to case-insensitive when you want, for example, `Finance` and `finance` to match the same value.
 
@@ -88,7 +88,7 @@ A criterion is tested against **every** value the object holds for the attribute
 - **Positive operators** (*equals*, *starts with*, *contains*, *greater than* and the rest) match when **any** value matches.
 - **The *does not* operators** match when the object holds at least one value and **no** value matches. An object with no value for the attribute matches neither kind.
 
-So with `Groups` holding `All Staff` and `Finance Readers`, *contains* `Finance` matches the object and *does not equal* `Finance Readers` does not. These are the same rules [Synchronisation Rule scoping](synchronisation-rules.md#multi-valued-attributes-in-scope) uses, so a search with an export rule's criteria lists exactly the Metaverse Objects that rule covers.
+So with `Groups` holding `All Staff` and `Finance Readers`, *contains* `Finance` matches the object and *does not equal* `Finance Readers` does not. These are the same rules [Synchronisation Rule scoping](scoping-criteria.md#multi-valued-attributes-in-scope) uses, so a search with an export rule's criteria lists exactly the Metaverse Objects that rule covers.
 
 ### How criteria combine
 

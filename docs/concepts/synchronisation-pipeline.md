@@ -66,11 +66,11 @@ Inbound sync processes Connected System Objects from source systems and updates 
 
 1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object.
 
-2. **Matching**<br /> JIM looks for the Metaverse Object the object belongs to, using the [Object Matching Rules](../configuration/synchronisation-rules.md#object-matching-rules), which correlate it with an existing Metaverse Object on, say, an employee ID, an email address, or a combination of attributes.
+2. **Matching**<br /> JIM looks for the Metaverse Object the object belongs to, using the [Object Matching Rules](../configuration/object-matching-rules.md), which correlate it with an existing Metaverse Object on, say, an employee ID, an email address, or a combination of attributes.
 
 3. **Projection**<br /> If nothing matches and the Synchronisation Rule projects, JIM creates a new Metaverse Object and joins the Connected System Object to it.
 
-4. **Attribute Flow**<br /> Once joined or projected, JIM applies the rule's Attribute Flows, copying values from the Connected System Object to the Metaverse Object and optionally transforming them with [expressions](expressions.md). For text attributes, per-mapping [value processing](../configuration/synchronisation-rules.md#value-processing-inbound) (trim, collapse, case normalisation, and the default treat-whitespace-as-no-value) runs at this step, normalising the value before priority resolves which rule's value wins.
+4. **Attribute Flow**<br /> Once joined or projected, JIM applies the rule's Attribute Flows, copying values from the Connected System Object to the Metaverse Object and optionally transforming them with [expressions](expressions.md). For text attributes, per-mapping [value processing](../configuration/attribute-mappings.md#value-processing-inbound) (trim, collapse, case normalisation, and the default treat-whitespace-as-no-value) runs at this step, normalising the value before priority resolves which rule's value wins.
 
 5. **Attribute resolution**<br /> When more than one Connected System contributes the same Metaverse Attribute, the winning value is chosen deterministically by [Attribute Priority](attribute-priority.md), not by the order synchronisations happen to run in. This is also where a "Null is a value" contributor can assert a clear and where a departing source hands an attribute down to the next-priority contributor.
 
@@ -97,7 +97,7 @@ What prevents this from looping is value-level change detection, not a special c
 - **Full Synchronisation** re-evaluates every Connected System Object against the Synchronisation Rules, except a joined one unchanged since the last synchronisation, which it skips unless Synchronisation Rule configuration has changed since the last Full Synchronisation. Use it after changing Synchronisation Rule configuration, or for periodic reconciliation.
 - **Delta Synchronisation** processes only the Connected System Objects that have changed since the last synchronisation. It is faster, and is the normal operational mode.
 
-One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/synchronisation-rules.md#when-a-change-to-an-export-rule-takes-effect).
+One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
 
 ## 📤 Phase 3: Export
 
@@ -152,18 +152,18 @@ Before running the real cycle for one object, [Sync Preview](../configuration/sy
 
 ## Initialising JIM
 
-Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/synchronisation-rules.md#object-matching-rules) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
+Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
 
 **The order:**
 
 1. **Full Import every Connected System.** Joins, scoping and Attribute Flows are only correct when every Connector Space holds current data.
-2. **Full Synchronisation every Connected System, sources before targets.** Sources project and join first, so the Metaverse is complete before targets are evaluated. A target that also supplies values (for example a higher-priority import Attribute Flow that keeps an existing account's name) contributes them during its own synchronisation, which cancels any Pending Export that would have overwritten them. Where a Synchronisation Rule [derives a Metaverse Attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) from one another Connected System contributes, synchronise that other system first, so the derived value is right in the same pass.
+2. **Full Synchronisation every Connected System, sources before targets.** Sources project and join first, so the Metaverse is complete before targets are evaluated. A target that also supplies values (for example a higher-priority import Attribute Flow that keeps an existing account's name) contributes them during its own synchronisation, which cancels any Pending Export that would have overwritten them. Where a Synchronisation Rule [derives a Metaverse Attribute](../configuration/derived-attributes.md) from one another Connected System contributes, synchronise that other system first, so the derived value is right in the same pass.
 3. **Review the Pending Exports.** Use [Sync Preview](../configuration/sync-preview.md) to check a sample. This is the last point before anything leaves JIM.
 4. **Export.**
 
 **Why not delta runs.** A delta run only sees objects that changed since the last run. On initialisation everything is new to JIM, so every object has to be processed.
 
-**Existing accounts in a target.** An Object Matching Rule joins accounts JIM did not create to the Metaverse Objects your sources project. That join can only form after the target has been imported, which is why Full Import comes first. Joining does not decide which value wins: to keep an existing account's value (an existing `sAMAccountName`, for example), add an import Attribute Flow from that target at a higher priority than the flow that would otherwise supply it. See [Generated values](../configuration/synchronisation-rules.md#generated-values) for how this works with generated Account Names. Keep the Export Run Profile's [safeguards](../configuration/run-profiles.md#safeguards) in place for the first export, so a rule or matching mistake cannot turn it into a mass write.
+**Existing accounts in a target.** An Object Matching Rule joins accounts JIM did not create to the Metaverse Objects your sources project. That join can only form after the target has been imported, which is why Full Import comes first. Joining does not decide which value wins: to keep an existing account's value (an existing `sAMAccountName`, for example), add an import Attribute Flow from that target at a higher priority than the flow that would otherwise supply it. See [Generated values](../configuration/generated-values.md) for how this works with generated Account Names. Keep the Export Run Profile's [safeguards](../configuration/run-profiles.md#safeguards) in place for the first export, so a rule or matching mistake cannot turn it into a mass write.
 
 **After initialisation,** return to normal delta cycles (see [Schedules](../configuration/schedules.md#common-workflows)).
 
