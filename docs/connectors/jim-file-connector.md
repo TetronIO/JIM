@@ -1,6 +1,11 @@
-# JIM File Connector
+---
+title: JIM File Connector
+description: Synchronise identities with CSV and delimited text files, where JIM finds them, and the settings the File Connector takes.
+type: object
+audience: administrator
+---
 
-## Overview
+# JIM File Connector
 
 The JIM File Connector enables bi-directional synchronisation of identity data with CSV and delimited text files. It is ideal for integrating with systems that produce flat-file extracts, such as HR exports, batch feeds, or data migration files.
 
@@ -17,22 +22,6 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
 - **Auto-confirm export**<br /> An export counts as confirmed as soon as the file is written, and JIM records the values it wrote, so it knows what the file holds without reading it back (see [Export Only mode](#export-only-mode))
 - **Stop on first error**<br /> Optionally halt processing on the first error encountered, useful for debugging data quality issues
-
-## Settings
-
-| Setting | Description | Default | Example |
-|---------|-------------|---------|---------|
-| File Path | Path to the CSV file inside the container. Used for import, export, or both depending on mode. | *(required)* | `/connector-files/Users.csv` |
-| Mode | Operational mode: Import Only, Export Only, or Bidirectional. | `Import Only` | `Bidirectional` |
-| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(one of these two is required)* | `Type` |
-| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(one of these two is required)* | `User` |
-| Delimiter | Field delimiter character. | `,` | `\t` (tab) |
-| Multi-Value Delimiter | Character used to separate multiple values within a single field. | `\|` | `;` |
-| Culture | Culture code for parsing locale-sensitive values. Uses invariant culture if not specified. | *(invariant)* | `en-gb` |
-| Stop On First Error | Stop processing when the first error is encountered. Useful for debugging. | `false` | `true` |
-
-!!! note "Object type configuration"
-    You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
 
 ## File access
 
@@ -100,7 +89,7 @@ Then configure the File Connector with `File Path = /connector-files/hr-input/em
     - Make the host directory readable/writable by UID 1654 (`chown 1654:1654 /mnt/hr-extracts`), or
     - Adjust your network share's mount options (`uid=1654,gid=1654` for CIFS, or apply NFS UID-mapping) so files appear to be owned by UID 1654 inside the container.
 
-    Permission errors during sync show up as RPEIs on the failing import or export Activity, with a clear "Access to the path … is denied" message.
+    Permission errors during a run show up as execution item errors on the failing import or export Activity, with a clear "Access to the path … is denied" message.
 
 #### On Podman
 
@@ -208,6 +197,22 @@ JIM records values only when it writes them. Point a new Export Only Connected S
 
 The import reads every row into the Connector Space, and moves the objects it finds to Normal. Rows JIM did not write, and objects JIM expected but the file does not have, are reported by that import like any other.
 
+## Settings
+
+| Setting | Description | Default | Example |
+|---------|-------------|---------|---------|
+| File Path | Path to the CSV file inside the container. Used for import, export, or both depending on mode. | *(required)* | `/connector-files/Users.csv` |
+| Mode | Operational mode: Import Only, Export Only, or Bidirectional. | `Import Only` | `Bidirectional` |
+| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(one of these two is required)* | `Type` |
+| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(one of these two is required)* | `User` |
+| Delimiter | Field delimiter character. | `,` | `\t` (tab) |
+| Multi-Value Delimiter | Character used to separate multiple values within a single field. | `\|` | `;` |
+| Culture | Culture code for parsing locale-sensitive values. Uses invariant culture if not specified. | *(invariant)* | `en-gb` |
+| Stop On First Error | Stop processing when the first error is encountered. Useful for debugging. | `false` | `true` |
+
+!!! note "Object type configuration"
+    You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
+
 ## Troubleshooting
 
 ### File not found
@@ -262,3 +267,9 @@ If attributes that should be multi-valued are appearing as single-valued:
 
 - **Duplicate column approach**<br /> Ensure the column name appears more than once in the header row. The names must match exactly (case-insensitive).
 - **In-field delimiter approach**<br /> Check that the Multi-Value Delimiter setting matches the delimiter used within the field values.
+
+## Related
+
+- [Connectors](index.md)
+- [Connected Systems](../configuration/connected-systems.md)
+- [Your First Synchronisation](../getting-started/first-synchronisation.md): two File Connector Connected Systems, end to end.

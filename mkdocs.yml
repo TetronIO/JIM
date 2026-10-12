@@ -192,8 +192,12 @@ nav:
       - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
-          - Delta Import with a change-log table: connectors/jim-sql-connector-delta-import-change-log.md
-          - Delta Import with a watermark column: connectors/jim-sql-connector-delta-import-watermark.md
+          - "Delta Import: Change-Log Table": connectors/jim-sql-connector-delta-import-change-log.md
+          - "Delta Import: Watermark Column": connectors/jim-sql-connector-delta-import-watermark.md
+          - Values Already in Use: connectors/jim-sql-connector-values-in-use.md
+          - Worked Examples: connectors/jim-sql-connector-examples.md
+          - Security: connectors/jim-sql-connector-security.md
+          - Troubleshooting the SQL Connector: connectors/jim-sql-connector-troubleshooting.md
   - API:
       - api/index.md
       - Authentication: api/authentication.md
