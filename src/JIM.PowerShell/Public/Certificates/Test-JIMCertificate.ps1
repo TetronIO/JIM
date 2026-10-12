@@ -14,7 +14,9 @@ function Test-JIMCertificate {
         The unique identifier (GUID) of the certificate to validate.
 
     .OUTPUTS
-        PSCustomObject representing the validation result with any warnings or errors.
+        The result of the checks. IsValid is true when the certificate passed every one; Warnings lists
+        problems that do not stop it being used, such as expiring soon, and Errors those that do, such as
+        having expired or an untrusted chain.
 
     .EXAMPLE
         Test-JIMCertificate -Id $certId
@@ -36,7 +38,7 @@ function Test-JIMCertificate {
         Add-JIMCertificate
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.CertificateValidationResult')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id

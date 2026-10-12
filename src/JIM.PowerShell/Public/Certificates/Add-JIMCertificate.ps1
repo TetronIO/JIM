@@ -11,7 +11,7 @@ function Add-JIMCertificate {
         Both PEM and DER formats are supported.
 
     .PARAMETER Name
-        The name for the certificate in the store.
+        The name the certificate is shown by in the store.
 
     .PARAMETER Path
         Path to a certificate file (PEM or DER format). The path should be
@@ -31,10 +31,10 @@ function Add-JIMCertificate {
         configuration change history.
 
     .PARAMETER PassThru
-        If specified, returns the created certificate object.
+        Returns the certificate added.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created certificate object.
+        With -PassThru, the certificate added; otherwise nothing.
 
     .EXAMPLE
         Add-JIMCertificate -Name "LDAP CA" -Path "/connector-files/ldap-ca.pem" -PassThru
@@ -60,7 +60,7 @@ function Add-JIMCertificate {
         Test-JIMCertificate
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'FromFile')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TrustedCertificateDetailDto')]
     param(
         [Parameter(Mandatory)]
         [string]$Name,
