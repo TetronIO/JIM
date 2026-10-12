@@ -80,6 +80,15 @@ public class ConnectedSystemExportResult
     public string? SecondaryExternalId { get; set; }
 
     /// <summary>
+    /// Whether the Connector never started this export because the run was cancelled before it reached it (#2083).
+    /// JIM records the results of the exports the Connector did write, and puts this one back exactly as it was before
+    /// the batch was sent: no attempt is counted and no execution item is recorded, because nothing was sent and
+    /// nothing failed. <see cref="Success"/> is false, so anything that does not know this flag fails safe rather than
+    /// reading the export as written.
+    /// </summary>
+    public bool IsNotAttempted { get; set; }
+
+    /// <summary>
     /// Creates a successful result with no external ID feedback.
     /// </summary>
     public static ConnectedSystemExportResult Succeeded() => new() { Success = true };
@@ -132,6 +141,18 @@ public class ConnectedSystemExportResult
             ErrorMessage = errorMessage,
             ErrorType = ConnectedSystemExportErrorType.UniqueValueAlreadyInUse,
             RejectedAttributeName = rejectedAttributeName
+        };
+
+    /// <summary>
+    /// Creates the result for an export the Connector did not start because the run was cancelled (#2083). See
+    /// <see cref="IsNotAttempted"/>.
+    /// </summary>
+    public static ConnectedSystemExportResult NotAttempted() =>
+        new()
+        {
+            Success = false,
+            IsNotAttempted = true,
+            ErrorMessage = "Not attempted: the export run was cancelled before this change was started."
         };
 
     /// <summary>

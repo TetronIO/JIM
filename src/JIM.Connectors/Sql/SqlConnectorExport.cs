@@ -69,12 +69,20 @@ internal sealed class SqlConnectorExport
     /// </summary>
     internal const string GeneratedKeyParameterName = "exKey";
 
+    /// <summary>
+    /// How long an object already being written may run on once the export run is cancelled, before it is abandoned
+    /// (#2083). Long enough for any ordinary write to finish, and a bound on one that never would: not every database has
+    /// a default command timeout, and a statement blocked on a row lock could otherwise hold a cancellation up for ever.
+    /// </summary>
+    internal static readonly TimeSpan DefaultInFlightGracePeriod = TimeSpan.FromSeconds(30);
+
     private readonly ISqlProvider _provider;
     private readonly DbConnection _connection;
     private readonly SqlSchemaConfiguration _configuration;
     private readonly TimeZoneInfo _databaseTimeZone;
     private readonly SqlTypeMappingOptions _typeMappingOptions;
     private readonly ILogger _logger;
+    private readonly TimeSpan _inFlightGracePeriod;
     private readonly Dictionary<string, SqlExportPlan> _plans = new(StringComparer.OrdinalIgnoreCase);
 
     internal SqlConnectorExport(
@@ -83,8 +91,10 @@ internal sealed class SqlConnectorExport
         SqlSchemaConfiguration configuration,
         TimeZoneInfo databaseTimeZone,
         SqlTypeMappingOptions typeMappingOptions,
-        ILogger logger)
+        ILogger logger,
+        TimeSpan? inFlightGracePeriod = null)
     {
+        _inFlightGracePeriod = inFlightGracePeriod ?? DefaultInFlightGracePeriod;
         _provider = provider;
         _connection = connection;
         _configuration = configuration;
@@ -96,6 +106,13 @@ internal sealed class SqlConnectorExport
     /// <summary>
     /// Applies every Pending Export in the batch, returning one result per Pending Export in the order
     /// they arrived.
+    /// <para>
+    /// A cancelled run stops between objects, never inside one (#2083): the object being written when the run is
+    /// cancelled finishes, committed or rolled back whole, and every object not yet started is reported
+    /// <see cref="ConnectedSystemExportResult.NotAttempted"/>. Throwing instead would lose the result of every object
+    /// already committed, and JIM would send those Creates again. An object still being written once the grace period
+    /// after the cancellation has run out is abandoned, its transaction rolled back, and reported as a failed attempt.
+    /// </para>
     /// </summary>
     internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
@@ -111,22 +128,42 @@ internal sealed class SqlConnectorExport
 
         var results = new ConnectedSystemExportResult[pendingExports.Count];
         var failed = 0;
+        var notAttempted = 0;
+
+        // An object started is not cut off by the run's cancellation, only by this, which follows it after the grace period.
+        using var inFlight = new InFlightCancellation(cancellationToken, _inFlightGracePeriod);
 
         for (var index = 0; index < pendingExports.Count; index++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             var pendingExport = pendingExports[index];
+            if (cancellationToken.IsCancellationRequested)
+            {
+                results[index] = ConnectedSystemExportResult.NotAttempted();
+                notAttempted++;
+                continue;
+            }
 
             try
             {
-                results[index] = await ExportObjectAsync(pendingExport, cancellationToken);
+                // Not handed the run's token: an object started is finished, its transaction committed or rolled back
+                // whole, rather than cut off part-way with its result lost.
+                results[index] = await ExportObjectAsync(pendingExport, inFlight.Token);
+            }
+            catch (OperationCanceledException) when (inFlight.IsCancellationRequested)
+            {
+                // Still being written once the grace period after the run's cancellation ran out: abandoned, and its
+                // uncommitted transaction rolled back as it is disposed. A failed attempt, so the next run sends it again.
+                failed++;
+                _logger.Warning("SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) was still being written {GracePeriod} after the run was cancelled, so it was abandoned",
+                    pendingExport.Id, pendingExport.ChangeType, _inFlightGracePeriod);
+                results[index] = ConnectedSystemExportResult.Failed(
+                    $"The export run was cancelled, and this change was still being written {_inFlightGracePeriod.TotalSeconds:0} seconds later, so it was abandoned. The next run sends it again.");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Every failure this object could have is one object's failure: a value that cannot be
                 // written, configuration that does not describe it, or the database refusing the write.
-                // It is reported against the object and the batch carries on; an aborting run is a
-                // cancellation, and that is the one thing this does not swallow.
+                // It is reported against the object and the batch carries on.
                 failed++;
                 // A duplicate key is reported as a value already in use, naming the column where the database
                 // named one (Unique Value Generation, decision 9); the database's own message is kept whole. It is a
@@ -146,8 +183,8 @@ internal sealed class SqlConnectorExport
             }
         }
 
-        _logger.Information("SqlConnectorExport: applied {PendingExportCount} Pending Export(s), {FailedCount} of which failed",
-            pendingExports.Count, failed);
+        _logger.Information("SqlConnectorExport: attempted {AttemptedCount} of {PendingExportCount} Pending Export(s), {FailedCount} of which failed; " +
+            "{NotAttemptedCount} were not attempted because the run was cancelled", pendingExports.Count - notAttempted, pendingExports.Count, failed, notAttempted);
 
         return [.. results];
     }

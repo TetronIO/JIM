@@ -3109,6 +3109,23 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    {
+        // Only rows still Executing are written, as the database's guarded UPDATE does. This store shares instances with
+        // the caller, so a result the caller set in memory and has not persisted reads here as already recorded; the
+        // guard's real semantics are proven against PostgreSQL.
+        var released = new HashSet<Guid>();
+        foreach (var state in states)
+        {
+            if (!_pendingExports.TryGetValue(state.PendingExportId, out var pe) || pe.Status != PendingExportStatus.Executing)
+                continue;
+
+            state.ApplyTo(pe);
+            released.Add(pe.Id);
+        }
+        return Task.FromResult<IReadOnlySet<Guid>>(released);
+    }
+
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
     {
         var recovered = 0;

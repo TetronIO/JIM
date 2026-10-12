@@ -422,6 +422,80 @@ public class SqlConnectorExportTests
 
     #region Transactions
 
+    /// <summary>
+    /// #2083: a run cancelled before the batch starts writes nothing, and says so per change rather than throwing, so JIM
+    /// puts every change back as it was instead of guessing what was written.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RunCancelledBeforeTheBatch_ReportsEveryChangeNotAttemptedAndWritesNothingAsync()
+    {
+        var provider = new FakeSqlProvider { GeneratedKey = 4711 };
+        using var run = new CancellationTokenSource();
+        run.Cancel();
+
+        var results = await ExportAsync(provider, PersonDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada")), Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Grace"))],
+            cancellationToken: run.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Select(result => result.IsNotAttempted), Is.All.True);
+            Assert.That(provider.ExecutedStatements, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// #2083: a run cancelled while an object is being written lets that object finish, committed whole, and reports the
+    /// objects it never started as not attempted. Throwing instead lost the result of every object already committed, so
+    /// the next run sent those Creates again.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RunCancelledWhileAnObjectIsBeingWritten_FinishesItAndReportsTheRestNotAttemptedAsync()
+    {
+        var provider = new FakeSqlProvider { GeneratedKey = 4711 };
+        using var run = new CancellationTokenSource();
+        provider.BeforeExecute = _ => run.Cancel();
+
+        var results = await ExportAsync(provider, PersonDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada")), Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Grace"))],
+            cancellationToken: run.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, "the object in flight finishes");
+            Assert.That(results[0].ExternalId, Is.EqualTo("4711"));
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+            Assert.That(results[1].IsNotAttempted, Is.True, "the object never started is reported, not dropped");
+            Assert.That(provider.ExecutedStatements, Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// #2083: an object still being written once the grace period after a cancellation has run out is abandoned rather
+    /// than left to hold the cancellation up indefinitely (a statement blocked on a row lock has no time limit on every
+    /// database), and is reported as a failed attempt, never as written.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_ObjectStillBeingWrittenWhenTheGracePeriodRunsOut_IsAbandonedAndReportedFailedAsync()
+    {
+        var provider = new FakeSqlProvider { GeneratedKey = 4711 };
+        using var run = new CancellationTokenSource();
+        provider.BeforeExecute = _ => run.Cancel();
+
+        var results = await ExportAsync(provider, PersonDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada")), Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Grace"))],
+            cancellationToken: run.Token, inFlightGracePeriod: TimeSpan.Zero);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].IsNotAttempted, Is.False, "it was started, so it is a failed attempt rather than one never made");
+            Assert.That(results[0].ErrorMessage, Does.Contain("abandoned"));
+            Assert.That(provider.Transactions, Has.None.Matches<FakeDbTransaction>(transaction => transaction.Committed));
+            Assert.That(results[1].IsNotAttempted, Is.True);
+        }
+    }
+
     [Test]
     public async Task ExportAsync_ASuccessfulObject_CommitsItsOwnTransactionWithEveryWriteInsideIt()
     {
@@ -1639,7 +1713,9 @@ public class SqlConnectorExportTests
         string objectTypesDocument,
         IList<PendingExport> pendingExports,
         string databaseTimeZone = SqlConnectorConstants.DefaultDatabaseTimeZone,
-        Action<List<ConnectedSystemSettingValue>>? configureSettings = null)
+        Action<List<ConnectedSystemSettingValue>>? configureSettings = null,
+        CancellationToken cancellationToken = default,
+        TimeSpan? inFlightGracePeriod = null)
     {
         ArgumentNullException.ThrowIfNull(provider);
 
@@ -1648,14 +1724,18 @@ public class SqlConnectorExportTests
         if (provider.Catalogue.Tables.Count == 0)
             DeclareTheUsualTables(provider);
 
-        using var connector = new SqlConnector { ProviderFactory = _ => provider };
+        using var connector = new SqlConnector
+        {
+            ProviderFactory = _ => provider,
+            ExportInFlightGracePeriod = inFlightGracePeriod ?? SqlConnectorExport.DefaultInFlightGracePeriod
+        };
         var settingValues = SettingValues(connector, objectTypesDocument, databaseTimeZone);
         configureSettings?.Invoke(settingValues);
         connector.OpenExportConnection(settingValues, null);
 
         try
         {
-            return await connector.ExportAsync(pendingExports, CancellationToken.None, new RecordingConnectorProgress());
+            return await connector.ExportAsync(pendingExports, cancellationToken, new RecordingConnectorProgress());
         }
         finally
         {

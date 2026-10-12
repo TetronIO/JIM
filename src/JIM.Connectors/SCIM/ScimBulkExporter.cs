@@ -61,24 +61,26 @@ internal sealed class ScimBulkExporter
     public async Task<Dictionary<int, ConnectedSystemExportResult>> ExecuteAsync(
         IReadOnlyList<ScimBulkExportOperation> operations,
         Func<ScimExportOperation, CancellationToken, Task<ConnectedSystemExportResult>> sendIndividually,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        InFlightCancellation inFlight)
     {
         var results = new Dictionary<int, ConnectedSystemExportResult>();
         var batches = Batch(operations, out var oversized);
 
         // An operation too large for any bulk request is not too large for a request of its own: the
         // limit is the bulk endpoint's, not the provider's.
+        // A cancelled run sends nothing more, and reports what it did not send as not attempted; a request already under
+        // way is not handed the run's token, so it finishes and its outcome is recorded (#2083).
         foreach (var operation in oversized)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            results[operation.Index] = await sendIndividually(operation.Operation, cancellationToken);
+            results[operation.Index] = cancellationToken.IsCancellationRequested
+                ? ConnectedSystemExportResult.NotAttempted()
+                : await ScimConnectorExport.SendWithinGracePeriodAsync(operation.Operation, sendIndividually, inFlight, _logger);
         }
 
         foreach (var batch in batches)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            foreach (var (index, result) in await SendBatchAsync(batch, sendIndividually, cancellationToken))
+            foreach (var (index, result) in await SendBatchAsync(batch, sendIndividually, cancellationToken, inFlight))
                 results[index] = result;
         }
 
@@ -168,14 +170,27 @@ internal sealed class ScimBulkExporter
     private async Task<Dictionary<int, ConnectedSystemExportResult>> SendBatchAsync(
         List<ScimBulkExportOperation> batch,
         Func<ScimExportOperation, CancellationToken, Task<ConnectedSystemExportResult>> sendIndividually,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        InFlightCancellation inFlight)
     {
+        // The run's token decides only whether this request is sent; once sent it finishes (#2083).
+        if (cancellationToken.IsCancellationRequested)
+            return batch.ToDictionary(operation => operation.Index, _ => ConnectedSystemExportResult.NotAttempted());
+
         var request = new ScimBulkRequest { Operations = batch.Select(ToBulkOperation).ToList() };
 
         ScimBulkResponse? response;
         try
         {
-            response = await _client.PostAsync<ScimBulkResponse>(ScimEndpoints.Bulk, request, cancellationToken);
+            response = await _client.PostAsync<ScimBulkResponse>(ScimEndpoints.Bulk, request, inFlight.Token);
+        }
+        catch (OperationCanceledException) when (inFlight.IsCancellationRequested)
+        {
+            // Still under way once the grace period after the run's cancellation ran out (#2083): what the provider applied is
+            // unknown, so every change in it is a failed attempt, never a success and never sent again here.
+            _logger.Warning("SCIM export: a bulk request of {OperationCount} operation(s) was still under way {GracePeriod} after the run was cancelled, so JIM stopped waiting for it",
+                batch.Count, inFlight.GracePeriod);
+            return batch.ToDictionary(operation => operation.Index, _ => ScimConnectorExport.Abandoned(inFlight));
         }
         catch (ScimRequestException ex) when (IsEndpointMissing(ex))
         {
@@ -186,7 +201,7 @@ internal sealed class ScimBulkExporter
             _logger.Warning("SCIM export: the service provider advertises bulk operations but its {Endpoint} endpoint answered HTTP {StatusCode}. Falling back to one request per object for the rest of this run; turn the 'Use Bulk Operations' setting off to stop asking.",
                 ScimEndpoints.Bulk, (int?)ex.StatusCode);
 
-            return await SendIndividuallyAsync(batch, sendIndividually, cancellationToken);
+            return await SendIndividuallyAsync(batch, sendIndividually, cancellationToken, inFlight);
         }
         catch (ScimRequestException ex) when (IsBatchTooLarge(ex) && batch.Count > 1)
         {
@@ -198,8 +213,8 @@ internal sealed class ScimBulkExporter
                 batch.Count);
 
             var half = batch.Count / 2;
-            var firstHalf = await SendBatchAsync(batch.Take(half).ToList(), sendIndividually, cancellationToken);
-            var secondHalf = await SendBatchAsync(batch.Skip(half).ToList(), sendIndividually, cancellationToken);
+            var firstHalf = await SendBatchAsync(batch.Take(half).ToList(), sendIndividually, cancellationToken, inFlight);
+            var secondHalf = await SendBatchAsync(batch.Skip(half).ToList(), sendIndividually, cancellationToken, inFlight);
 
             foreach (var (index, result) in secondHalf)
                 firstHalf[index] = result;
@@ -221,17 +236,19 @@ internal sealed class ScimBulkExporter
         return Correlate(batch, response);
     }
 
-    private static async Task<Dictionary<int, ConnectedSystemExportResult>> SendIndividuallyAsync(
+    private async Task<Dictionary<int, ConnectedSystemExportResult>> SendIndividuallyAsync(
         List<ScimBulkExportOperation> batch,
         Func<ScimExportOperation, CancellationToken, Task<ConnectedSystemExportResult>> sendIndividually,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        InFlightCancellation inFlight)
     {
         var results = new Dictionary<int, ConnectedSystemExportResult>(batch.Count);
 
         foreach (var operation in batch)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            results[operation.Index] = await sendIndividually(operation.Operation, cancellationToken);
+            results[operation.Index] = cancellationToken.IsCancellationRequested
+                ? ConnectedSystemExportResult.NotAttempted()
+                : await ScimConnectorExport.SendWithinGracePeriodAsync(operation.Operation, sendIndividually, inFlight, _logger);
         }
 
         return results;
