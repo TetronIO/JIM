@@ -7,107 +7,112 @@ using JIM.Models.Scheduling.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// DTO for a schedule in list views.
+/// A Schedule's configuration, as the list returns it, with the outcome of its most recent run.
 /// </summary>
 public class ScheduleDto
 {
     /// <summary>
-    /// The unique identifier of the schedule.
+    /// The unique identifier of the Schedule.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The user-defined name for this schedule.
+    /// The Schedule's name.
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// Optional description of what this schedule does.
+    /// What the Schedule does, in its author's words. Null when it has no description.
     /// </summary>
     public string? Description { get; set; }
 
     /// <summary>
-    /// Whether this schedule runs on a cron trigger or is manual-only.
+    /// How the Schedule starts: <c>Cron</c> runs it automatically on its pattern; <c>Manual</c> runs it only when it is
+    /// started.
     /// </summary>
     public ScheduleTriggerType TriggerType { get; set; }
 
     /// <summary>
-    /// The cron expression for scheduled triggers (null for manual schedules).
-    /// This is generated from the pattern configuration fields, or entered directly when PatternType is Custom.
+    /// The cron expression the Schedule runs on; null for a <c>Manual</c> Schedule. JIM builds it from the pattern
+    /// fields, except for a <c>Custom</c> pattern, which gives it directly.
     /// </summary>
     public string? CronExpression { get; set; }
 
     /// <summary>
-    /// The type of schedule pattern: SpecificTimes, Interval, or Custom.
+    /// How a <c>Cron</c> Schedule is timed: at set times of day (<c>SpecificTimes</c>), every few hours or minutes
+    /// (<c>Interval</c>), or by a cron expression of its own (<c>Custom</c>).
     /// </summary>
     public SchedulePatternType PatternType { get; set; }
 
     /// <summary>
-    /// Days of week to run (0=Sunday, 6=Saturday). Only used when PatternType != Custom.
-    /// Stored as comma-separated values: "1,2,3,4,5" for Mon-Fri.
+    /// The days the Schedule runs, as a comma-separated list of numbers from 0 (Sunday) to 6 (Saturday), for example
+    /// <c>1,2,3,4,5</c> for weekdays. A <c>Custom</c> pattern does not use it.
     /// </summary>
     public string? DaysOfWeek { get; set; }
 
     /// <summary>
-    /// Times to run when PatternType is SpecificTimes.
-    /// Stored as comma-separated 24h times: "09:00,12:00,15:00,18:00".
+    /// For a <c>SpecificTimes</c> pattern, the times of day the Schedule runs, as a comma-separated list of 24-hour
+    /// times, for example <c>06:00,18:00</c>.
     /// </summary>
     public string? RunTimes { get; set; }
 
     /// <summary>
-    /// Interval value when PatternType is Interval (e.g., 2 for "every 2 hours").
+    /// For an <c>Interval</c> pattern, how often the Schedule runs, counted in IntervalUnit: 2 with <c>Hours</c> runs
+    /// it every two hours.
     /// </summary>
     public int? IntervalValue { get; set; }
 
     /// <summary>
-    /// Interval unit when PatternType is Interval.
+    /// For an <c>Interval</c> pattern, the unit of IntervalValue.
     /// </summary>
     public ScheduleIntervalUnit? IntervalUnit { get; set; }
 
     /// <summary>
-    /// Optional start time for interval window (e.g., "06:00"). Only used when PatternType is Interval.
+    /// For an hourly <c>Interval</c> pattern, the start of the window the Schedule runs in, as a 24-hour time such
+    /// as <c>06:00</c>. Null when the interval runs all day.
     /// </summary>
     public string? IntervalWindowStart { get; set; }
 
     /// <summary>
-    /// Optional end time for interval window (e.g., "18:00"). Only used when PatternType is Interval.
+    /// For an hourly <c>Interval</c> pattern, the end of the window the Schedule runs in, as a 24-hour time such as
+    /// <c>18:00</c>. Null when the interval runs all day.
     /// </summary>
     public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
-    /// Whether the schedule is currently enabled.
+    /// Whether the Schedule is enabled.
     /// </summary>
     public bool IsEnabled { get; set; }
 
     /// <summary>
     /// What the Schedule does when a step fails, for every step that follows the Schedule: <c>Stop</c> ends the run
     /// (Failed); <c>Continue</c> runs the remaining steps, and a run that carried on past a failure ends
-    /// <c>CompleteWithError</c>. A step with a setting of its own (a step's <c>onFailure</c>) overrides it.
+    /// <c>CompleteWithError</c>. A step with a failure setting of its own overrides it.
     /// </summary>
     public ScheduleFailureBehaviour OnStepFailure { get; set; }
 
     /// <summary>
-    /// When the schedule last ran (UTC).
+    /// When the Schedule last ran (UTC).
     /// </summary>
     public DateTime? LastRunTime { get; set; }
 
     /// <summary>
-    /// When the schedule is next due to run (UTC).
+    /// When the Schedule is next due to run (UTC).
     /// </summary>
     public DateTime? NextRunTime { get; set; }
 
     /// <summary>
-    /// The number of steps in this schedule.
+    /// The number of steps in the Schedule.
     /// </summary>
     public int StepCount { get; set; }
 
     /// <summary>
-    /// When the schedule was created (UTC).
+    /// When the Schedule was created (UTC).
     /// </summary>
     public DateTime Created { get; set; }
 
     /// <summary>
-    /// When the schedule was last modified (UTC).
+    /// When the Schedule was last changed (UTC).
     /// </summary>
     public DateTime? LastUpdated { get; set; }
 
@@ -230,12 +235,12 @@ public class ScheduleDto
 }
 
 /// <summary>
-/// DTO for a schedule with its steps.
+/// A Schedule's configuration with its steps.
 /// </summary>
 public class ScheduleDetailDto : ScheduleDto
 {
     /// <summary>
-    /// The steps in this schedule, ordered by StepIndex.
+    /// The Schedule's steps, in the order they run (by StepIndex).
     /// </summary>
     public List<ScheduleStepDto> Steps { get; set; } = new();
 
