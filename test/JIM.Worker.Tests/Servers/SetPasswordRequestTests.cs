@@ -206,6 +206,29 @@ public class SetPasswordRequestTests
         }
     }
 
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162). A disable would
+    /// override the account's Attribute Flows as a side effect of a password reset, so false is refused rather than
+    /// carried to the Connector, before anything is queued or recorded.
+    /// </summary>
+    [Test]
+    public void SetPasswordAsync_EnableAccountFalse_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        ArrangeSystem(CorporateAdId, "Corporate AD", enabled: null);
+        var account = ArrangeAccount(CorporateAdId);
+
+        var refusal = Assert.ThrowsAsync<ArgumentException>(() =>
+            _server.SetPasswordAsync(Request([account.Id], enableAccount: false), CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal!.Message, Does.Contain("enableAccount"));
+            Assert.That(refusal.ParamName, Is.Null, "the message goes to API callers as it is, so it names no parameter");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_createdActivities, Is.Empty);
+        }
+    }
+
     [Test]
     public async Task SetPasswordAsync_ExplicitTargetWithNoTimeToLiveSet_UsesJimsDefaultAsync()
     {
