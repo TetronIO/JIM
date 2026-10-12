@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
 - 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)
 - 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
