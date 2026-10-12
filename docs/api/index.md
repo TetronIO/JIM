@@ -1,5 +1,8 @@
 ---
 title: API
+description: "What JIM's REST API covers, where its reference lives, and how to authenticate, page, filter and handle errors."
+type: reference
+audience: automation-author
 ---
 
 # API

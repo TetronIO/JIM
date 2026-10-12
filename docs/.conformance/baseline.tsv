@@ -35,7 +35,6 @@ LANG-3	powershell/service-settings.md	1
 LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
-LANG-3	reference/glossary.md	1
 LANG-4	connectors/index.md	3
 LANG-4	connectors/jim-file-connector.md	1
 LANG-4	powershell/connected-systems.md	3
@@ -53,7 +52,6 @@ LANG-7	connectors/jim-sql-connector-delta-import-watermark.md	1
 LANG-7	powershell/connection.md	1
 LANG-7	powershell/index.md	1
 LANG-7	powershell/previews.md	1
-LANG-7	reference/glossary.md	1
 STR-2	administration/configuration.md	3
 STR-2	administration/deploying-with-ansible.md	3
 STR-2	administration/index.md	3
@@ -66,9 +64,6 @@ STR-2	administration/sso-setup.md	3
 STR-2	administration/sso-setup/ad-fs.md	3
 STR-2	administration/sso-setup/keycloak.md	3
 STR-2	administration/sso-setup/microsoft-entra-id.md	3
-STR-2	api/authentication.md	3
-STR-2	api/index.md	3
-STR-2	api/rate-limiting.md	3
 STR-2	concepts/architecture.md	4
 STR-2	concepts/attribute-priority.md	4
 STR-2	concepts/case-sensitivity.md	4
@@ -116,5 +111,3 @@ STR-2	powershell/service-settings.md	3
 STR-2	powershell/synchronisation-rules.md	3
 STR-2	powershell/system.md	3
 STR-2	powershell/worker-tasks.md	3
-STR-2	reference/glossary.md	4
-STR-2	reference/roadmap.md	4
