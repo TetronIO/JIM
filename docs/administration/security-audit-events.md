@@ -1,5 +1,8 @@
 ---
 title: Security Audit Events
+description: The sign-in and API key authentication events JIM records in its Activity log, how long it keeps them, and how to send them to a SIEM.
+type: reference
+audience: security-assessor
 ---
 
 # Security Audit Events
@@ -13,7 +16,7 @@ JIM records authentication activity, interactive sign-in success and failure, an
 | Interactive sign-in succeeded | The signed-in user | One Activity per session establishment |
 | Interactive sign-in failed | **Anonymous** | Aggregated (see below) |
 | API key authentication failed | **Anonymous** | Aggregated (see below) |
-| API key authentication succeeded | *n/a* | Not written as an Activity; API key lifecycle (create, update, disable, delete) is already audited via [configuration change history](../configuration/activities.md#configuration-change-history), and each successful call updates the key's last-used timestamp |
+| API key authentication succeeded | *n/a* | Not written as an Activity; API key lifecycle (create, update, disable, delete) is already audited via [Configuration Change History](../configuration/activities.md#configuration-change-history), and each successful call updates the key's last-used timestamp |
 
 Every security audit event carries `Authentication` as its Activity target type, and a client IP address where one was available. Filter the [Activity list](../configuration/activities.md#filtering-the-activity-list) to the **Security** category, or the `Authentication` type, to see these events on their own.
 

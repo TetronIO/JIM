@@ -108,7 +108,7 @@ It downloads the latest release and installs it in `/opt/jim`; see [What the Ins
 
 ### By Hand
 
-On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the Podman files from the latest release:
+On Podman, follow [Installing on Podman by Hand](podman-by-hand.md), with the Podman files from the latest release:
 
 ```bash
 mkdir -p jim-podman && cd jim-podman
@@ -214,7 +214,7 @@ Run inside the bundle, the installer loads JIM's images from it and starts JIM w
 
 ### By Hand
 
-On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the files in the bundle's `podman` folder and the images in its `docker-images` folder.
+On Podman, follow [Installing on Podman by Hand](podman-by-hand.md), with the files in the bundle's `podman` folder and the images in its `docker-images` folder.
 
 On Docker, as root, in the extracted bundle:
 

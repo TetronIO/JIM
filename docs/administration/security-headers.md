@@ -1,5 +1,8 @@
 ---
 title: Security Headers
+description: The security headers JIM sends on every response, its Content Security Policy, and what to check behind a reverse proxy.
+type: reference
+audience: security-assessor
 ---
 
 # Security Headers

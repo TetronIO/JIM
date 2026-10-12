@@ -157,6 +157,7 @@ nav:
       - Deployment: administration/deployment.md
       - TLS and Reverse Proxy: administration/tls-and-reverse-proxy.md
       - Running on Podman: administration/podman.md
+      - Installing on Podman by Hand: administration/podman-by-hand.md
       - Deploying with Ansible: administration/deploying-with-ansible.md
       - SSO Setup:
           - administration/sso-setup.md
