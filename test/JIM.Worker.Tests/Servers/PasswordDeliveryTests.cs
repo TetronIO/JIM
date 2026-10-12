@@ -1039,6 +1039,36 @@ public class PasswordDeliveryTests
     }
 
     /// <summary>
+    /// A lane claims its batch up front and then works through it one account at a time, so an export can mark a
+    /// claimed row (a leaver disabled moments ago) before the lane reaches it. The mark is read afresh at the attempt,
+    /// not taken from the claim, or the delivery would re-enable the leaver.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_MarkedAfterTheClaim_LeavesItToTheFlowAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (first, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-2));
+        var (second, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-1));
+        _connector.WithPasswordSetResult(account =>
+        {
+            // The leaver's export lands while the lane is busy with the first account.
+            if (account.Id == first.ConnectedSystemObjectId)
+                _syncRepository.PendingPasswordChanges[second.Id].EnabledStateSetByAttributeFlow = true;
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var attempts = _connector.PasswordSetAttempts.ToDictionary(a => a.ConnectedSystemObjectId, a => a.Options.EnableAccount);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attempts[first.ConnectedSystemObjectId!.Value], Is.True, "nothing set the first account's enabled state");
+            Assert.That(attempts[second.ConnectedSystemObjectId!.Value], Is.Null, "marked after the claim, before its attempt");
+        }
+    }
+
+    /// <summary>
     /// The hold is read live at every attempt; a read that fails never defaults to a decision, because guessing
     /// "not held" could leave an account disabled and guessing "held" could enable one. The attempt is kept as a
     /// transient failure and nothing is sent.

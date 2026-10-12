@@ -2475,6 +2475,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(held);
     }
 
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+    {
+        // The stored row, not a claimed copy: that is the point of reading afresh.
+        var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
+        var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
+        return new AccountEnablementFacts(holds, marked);
+    }
+
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
     {
         // Joined to the Connected System Object, as the PostgreSQL query is: a Pending Export whose object is gone has
@@ -3431,13 +3439,13 @@ public class SyncRepository : ISyncRepository
         if (FailInitialPasswordMarkingWith != null)
             throw FailInitialPasswordMarkingWith;
 
-        // Mirrors the PostgreSQL status mark (#2064): owed Provisioned rows for these accounts, not already marked.
+        // Mirrors the PostgreSQL status mark (#2064): Provisioned rows for these accounts, whatever their status, not
+        // already marked.
         var accounts = connectedSystemObjectIds.ToHashSet();
         var marking = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId
                         && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)
                         && c.Origin == PendingPasswordChangeOrigin.Provisioned
-                        && c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked
                         && !c.EnabledStateSetByAttributeFlow)
             .ToList();
 

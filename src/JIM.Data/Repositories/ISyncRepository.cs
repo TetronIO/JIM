@@ -736,8 +736,8 @@ public interface ISyncRepository
 
     /// <summary>
     /// Records that an export has written the enabled state of these accounts (#2064), on each account's
-    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row that is still owed (Pending, Delivering or Parked):
-    /// sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, whatever its status (a Cancelled row comes back on a
+    /// Retry): sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
     /// leaves the enabled state to the Attribute Flow rather than applying the provisioning Synchronisation Rule's
     /// Enable Account. Asked after an Update, or a Delete performed as a disable, whose Connector reported writing
     /// the enabled state: a leaver disabled, or an account disabled on deprovisioning, while its first password is
@@ -1263,6 +1263,16 @@ public interface ISyncRepository
     /// carries the flag.
     /// </summary>
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// What a password delivery's enabled-state decision needs to know at the attempt (#2064), in one round trip:
+    /// whether the account holds an enable withheld until a password exists (as
+    /// <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> answers it), and whether the queued change
+    /// is marked as having its account's enabled state written by an export. Read afresh rather than taken from the
+    /// claimed row, because an export can mark the row, or withdraw the hold, while the lane works through the
+    /// accounts ahead of it.
+    /// </summary>
+    Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId);
 
     /// <summary>
     /// Every change on a Connected System held until an Initial Password is delivered

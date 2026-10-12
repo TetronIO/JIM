@@ -227,23 +227,20 @@ public partial class SyncRepository
             return 0;
 
         // A narrow status mark on one column (#2064), so exempt from the bulk column list rule. Only a Provisioned row
-        // reads the flag, and only one still owed can be delivered; a row already marked is left alone so the count
-        // says what this export changed. Delivering is included: the attempt in flight decided before this, and the
-        // flag is what any retry of it reads.
+        // reads the flag. Every status is marked, not only the ones due now: a Cancelled row comes back to Pending on a
+        // Retry, and a Delivering row's attempt reads the flag afresh before it decides; marking a row that can never be
+        // delivered (Expired) costs nothing. A row already marked is left alone, so the count says what this export
+        // changed.
         return await _context.Database.ExecuteSqlRawAsync("""
             UPDATE "PendingPasswordChanges" SET "EnabledStateSetByAttributeFlow" = TRUE
             WHERE "ConnectedSystemId" = {0}
               AND "ConnectedSystemObjectId" = ANY({1})
               AND "Origin" = {2}
-              AND "Status" IN ({3}, {4}, {5})
               AND NOT "EnabledStateSetByAttributeFlow"
             """,
             connectedSystemId,
             new NpgsqlParameter { Value = connectedSystemObjectIds.ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
-            (int)PendingPasswordChangeOrigin.Provisioned,
-            (int)PendingPasswordChangeStatus.Pending,
-            (int)PendingPasswordChangeStatus.Delivering,
-            (int)PendingPasswordChangeStatus.Parked);
+            (int)PendingPasswordChangeOrigin.Provisioned);
     }
 
     /// <inheritdoc />

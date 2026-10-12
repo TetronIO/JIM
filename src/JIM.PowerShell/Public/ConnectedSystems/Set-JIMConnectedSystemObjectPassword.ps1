@@ -62,9 +62,11 @@ function Set-JIMConnectedSystemObjectPassword {
         A Connected System that cannot honour the choice applies what it can and says so in the target's Message.
 
     .PARAMETER EnableAccount
-        Enables the account as part of setting the password. Omit it to leave the account's enabled state
-        untouched, which is what a reset on an already-enabled account should do. Directories that refuse to
-        enable an account without a compliant password need the password first, which is why this belongs here.
+        Enables the account as part of setting the password, whatever its Attribute Flows say. Omit it to leave the
+        account's enabled state as it is, which is what a reset on an already-enabled account should do; the one
+        exception is a new Active Directory account JIM created disabled only until it had a password, which the
+        password enables as its Attribute Flow asks. Directories that refuse to enable an account without a
+        compliant password need the password first, which is why this belongs here.
 
     .PARAMETER Wait
         How many seconds, from 0 to 30, to wait for the account to answer before returning. Defaults to 10. Pass 0

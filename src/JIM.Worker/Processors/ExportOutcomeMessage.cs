@@ -102,4 +102,32 @@ internal static class ExportOutcomeMessage
               "will send it again. The service log names the cause."
             : $"{exports:N0} exports were written, but JIM could not record the values they wrote, so they were left unconfirmed and the " +
               "next export run will send them again. The service log names the cause.";
+
+    /// <summary>
+    /// The warning for newly provisioned accounts owed an Initial Password that JIM could not record (#1121). A warning,
+    /// not a failure: the accounts were created, but nothing will deliver a password nobody knows is owed.
+    /// </summary>
+    /// <param name="accounts">How many accounts' passwords could not be recorded.</param>
+    internal static string ForInitialPasswordsNotStaged(int accounts) =>
+        accounts == 1
+            ? "1 newly provisioned account is owed an Initial Password that JIM could not record, so none will be delivered to it. " +
+              "Export it again to queue the password; the service log names the account and the cause."
+            : $"{accounts:N0} newly provisioned accounts are owed an Initial Password that JIM could not record, so none will be " +
+              "delivered to them. Export them again to queue the passwords; the service log names the accounts and the cause.";
+
+    /// <summary>
+    /// The warning for accounts whose enabled state an export wrote while an Initial Password was still owed to them,
+    /// where JIM could not record that against the password (#2064). Delivering it would then follow the Synchronisation
+    /// Rule's setting rather than the Attribute Flow, which is why the export run says so.
+    /// </summary>
+    /// <param name="accounts">How many accounts the record could not be made for.</param>
+    internal static string ForInitialPasswordMarkingFailed(int accounts) =>
+        accounts == 1
+            ? "1 account had its enabled state written by this export, but JIM could not record that against the Initial Password " +
+              "still owed to it, so delivering that password will follow its Synchronisation Rule rather than the Attribute Flow. " +
+              "The service log names the account; cancel its password under Operations > Passwords if it must stay as the flow left it."
+            : $"{accounts:N0} accounts had their enabled state written by this export, but JIM could not record that against the " +
+              "Initial Passwords still owed to them, so delivering those passwords will follow their Synchronisation Rule rather than " +
+              "the Attribute Flow. The service log names the accounts; cancel their passwords under Operations > Passwords if they " +
+              "must stay as the flow left them.";
 }

@@ -425,18 +425,31 @@ function Wait-ForInitialPasswordDelivery {
     .DESCRIPTION
         A delivered password leaves the queue, so nothing Pending or Delivering is the signal. A Parked or Expired
         change will not deliver without a person, and a Held one waits for Password Synchronisation to be switched
-        on for the Connected System, so any of those ends the wait at once rather than at the timeout. The default
-        timeout allows for one retry on JIM's default schedule, whose first backoff is five minutes: a directory
-        that does not yet show an account it has just created answers the first attempt that way.
+        on for the Connected System, so any of those ends the wait at once rather than at the timeout. Otherwise the
+        wait fails only when delivery stops making progress for StallSeconds, so it scales with the template: the
+        Password Delivery Service works through one Connected System's queue an account at a time (about 1,000 in
+        three minutes on Samba AD), so no fixed budget suits both Nano and the Scale templates. The default stall
+        allows for one retry on JIM's default schedule, whose first backoff is five minutes: a directory that does
+        not yet show an account it has just created answers the first attempt that way.
     #>
     param(
         [Parameter(Mandatory=$true)][int]$ConnectedSystemId,
         [Parameter(Mandatory=$true)][string]$ConnectedSystemName,
-        [Parameter(Mandatory=$false)][int]$TimeoutSeconds = 420
+        [Parameter(Mandatory=$false)][int]$StallSeconds = 420
     )
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    # Progress is the queue's waiting count falling. The per-status reads below return their first page only, so the
+    # count comes from the queue summary; this scenario queues passwords for one Connected System, so it is exact.
+    $sinceProgress = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastWaiting = [int]::MaxValue
     while ($true) {
+        $waiting = [int](Get-JIMPendingPasswordChange -Summary).WaitingCount
+        if ($waiting -lt $lastWaiting) {
+            $lastWaiting = $waiting
+            $sinceProgress.Restart()
+        }
+
         $outstanding = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Pending) +
                        @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Delivering)
         $parked = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Parked)
@@ -449,13 +462,13 @@ function Wait-ForInitialPasswordDelivery {
         }
 
         $cannotDeliver = $parked.Count -gt 0 -or $expired.Count -gt 0 -or $held.Count -gt 0
-        if ($cannotDeliver -or $stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+        if ($cannotDeliver -or $sinceProgress.Elapsed.TotalSeconds -ge $StallSeconds) {
             # A change's own status, held flag, attempts and target message say far more than "it timed out": a
             # Parked change carries the directory's refusal in its own words.
             $details = @(@($parked) + @($expired) + @($outstanding) | Select-Object -First 5 | ForEach-Object {
                 "{0} (status {1}, held {2}, attempts {3}): {4}" -f $_.metaverseObjectDisplayName, $_.status, $_.held, $_.attemptCount, $_.targetMessage
             })
-            $reason = if ($cannotDeliver) { "they cannot be delivered without a person" } else { "they were still queued after $TimeoutSeconds seconds" }
+            $reason = if ($cannotDeliver) { "they cannot be delivered without a person" } else { "none was delivered for $StallSeconds seconds, $waiting still waiting" }
             throw ("The Initial Passwords queued for $ConnectedSystemName were not all delivered: $reason. " +
                 "Pending or Delivering: $($outstanding.Count) ($($held.Count) held), Parked: $($parked.Count), Expired: $($expired.Count). " +
                 "Until they are, the accounts stay disabled. First few: $($details -join '; ')")

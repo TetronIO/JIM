@@ -63,8 +63,8 @@ The fix makes the precedence explicit:
 
 **3. Stamping.**
 - `StageInitialPasswordsForBatchAsync` sets the field from the Create's result.
-- For a successful non-Create export that reports the fact, one narrow status-mark UPDATE marks the account's owed Provisioned row (`Pending`, `Delivering` or `Parked`): `ISyncRepository.MarkOwedInitialPasswordsAsSetByAttributeFlowAsync`. So a leaver disabled, or an account disabled by deprovisioning, while its password is still owed is never re-enabled by a late delivery.
-- A failure is logged and counted; it never fails the export.
+- For a successful non-Create export that reports the fact, one narrow status-mark UPDATE marks the account's Provisioned row, whatever its status: `ISyncRepository.MarkOwedInitialPasswordsAsSetByAttributeFlowAsync`. A Cancelled row comes back to Pending on a Retry, so it is marked too. So a leaver disabled, or an account disabled by deprovisioning, while its password is still on the queue is never re-enabled by a late delivery.
+- A failure is logged, counted and put on the export Activity as a warning; it never fails the export.
 
 **4. The decision: one pure engine function.**
 
@@ -78,13 +78,13 @@ The fix makes the precedence explicit:
 | 4 | Provisioned | Otherwise | Rule on: `true`; rule off: `null` | SyncRuleSetting |
 | 5 | Propagated, or Explicit with no choice | Otherwise | `null` | LeftAsIs |
 
-"Holds a withheld enable" is read live at every attempt through the existing `GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync`, a partial-index probe. It is true only while the flow still asks for enabled and JIM is the only reason the account is disabled:
+Both inputs are read afresh at every attempt, in one round trip (`ISyncRepository.GetAccountEnablementFactsAsync`), not taken from the claimed row: a lane claims a batch and works through it one account at a time, so an export can mark a claimed row before the lane reaches it. "Holds a withheld enable" is the partial-index probe behind `GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync`. It is true only while the flow still asks for enabled and JIM is the only reason the account is disabled:
 - a leaver's value supersedes it before the confirming import;
 - `IsKeptAgainstAlreadyCurrent` withdraws it after the import.
 
 A failed probe keeps the attempt as a transient failure; it never guesses.
 
-**5. Visibility.** The delivery outcome Activity states the basis, for example "the account's enabled state was left to its Attribute Flow". That is visible on the portal, REST and PowerShell through the existing Activity views. No new setting or parameter, so surface parity needs text changes only.
+**5. Visibility.** Where the precedence overrode what the setting alone would do, the delivery outcome Activity says so: "the account's enabled state was left to its Attribute Flow", or "the account enabled as its Attribute Flow asks". The lane summary counts both. That is visible on the portal, REST and PowerShell through the existing Activity views. No new setting or parameter, so surface parity needs text changes only.
 
 ### Scenario outcomes
 
@@ -98,7 +98,9 @@ A failed probe keeps the attempt as a transient failure; it never guesses.
 | Provisioning rule without the flow, a separate leaver rule with it | Joiner: `true` | The joiner is enabled; a leaver disabled while the password is owed is marked and never re-enabled |
 | Leaver during the #2039 hold | `null` | The hold is superseded or withdrawn, so the account stays `514` |
 | Explicit with a choice | The choice | Unchanged override |
-| Parked, then Retry | Recomputed | Stamp from the row, hold probed live, rule read fresh |
+| Parked, then Retry | Recomputed | Stamp and hold read afresh, rule read fresh |
+| Cancelled, the person leaves, then Retry | `null` | The leaver's export marked the Cancelled row, so the retried delivery leaves the account disabled |
+| Marked after the lane claimed the row | `null` | The mark is read at the attempt, not from the claim |
 | OpenLDAP, 389, Generic | Rule on: `true`; off: `null` | No change: these directories ignore it, with the existing caveat |
 | Rows staged before the upgrade | The rule's value | Default false keeps today's behaviour for rows retrying across the upgrade; no backfill |
 
@@ -130,11 +132,11 @@ A failed probe keeps the attempt as a transient failure; it never guesses.
 
 - On Samba AD, Scenario 001's Joiner with an Initial Password leaves the Archived joiner disabled and reports no `ExportNotConfirmed`; Tests 2d and 2e still toggle the enabled state from HR data.
 - Scenarios 017, 020 and 024 (no `userAccountControl` flow) still enable accounts through the Initial Password.
-- The policy is one unit-tested truth table, and every delivery Activity names the basis it used.
+- The policy is one unit-tested truth table, and every delivery the precedence decided differently from the setting says why on its Activity.
 
 ## Risks & Mitigations
 
-- **Upgrade window.** Rows staged before the migration default to false and keep today's precedence. Only rows retrying or Parked across the upgrade are affected, and Enforce State reverts them as today.
-- **Residual race.** A leaver committing in the milliseconds between the hold probe and the Connector's write can still see a held enable completed; the leaver's queued Update disables it at the next export. The broader read-modify-write race is #2161.
+- **Residual race.** A leaver committing in the milliseconds between the attempt's read and the Connector's write can still see a held enable completed, or an unmarked row enabled; the next import reports the flow's value as not confirmed and the export after it disables the account. The broader read-modify-write race is #2161.
+- **Upgrade window, accepted.** Rows staged before the migration default to unmarked. JIM is pre-release with no deployments to carry across, so there is no backfill and no customer guidance.
 - **Real AD, `514` to `512` while the password is Parked.** The enabling Update is refused with Password Required and retried; it fails closed and is actionable. Holding it is #2158.
 - **Unverified on the lab, inherited from #2039:** whether Active Directory stores `514` or `546` for an explicit `514` create. Check it on the first lab run.

@@ -898,11 +898,13 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Decides what delivering this change does to the account's enabled state (#2064), probing live whether the
-    /// account holds an enable JIM withheld until a password existed (#2039) wherever the answer can depend on it.
-    /// Returns null when that cannot be read: the caller keeps the change rather than guess, because guessing "not
-    /// held" could leave an account disabled the flow asks to be enabled, and guessing "held" could enable one it asks
-    /// to be disabled.
+    /// Decides what delivering this change does to the account's enabled state (#2064). The two facts the decision
+    /// turns on are read afresh at the attempt, not taken from the claimed row: whether the account holds an enable JIM
+    /// withheld until a password existed (#2039), and whether an export has written the account's enabled state. An
+    /// export can mark a claimed row, a leaver disabled moments ago, while the lane works through the accounts ahead of
+    /// it. Returns null when those facts cannot be read: the caller keeps the change rather than guess, because
+    /// guessing "not held" could leave an account disabled the flow asks to be enabled, and guessing "not marked" could
+    /// enable one the flow has disabled.
     /// </summary>
     private async Task<AccountEnablementDecision?> DecideAccountEnablementAsync(
         ConnectedSystem connectedSystem,
@@ -910,23 +912,31 @@ public class PasswordSynchronisationServer
         ConnectedSystemObject account,
         bool ruleEnableAccount)
     {
+        // Nothing to read where an administrator has already decided; the mark only ever moves from false to true, so
+        // a claimed row already carrying it needs no second look at it.
+        var dependsOnHold = PasswordEnablementPolicy.DependsOnWithheldEnable(change.Origin, change.EnableAccount);
+        var dependsOnMark = change.IsProvisioned && !change.EnabledStateSetByAttributeFlow;
+
         var holdsWithheldEnable = false;
-        if (PasswordEnablementPolicy.DependsOnWithheldEnable(change.Origin, change.EnableAccount))
+        var enabledStateSetByAttributeFlow = change.EnabledStateSetByAttributeFlow;
+        if (dependsOnHold || dependsOnMark)
         {
             try
             {
-                holdsWithheldEnable = (await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystem.Id, [account.Id]))
-                    .Contains(account.Id);
+                var facts = await _syncRepo.GetAccountEnablementFactsAsync(connectedSystem.Id, change.Id, account.Id);
+                holdsWithheldEnable = dependsOnHold && facts.HoldsWithheldEnable;
+                enabledStateSetByAttributeFlow |= facts.EnabledStateSetByAttributeFlow;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log.Warning(ex, "DeliverDuePasswordChangesAsync: Could not read whether account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
-                    "holds an enable awaiting its password; the change is kept and tried again", account.Id, connectedSystem.Id);
+                    "holds an enable awaiting its password, or has had its enabled state written by an export; the change is kept and tried again",
+                    account.Id, connectedSystem.Id);
                 return null;
             }
         }
 
-        return PasswordEnablementPolicy.Decide(change.Origin, change.EnableAccount, change.EnabledStateSetByAttributeFlow,
+        return PasswordEnablementPolicy.Decide(change.Origin, change.EnableAccount, enabledStateSetByAttributeFlow,
             ruleEnableAccount, holdsWithheldEnable);
     }
 
@@ -941,7 +951,7 @@ public class PasswordSynchronisationServer
         DateTime asOf)
     {
         change.RecordAttempt(PasswordSetFailureReason.Transient,
-            "JIM could not read whether this account is waiting for its password to be enabled, so nothing was sent.",
+            "JIM could not read whether this account's enabled state is set by an Attribute Flow, or waiting for its password, so nothing was sent.",
             configuration, asOf);
         await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
         return (PasswordDeliveryDisposition.Kept, null);
@@ -1029,7 +1039,7 @@ public class PasswordSynchronisationServer
         return enablement switch
         {
             AccountEnablementBasis.LeftToAttributeFlow =>
-                $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Synchronisation Rule's Enable Account did not apply.",
+                $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Initial Password's \"Enable the Connected System Object once the password is set\" did not apply.",
             AccountEnablementBasis.CompletesWithheldEnable =>
                 $"{set}, and the account enabled as its Attribute Flow asks: it was created disabled only until it had a password.",
             _ => $"{set}."

@@ -529,6 +529,24 @@ public class InitialPasswordStagingTests
         }
     }
 
+    /// <summary>
+    /// A first password an administrator cancelled is not dead: a Retry puts it back on the queue. So an export that
+    /// writes the account's enabled state marks it too, or the retried delivery would re-enable a leaver.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportingItWroteTheEnabledState_MarksACancelledFirstPasswordTooAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        var cancelled = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Cancelled, connectedSystemObjectId: cso.Id);
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        Assert.That(SyncRepo.PendingPasswordChanges[cancelled.Id].EnabledStateSetByAttributeFlow, Is.True);
+    }
+
     [Test]
     public async Task ExecuteExportsAsync_UpdateNotReportingIt_LeavesTheOwedFirstPasswordUnmarkedAsync()
     {

@@ -1776,7 +1776,7 @@ Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Genera
 | `Password` | `securestring` | Yes (unless `-Generate`) | | The password to set. Encrypted before JIM stores it and held only until delivered. |
 | `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate a password satisfying the policy it discovered on the Connected System. |
 | `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password. Omitting it leaves the account's enabled state untouched. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password, whatever its Attribute Flows say. Omitting it leaves the account's enabled state as it is, except for a new Active Directory account JIM created disabled only until it had a password, which the password enables as its Attribute Flow asks. |
 | `Wait` | `int` | No | `10` | Seconds, 0 to 30, to wait for the account to answer. Pass `0` to return as soon as the change is recorded. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
 

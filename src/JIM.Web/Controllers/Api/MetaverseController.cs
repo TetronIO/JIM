@@ -1505,7 +1505,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (!namedAccounts && request.EnableAccount.HasValue)
         {
             return BadRequest(ApiErrorResponse.BadRequest(
-                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system never enables an account."));
+                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system never chooses to enable an account."));
         }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);
