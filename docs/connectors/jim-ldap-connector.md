@@ -65,14 +65,16 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 ### How values are read
 
-| Data type | Read from | Reported as unreadable |
+| Data type | Read from | Reported, not imported |
 |---|---|---|
-| Boolean | `TRUE` or `FALSE`, in any case | Anything else, such as `yes` or `1` |
+| Boolean | `TRUE` or `FALSE`, in any case | Anything else, such as `yes` or `1`; every value, when there is more than one |
 | Number | A whole number with an optional sign that fits 32 bits | Letters, or a number too large for the type |
 | Long Number | A whole number with an optional sign that fits 64 bits | Letters, or a number too large for the type |
-| DateTime | `GeneralizedTime` (minutes, seconds and a fraction optional; no time zone means UTC), `UTCTime` (years 50 to 99 are 19xx), or ISO 8601 with a time of day | A date that does not exist, text after the time zone, a date with no time, or a date that can be read two ways (below) |
+| DateTime | `GeneralizedTime` (minutes, seconds and a fraction optional; no time zone means UTC), `UTCTime` (years 50 to 99 are 19xx), or ISO 8601 with a time of day | A date that does not exist, text after the time zone, a date with no time, or a date that can be read two ways (below); every value, when there is more than one |
 | Guid (Active Directory `objectGUID`) | 16 bytes | Any other length, given as hexadecimal |
 | Text, Reference, Binary | As the directory returns them | Never |
+
+JIM holds one value for a Boolean or DateTime attribute. When an entry holds more than one value for such an attribute, JIM does not choose between them: it lists each value, with how many the directory returned, under **Attribute Values Not Imported** on the object's execution item (see [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read)), and leaves the attribute as it already held it. To import it again, leave the entry with a single value for that attribute, or, for an attribute the directory maintains itself, stop selecting it.
 
 A date of ten or twelve digits with a time zone can be either a `GeneralizedTime` or a `UTCTime`. JIM reads it as the one that gives a year from 1950 to 2049. If both do, as `200805121430Z` does (12 May 2008 14:30, or 5 August 2020 12:14:30), JIM does not guess and reports the value.
 
