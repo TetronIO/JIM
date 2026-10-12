@@ -176,13 +176,17 @@ Describe 'Get-IntegrationScenarioSetupParameters' {
     }
 
     # Real Active Directory refuses to create an enabled account with no password (#2039), and Scenario 001's
-    # userAccountControl Attribute Flow asks for an enabled one, so the lab runs with an Initial Password.
-    It 'gives Scenario 001 an Initial Password on the Active Directory lab' {
-        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType 'ActiveDirectory').InitialPassword | Should -BeTrue
+    # userAccountControl Attribute Flow asks for an enabled one, so the lab runs with an Initial Password. Samba AD
+    # runs with one too, because it is where an Initial Password once enabled an account the flow creates disabled
+    # (#2064): the HR data always holds an Archived joiner, and Test 1 asserts its account stays disabled.
+    It 'gives Scenario 001 an Initial Password on <DirectoryType>' -ForEach @(
+        @{ DirectoryType = 'ActiveDirectory' }
+        @{ DirectoryType = 'SambaAD' }
+    ) {
+        (Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryType).InitialPassword | Should -BeTrue
     }
 
-    It 'leaves Scenario 001 without an Initial Password on <DirectoryType>, which runs as it always has' -ForEach @(
-        @{ DirectoryType = 'SambaAD' }
+    It 'leaves Scenario 001 without an Initial Password on <DirectoryType>, which has no userAccountControl' -ForEach @(
         @{ DirectoryType = 'OpenLDAP' }
         @{ DirectoryType = 'DirectoryServer389' }
     ) {

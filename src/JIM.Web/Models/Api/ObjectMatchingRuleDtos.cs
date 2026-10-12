@@ -21,7 +21,7 @@ public class ObjectMatchingRuleSourceDto
     public int Order { get; set; }
 
     /// <summary>
-    /// The Connected System attribute ID (for import matching).
+    /// The Connected System attribute whose values the rule compares, or null when it compares an expression.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
 
@@ -29,6 +29,11 @@ public class ObjectMatchingRuleSourceDto
     /// The Connected System attribute name (for display).
     /// </summary>
     public string? ConnectedSystemAttributeName { get; set; }
+
+    /// <summary>
+    /// The expression whose result the rule compares, or null when it compares a Connected System attribute.
+    /// </summary>
+    public string? Expression { get; set; }
 
     /// <summary>
     /// Creates a DTO from an ObjectMatchingRuleSource entity.
@@ -40,7 +45,8 @@ public class ObjectMatchingRuleSourceDto
             Id = source.Id,
             Order = source.Order,
             ConnectedSystemAttributeId = source.ConnectedSystemAttributeId,
-            ConnectedSystemAttributeName = source.ConnectedSystemAttribute?.Name
+            ConnectedSystemAttributeName = source.ConnectedSystemAttribute?.Name,
+            Expression = source.Expression
         };
     }
 }

@@ -1500,12 +1500,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         var namedAccounts = request.ConnectedSystemObjectIds != null;
 
         // Refused rather than silently ignored. A propagated password reaches accounts an administrator may have
-        // disabled on purpose, so the core never enables one; a caller who asked for it would otherwise believe
-        // it happened.
+        // disabled on purpose, so the core enables none of them (it only completes an enable withheld until a
+        // new account had a password, #2039); a caller who asked for it would otherwise believe it happened.
         if (!namedAccounts && request.EnableAccount.HasValue)
         {
             return BadRequest(ApiErrorResponse.BadRequest(
-                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system never enables an account."));
+                "enableAccount applies only to named accounts. Pass connectedSystemObjectIds to enable the accounts the password is set on; a password propagated to every configured system enables no account, other than a new Active Directory account JIM created disabled until it had a password."));
         }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(id);

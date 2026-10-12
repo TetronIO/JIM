@@ -208,7 +208,7 @@ function Remove-JIMConnectedSystem {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($systemName, $confirmAction)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $systemName -Action $confirmAction -Force:$Force) {
             Write-Verbose "Deleting Connected System: $systemName (ID: $systemId)"
 
             try {

@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -209,6 +210,45 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
             s.SystemId, [s.CsoIds[0], s.CsoIds[1], s.CsoIds[2], s.CsoIds[3]]);
 
         Assert.That(found, Is.EquivalentTo(new[] { s.CsoIds[0] }));
+    }
+
+    /// <summary>
+    /// The delivery's one read at the attempt (#2064): whether the account holds a withheld enable, and whether its
+    /// queued change is marked as having its enabled state written by an export. Each is answered on its own, and a
+    /// change that no longer exists reads as unmarked.
+    /// </summary>
+    [Test]
+    public async Task GetAccountEnablementFactsAsync_ReadsTheHoldAndTheMarkAsTheyStandAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 2, metaverseObjectCount: 2);
+        var held = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        held.AttributeValueChanges.Add(HeldChange(s.AttributeId));
+        var marked = Password(s.MvoIds[1], s.SystemId, PendingPasswordChangeStatus.Delivering, PendingPasswordChangeOrigin.Provisioned);
+        marked.ConnectedSystemObjectId = s.CsoIds[1];
+        marked.EnabledStateSetByAttributeFlow = true;
+        var unmarked = Password(s.MvoIds[0], s.SystemId, PendingPasswordChangeStatus.Delivering, PendingPasswordChangeOrigin.Provisioned);
+        unmarked.ConnectedSystemObjectId = s.CsoIds[0];
+        await using (var write = NewContext())
+        {
+            var repository = new PostgresDataRepository(write).Sync;
+            await repository.CreatePendingExportsAsync([held]);
+            await repository.QueuePasswordChangesAsync([marked, unmarked]);
+        }
+
+        await using var read = NewContext();
+        var sync = new PostgresDataRepository(read).Sync;
+        var heldAndUnmarked = await sync.GetAccountEnablementFactsAsync(s.SystemId, unmarked.Id, s.CsoIds[0]);
+        var markedAndNotHeld = await sync.GetAccountEnablementFactsAsync(s.SystemId, marked.Id, s.CsoIds[1]);
+        var changeGone = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[1]);
+        var otherSystem = await sync.GetAccountEnablementFactsAsync(s.SystemId + 1000, unmarked.Id, s.CsoIds[0]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(heldAndUnmarked, Is.EqualTo(new AccountEnablementFacts(true, false)));
+            Assert.That(markedAndNotHeld, Is.EqualTo(new AccountEnablementFacts(false, true)));
+            Assert.That(changeGone, Is.EqualTo(new AccountEnablementFacts(false, false)));
+            Assert.That(otherSystem.HoldsWithheldEnable, Is.False, "a hold on another Connected System is not this account's");
+        }
     }
 
     /// <summary>

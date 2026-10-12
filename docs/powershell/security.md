@@ -10,23 +10,48 @@ Cmdlets for managing security roles and role membership in JIM. Roles define per
 
 Retrieves security role definitions from JIM.
 
+<!-- BEGIN GENERATED: Get-JIMRole -->
 ### Syntax
 
 ```powershell
-Get-JIMRole [-Id <int>]
+# List (default)
 Get-JIMRole [-Name <string>]
+
+# ById
+Get-JIMRole -Id <int>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | No | | Get a specific role by its unique identifier. |
-| `Name` | `string` | No | | Filter roles by name. Supports wildcards (e.g., `"Admin*"`). |
+| `Id` | `int` | Yes (ById) |  | Returns the Role with this ID. Accepts pipeline input by property name. |
+| `Name` | `string` | No (List) |  | Only Roles with this name. Supports wildcards. |
 
 ### Output
 
-Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties.
+One object per Role.
+
+**`RoleHeader`** (List):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The Role's identifier. |
+| `Name` | `string` | The Role's name. |
+| `BuiltIn` | `bool` | Whether JIM created the Role when it was set up. A built-in Role cannot be deleted. |
+| `Created` | `datetime` | When the Role was created (UTC). |
+| `StaticMemberCount` | `int` | How many Metaverse Objects have been made members of the Role. |
+
+**`RoleDto`** (ById):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The Role's identifier. |
+| `Name` | `string` | The Role's name. |
+| `BuiltIn` | `bool` | Whether JIM created the Role when it was set up. A built-in Role cannot be deleted. |
+| `Created` | `datetime` | When the Role was created (UTC). |
+| `StaticMemberCount` | `int` | How many Metaverse Objects have been made members of the Role. |
+<!-- END GENERATED: Get-JIMRole -->
 
 ### Examples
 
@@ -53,10 +78,14 @@ New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.Id) -PassThru
 
 Retrieves Metaverse Objects assigned to a security role.
 
+<!-- BEGIN GENERATED: Get-JIMRoleMember -->
 ### Syntax
 
 ```powershell
+# ById (default)
 Get-JIMRoleMember -RoleId <int>
+
+# ByInputObject
 Get-JIMRoleMember -InputObject <PSCustomObject>
 ```
 
@@ -64,14 +93,21 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `RoleId` | `int` | Yes* | | The unique identifier of the role. |
-| `InputObject` | `PSCustomObject` | Yes* | | Role object from the pipeline (e.g., from `Get-JIMRole`). |
-
-*One of `RoleId` or `InputObject` is required.
+| `RoleId` | `int` | Yes (ById) |  | The ID of the Role. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Role from the pipeline, for example from Get-JIMRole. Accepts pipeline input. |
 
 ### Output
 
-Metaverse Object members with `Id`, `DisplayName`, and a nested `Type` object (`Type.Id` and `Type.Name`) properties.
+One object per member of the Role.
+
+**`RoleMemberDto`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The unique identifier (GUID) of the Metaverse Object. |
+| `DisplayName` | `string` | The display name of the Metaverse Object. |
+| `Type` | `MetaverseObjectTypeDto` | The Metaverse Object Type, with its Id and Name. |
+<!-- END GENERATED: Get-JIMRoleMember -->
 
 ### Examples
 
@@ -100,6 +136,7 @@ Get-JIMRole | ForEach-Object {
 
 Lists the security roles a Metaverse Object is a member of.
 
+<!-- BEGIN GENERATED: Get-JIMMetaverseObjectRole -->
 ### Syntax
 
 ```powershell
@@ -110,11 +147,14 @@ Get-JIMMetaverseObjectRole -Id <guid>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | The unique identifier of the Metaverse Object. Accepts pipeline input by property name (e.g. from `Get-JIMMetaverseObject`). |
+| `Id` | `guid` | Yes |  | The ID of the Metaverse Object. Accepts pipeline input by property name. |
 
 ### Output
 
-Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties. Returns nothing if the object is not a member of any role.
+One object per Role the Metaverse Object is a member of; nothing when it is in none.
+
+**`RoleDto`**: as under [Get-JIMRole](#get-jimrole).
+<!-- END GENERATED: Get-JIMMetaverseObjectRole -->
 
 ### Examples
 
@@ -146,23 +186,30 @@ Get-JIMRole -Name "Administrator" |
 
 Adds a Metaverse Object to a security role.
 
+<!-- BEGIN GENERATED: Add-JIMRoleMember -->
 ### Syntax
 
 ```powershell
-Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-ChangeReason <string>]
-Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <string>]
+# ById (default)
+Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-ChangeReason <string>] [-WhatIf] [-Confirm]
+
+# ByInputObject
+Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `RoleId` | `int` | Yes | | The unique identifier of the role to add the member to. |
-| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the Role's [configuration change history](../configuration/roles.md#change-history). |
+| `RoleId` | `int` | Yes |  | The ID of the Role to add the member to. |
+| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to add. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject. Accepts pipeline input. |
+| `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change History. |
 
-*One of `MetaverseObjectId` or `InputObject` is required.
+### Output
+
+None.
+<!-- END GENERATED: Add-JIMRoleMember -->
 
 ### Examples
 
@@ -189,24 +236,33 @@ Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -ChangeReason "Onb
 
 Removes a Metaverse Object from a security role.
 
+<!-- BEGIN GENERATED: Remove-JIMRoleMember -->
 ### Syntax
 
 ```powershell
-Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeReason <string>]
-Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>]
+# ById (default)
+Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeReason <string>] [-WhatIf] [-Confirm]
+
+# ByInputObject
+Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `RoleId` | `int` | Yes | | The unique identifier of the role to remove the member from. |
-| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline. |
-| `Force` | `switch` | No | `$false` | Suppresses confirmation prompts. |
-| `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the Role's [configuration change history](../configuration/roles.md#change-history). |
+| `RoleId` | `int` | Yes |  | The ID of the Role to remove the member from. |
+| `MetaverseObjectId` | `guid` | Yes (ById) |  | The ID of the Metaverse Object to remove. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Metaverse Object from the pipeline, for example from Get-JIMMetaverseObject. Accepts pipeline input. |
+| `Force` | `switch` | No |  | Skips the confirmation prompt. |
+| `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Role's Configuration Change History. |
 
-*One of `MetaverseObjectId` or `InputObject` is required.
+### Output
+
+None.
+<!-- END GENERATED: Remove-JIMRoleMember -->
 
 !!! warning "Safety Checks"
     The API enforces safety checks to prevent lockout:

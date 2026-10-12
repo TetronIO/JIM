@@ -22,6 +22,8 @@ Within a Synchronisation Rule, expressions are used in:
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
 
+Expressions also decide what an **Object Matching Rule** compares, where an identifier differs in format between systems: see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression).
+
 To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
 Expressions are also used by **example data generation templates** to construct a generated attribute's value from other attributes on the same object, for example building an email address whose domain is derived from a generated company name. Only the `mv` accessor applies in that context (generation builds Metaverse Objects directly, so there is no Connected System Object), but the same syntax and functions described below apply.
@@ -59,7 +61,7 @@ cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
 
-Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/derived-attributes.md) for the evaluation order, loops, and which synchronisation evaluates the flow.
+Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/derived-attributes.md) for the evaluation order, loops, and which synchronisation evaluates the flow. An Object Matching Rule's expression reads `cs` only, because the Metaverse Object is what the rule is looking for.
 
 In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
 
@@ -363,7 +365,7 @@ This reads as: "If the Employee Status is Active, set the value to 512 (enabled)
 !!! note "Creating accounts enabled on Active Directory"
     Active Directory refuses to create an enabled account that has no password, so on a Synchronisation Rule that provisions accounts, give the rule an [Initial Password](../configuration/initial-password.md) as well. JIM then creates the account disabled and enables it once the password is set, and the expression keeps deciding the enabled state from then on. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts).
 
-    One exception: with the Initial Password's **Enable the Connected System Object once the password is set** on, as it is by default, the password's delivery enables every account the rule provisions, including one this expression creates disabled (`514`), such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export restore the expression's `514`; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](../configuration/initial-password.md#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch that setting off, or scope provisioning to active people; see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector-passwords.md#accounts-your-attribute-flow-creates-disabled).
+    An account this expression creates disabled (`514`), such as a pre-hire's, stays disabled when its password is delivered, whatever the Initial Password's **Enable the Connected System Object once the password is set** says: the expression decides the enabled state. See [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector-passwords.md#accounts-your-attribute-flow-creates-disabled).
 
 **Check if an account is currently disabled:**
 

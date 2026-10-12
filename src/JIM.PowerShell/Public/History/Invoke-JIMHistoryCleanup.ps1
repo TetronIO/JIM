@@ -22,27 +22,10 @@ function Invoke-JIMHistoryCleanup {
         This operation creates an Activity record to audit the cleanup.
 
     .PARAMETER PassThru
-        If specified, returns the cleanup result object with deletion statistics.
+        Returns what the pass removed.
 
     .OUTPUTS
-        If -PassThru is specified, returns a PSCustomObject with cleanup statistics:
-        - csoChangesDeleted: Number of Connected System Object change records deleted
-        - mvoChangesDeleted: Number of Metaverse Object change records deleted
-        - activitiesDeleted: Number of general Activity records deleted
-        - configurationChangeActivitiesDeleted: Configuration change Activities deleted, at their own cutoff
-        - securityEventActivitiesDeleted: Security event Activities deleted, at their own cutoff
-        - initialPasswordWorkRecordsDeleted: Terminal initial-password records deleted
-        - passwordEventActivitiesDeleted: Password Synchronisation Activities deleted, at their own cutoff
-        - passwordQueueRecordsDeleted: Terminal Pending Password Changes deleted
-        - oldestRecordDeleted: Oldest record timestamp deleted
-        - newestRecordDeleted: Newest record timestamp deleted
-        - cutoffDate: Records older than this date were deleted, under the general retention period
-        - retentionPeriodDays: Configured general retention period
-        - configurationChangeRetentionPeriodDays: Configured configuration change retention period
-        - securityEventRetentionPeriodDays: Configured security event retention period
-        - initialPasswordRetentionPeriodDays: Configured initial-password record retention period
-        - passwordEventRetentionPeriodDays: Configured Password Synchronisation retention period
-        - batchSize: Maximum records deleted per type in this batch
+        With -PassThru, what the pass removed and the retention settings it applied; otherwise nothing.
 
     .EXAMPLE
         Invoke-JIMHistoryCleanup
@@ -85,7 +68,7 @@ function Invoke-JIMHistoryCleanup {
         Get-JIMServiceSetting
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.HistoryCleanupResponse')]
     param(
         [Parameter()]
         [switch]$PassThru

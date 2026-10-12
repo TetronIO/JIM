@@ -907,11 +907,7 @@ public class PasswordDeliveryTests
     [Test]
     public async Task Deliver_ProvisionedRow_CarriesTheRulesExpiryBehaviourAndEnableDecisionAsync()
     {
-        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip =>
-        {
-            ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires;
-            ip.EnableAccount = false;
-        });
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires);
 
         await _server.DeliverDuePasswordChangesAsync(
             _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
@@ -920,11 +916,209 @@ public class PasswordDeliveryTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
-            Assert.That(options.EnableAccount, Is.False);
+            Assert.That(options.EnableAccount, Is.True, "Nothing sets the enabled state, so the rule's Enable Account decides.");
             Assert.That(change.ExpiryBehaviour, Is.Not.EqualTo(PasswordExpiryBehaviour.NeverExpires),
                 "The row's own placeholder value must never be what reaches the Connector.");
         }
     }
+
+    #region the account's enabled state (#2064)
+
+    /// <summary>
+    /// Enable Account off leaves the account as it was created rather than disabling it: an account nothing sets the
+    /// enabled state of is created disabled by the directory anyway, and a late delivery must not disable one a
+    /// separate process has since enabled.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_RuleOffAndNoFlowSetsTheEnabledState_LeavesTheAccountAsCreatedAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, ip => ip.EnableAccount = false);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+    }
+
+    /// <summary>
+    /// The reported bug: the Attribute Flow creates a pre-hire or an archived joiner disabled, and the rule's Enable
+    /// Account enabled it with a password JIM knows. The export wrote the enabled state, so the flow decides.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_EnabledStateSetByAttributeFlow_LeavesItToTheFlowAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(result.EnabledStateLeftToAttributeFlowCount, Is.EqualTo(1), "the decision is counted, never silent");
+        }
+    }
+
+    /// <summary>
+    /// Active Directory: JIM created the account disabled only until a password existed, and the Attribute Flow still
+    /// asks for it enabled (#2039). The delivery completes that enable, whatever the rule's Enable Account says.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_HeldEnable_EnablesWhateverTheRuleSaysAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip => ip.EnableAccount = false);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+            Assert.That(result.WithheldEnablesCompletedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A leaver whose held enable was withdrawn or released is no longer held: only an enable still awaiting its
+    /// password counts, so the delivery leaves the account disabled.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_HeldEnableNoLongerAwaitingThePassword_LeavesItToTheFlowAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        _syncRepository.PendingPasswordChanges[change.Id].EnabledStateSetByAttributeFlow = true;
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value, PendingExportAttributeChangeStatus.Pending);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null);
+    }
+
+    [Test]
+    public async Task Deliver_PropagatedRow_HeldEnable_EnablesAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRowWithNoChoice_HeldEnable_EnablesAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRowWithAChoice_TheChoiceWinsOverAHeldEnableAsync()
+    {
+        var change = await QueueExplicitAsync(enableAccount: false);
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.False);
+    }
+
+    /// <summary>
+    /// A lane claims its batch up front and then works through it one account at a time, so an export can mark a
+    /// claimed row (a leaver disabled moments ago) before the lane reaches it. The mark is read afresh at the attempt,
+    /// not taken from the claim, or the delivery would re-enable the leaver.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_MarkedAfterTheClaim_LeavesItToTheFlowAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (first, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-2));
+        var (second, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-1));
+        _connector.WithPasswordSetResult(account =>
+        {
+            // The leaver's export lands while the lane is busy with the first account.
+            if (account.Id == first.ConnectedSystemObjectId)
+                _syncRepository.PendingPasswordChanges[second.Id].EnabledStateSetByAttributeFlow = true;
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var attempts = _connector.PasswordSetAttempts.ToDictionary(a => a.ConnectedSystemObjectId, a => a.Options.EnableAccount);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attempts[first.ConnectedSystemObjectId!.Value], Is.True, "nothing set the first account's enabled state");
+            Assert.That(attempts[second.ConnectedSystemObjectId!.Value], Is.Null, "marked after the claim, before its attempt");
+        }
+    }
+
+    /// <summary>
+    /// The hold is read live at every attempt; a read that fails never defaults to a decision, because guessing
+    /// "not held" could leave an account disabled and guessing "held" could enable one. The attempt is kept as a
+    /// transient failure and nothing is sent.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_HoldCannotBeRead_KeepsTheChangeWithoutSendingAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        _syncRepository.FailInitialPasswordHoldProbeWith = new InvalidOperationException("The database is unavailable.");
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges[change.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty, "nothing is sent on a guess");
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(stored.AttemptCount, Is.EqualTo(1));
+            Assert.That(result.RetryingCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// Seeds a Pending Export for the account whose <c>userAccountControl</c> change was written with an interim
+    /// disabled value until the password is delivered (#2039): still awaiting confirmation unless told otherwise.
+    /// </summary>
+    private void SeedHeldEnable(Guid accountId, PendingExportAttributeChangeStatus status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation) =>
+        _syncRepository.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectId = accountId,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Exported,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    IntValue = 512,
+                    AwaitsInitialPassword = status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    Status = status
+                }
+            ]
+        });
+
+    #endregion
 
     [Test]
     public async Task Deliver_ProvisionedRow_OnADisabledSystem_IsDeliveredAsync()

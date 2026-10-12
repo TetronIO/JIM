@@ -121,7 +121,7 @@ function Remove-JIMRunProfile {
 
         $displayName = $existing.name ?? $profileId
 
-        if ($Force -or $PSCmdlet.ShouldProcess($displayName, "Delete Run Profile")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $displayName -Action "Delete Run Profile" -Force:$Force) {
             Write-Verbose "Deleting Run Profile: $profileId from Connected System $csId"
 
             try {

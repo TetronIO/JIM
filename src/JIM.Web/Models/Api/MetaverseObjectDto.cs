@@ -308,7 +308,12 @@ public class PendingDeletionDto
     /// <summary>The display name of the Metaverse Object.</summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>The object type (id and name). Nested to match the single-object response shape.</summary>
+    /// <summary>
+    /// The Metaverse Object Type, with its Id and Name.
+    /// </summary>
+    /// <remarks>
+    /// Nested to match the single-object response shape.
+    /// </remarks>
     public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>When the last connector was disconnected from this MVO.</summary>

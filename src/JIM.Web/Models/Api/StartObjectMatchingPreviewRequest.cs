@@ -120,12 +120,15 @@ public class ObjectMatchingRuleSourceRequest
     /// <summary>Where this source sits; sources are evaluated in ascending order.</summary>
     public int Order { get; set; }
 
-    /// <summary>The Connected System attribute read.</summary>
+    /// <summary>
+    /// The Connected System attribute whose values are compared. Give exactly one of this or <see cref="Expression"/>.
+    /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
 
     /// <summary>
-    /// An Expression producing the value instead. Accepted because the model allows it and refused by the
-    /// preview's validation: Object Matching compares attribute values only.
+    /// An expression computing the value to compare instead, reading the Connected System Object only
+    /// (<c>cs["attributeName"]</c>). The preview judges it exactly as saving the rule would, and its rows name the
+    /// value each object computed. Give exactly one of this or <see cref="ConnectedSystemAttributeId"/>.
     /// </summary>
     public string? Expression { get; set; }
 

@@ -25,18 +25,15 @@ The cmdlets below are what you use once a change is on the queue.
 
 Gets queued password changes, or the queue's counts by state.
 
+<!-- BEGIN GENERATED: Get-JIMPendingPasswordChange -->
 ### Syntax
 
 ```powershell
 # List (default)
-Get-JIMPendingPasswordChange [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>]
-                             [-MetaverseObjectId <guid>] [-Search <string>] [-SortBy <string>]
-                             [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
+Get-JIMPendingPasswordChange [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-SortBy <string>] [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Get-JIMPendingPasswordChange -All [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>]
-                             [-MetaverseObjectId <guid>] [-Search <string>] [-SortBy <string>]
-                             [-SortDirection <string>] [-PageSize <int>] [-Force]
+Get-JIMPendingPasswordChange -All [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-SortBy <string>] [-SortDirection <string>] [-PageSize <int>] [-Force]
 
 # Summary
 Get-JIMPendingPasswordChange -Summary
@@ -46,41 +43,58 @@ Get-JIMPendingPasswordChange -Summary
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | No | | Restrict to one Connected System. Accepts pipeline input by property name, so a Connected System can be piped in. |
-| `Status` | `string` | No | | One of `Pending`, `Delivering`, `Parked`, `Expired`, `Cancelled`. |
-| `FailureReason` | `string` | No | | One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound`, `UnsupportedOperation`. Only meaningful for changes that have been attempted. |
-| `MetaverseObjectId` | `guid` | No | | Restrict to one Metaverse Object's queued changes. |
-| `Search` | `string` | No | | Free-text search over the Metaverse Object and Connected System names. |
-| `SortBy` | `string` | No | `queued` | One of `queued`, `identity`, `system`, `status`, `attempts`, `nextAttempt`, `expires`. |
-| `SortDirection` | `string` | No | `asc` | `asc` or `desc`. |
-| `Page` | `int` | No | `1` | Page number. Not available with `-All`. |
-| `PageSize` | `int` | No | `50` | Results per page (maximum 100). |
-| `All` | `switch` | Yes (ListAll set) | | Retrieve every page. Stops after 1000 pages with a warning unless `-Force` is supplied. |
-| `Force` | `switch` | No | | Fetch beyond the `-All` page ceiling. |
-| `Summary` | `switch` | Yes (Summary set) | | Return the queue's counts by state instead of the changes themselves. |
+| `ConnectedSystemId` | `int` | No (List, ListAll) |  | Only changes queued for this Connected System. Accepts pipeline input by property name. |
+| `Status` | `string` | No (List, ListAll) |  | Only changes in this state. One of `Pending`, `Delivering`, `Parked`, `Expired` or `Cancelled`. |
+| `FailureReason` | `string` | No (List, ListAll) |  | Only changes whose last attempt failed this way. A change that has never been attempted has no reason. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
+| `MetaverseObjectId` | `guid` | No (List, ListAll) |  | Only this Metaverse Object's queued changes. |
+| `Search` | `string` | No (List, ListAll) |  | Free-text search over the Metaverse Object and Connected System names. |
+| `SortBy` | `string` | No (List, ListAll) |  | The column to sort by; queued when omitted. One of `queued`, `identity`, `system`, `status`, `attempts`, `nextAttempt` or `expires`. |
+| `SortDirection` | `string` | No (List, ListAll) |  | The sort direction; ascending when omitted. One of `asc` or `desc`. |
+| `Page` | `int` | No (List) | `1` | The page of changes to return. At least 1. |
+| `PageSize` | `int` | No (List, ListAll) | `50` | How many changes to return per page. From 1 to 100. |
+| `All` | `switch` | Yes (ListAll) |  | Returns every page. Stops after 1,000 pages with a warning unless -Force is given. |
+| `Force` | `switch` | No (ListAll) |  | Fetches beyond the -All page ceiling. |
+| `Summary` | `switch` | Yes (Summary) |  | Returns the queue's counts by state instead of its changes. |
 
 ### Output
 
-In the default and `-All` parameter sets, one `PSCustomObject` per queued change:
+One object per queued change, one entry per Metaverse Object per Connected System, or with -Summary one object of counts. No password is returned, in any form.
 
-| Property | Description |
-|----------|-------------|
-| `Id` | The change's unique identifier, as passed to `Resume-` and `Stop-JIMPendingPasswordChange`. |
-| `MetaverseObjectId`, `MetaverseObjectDisplayName` | The Metaverse Object whose password this is. |
-| `MetaverseObjectTypePluralName` | Its Metaverse Object Type's plural name, which is what a link to it is built from. |
-| `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
-| `Status` | `Pending`, `Delivering`, `Parked`, `Expired` or `Cancelled`. `Delivering` is momentary: the Password Delivery Service is writing the change to the Connected System right now. |
-| `Origin` | `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for a Connected System Object an export has just created). |
-| `SyncRuleId` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt. `$null` for every other origin. |
-| `Due` | Whether the Password Delivery Service would attempt this change now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
-| `Held` | Whether the change is waiting on Password Synchronisation being switched back on for its Connected System, rather than on JIM. A switched-off system accumulates changes instead of discarding them; switching it on delivers what accumulated. |
-| `FailureReason`, `TargetMessage` | How the last attempt failed, and the target's own words. Both `$null` for a change that has not been attempted. |
-| `AttemptCount` | How many delivery attempts have been made. |
-| `NextRetryAt` | When the next attempt falls due, or `$null` for a change that is due now or is no longer being attempted. |
-| `CreatedAt`, `LastAttemptedAt`, `ExpiresAt` | When it was queued, last tried, and stops being deliverable. |
-| `CancelledAt`, `CancelledByName` | When an administrator cancelled it, and who. `$null` where nobody has; the name is `$null` for a cancellation made with an API key. |
+**`PendingPasswordChangeResponse`** (List, ListAll):
 
-With `-Summary`, a single object with `WaitingCount`, `DueCount`, `ParkedCount`, `ExpiredCount` and `CancelledCount`.
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The queued change's ID, which identifies it when retrying or cancelling it. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object whose password this is. |
+| `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name. |
+| `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
+| `ConnectedSystemId` | `int` | The Connected System the change is queued for. |
+| `ConnectedSystemName` | `string` | That Connected System's name. |
+| `Status` | `PendingPasswordChangeStatus` | Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or Cancelled (an administrator stopped it). |
+| `Origin` | `PendingPasswordChangeOrigin` | Where the change came from: `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). |
+| `SyncRuleId` | `int` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt, or null for every other origin. |
+| `Due` | `bool` | Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff from one that is due but not yet reached, which `Status` alone cannot. It is never true for a held change, whose Connected System is switched off. |
+| `Held` | `bool` | Whether the change is waiting on somebody switching Password Synchronisation back on for its Connected System, rather than on JIM. A configured system that is switched off accumulates queued changes instead of discarding them, and enabling it delivers what accumulated; until then nothing is attempted, so the remedy is a person's rather than a retry's. |
+| `FailureReason` | `PasswordSetFailureReason` | How the last attempt failed; null for a change that has not been attempted. |
+| `TargetMessage` | `string` | The target's own words for why the last attempt failed, which say where the remedy lies; null for a change that has not been attempted. |
+| `AttemptCount` | `int` | How many delivery attempts have been made. |
+| `NextRetryAt` | `datetime` | When the next attempt falls due, or null for a change that is due now or is no longer being attempted. |
+| `CreatedAt` | `datetime` | When the change was queued. |
+| `LastAttemptedAt` | `datetime` | When delivery was last attempted, or null where it never has been. |
+| `ExpiresAt` | `datetime` | When the change stops being deliverable, whether or not it has been delivered by then. |
+| `CancelledAt` | `datetime` | When an administrator cancelled the change, or null where nobody has. |
+| `CancelledByName` | `string` | Who cancelled the change; null where nobody has, and for a cancellation made with an API key, which has no person behind it. |
+
+**`PasswordQueueSummary`** (Summary):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `WaitingCount` | `int` | Changes JIM still intends to deliver, whether due now or waiting out a backoff. |
+| `DueCount` | `int` | How many of the waiting changes a delivery pass would attempt right now. A large waiting count with nothing due is a queue working through its backoffs; a large due count is a queue that is not being drained. A change queued for a Connected System that is switched off is waiting but not due: it is held until somebody enables the system. |
+| `ParkedCount` | `int` | Changes the target refused, or that ran out of attempts. JIM has stopped trying, so these wait on a person. |
+| `ExpiredCount` | `int` | Changes that outlived their Connected System's time to live. Nothing can deliver these now: the password they carried is gone. |
+| `CancelledCount` | `int` | Changes an administrator stopped. Counted rather than hidden, because the Metaverse Object's password is still divergent on that system and the count is the only thing that says so. |
+<!-- END GENERATED: Get-JIMPendingPasswordChange -->
 
 ### Examples
 
@@ -124,32 +138,36 @@ Run it once the reason a Connected System was refusing passwords has been dealt 
 !!! tip "Named `Resume-` rather than `Retry-`"
     `Retry` is not a PowerShell approved verb, and a module exporting one warns on import. `Resume` is the approved verb for starting something that was suspended, which is what a parked or cancelled change is.
 
+<!-- BEGIN GENERATED: Resume-JIMPendingPasswordChange -->
 ### Syntax
 
 ```powershell
-Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>]
-                                [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>]
-                                [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
+Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid[]` | No | | The changes to retry. Accepts pipeline input by property name, so queued changes can be piped straight in. |
-| `ConnectedSystemId` | `int` | No | | Retry the changes queued for one Connected System. Accepts pipeline input by property name. |
-| `Status` | `string` | No | | Retry only changes in this state. |
-| `FailureReason` | `string` | No | | Retry only changes whose last attempt failed this way. |
-| `MetaverseObjectId` | `guid` | No | | Retry only one Metaverse Object's changes. |
-| `Search` | `string` | No | | Retry only changes matching this search over the Metaverse Object and Connected System names. |
-| `EntireQueue` | `switch` | No | | Retry every queued password change. Required when nothing else narrows the request. |
-| `Force` | `switch` | No | | Skip the confirmation prompt. |
-
-The criteria combine rather than replace one another. Piping changes in alongside `-Status Parked` means "these, if they are still parked": one delivered since you listed it is not retried.
+| `Id` | `guid[]` | No |  | The IDs of the queued changes to retry. Combines with the other criteria rather than replacing them, so -Status Parked alongside piped changes means these changes, if they are still parked. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | No |  | Retry the changes queued for this Connected System. Accepts pipeline input by property name. |
+| `Status` | `string` | No |  | Retry only changes in this state. An Expired change is never retried, so -Status Expired matches nothing. One of `Pending`, `Parked`, `Expired` or `Cancelled`. |
+| `FailureReason` | `string` | No |  | Retry only changes whose last attempt failed this way. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
+| `MetaverseObjectId` | `guid` | No |  | Retry only this Metaverse Object's queued changes. |
+| `Search` | `string` | No |  | Retry only changes matching this free-text search over the Metaverse Object and Connected System names. |
+| `EntireQueue` | `switch` | No |  | Retry every queued password change in the deployment. Required when nothing else narrows the request, so a command that names no criteria cannot act on everything by accident. |
+| `Force` | `switch` | No |  | Skips the confirmation prompt. |
 
 ### Output
 
-A `PSCustomObject` with an `AffectedCount` property: how many changes were made due again. Zero is a valid answer, not an error; it means nothing matched.
+One object, whose AffectedCount says how many changes were made due again. Zero is an answer, not an error.
+
+**`PasswordQueueActionResponse`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `AffectedCount` | `int` | How many queued password changes the action applied to. May be lower than the number of identifiers a caller named, and that is not an error: a change delivered, expired or already cancelled between the caller reading the queue and acting on it no longer matches. |
+<!-- END GENERATED: Resume-JIMPendingPasswordChange -->
 
 ### Examples
 
@@ -183,21 +201,34 @@ The changes are kept, marked `Cancelled`, recording who cancelled them and when.
 
 Applies to `Pending` and `Parked` changes. An `Expired` or already `Cancelled` change is left alone rather than having its recorded outcome overwritten.
 
+<!-- BEGIN GENERATED: Stop-JIMPendingPasswordChange -->
 ### Syntax
 
 ```powershell
-Stop-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>]
-                              [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>]
-                              [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
+Stop-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
-The same as `Resume-JIMPendingPasswordChange` above, and they combine the same way.
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid[]` | No |  | The IDs of the queued changes to cancel. Combines with the other criteria rather than replacing them, so -Status Parked alongside piped changes means these changes, if they are still parked. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | No |  | Cancel the changes queued for this Connected System. Accepts pipeline input by property name. |
+| `Status` | `string` | No |  | Cancel only changes in this state. An Expired or Cancelled change keeps the outcome it has, so those states match nothing. One of `Pending`, `Parked`, `Expired` or `Cancelled`. |
+| `FailureReason` | `string` | No |  | Cancel only changes whose last attempt failed this way. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
+| `MetaverseObjectId` | `guid` | No |  | Cancel only this Metaverse Object's queued changes. |
+| `Search` | `string` | No |  | Cancel only changes matching this free-text search over the Metaverse Object and Connected System names. |
+| `EntireQueue` | `switch` | No |  | Cancel every queued password change in the deployment. Required when nothing else narrows the request, so a command that names no criteria cannot act on everything by accident. |
+| `Force` | `switch` | No |  | Skips the confirmation prompt. |
 
 ### Output
 
-A `PSCustomObject` with an `AffectedCount` property: how many changes were cancelled.
+One object, whose AffectedCount says how many changes were cancelled. Zero is an answer, not an error.
+
+**`PasswordQueueActionResponse`**: as under [Resume-JIMPendingPasswordChange](#resume-jimpendingpasswordchange).
+<!-- END GENERATED: Stop-JIMPendingPasswordChange -->
 
 ### Examples
 

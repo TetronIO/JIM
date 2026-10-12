@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ An **Ambiguous Match** now lists the Metaverse Objects it found on the Activity item, each linked, with the value it matched on and what it's joined to; REST, `Get-JIMActivityExecutionItem` and Sync Preview return them too. (#2052)
 - ✨ A connection joined by an Object Matching Rule now says which rule matched and on what value, on the Connections tab, in REST and in `Get-JIMMetaverseObjectConnection`. (#2052)
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
+- ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
+- ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
 
 ### Changed
 
@@ -67,7 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
 - 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
 - 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
+- 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
+- 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 
 ### Removed
 
@@ -76,12 +80,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
+- 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
 - 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
+- 🐛 An import's Activity message counts as updated only the objects that changed: objects compared and found unchanged count as unchanged, deletes as deleted, and objects a Full Import no longer found are reported apart from those it read. (#2129)
+- 🐛 The LDAP Connector reports a value it cannot read (a Boolean other than TRUE or FALSE, letters in a number, a date that does not exist) instead of dropping or misreading it, and an `objectGUID` that is not 16 bytes no longer fails the import. (#2128)
+- 🐛 Active Directory Enumeration attributes such as `sAMAccountType` are discovered as Number attributes, not as Booleans that read every value as false; after upgrading, refresh each Active Directory schema as **Refreshing the schema** describes. (#2128)
+- 🐛 After a schema refresh changes an attribute's data type, the next import replaces the values held under the old type rather than keeping both, and the refresh names an Expression that reads the attribute among the mappings to disable. (#2128)
 - 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
 - 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
 - 🐛 **Deleted By** on the Deleted Objects page linked the person who deleted an object to a page that does not exist; it now opens their Metaverse Object. (#2066)
-- 🐛 Changes made through the REST API to Schedules, example data templates and a factory reset are recorded as the API key or person who made them; they were recorded against a person who does not exist, so **Initiated By** linked nowhere. (#2066)
+- 🐛 A reference in a deleted Metaverse Object's change history, such as its manager, linked to a page that does not exist and showed its type as Unknown; it now opens the referenced Metaverse Object and names its type. (#2146)
+- 🐛 Changes made through the REST API to Schedules, Example Data Templates and a factory reset are recorded as the API key or person who made them; they were recorded against a person who does not exist, so **Initiated By** linked nowhere. (#2066)
+- 🐛 History already recorded when an API key changed Schedules or Example Data Templates, ran a Schedule or performed a factory reset through the REST API, including what those runs recorded, is corrected on upgrade to name the API key, where JIM can still tell it was one. (#2066)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 
@@ -152,6 +163,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When more than one existing account matches an identity before provisioning, JIM now reports an **Ambiguous Provisioning Match** listing them for you to resolve, instead of joining whichever was created first. (#2052)
 - 🐛 Matching before provisioning now looks up every value of a multi-valued attribute, so an existing account holding the second value is joined instead of duplicated. (#2052)
 - 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
+
+### Security
+
+- 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 
 ### Performance
 

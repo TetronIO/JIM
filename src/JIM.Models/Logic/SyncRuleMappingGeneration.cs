@@ -45,7 +45,7 @@ public class SyncRuleMappingGeneration
 
     /// <summary>
     /// Sequence: the lowest number this flow will ever issue. The counter's actual floor
-    /// (<see cref="GeneratedValueSequence.NextValue"/>) is whichever of this and the counter's own progress is
+    /// (<see cref="JIM.Models.Transactional.GeneratedValueSequence.NextValue"/>) is whichever of this and the counter's own progress is
     /// higher; raising this value above the counter's current position skips ahead (plan decision 3). Ignored for
     /// other token kinds.
     /// </summary>
@@ -90,7 +90,7 @@ public class SyncRuleMappingGeneration
     /// <summary>
     /// The maximum number of candidates tried, per object per synchronisation run, before generation fails hard
     /// for that object (plan decision 15 covers remediation's separate, per-assignment-lifetime counter,
-    /// <see cref="GeneratedValueAssignment.RemediationCount"/>).
+    /// <see cref="JIM.Models.Transactional.GeneratedValueAssignment.RemediationCount"/>).
     /// </summary>
     public int AttemptLimit { get; set; } = 1000;
 
@@ -153,7 +153,7 @@ public class SyncRuleMappingGeneration
 
     /// <summary>
     /// Set for the duration of a single create/update call when that save raised the target attribute's
-    /// <see cref="GeneratedValueSequence"/> counter because <see cref="SequenceStart"/> stood above its current
+    /// <see cref="JIM.Models.Transactional.GeneratedValueSequence"/> counter because <see cref="SequenceStart"/> stood above its current
     /// position (Phase 3, plan decision 3). Transient: never persisted, and null on every ordinary read. The
     /// server that performed the save stamps it on the same tracked instance it returns, so the caller (a REST
     /// controller, PowerShell) can report the skip in that one response without a second round trip.

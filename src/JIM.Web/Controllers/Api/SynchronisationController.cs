@@ -4104,6 +4104,10 @@ public class SynchronisationController(
     ///
     /// Only Export rules that provision can set an initial password: only an account JIM has just created has
     /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
+    ///
+    /// `enableAccount` applies only to accounts whose enabled state no export has written by the time the password is
+    /// delivered: where one has (`userAccountControl` on Active Directory and Samba AD), the Attribute Flow decides.
+    /// `false` leaves the account as it was created.
     /// </remarks>
     /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The settings to change.</param>
@@ -5902,29 +5906,10 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
-        // Add sources
-        foreach (var sourceRequest in request.Sources)
-        {
-            var source = new ObjectMatchingRuleSource
-            {
-                Order = sourceRequest.Order
-            };
-
-            if (sourceRequest.ConnectedSystemAttributeId.HasValue)
-            {
-                var csAttr = objectType.Attributes.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
-                if (csAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
-                source.ConnectedSystemAttributeId = csAttr.Id;
-                source.ConnectedSystemAttribute = csAttr;
-            }
-            else
-            {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
-            }
-
-            rule.Sources.Add(source);
-        }
+        var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, objectType, ruleId: 0, out var sources);
+        if (sourcesError != null)
+            return sourcesError;
+        rule.Sources.AddRange(sources);
 
         try
         {
@@ -6020,37 +6005,16 @@ public class SynchronisationController(
             rule.TargetMetaverseAttribute = targetMvAttr;
         }
 
-        // Update sources if specified
+        // Update sources if specified, replacing the existing ones
         if (request.Sources != null)
         {
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
+            var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, objectType, rule.Id, out var sources);
+            if (sourcesError != null)
+                return sourcesError;
 
-            // Clear existing sources and add new ones
             rule.Sources.Clear();
-
-            foreach (var sourceRequest in request.Sources)
-            {
-                var source = new ObjectMatchingRuleSource
-                {
-                    Order = sourceRequest.Order,
-                    ObjectMatchingRuleId = rule.Id
-                };
-
-                if (sourceRequest.ConnectedSystemAttributeId.HasValue)
-                {
-                    var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
-                    if (csAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
-                    source.ConnectedSystemAttributeId = csAttr.Id;
-                    source.ConnectedSystemAttribute = csAttr;
-                }
-                else
-                {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
-                }
-
-                rule.Sources.Add(source);
-            }
+            rule.Sources.AddRange(sources);
         }
 
         // Update case sensitivity if specified
@@ -6133,6 +6097,49 @@ public class SynchronisationController(
     #endregion
 
     #region Synchronisation Rule Object Matching Rules (Advanced Mode)
+
+    /// <summary>
+    /// Builds an Object Matching Rule's sources from a request. Each source names exactly one of a Connected System
+    /// attribute on <paramref name="objectType"/> or an expression (#2052); whether the rule they make up is workable
+    /// is the application layer's to decide, so an expression is passed through for it to judge.
+    /// </summary>
+    /// <returns>The response to send instead when a source cannot be built; null when every source was built.</returns>
+    private IActionResult? TryBuildObjectMatchingRuleSources(
+        IEnumerable<CreateObjectMatchingRuleSourceRequest> requests,
+        ConnectedSystemObjectType? objectType,
+        int ruleId,
+        out List<ObjectMatchingRuleSource> sources)
+    {
+        sources = [];
+        foreach (var sourceRequest in requests)
+        {
+            var hasExpression = !string.IsNullOrWhiteSpace(sourceRequest.Expression);
+            if (sourceRequest.ConnectedSystemAttributeId.HasValue && hasExpression)
+                return BadRequest(ApiErrorResponse.BadRequest("A source gives either ConnectedSystemAttributeId or Expression, not both."));
+
+            var source = new ObjectMatchingRuleSource { Order = sourceRequest.Order, ObjectMatchingRuleId = ruleId };
+            if (sourceRequest.ConnectedSystemAttributeId is { } attributeId)
+            {
+                var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == attributeId);
+                if (csAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {attributeId} not found in object type."));
+                source.ConnectedSystemAttributeId = csAttr.Id;
+                source.ConnectedSystemAttribute = csAttr;
+            }
+            else if (hasExpression)
+            {
+                source.Expression = sourceRequest.Expression;
+            }
+            else
+            {
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must give ConnectedSystemAttributeId or Expression."));
+            }
+
+            sources.Add(source);
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// List Object Matching Rules for a Synchronisation Rule
@@ -6237,30 +6244,11 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive ?? ObjectMatchingDefaults.CaseSensitive
         };
 
-        // Add sources - for advanced mode, sources reference CS attributes from the Synchronisation Rule's object type
-        var objectType = syncRule.ConnectedSystemObjectType;
-        foreach (var sourceRequest in request.Sources)
-        {
-            var source = new ObjectMatchingRuleSource
-            {
-                Order = sourceRequest.Order
-            };
-
-            if (sourceRequest.ConnectedSystemAttributeId.HasValue)
-            {
-                var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
-                if (csAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
-                source.ConnectedSystemAttributeId = csAttr.Id;
-                source.ConnectedSystemAttribute = csAttr;
-            }
-            else
-            {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
-            }
-
-            rule.Sources.Add(source);
-        }
+        // Add sources - for advanced mode, sources read the Synchronisation Rule's object type
+        var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, syncRule.ConnectedSystemObjectType, ruleId: 0, out var sources);
+        if (sourcesError != null)
+            return sourcesError;
+        rule.Sources.AddRange(sources);
 
         try
         {
@@ -6345,36 +6333,15 @@ public class SynchronisationController(
             rule.TargetMetaverseAttribute = targetMvAttr;
         }
 
-        // Update sources if specified
+        // Update sources if specified, replacing the existing ones
         if (request.Sources != null)
         {
-            var objectType = syncRule.ConnectedSystemObjectType;
+            var sourcesError = TryBuildObjectMatchingRuleSources(request.Sources, syncRule.ConnectedSystemObjectType, rule.Id, out var sources);
+            if (sourcesError != null)
+                return sourcesError;
 
             rule.Sources.Clear();
-
-            foreach (var sourceRequest in request.Sources)
-            {
-                var source = new ObjectMatchingRuleSource
-                {
-                    Order = sourceRequest.Order,
-                    ObjectMatchingRuleId = rule.Id
-                };
-
-                if (sourceRequest.ConnectedSystemAttributeId.HasValue)
-                {
-                    var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
-                    if (csAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
-                    source.ConnectedSystemAttributeId = csAttr.Id;
-                    source.ConnectedSystemAttribute = csAttr;
-                }
-                else
-                {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
-                }
-
-                rule.Sources.Add(source);
-            }
+            rule.Sources.AddRange(sources);
         }
 
         // Update case sensitivity if specified

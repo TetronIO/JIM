@@ -32,7 +32,7 @@ JIM has one operation for giving somebody a password, **Set Password**, and you 
 | Reaches | The Connected System Objects you name, whether or not their system's Password Synchronisation is switched on | Every Connected System configured for Password Synchronisation, including those switched off (held) and those where the Connected System Object does not exist yet (delivered when it does) |
 | Expiry, unless you say otherwise | Change required at next sign-in: somebody else chose this password | Left to each system's own policy: the person chose it, and should not be made to choose another |
 | Told to you | The call waits up to ten seconds and reports what each Connected System Object did with the password | The call returns as soon as the change is recorded; ask it to wait if you want the outcomes |
-| Enable the Connected System Object | Available | Never: a propagated password reaches Connected System Objects an administrator may have disabled on purpose |
+| Enable the Connected System Object | Available | Never by choice: a propagated password reaches Connected System Objects an administrator may have disabled on purpose. It only finishes enabling a new Active Directory account that was disabled until it had a password |
 
 Name the Connected System Objects when you are choosing the password for somebody: onboarding them, or putting right one whose password was refused or forgotten. Name none when they have already changed their own password somewhere and the rest should catch up; this is also the shape a future capture agent, replaying a change made in another directory, would use.
 

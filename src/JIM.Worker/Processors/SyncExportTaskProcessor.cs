@@ -548,6 +548,13 @@ public class SyncExportTaskProcessor
         if (result.UnrecordedExportCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForUnrecorded(result.UnrecordedExportCount));
 
+        // Contained so the exports stay successful, but never left to the service log alone (#1121, #2064).
+        if (result.InitialPasswordStagingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordsNotStaged(result.InitialPasswordStagingFailedCount));
+
+        if (result.InitialPasswordMarkingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)

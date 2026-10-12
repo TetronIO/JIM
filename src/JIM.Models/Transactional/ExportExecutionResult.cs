@@ -161,11 +161,21 @@ public class ExportExecutionResult
     /// <para>
     /// Contained, but never silent. The accounts were created in the Connected System and their exports
     /// succeeded, so this must not fail the batch; unlike the optimistic apply above, though, nothing
-    /// self-heals a password that nobody knows is owed, so the count is reported on the Activity and an
-    /// administrator can re-stage by exporting again.
+    /// self-heals a password that nobody knows is owed, so the count is reported on the export Activity as a
+    /// warning and the service log names the accounts. Exporting again does not re-stage the passwords, because
+    /// only the Create that provisions an account stages one; an administrator sets them with the set-password
+    /// action instead.
     /// </para>
     /// </summary>
     public int InitialPasswordStagingFailedCount { get; set; }
+
+    /// <summary>
+    /// Number of exports that wrote an account's enabled state (#2064) whose owed first password JIM failed to mark as
+    /// set by an Attribute Flow. Contained like a staging failure: the directory has changed and the exports succeeded.
+    /// Not silent, because a password delivered to such an account would follow the provisioning Synchronisation
+    /// Rule's Enable Account instead of the flow, until Enforce State corrects it.
+    /// </summary>
+    public int InitialPasswordMarkingFailedCount { get; set; }
 
     /// <summary>
     /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was

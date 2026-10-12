@@ -12,7 +12,7 @@ namespace JIM.Models.Search;
 /// <c>B(t) = RelativeDateResolver.Resolve(count, unit, direction, t)</c>. Because the comparison operator
 /// only flips its result when the stored value crosses <c>B(t)</c>, and <c>B</c> is monotonic
 /// non-decreasing in <c>t</c>, every object whose result changed as the clock moved from
-/// <paramref name="afterUtc"/> to <paramref name="nowUtc"/> has its stored value in
+/// <c>afterUtc</c> to <c>nowUtc</c> has its stored value in
 /// <c>(B(afterUtc), B(nowUtc)]</c>. Resolving the boundary at both instants (rather than adding a raw
 /// offset) makes whole-day rounding fall out correctly: with day-or-coarser units the boundary only moves
 /// at midnight, so the window is empty between midnights.

@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -91,6 +91,51 @@ Describe 'Test-LabMatrix for upgrade cells' {
         $matrix.Cells[0].MemoryGiB = 12
 
         Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Test-LabMatrix for the installer''s cases and an external database' {
+    It 'accepts an installer cases cell' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Scenario = 'InstallerCases'
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'accepts an external database cell with memory for its database server' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Scenario = 'ExternalDatabase'
+        $matrix.Cells[0].DatabaseMemoryGiB = 2
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'refuses an external database cell with no memory for its database server' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Scenario = 'ExternalDatabase'
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: an ExternalDatabase cell needs DatabaseMemoryGiB, at least 1, for its database server')
+    }
+
+    It 'refuses memory for a database server in a cell that has none' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].DatabaseMemoryGiB = 2
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: DatabaseMemoryGiB is for ExternalDatabase cells only')
+    }
+}
+
+Describe 'Get-LabCellMemory' {
+    It 'is the cell''s VM memory' {
+        Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6 } | Should -Be 6
+    }
+
+    It 'adds its database server''s memory' {
+        Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6; DatabaseMemoryGiB = 2 } | Should -Be 8
+    }
+
+    It 'reads a cell read back from JSON' {
+        Get-LabCellMemory -Cell ('{"Name":"a","MemoryGiB":6,"DatabaseMemoryGiB":2}' | ConvertFrom-Json) | Should -Be 8
     }
 }
 
@@ -164,6 +209,12 @@ Describe 'Select-LabCellToStart' {
 
         (Select-LabCellToStart -Pending $pending -RunningGiB 6 -RunningCount 1 -BudgetGiB 100 -MaxParallel 2).Name |
             Should -Be @('a')
+    }
+
+    It 'counts a cell''s database server with it' {
+        $pending = @(@{ Name = 'ext'; MemoryGiB = 6; DatabaseMemoryGiB = 2 }, (New-Cell 'a' 7))
+
+        (Select-LabCellToStart -Pending $pending -RunningGiB 0 -BudgetGiB 14).Name | Should -Be @('ext')
     }
 
     It 'keeps the matrix''s order among cells of the same size' {
@@ -356,5 +407,54 @@ Describe 'ConvertTo-LabMegabytes' {
 
     It 'fails on a size it cannot read' {
         { ConvertTo-LabMegabytes '8gb' } | Should -Throw '*8gb*'
+    }
+}
+
+Describe 'Get-LabSetupMessage' {
+    BeforeAll {
+        $script:output = @(
+            "`e[0;34m`e[1m[INFO]`e[0m Checking prerequisites..."
+            "`e[0;32m`e[1m[OK]`e[0m   All prerequisites met"
+            "`e[1;33m`e[1m[WARN]`e[0m JIM_DB_SHARED_BUFFERS is 3000MB, more than half this host's 5.7 GB of memory"
+            '  a continuation line'
+            '[ERR]  JIM_DB_SHARED_BUFFERS is 64GB, which this host cannot give'
+        )
+    }
+
+    It 'returns the installer''s messages at a level, without colour or label' {
+        Get-LabSetupMessage -Line $output -Level WARN |
+            Should -Be @("JIM_DB_SHARED_BUFFERS is 3000MB, more than half this host's 5.7 GB of memory")
+    }
+
+    It 'reads messages written without colour' {
+        Get-LabSetupMessage -Line $output -Level ERR | Should -Be @('JIM_DB_SHARED_BUFFERS is 64GB, which this host cannot give')
+    }
+
+    It 'reads a message printed after a question, on the question''s line' {
+        $line = "Overwrite configuration? [y/N]: `e[0;34m`e[1m[INFO]`e[0m Aborting. Existing installation left untouched."
+
+        Get-LabSetupMessage -Line $line -Level INFO | Should -Be @('Aborting. Existing installation left untouched.')
+    }
+
+    It 'returns nothing when there is no message at the level' {
+        Get-LabSetupMessage -Line @('[OK]   done') -Level ERR | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Compare-LabFingerprint' {
+    It 'returns nothing for two fingerprints that are the same' {
+        Compare-LabFingerprint -Before @('a1 .env', 'jim.web image') -After @('a1 .env', 'jim.web image') | Should -BeNullOrEmpty
+    }
+
+    It 'returns what went and what came, in the order of the fingerprint' {
+        $before = @('a1 .env', 'b2 docker-compose.yml', 'jim.web image:1')
+        $after = @('a1 .env', 'c3 docker-compose.yml', 'jim.web image:1', '.before-setup')
+
+        Compare-LabFingerprint -Before $before -After $after |
+            Should -Be @('- b2 docker-compose.yml', '+ c3 docker-compose.yml', '+ .before-setup')
+    }
+
+    It 'counts an empty fingerprint as one' {
+        Compare-LabFingerprint -Before @() -After @('x') | Should -Be @('+ x')
     }
 }

@@ -121,13 +121,14 @@ function Get-IntegrationScenarioSetupParameters {
         Attribute Flows, #1750). The switches belong here rather than as Setup-Scenario-001.ps1's defaults,
         because the scenarios that compose that setup as their substrate rely on its sourced identifiers.
 
-        On the Active Directory lab Scenario 001 also gives its provisioning Synchronisation Rule an Initial
-        Password (-InitialPassword, #2039). Real Active Directory refuses to create an enabled account that has no
-        password (0000052D), and the scenario's userAccountControl Attribute Flow asks for an enabled one. With an
-        Initial Password JIM creates the account disabled and the password's delivery enables it, so the flow
-        stays in place and Tests 2d and 2e still disable and enable accounts from HR data. Samba AD accepts an
-        enabled account with no password, and OpenLDAP and 389 Directory Server have no userAccountControl, so
-        those labs run without one, exactly as before.
+        On the Active Directory and Samba AD labs Scenario 001 also gives its provisioning Synchronisation Rule an
+        Initial Password (-InitialPassword). Real Active Directory refuses to create an enabled account that has no
+        password (0000052D, #2039), and the scenario's userAccountControl Attribute Flow asks for an enabled one.
+        With an Initial Password JIM creates the account disabled and the password's delivery enables it, so the
+        flow stays in place and Tests 2d and 2e still disable and enable accounts from HR data. Samba AD accepts an
+        enabled account with no password, but runs with one too: it is where an Initial Password once enabled an
+        account the flow creates disabled (#2064), and Test 1 asserts the HR data's Archived joiner stays disabled.
+        OpenLDAP and 389 Directory Server have no userAccountControl, so those labs run without one.
     .PARAMETER DirectoryType
         The directory the scenario runs against, as Get-DirectoryConfig names it in the DirectoryType key of the
         configuration it returns (SambaAD, OpenLDAP, DirectoryServer389 or ActiveDirectory). Empty or null for a
@@ -149,7 +150,7 @@ function Get-IntegrationScenarioSetupParameters {
     switch ($ScenarioNumber) {
         1 {
             $parameters = @{ GenerateAccountName = $true; DeriveFromAccountName = $true }
-            if ($DirectoryType -eq 'ActiveDirectory') {
+            if ($DirectoryType -in @('ActiveDirectory', 'SambaAD')) {
                 $parameters.InitialPassword = $true
             }
             return $parameters

@@ -74,9 +74,11 @@ function Set-JIMMetaverseObjectPassword {
         ExpiresAccordingToTargetPolicy without it (the person chose it, and should not be made to choose another).
 
     .PARAMETER EnableAccount
-        Enables the named accounts as part of setting the password. Omit it to leave their enabled state
-        untouched. Only available with -ConnectedSystemId: a password propagated to every configured system never
-        enables an account, because it reaches accounts an administrator may have disabled on purpose.
+        Enables the named accounts as part of setting the password. Omit it to leave their enabled state as it is,
+        except for a new Active Directory account JIM created disabled only until it had a password, which the
+        password enables as its Attribute Flow asks. Only available with -ConnectedSystemId: a password propagated to
+        every configured system enables no other account, because it reaches accounts an administrator may have
+        disabled on purpose.
 
     .PARAMETER Wait
         How many seconds, from 0 to 30, to wait for the systems to answer before returning. Defaults to 10 with
@@ -295,7 +297,7 @@ function Set-JIMMetaverseObjectPassword {
             $action = "Set the password on every Connected System configured for Password Synchronisation"
         }
 
-        if (-not ($Force -or $PSCmdlet.ShouldProcess($target, $action))) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action $action -Force:$Force)) {
             return
         }
 

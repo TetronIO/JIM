@@ -165,6 +165,9 @@ public class ConnectedSystemObject
     /// this, and <see cref="JoinType"/> follows from the method, so the record cannot describe a different join from
     /// the one made.
     /// </summary>
+    /// <param name="method">How the object was joined.</param>
+    /// <param name="syncRule">The Synchronisation Rule responsible for the join, if any.</param>
+    /// <param name="dateJoined">When the join was made.</param>
     /// <param name="matchingRule">For a join made by matching, the Object Matching Rule that found the match (#2052).</param>
     /// <param name="matchValue">For a join made by matching, the value it matched on (#2052).</param>
     public void RecordJoin(ConnectedSystemObjectJoinMethod method, SyncRule? syncRule, DateTime dateJoined,
@@ -253,7 +256,7 @@ public class ConnectedSystemObject
 
     /// <summary>
     /// Whether a Full Synchronisation loading with <paramref name="watermark"/> (see
-    /// <see cref="ConnectedSystem.GetUnchangedObjectWatermark"/>) treats this object as unchanged and skips it: a joined,
+    /// <c>ConnectedSystem.GetUnchangedObjectWatermark</c>) treats this object as unchanged and skips it: a joined,
     /// normal object neither created nor updated since. One rule for the run's loader and the Full Synchronisation
     /// preview (#1530), so the preview never proposes a change for an object the run will not process.
     /// </summary>
