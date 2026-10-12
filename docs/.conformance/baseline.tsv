@@ -19,7 +19,6 @@ LANG-3	configuration/schedules.md	2
 LANG-3	configuration/service-settings.md	1
 LANG-3	configuration/sync-preview.md	2
 LANG-3	connectors/index.md	6
-LANG-3	getting-started/index.md	1
 LANG-3	powershell/api-keys.md	3
 LANG-3	powershell/certificates.md	3
 LANG-3	powershell/connected-systems.md	20
@@ -94,8 +93,6 @@ STR-2	connectors/jim-scim-connector.md	4
 STR-2	connectors/jim-sql-connector-delta-import-change-log.md	4
 STR-2	connectors/jim-sql-connector-delta-import-watermark.md	4
 STR-2	connectors/jim-sql-connector.md	4
-STR-2	getting-started/index.md	2
-STR-2	getting-started/quickstart.md	2
 STR-2	powershell/activities.md	3
 STR-2	powershell/api-keys.md	3
 STR-2	powershell/certificates.md	3
