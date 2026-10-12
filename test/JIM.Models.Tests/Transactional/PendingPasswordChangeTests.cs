@@ -714,6 +714,31 @@ public class PendingPasswordChangeTests
         }
     }
 
+    /// <summary>
+    /// Whether an export wrote the account's enabled state (#2064) describes the account a Provisioned row was staged
+    /// for, so it follows the row the same way: a re-provisioned account's new row carries its own export's answer,
+    /// and an administrator's reset replacing a Provisioned row carries none.
+    /// </summary>
+    [Test]
+    public void Supersede_CarriesTheNewerRowsEnabledStateSetByAttributeFlow()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+
+        var reprovisioned = Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: 12);
+        reprovisioned.EnabledStateSetByAttributeFlow = true;
+        change.Supersede(reprovisioned);
+
+        Assert.That(change.EnabledStateSetByAttributeFlow, Is.True);
+
+        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1), PendingPasswordChangeOrigin.Explicit));
+
+        Assert.That(change.EnabledStateSetByAttributeFlow, Is.False,
+            "An administrator's reset carries no export's answer, and must not inherit the provisioned row's.");
+    }
+
     [Test]
     public void Supersede_TakesTheNewerChangesAccount()
     {

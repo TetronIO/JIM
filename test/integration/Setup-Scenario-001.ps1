@@ -72,10 +72,11 @@
     one, JIM creates the account disabled (514, the flow's value with ACCOUNTDISABLE added), the Password
     Delivery Service sets the password and enables the account, and the confirming import holds the interim
     value meanwhile rather than reporting the export as unconfirmed. Enabling and disabling accounts from HR
-    data (Scenario 001's Tests 2d and 2e) keeps working, because the flow keeps writing the enabled state.
-    Get-IntegrationScenarioSetupParameters turns this on for Scenario 001 on the Active Directory lab only:
-    Samba AD accepts an enabled account with no password, and OpenLDAP and 389 Directory Server have no
-    userAccountControl.
+    data (Scenario 001's Tests 2d and 2e) keeps working, because the flow keeps writing the enabled state, and an
+    account the flow creates disabled (an Archived joiner) stays disabled when its password is delivered, because
+    the flow, not EnableAccount, decides the enabled state (#2064). Get-IntegrationScenarioSetupParameters turns
+    this on for Scenario 001 on the Active Directory and Samba AD labs: Samba AD accepts an enabled account with no
+    password, but is where #2064 reproduced. OpenLDAP and 389 Directory Server have no userAccountControl.
 
     The password expires according to the directory's own policy (ExpiresAccordingToTargetPolicy). NeverExpires
     is deliberately not used: its delivery adds DONT_EXPIRE_PASSWORD (0x10000), leaving 66048 where the flow

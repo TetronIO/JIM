@@ -47,6 +47,25 @@ public class ConnectedSystemExportResult
     public IReadOnlyList<string>? AttributesAwaitingInitialPassword { get; set; }
 
     /// <summary>
+    /// Whether this export wrote the attribute through which the Connected System enables or disables the account
+    /// (#2064): <c>userAccountControl</c> on Active Directory and Samba AD. Reported on any successful export that wrote
+    /// it, whether a Create's add, an Update's modify, or a Delete performed as a disable.
+    /// <para>
+    /// JIM records it on the account's owed Initial Password, and a password delivered to an account whose enabled
+    /// state an export wrote leaves that state to the Attribute Flow, rather than applying the provisioning
+    /// Synchronisation Rule's Enable Account. Without it an account the flow creates disabled (a pre-hire, or a person
+    /// archived at creation) would be enabled with a password JIM knows. The Connector only observes: it decides
+    /// nothing about the account.
+    /// </para>
+    /// <para>
+    /// A non-empty <see cref="AttributesAwaitingInitialPassword"/> implies this is true: an enable withheld until the
+    /// password exists is a flow-set enabled state, which is what lets the delivery complete it. False from every
+    /// Connector whose password channel has no notion of enabling an account.
+    /// </para>
+    /// </summary>
+    public bool SetsAccountEnabledState { get; set; }
+
+    /// <summary>
     /// The primary external ID assigned by the target system.
     /// For LDAP, this would be the objectGUID.
     /// For systems that don't generate IDs, this may be null.
