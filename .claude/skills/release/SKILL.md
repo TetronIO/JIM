@@ -409,7 +409,7 @@ Tell the user to verify after the workflow completes:
 - [ ] Docker images are available: `ghcr.io/tetronio/jim-web:<version>`, etc.
 - [ ] PowerShell module is available on PSGallery: `Install-Module JIM -RequiredVersion <version>`
 - [ ] The `setup.sh` installer detects the new release
-- [ ] The product tour's screenshots: the `jim-screenshots` job in the release commit's `jim-pre-release` run opens a junctional.io pull request, `Product tour screenshots for JIM v<version>`. Look through the images and each step's alt text, and merge it now the release is published. If the job failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
+- [ ] The product tour's screenshots: the `jim-screenshots` job in the release commit's `jim-pre-release` run opens a junctional.io pull request, `Product tour screenshots for JIM v<version>`, and a tetron.io one, `JIM screenshot for JIM v<version>`. Look through the junctional.io images and each step's alt text, and the tetron.io preview deployment, and merge both now the release is published. If the job failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
 
 Provide the Actions URL for monitoring:
 ```
