@@ -2479,11 +2479,12 @@ public class ExportExecutionServer
     /// Pending Export updates, or the Activity (D7).
     /// </summary>
     /// <returns>
-    /// True when the values were recorded (or there was nothing to record); false when recording failed. The calls
-    /// path does not need the answer, because its confirming import self-heals; an auto-confirmed file export does
-    /// (#1936), because nothing ever imports from its target.
+    /// The exports whose values were not all recorded: every one of them when recording failed, otherwise those carrying a
+    /// change whose value is held in another data type's column than its attribute's (#2183). The calls path does not
+    /// need the answer, because its confirming import self-heals; an auto-confirmed file export does (#1936), because
+    /// nothing ever imports from its target.
     /// </returns>
-    private async Task<bool> ApplyOptimisticExportUpdatesAsync(
+    private async Task<List<PendingExport>> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
         ISyncRepository repository)
@@ -2506,6 +2507,9 @@ public class ExportExecutionServer
             // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(
                 successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
+
+            if (delta.UnrecordedChanges.Count > 0)
+                LogUnrecordedChanges(delta.UnrecordedChanges, successfulNonDeleteExports[0].ConnectedSystemId);
 
             // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
             // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -2562,7 +2566,8 @@ public class ExportExecutionServer
                     successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
             }
 
-            return true;
+            var unrecordedExportIds = delta.UnrecordedChanges.Select(c => c.PendingExportId).ToHashSet();
+            return successfulNonDeleteExports.Where(pe => unrecordedExportIds.Contains(pe.Id)).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2570,8 +2575,27 @@ public class ExportExecutionServer
             Log.Warning(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply failed for Connected System {ConnectedSystemId} " +
                 "({Count} Pending Exports); a confirming import will self-heal, and auto-confirmed exports are left to be sent again",
                 successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
-            return false;
+            return successfulNonDeleteExports;
         }
+    }
+
+    /// <summary>
+    /// Logs, once per batch, the exported changes optimistic apply could not record (#2183): each was written with its
+    /// value in another data type's column than its attribute's, which an export Attribute Flow expression returning
+    /// another type produces. A Warning, because the target now holds a value JIM has no record of; the Activity of an
+    /// auto-confirmed export says so too, and names this log as where the cause is.
+    /// </summary>
+    private static void LogUnrecordedChanges(IReadOnlyCollection<OptimisticExportUnrecordedChange> unrecordedChanges, int connectedSystemId)
+    {
+        var attributes = string.Join(", ", unrecordedChanges
+            .Select(c => $"{LogSanitiser.Sanitise(c.AttributeName)} ({c.AttributeType}, given {c.HeldDataType?.ToString() ?? "nothing"})")
+            .Distinct());
+        Log.Warning("ApplyOptimisticExportUpdatesAsync: {Count} exported changes to Connected System {ConnectedSystemId} could not be " +
+            "recorded, because each gave its attribute a value of another data type (an export Attribute Flow expression " +
+            "returning another type does this): {Attributes}. A confirming import records what the target holds; an " +
+            "auto-confirmed export is left unconfirmed. Connected System Objects: {ConnectedSystemObjectIds}",
+            unrecordedChanges.Count, connectedSystemId, attributes,
+            DescribeConnectedSystemObjectIds(unrecordedChanges.Select(c => c.ConnectedSystemObjectId).Distinct()));
     }
 
     /// <summary>
@@ -2796,18 +2820,21 @@ public class ExportExecutionServer
     /// <c>IsReadyForExecution</c> treats as "send again" for a Create and an Update alike. The next export run then
     /// writes the same row again (the File Connector merges into the existing file, so a repeat is harmless) and
     /// retries the recording. Confirming it regardless would leave JIM's view of the target missing those values,
-    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target.
+    /// with no import ever coming to repair it, so a value later cleared would never be cleared in the target. An
+    /// export carrying a value held as another data type than its attribute's (#2183) is left the same way; its recording
+    /// fails again on every retry until the Attribute Flow stages the attribute's own type, so the warning repeats on each
+    /// run instead of the export being confirmed with nothing recorded.
     /// </summary>
-    /// <param name="successfulNonDeleteExports">The exports whose values the failed recording covered.</param>
+    /// <param name="unrecordedExports">The exports whose values were not all recorded.</param>
     /// <param name="exportsToDelete">The auto-confirmed exports about to be deleted; those left unconfirmed are taken out.</param>
     /// <param name="result">Counts the exports left unconfirmed, for the Activity's warning.</param>
     private async Task LeaveUnrecordedExportsUnconfirmedAsync(
-        List<PendingExport> successfulNonDeleteExports,
+        List<PendingExport> unrecordedExports,
         List<PendingExport> exportsToDelete,
         ExportExecutionResult result)
     {
         var now = DateTime.UtcNow;
-        foreach (var export in successfulNonDeleteExports)
+        foreach (var export in unrecordedExports)
         {
             foreach (var change in export.AttributeValueChanges.Where(c => c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
                 change.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
@@ -2816,19 +2843,19 @@ public class ExportExecutionServer
             export.LastAttemptedAt = now;
         }
 
-        var unrecorded = successfulNonDeleteExports.ToHashSet();
+        var unrecorded = unrecordedExports.ToHashSet();
         exportsToDelete.RemoveAll(unrecorded.Contains);
 
         using (Diagnostics.Diagnostics.Database.StartSpan("UpdateUnrecordedPendingExports")
-            .SetTag("count", successfulNonDeleteExports.Count))
+            .SetTag("count", unrecordedExports.Count))
         {
-            await SyncRepo.UpdatePendingExportsAsync(successfulNonDeleteExports);
+            await SyncRepo.UpdatePendingExportsAsync(unrecordedExports);
         }
 
-        result.UnrecordedExportCount += successfulNonDeleteExports.Count;
+        result.UnrecordedExportCount += unrecordedExports.Count;
         Log.Warning("LeaveUnrecordedExportsUnconfirmedAsync: {Count} auto-confirmed exports to Connected System {ConnectedSystemId} were written, " +
             "but their values could not be recorded; they are left unconfirmed and will be sent again on the next export run",
-            successfulNonDeleteExports.Count, successfulNonDeleteExports[0].ConnectedSystemId);
+            unrecordedExports.Count, unrecordedExports[0].ConnectedSystemId);
     }
 
     /// <summary>
@@ -3129,12 +3156,14 @@ public class ExportExecutionServer
             // Issue #1936: record the exported values. LAST among the CSO writes, after
             // BatchUpdateCsosAfterSuccessfulExportAsync, so its external-Id additions are already reflected in each
             // CSO's AttributeValues (#1079's D9/D11 ordering), and BEFORE the auto-confirmed exports are deleted,
-            // because confirming an export whose values were not recorded would leave nothing to repair it.
-            var valuesRecorded = successfulNonDeleteExports.Count == 0 ||
-                                 await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+            // because confirming an export whose values were not recorded would leave nothing to repair it. That covers
+            // a recording that failed outright and an export carrying a value it could not record (#2183).
+            var unrecordedExports = successfulNonDeleteExports.Count == 0
+                ? []
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
 
-            if (autoConfirm && !valuesRecorded)
-                await LeaveUnrecordedExportsUnconfirmedAsync(successfulNonDeleteExports, exportsToDelete, result);
+            if (autoConfirm && unrecordedExports.Count > 0)
+                await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
 
             await ClearRenameAuthorisationsAfterSuccessfulExportAsync(successfulNonDeleteExports, SyncRepo);
 
