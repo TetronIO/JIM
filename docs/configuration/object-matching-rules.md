@@ -33,6 +33,8 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 | **Ambiguous Provisioning Match** | Before provisioning, the rule's values match several existing Connected System Objects; the Activity item lists them, and nothing joins or provisions for that export rule. See [Ambiguous Provisioning Match](../administration/troubleshooting-synchronisation.md) |
 | **Object Matching Rule Failed** | The rule cannot be worked out; nothing joins, projects or provisions, and no later rule is tried |
 
+A join to a Metaverse Object also records the rule and value on the joining object's [Activity item](activity-execution-items.md), and a [Sync Preview](sync-preview.md) names them for a join it predicts.
+
 ## Matching on an expression
 
 Two systems often hold the same identifier in different formats: a directory stores `1007` where HR has `E1007`, pads

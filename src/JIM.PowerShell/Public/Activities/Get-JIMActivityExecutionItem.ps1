@@ -111,6 +111,15 @@ function Get-JIMActivityExecutionItem {
         Lists the identities an ambiguous match found, the value each matched on, and where each is connected.
 
     .EXAMPLE
+        Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+            Where-Object ObjectChangeType -eq 'Joined' |
+            Get-JIMActivityExecutionItem |
+            Select-Object DisplayNameSnapshot, JoinMatchedValue, JoinObjectMatchingRuleDescriptionSnapshot
+
+        Lists each object a synchronisation joined, with the value it matched on and the Object Matching Rule that
+        made the join.
+
+    .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
             Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
 

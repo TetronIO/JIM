@@ -1332,4 +1332,17 @@ public class CausalityModelBuilderTests
     }
 
     #endregion
+
+    [Test]
+    public void Build_JoinedByMatching_CarriesTheRuleAndValueItMatchedOn()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.JoinedByMatchingItem(), CausalityTestData.NewJoinerContext());
+
+        var joined = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joined.ObjectMatchingRuleDescription, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(joined.MatchedValue, Is.EqualTo("48213"));
+        }
+    }
 }

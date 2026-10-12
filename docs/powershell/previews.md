@@ -419,7 +419,9 @@ Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId <int> -Id <guid>
 
 Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the object project or join, and what would flow), `ProposedExports`, `Errors`, `Warnings`, `HasBlockingErrors` and `AffectedSyncRules`.
 
-Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
+Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage`, `StagedChangeType`, `ObjectMatchingRule` and `MatchedValue`, in the tree's own display order.
+
+On a join made by matching, `ObjectMatchingRule` says what the [Object Matching Rule](../configuration/object-matching-rules.md) compares (falling back to its id) and `MatchedValue` the value the join would match on; both are empty on every other row. `Inbound` carries the same two facts as `WouldJoinObjectMatchingRuleDescription` and `WouldJoinMatchedValue`, with the rule's id in `WouldJoinObjectMatchingRuleId`.
 
 Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](execution-items.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 

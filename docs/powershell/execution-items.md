@@ -67,6 +67,9 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `SourceLocation` | `string` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | `MatchCandidateDetailDto[]` | For an `AmbiguousMatch`, the Metaverse Objects the match found, and for an `AmbiguousProvisioningMatch`, the Connected System Objects: up to 10, ordered by display name, each with whether it still exists and, for a Metaverse Object, what is joined to it now. Empty for any other item. |
+| `JoinObjectMatchingRuleId` | `int` | For an object joined to an existing Metaverse Object by matching, the id of the Object Matching Rule that found it; empty for any other item. The rule may since have been changed or deleted; the description below records what it compared at the time. |
+| `JoinObjectMatchingRuleDescriptionSnapshot` | `string` | For an object joined by matching, what the Object Matching Rule compared when the join was made, for example `Employee ID equals employeeId`; empty for any other item. |
+| `JoinMatchedValue` | `string` | For an object joined by matching, the value the join matched on: what the rule computed from the object, with several separated by commas for a multi-valued source. Empty for any other item. |
 
 **`CauseCohort`** (Causes):
 
@@ -112,7 +115,7 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 
-An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object. Each candidate in `MatchCandidates` carries:
+An object can join only one Metaverse Object, so when its [Object Matching Rule](../configuration/object-matching-rules.md) finds several, the object is neither joined nor projected. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object. Each candidate in `MatchCandidates` carries:
 
 | Property | Description |
 |----------|-------------|

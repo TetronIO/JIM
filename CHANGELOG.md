@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The REST API and PowerShell can read what caused an Activity's execution item and what it went on to cause, with exact counts and where each branch ended (`Get-JIMActivityExecutionItem -Causes` and `-Consequences`, `Get-JIMCausalCohortMember`). (#1811)
 - ✨ An **Ambiguous Match** now lists the Metaverse Objects it found on the Activity item, each linked, with the value it matched on and what it's joined to; REST, `Get-JIMActivityExecutionItem` and Sync Preview return them too. (#2052)
 - ✨ A connection joined by an Object Matching Rule now says which rule matched and on what value, on the Connections tab, in REST and in `Get-JIMMetaverseObjectConnection`. (#2052)
+- ✨ An object joined by an Object Matching Rule now says on its Activity item which rule matched and on what value, and Sync Preview says the same of a join it predicts; also via REST, `Get-JIMActivityExecutionItem` and the Sync Preview cmdlets. (#2052)
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 - ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
 - ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
@@ -79,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)

@@ -222,6 +222,167 @@ public class SyncOutcomeSyncRuleAttributionDatabaseTests
             "The cross-page merge read must carry the staged kind, or a same-page merge would silently drop it");
     }
 
+    /// <summary>
+    /// A Joined outcome made by matching records which Object Matching Rule found the Metaverse Object and on what
+    /// value (#2052). The update path writes new outcomes through the parameterised multi-row INSERT
+    /// (<c>BulkInsertSyncOutcomesRawAsync</c>), a writer separate from the create path's COPY, so it needs its own
+    /// round trip.
+    /// </summary>
+    [Test]
+    public async Task BulkUpdateRpeiOutcomesAsync_JoinedOutcomeWithMatchSource_PersistsTheColumnsAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Joined,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+
+            var joined = new ActivityRunProfileExecutionItemSyncOutcome
+            {
+                Id = Guid.NewGuid(),
+                ActivityRunProfileExecutionItemId = rpei.Id,
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                ObjectMatchingRuleId = 12,
+                ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals \"E\" + Trim(cs[\"employeeId\"])",
+                MatchedValue = "E1007"
+            };
+            await repository.Sync.BulkUpdateRpeiOutcomesAsync([rpei], [joined]);
+        }
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking().SingleAsync(o => o.ActivityRunProfileExecutionItemId == rpei.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(persisted.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals \"E\" + Trim(cs[\"employeeId\"])"));
+            Assert.That(persisted.MatchedValue, Is.EqualTo("E1007"));
+        }
+    }
+
+    /// <summary>
+    /// The cross-page merge read must carry a Joined outcome's match source too (#2052), or a reference resolved at
+    /// page end would merge into a tree that has lost which rule made the join.
+    /// </summary>
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_JoinedOutcomeWithMatchSource_ReturnsTheColumnsAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var csoId = await SeedConnectedSystemObjectAsync();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Joined,
+            ConnectedSystemObjectId = csoId,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+        rpei.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 12,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeId",
+            MatchedValue = "1007"
+        });
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var readCtx = NewContext();
+        var merged = await new PostgresDataRepository(readCtx).Sync.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(activityId, [csoId]);
+
+        var mergedOutcome = merged.Single().Rpei.SyncOutcomes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mergedOutcome.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(mergedOutcome.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeId"));
+            Assert.That(mergedOutcome.MatchedValue, Is.EqualTo("1007"));
+        }
+    }
+
+    /// <summary>
+    /// The Run Profile Execution Item detail endpoint reads an item's Joined outcome on its own (#2052), to say which
+    /// rule made the join and on what value, without loading the item's whole tree.
+    /// </summary>
+    [Test]
+    public async Task GetJoinedOutcomeAsync_ItemThatJoinedByMatching_ReturnsTheJoinedOutcomeWithItsMatchSourceAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Joined,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+        var joined = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 12,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeId",
+            MatchedValue = "1007"
+        };
+        joined.Children.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            ParentSyncOutcome = joined,
+            DetailCount = 3
+        });
+        rpei.SyncOutcomes.Add(joined);
+        rpei.SyncOutcomes.Add(joined.Children[0]);
+
+        await using (var ctx = NewContext())
+        {
+            await new PostgresDataRepository(ctx).Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var readCtx = NewContext();
+        var outcome = await new PostgresDataRepository(readCtx).Activity.GetJoinedOutcomeAsync(rpei.Id);
+
+        Assert.That(outcome, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Joined));
+            Assert.That(outcome.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(outcome.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeId"));
+            Assert.That(outcome.MatchedValue, Is.EqualTo("1007"));
+        }
+    }
+
+    [Test]
+    public async Task GetJoinedOutcomeAsync_ItemWithNoJoinedOutcome_ReturnsNullAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            DisplayNameSnapshot = "Ann Bloggs"
+        };
+        rpei.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome { OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected });
+
+        await using (var ctx = NewContext())
+        {
+            await new PostgresDataRepository(ctx).Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        await using var readCtx = NewContext();
+        Assert.That(await new PostgresDataRepository(readCtx).Activity.GetJoinedOutcomeAsync(rpei.Id), Is.Null);
+    }
+
     private async Task<Guid> SeedActivityAsync()
     {
         await using var ctx = NewContext();

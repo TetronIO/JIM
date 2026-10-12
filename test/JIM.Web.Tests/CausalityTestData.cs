@@ -157,6 +157,22 @@ public static class CausalityTestData
     }
 
     /// <summary>
+    /// A record joined to an existing Identity by an Object Matching Rule (#2052), with what the rule compared and
+    /// the value it matched on recorded on the Joined outcome.
+    /// </summary>
+    public static ActivityRunProfileExecutionItem JoinedByMatchingItem()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: MvoId, targetEntityDescription: "Liam Allen",
+            syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+        joined.ObjectMatchingRuleId = 3;
+        joined.ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeNumber";
+        joined.MatchedValue = "48213";
+        return item;
+    }
+
+    /// <summary>
     /// Scenario 2 (PRD): a record leaves the scope of its Synchronisation Rule; the Identity's last
     /// authoritative source disconnects and the Identity is deleted, with deprovisioning queued for
     /// two downstream systems.

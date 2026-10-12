@@ -863,13 +863,17 @@ public class SyncPreviewServer
         }
         else
         {
-            var matchedMvo = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, guardedRepository, result);
+            // The match a would-be join is made on (#2052), named on the inbound summary and on the Joined node.
+            var joinMatch = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, guardedRepository, result);
             if (result.HasBlockingErrors)
                 return result;
 
-            if (matchedMvo != null)
+            if (joinMatch?.MetaverseObject is { } matchedMvo)
             {
                 inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
+                inbound.WouldJoinObjectMatchingRuleId = joinMatch.Rule.Id > 0 ? joinMatch.Rule.Id : null;
+                inbound.WouldJoinObjectMatchingRuleDescription = joinMatch.Rule.DescribeComparison();
+                inbound.WouldJoinMatchedValue = joinMatch.MatchedValue;
                 workingMvo = CloneForPreview(matchedMvo);
                 flaggedForScopeReview = matchedMvo.ScopeReviewPending;
                 DescribeMetaverseObject(inbound, matchedMvo);
@@ -1104,8 +1108,10 @@ public class SyncPreviewServer
 
         // The speculative outcome tree, in the real tree's shape: a Projected/Joined/AttributeFlow root
         // when attributes would flow, an Attribute Flow child under Projected/Joined, and the outbound
-        // outcomes beneath (mirroring the real processor's exportParent selection).
-        if (flowCount > 0)
+        // outcomes beneath (mirroring the real processor's exportParent selection). A projection or join is a
+        // change in its own right, so the run records its root even when nothing flows (the processor's lone
+        // Projected or Joined outcome for an object with no attribute changes), and so must the preview.
+        if (flowCount > 0 || inbound.WouldProject || inbound.WouldJoinMetaverseObjectId.HasValue)
         {
             var rootType = inbound.WouldProject ? ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 : inbound.WouldJoinMetaverseObjectId.HasValue ? ActivityRunProfileExecutionItemSyncOutcomeType.Joined
@@ -1118,6 +1124,12 @@ public class SyncPreviewServer
                 SyncRuleId = rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected ? projectionSyncRule?.Id : null,
                 SyncRuleName = rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected ? projectionSyncRule?.Name : null
             };
+            if (rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            {
+                root.ObjectMatchingRuleId = inbound.WouldJoinObjectMatchingRuleId;
+                root.ObjectMatchingRuleDescriptionSnapshot = inbound.WouldJoinObjectMatchingRuleDescription;
+                root.MatchedValue = inbound.WouldJoinMatchedValue;
+            }
             result.OutcomeTree.Add(root);
 
             // Unique Value Generation (#242): a GeneratedValueAssigned child per
@@ -1140,8 +1152,9 @@ public class SyncPreviewServer
             }
 
             SyncOutcomeNode? attributeFlowChild = null;
-            if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            if (flowCount > 0
+                && rootType is (ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                    or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
             {
                 attributeFlowChild = new SyncOutcomeNode
                 {
@@ -2372,8 +2385,9 @@ public class SyncPreviewServer
     /// join, without claiming anything. Advanced mode reads each import rule's own matching rules; simple
     /// mode's rules live on the object type. An ambiguous match is an expected block: it lands in the
     /// result's Errors, exactly as the real synchronisation would fail the object with an AmbiguousMatch.
+    /// Returns the whole match, so the preview names the rule and value the join would be made on (#2052).
     /// </summary>
-    private async Task<MetaverseObject?> ProbeForJoinAsync(
+    private async Task<ImportMatch?> ProbeForJoinAsync(
         ConnectedSystemObject cso,
         List<SyncRule> inScopeRules,
         List<ConnectedSystemObjectType> objectTypes,
@@ -2406,7 +2420,7 @@ public class SyncPreviewServer
             {
                 var match = await Application.ObjectMatching.FindMatchingMetaverseObjectAsync(guardedRepository, cso, matchingRules);
                 if (match != null)
-                    return match.MetaverseObject;
+                    return match;
             }
             catch (MultipleMatchesException ex)
             {
