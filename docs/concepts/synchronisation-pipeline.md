@@ -38,11 +38,19 @@ A **Delta Import** reads only the objects that have changed since the last impor
 
 1. JIM connects to the external system through its Connector.
 2. Objects are read: all of them for a Full Import, the changed ones for a Delta Import.
-3. For each imported object, JIM either:
+3. For each object read, JIM either:
    - **Creates**<br /> A new Connected System Object, if the object is not already in the Connector Space.
-   - **Updates**<br /> The existing Connected System Object, if the object has changed.
-   - **Obsoletes**<br /> The Connected System Object, if the object no longer exists in the source (Full Import only).
-4. The run's Activity records how many objects were added, updated, obsoleted and unchanged.
+   - **Updates**<br /> The existing Connected System Object, if at least one of its attribute values has changed, or if JIM provisioned the object and the import confirms it exists in the Connected System.
+   - **Leaves it unchanged**<br /> The existing Connected System Object, if the object matches what JIM holds. JIM finds this from the object's [content hash](#how-full-import-detects-unchanged-objects), or by comparing it attribute by attribute.
+   - **Obsoletes**<br /> The existing Connected System Object, if the Connector reports the object deleted.
+4. A Full Import also obsoletes each Connected System Object it no longer found in the source.
+5. The run's Activity message counts what happened, for example:
+
+    > Import complete: 1,000 objects (3 created, 12 updated, 983 unchanged, 2 errors) in 42 sec (avg 24 obj/s); 5 no longer found and marked as deleted
+
+The figures in brackets describe the objects the run read, and count each one once: **created**, **updated** (including an object JIM provisioned that the import confirms), **unchanged**, or **deleted** (a delete the Connector reported). A delete for an object JIM no longer holds, or already holds as obsolete, changes nothing, so it counts as unchanged. An object whose export the import confirms usually counts as unchanged too: JIM applied the exported values when the export succeeded, so the import finds nothing new, although the run still records an execution item for the confirmation.
+
+**Errors** counts the problems the run recorded, one per [execution item](../configuration/activity-execution-items.md). An object JIM could not import at all appears only among the errors. One with a value the Connector could not read is imported without that value, and JIM keeps any value it already held for the attribute, so the object counts as created, updated or unchanged, and among the errors too. Objects a Full Import no longer found were not read, so they follow the brackets as **no longer found and marked as deleted**. An object that changed Object Type, where the Run Profile [allows it](../configuration/run-profiles.md#allow-object-type-changes-full-import), is not one of them: the import read it under its new type and counts it once, as created, and retires the Connected System Object it replaces. Unchanged, deleted, errors and the objects no longer found appear only when there are any.
 
 An obsoleted Connected System Object stays that way until a Synchronisation Run Profile on the same Connected System processes it, so every Full Import in between finds the object missing all over again. Only the first one reports a deletion; the runs that follow record nothing for it, because it was already obsolete when they started. An object that sits obsolete for a long time means the Connected System is being imported but not synchronised.
 

@@ -148,6 +148,39 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullImport_AllowObjectTypeChanges_CountsOnlyTheGenuinelyMissingObjectAsNoLongerFoundAsync()
+    {
+        // The import returned the re-typed object, so it is counted once, as created (#2129). The object it replaces
+        // was not missing, so only the object genuinely gone is reported as no longer found.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+        SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)]);
+
+        Assert.That(context.Activity.Message, Does.Contain("1 object (1 created, 0 updated); 1 no longer found and marked as deleted"));
+    }
+
+    [Test]
+    public async Task FullImport_AllowObjectTypeChangesUnderADeletionLimit_ReportsNothingNoLongerFoundAsync()
+    {
+        // A refused deletion detection marks nothing as deleted, and its warning says so; the message must not
+        // contradict it by reporting the retired object as no longer found.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+        SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)],
+            configure: runProfile => runProfile.MaxDetectedDeletions = 0);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.Activity.Message, Does.Contain("1 object (1 created, 0 updated)"));
+            Assert.That(context.Activity.Message, Does.Not.Contain("no longer found"));
+        }
+    }
+
+    [Test]
     public async Task FullImport_AllowObjectTypeChangesWhenTheHeldObjectCannotBeRetired_DoesNotCreateTheReplacementAsync()
     {
         // A deselected Object Type with an enabled Synchronisation Rule still bound to it is left out of deletion

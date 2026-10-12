@@ -13,25 +13,44 @@ namespace JIM.Worker.Processors;
 /// </summary>
 internal static class ImportOutcomeMessage
 {
+    /// <summary>
+    /// The parentheses describe only the objects the run read, each counted once as created, updated, unchanged or
+    /// deleted (#2129), so they never add up to more than the run read; the errors are counted alongside. Deletions a
+    /// Full Import detected are of objects it did not read, so they follow the parentheses as a clause of their own.
+    /// </summary>
     /// <param name="objects">Everything the run read from the Connected System.</param>
     /// <param name="created">Connected System Objects created.</param>
-    /// <param name="updated">Connected System Objects whose attributes were changed.</param>
-    /// <param name="unchanged">Objects skipped as unchanged by their content hash.</param>
-    /// <param name="errors">Objects the run could not import.</param>
+    /// <param name="updated">
+    /// Existing Connected System Objects the run changed: at least one attribute value, or an object JIM provisioned
+    /// now confirmed as present in the Connected System.
+    /// </param>
+    /// <param name="unchanged">
+    /// Objects read that already matched what JIM held, found so by their content hash or by comparing them, and
+    /// deletes the Connector reported for objects JIM no longer held or already held as deleted.
+    /// </param>
+    /// <param name="connectorReportedDeletions">Deletes the Connector reported for objects JIM held, now marked as deleted.</param>
+    /// <param name="detectedDeletions">Objects a Full Import no longer found and newly marked as deleted; not among <paramref name="objects"/>.</param>
+    /// <param name="errors">Execution items the run recorded an error on.</param>
     /// <param name="throughput">
     /// How long the run took and what it averaged, already formatted by
     /// <see cref="ThroughputTracker.FormatCompletion"/>, or empty where there was too little work
     /// to average.
     /// </param>
-    internal static string ForImport(int objects, int created, int updated, int unchanged, int errors, string throughput)
+    internal static string ForImport(int objects, int created, int updated, int unchanged, int connectorReportedDeletions, int detectedDeletions, int errors, string throughput)
     {
         var parts = new List<string> { $"{created:N0} created", $"{updated:N0} updated" };
         if (unchanged > 0)
             parts.Add($"{unchanged:N0} unchanged");
+        if (connectorReportedDeletions > 0)
+            parts.Add($"{connectorReportedDeletions:N0} deleted");
         if (errors > 0)
             parts.Add($"{errors:N0} error{(errors == 1 ? "" : "s")}");
 
-        return $"Import complete: {objects:N0} object{(objects == 1 ? "" : "s")} ({string.Join(", ", parts)}){throughput}";
+        var detected = detectedDeletions > 0 ? $"; {detectedDeletions:N0} no longer found and marked as deleted" : string.Empty;
+
+        // The throughput is the objects read over the run's time, so it stays with them: after the detected deletions it
+        // would read as the time those took.
+        return $"Import complete: {objects:N0} object{(objects == 1 ? "" : "s")} ({string.Join(", ", parts)}){throughput}{detected}";
     }
 
     /// <summary>
