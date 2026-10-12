@@ -41,7 +41,7 @@ Activities for Run Profile executions carry counters relevant to the operation t
 
 The [interactive API reference](../../api/reference/) documents the full schema.
 
-A Delta Import from a directory first checks that it can read where the directory records its changes; [Delta Import change source checks](../connectors/jim-ldap-connector.md#delta-import-change-source-checks) says how each outcome ends the run.
+A Delta Import from a directory first checks that it can read where the directory records its changes; [Delta Import change source checks](../connectors/jim-ldap-connector-delta-import.md#delta-import-change-source-checks) says how each outcome ends the run.
 
 ### Run Profile Safeguards (export limits)
 

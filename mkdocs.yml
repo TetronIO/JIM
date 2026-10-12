@@ -175,7 +175,16 @@ nav:
   - Connectors:
       - connectors/index.md
       - JIM File Connector: connectors/jim-file-connector.md
-      - JIM LDAP Connector: connectors/jim-ldap-connector.md
+      - JIM LDAP Connector:
+          - connectors/jim-ldap-connector.md
+          - Delta Import: connectors/jim-ldap-connector-delta-import.md
+          - Values Already in Use: connectors/jim-ldap-connector-values-in-use.md
+          - Auxiliary Object Classes: connectors/jim-ldap-connector-auxiliary-classes.md
+          - Domain Controllers and Containers: connectors/jim-ldap-connector-topology.md
+          - Certificates: connectors/jim-ldap-connector-certificates.md
+          - Passwords: connectors/jim-ldap-connector-passwords.md
+          - Service Account Permissions: connectors/jim-ldap-connector-permissions.md
+          - Troubleshooting the LDAP Connector: connectors/jim-ldap-connector-troubleshooting.md
       - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
