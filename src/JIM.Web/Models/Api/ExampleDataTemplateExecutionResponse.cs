@@ -9,8 +9,8 @@ namespace JIM.Web.Models.Api;
 public class ExampleDataTemplateExecutionResponse
 {
     /// <summary>
-    /// The Activity ID for tracking the execution. Follow it via GET /activities/{id} or the
-    /// lightweight GET /activities/{id}/progress endpoint.
+    /// The Activity that records the execution. Follow it with <c>GET /api/v1/activities/{id}</c>, or the lighter
+    /// <c>GET /api/v1/activities/{id}/progress</c>.
     /// </summary>
     public Guid ActivityId { get; set; }
 

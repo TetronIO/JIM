@@ -15,20 +15,20 @@ function New-JIMExampleDataSet {
         The name for the Example Data Set.
 
     .PARAMETER Culture
-        The .NET culture the values are in, e.g. "en-GB".
+        The .NET culture the values are in, for example "en-GB".
 
     .PARAMETER Values
-        The string values that make up this Example Data Set.
+        The values that make up the Example Data Set.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
-        configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change
+        History.
 
     .PARAMETER PassThru
-        If specified, returns the created Example Data Set object.
+        Returns the created Example Data Set.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Example Data Set object.
+        With -PassThru, the created Example Data Set, with its values; otherwise nothing.
 
     .EXAMPLE
         New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manchester", "Bristol" -PassThru
@@ -46,7 +46,7 @@ function New-JIMExampleDataSet {
         Remove-JIMExampleDataSet
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataSetDto')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
