@@ -1,6 +1,6 @@
 # Native Multi-Valued Date and Time Attributes
 
-- **Status:** Planned
+- **Status:** Doing (F0, the LDAP stop-gap, delivered; fix-first issues and slices S1 to S6 and L1 outstanding)
 - **Created:** 2026-10-12
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#2153](https://github.com/TetronIO/JIM/issues/2153)
@@ -92,7 +92,7 @@ A multi-valued Boolean can only hold {TRUE}, {FALSE} or {TRUE, FALSE}. The first
 
 - **Multi-valued Boolean.** Deliberately unsupported, by [the Boolean rule](#the-boolean-rule).
 - **100ns fidelity.** JIM holds microseconds (D1). Sources that carry finer precision are floored, and collisions are reported.
-- **Defining how expressions read multi-valued inputs.** That model is already decided in #2053 (Decision 8 of [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md)). This PRD covers only the result handling and the date forms that multi-valued dates need (D5).
+- **Defining how expressions read multi-valued inputs.** That model is already decided in #2053 (Decision 8 of [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md)). This PRD covers only the result handling and the date forms that multi-valued dates need (D5).
 - **A File Connector multi-valued overhaul** (plurality override, repeated-header reads, whole-set export). Its gaps affect every type, not only dates (D6).
 - **Retiring Npgsql's legacy timestamp switch or pinning the session time zone.** Separate concerns; this delivery makes attribute values correct regardless.
 - **Out of scope, filed separately** (each affects every type): the REST list DTO is single-valued, last value wins (`MetaverseObjectHeaderDto.cs:75-78`); the capped multi-valued value search is string-only (`MetaverseRepository.cs:4287-4294`, `ConnectedSystemRepository.cs:2263-2267`); the date-only criterion editor (`CriterionValueEditor.razor:36`); Example Data generating one value per attribute.
@@ -205,7 +205,15 @@ A new pure class in `JIM.Application/Servers`, beside `ImportContentHashCalculat
 ### 7. Expressions (F1 and D5)
 
 - **Output side (F1, fix-first).** `EvaluateExpressionSource` treats any non-string `IEnumerable` other than `byte[]` as an array (today only `string[]` and `IEnumerable<string>`, `SyncEngine.AttributeFlow.cs:624-628`). Each element converts to the target type and is diffed as a typed value; StringValue rows are never written to a typed attribute (today 1527-1535). A non-Text scalar compares as a typed value (today it compares `StringValue`, which is null for typed targets, so it restages on every synchronisation: 712-713). A scalar into a multi-valued target replaces the set, with no `SingleOrDefault` (692-693). A conversion failure records an `AttributeFlowError` and keeps the existing value (today the removal is staged first, then the conversion returns null with a Warning: 717-718, 1557-1562). Export expression arrays stage a set into a multi-valued target, an MVA->SVA error into a single-valued one, and never the literal `System.String[]` (`SyncEngine.ExportStaging.cs:530-533`).
-- **Input side (D5).** How `cs["x"]` and `mv["x"]` read multi-valued inputs is #2053's Decision 8, delivered in #2053's multi-valued slice, not here. The exact library changes, including the date text and date-reading rules this work needs now, are in an expression proposal awaiting the product owner's approval; nothing is built until it is approved.
+- **Input side (D5).** How `cs["x"]` and `mv["x"]` read multi-valued inputs is #2053's Decision 8, amended on 12 October 2026 and delivered in #2053's multi-valued slice, not here.
+- **Library changes that ship with this work (D5, approved 12 October 2026),** in the F1 slice unless noted:
+  - **N1, one text form.** Expressions run under an invariant JIM culture, so a date becomes `2026-03-15 10:30:00Z` (a fraction only when non-zero) and numbers use `.`, whatever the host's `LANG`. One helper turns every non-text result into text (Text targets, export, Example Data, the tester, provenance). Binary used as text is an expression error.
+  - **N2, one date-reading rule.** Text is read as a date only in ISO 8601 (`yyyy-MM-dd`, optionally `T` or a space and `HH:mm[:ss[.fraction]]`, then `Z`, an offset or nothing, meaning UTC) by `ToFileTime`, `FormatDate`, `Eq` and `ExpressionResultConverter`. `03/15/2026` and `15/03/2026` are refused.
+  - **ParseDate, new.** `ParseDate(value, format)` reads text in an explicit .NET date format with the invariant culture, taking it as UTC unless the format carries an offset, and returns the canonical date. Null or empty text gives null; text that does not match the format is an expression error, so the attribute keeps its value rather than being cleared. It is the counterpart of `FormatDate`, and the only way to read a non-ISO date once N2 lands.
+  - **N3, FormatDate widened.** `FormatDate(value, format)` takes a date or ISO text (N2); null, empty or unreadable text gives null.
+  - **N4, canonical dates handed to expressions** (S1): UTC, floored to the microsecond, on every path.
+  - **N5, one expression error.** The evaluator wraps every failure an expression can cause in one `ExpressionEvaluationException`; every consumer catches that type and reports an expression error, never an unhandled error, and Drift Detection no longer clears on a failure.
+  - **N6, copies of Binary values** are handed to expressions, so an expression cannot change stored bytes.
 
 ### 8. Drift detection (F2, fix-first)
 
@@ -432,14 +440,14 @@ Decided by the product owner on 12 October 2026.
 2. **D2. Target resolution for export:** a per-attribute resolution, discovered by each Connector, in S6.
 3. **D3. Widening while values exist:** allowed, before S5, on all three surfaces.
 4. **D4. Multi-valued Boolean Metaverse Attributes:** never supported. None exist, and none are converted: JIM is pre-release and environments are reset between development cycles, so no legacy data is remediated.
-5. **D5. Expressions:** pending. The multi-valued input model is #2053's Decision 8. The exact changes to the expression library, including amendments to Decision 8, are listed for approval in a separate proposal; nothing is built until it is approved, and the library must stay clean and consistent.
+5. **D5. Expressions:** N1 to N6 and the new `ParseDate` ship with this work (section 7). The multi-valued input model stays with #2053's Decision 8, amended the same day (Count, Min and Max added; CollectionContains, HasAttribute and AttributeNames removed; Join keeps the order values are read in; one definition of no value; no upgrade report), with DynamicExpresso late binding adopted only after a security review, and a save-time refusal of `==` on untyped values as the fallback.
 6. **D6. File Connector multi-valued gaps:** a separate issue.
 7. **D7. LDAP stop-gap:** yes, F0 now, and the full fix (S5) is part of this work and tracked here.
 8. **D8. OpenLDAP operational attributes:** discovered as unselected, read-only attributes (L1).
 
 ## Open Questions
 
-1. **D5:** approval of the expression proposal.
+None. Every decision is recorded above.
 
 ## Acceptance Criteria
 

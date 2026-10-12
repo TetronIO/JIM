@@ -251,21 +251,26 @@ Recorded with the product owner on 2026-10-11.
      - Directories store multi-valued attributes as unordered sets, so "first" and "last" are arbitrary: the same object can give a different answer after another import.
      - The documented `Join(mv["Group Memberships"], "|")` and `CollectionContains(cs["memberOf"], ...)` therefore see one value during synchronisation.
      - An export expression that returns several values writes the literal text `System.String[]`.
-   - **Model (confirmed 2026-10-11, Decision 8):**
-     1. `cs["x"]` and `mv["x"]` read every value of a multi-valued attribute, in every context.
-     2. Transform functions (`Trim`, `Upper`, `Lower`, `Replace`, `Left`, `FormatDate`, the conversions and so on) apply to each value and return every result.
-     3. Comparison functions (`Eq`, `StartsWith`, `EndsWith`, `Contains`, `IsMatch`) are true when any value satisfies them, exactly as a scoping criterion on a multi-valued attribute is met. `!` therefore means "no value does", which matches the negated scoping operators.
+   - **Model (confirmed 2026-10-11, Decision 8; amended 2026-10-12 by the product owner while designing #2153):**
+     1. `cs["x"]` and `mv["x"]` read every value of a multi-valued attribute, in every context: no value reads as null, one value as itself, several values as every distinct value in a fixed order (text by ordinal, numbers ascending, dates oldest first, Guids and References by their text). There is no second accessor.
+     2. Transform functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `EscapeDN`, `ToString`, `FormatDate`, `FromFileTime`, and the regex functions) apply to each value and return every result, in the same order.
+     3. Comparison functions (`Eq`, `StartsWith`, `EndsWith`, `Contains`, `IsMatch`) are true when any value satisfies them, exactly as a scoping criterion on a multi-valued attribute is met. `!` therefore means "no value does", which matches the negated scoping operators. `Eq` compares by type: text against a typed value is read as that type.
      4. Whole-set functions work on the set itself:
         - `Count`;
-        - `Join`, in ordinal order, so the result does not change between imports;
+        - `Min` and `Max`, over numbers, dates (by instant) or text (by ordinal); null for no values; an error for mixed kinds, Boolean, Guid, Binary and References;
+        - `Join`, keeping the order the values are read in, so the result does not change between imports and `Split` followed by `Join` gives back what it was given;
         - `Where(values, "starts with", "smtp:")`, which filters with the catalogue's own operator names.
-     5. Where one value is required (joining text with `+`, or writing to a single-valued attribute), a single value is used as it is. Several values are an error on the object, naming the attribute and suggesting `Join`, `Where` or `Count`. No value reads as null, as today.
+     5. Where one value is required (joining text with `+`, `.ToString()`, comparison and arithmetic operators, writing to a single-valued attribute, and the one-value functions `Length`, `ToInt`, `ToDecimal`, `ToFileTime`, `HasBit`, `SetBit`, `ClearBit`, `EnableUser`, `DisableUser`, `Split`'s input and `IIF`'s condition), a single value is used as it is. Several values are an error on the object, naming the attribute and the count and suggesting `Join`, `Where`, `Count`, `Min` or `Max`. `== null` and `!= null` remain presence tests.
      6. A result with several values written to a multi-valued attribute writes every value, on import and on export (this fixes `System.String[]`).
+     7. **One definition of no value:** null, empty text, or a list with no values. `IsNullOrEmpty` and `Coalesce` follow it, and `HasValue(x)` is exactly `!IsNullOrEmpty(x)`.
+     8. **Removed:** `CollectionContains` (under point 3 it is identical to `Eq`), and the accessor's undocumented `HasAttribute` and `AttributeNames` members.
+     9. **Late binding.** Because transform results can hold one value or several, they are untyped, and without DynamicExpresso's late binding `Upper(a) + Upper(b)` stops parsing and `Lower(x) == "abc"` silently becomes false. Late binding is adopted only after a security review of the late-bound member surface against `EXPRESSION_SECURITY.md` and the reflection guard, with new tests. If the review fails, the fallback is a save-time refusal of `==` and `!=` on untyped operands (suggesting `Eq`), and text between two joined function results.
    - **Compatibility:**
      - Single-valued attributes are unaffected.
      - Multi-valued attributes holding one value are unaffected. This matters because LDAP schemas declare `cn`, `sn`, `givenName` and `mail` multi-valued.
      - Only multi-valued attributes holding several values change, from an arbitrary value to all of them or a visible error.
-     - Sync Preview and the Configuration Change Preview show the difference before it runs, and an upgrade report lists every expression that reads a multi-valued attribute.
+     - Sync Preview and the Configuration Change Preview show the difference before it runs. JIM is pre-release, so there is no upgrade report.
+   - **Delivered after #2055's shared pipeline.** #2153 (multi-valued dates) ships the date text and date-reading rules, `ParseDate` and the result-handling fixes it needs on its own; its PRD lists them.
 9. **Expression editor.**
    - Suggestions as you type, for functions and attributes.
    - A browsable function list, with signature help.
