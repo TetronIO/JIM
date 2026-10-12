@@ -3644,6 +3644,7 @@ public class SyncImportTaskProcessor
         // An attribute the Connector found an unreadable value on is passed over (#2066): the source holds a value JIM
         // could not read, which is not the same as holding none, so the stored values stay exactly as they were.
         var unreadableAttributeNames = UnreadableAttributeNames(connectedSystemImportObject);
+        RemoveValuesHeldUnderAnotherDataType(connectedSystemImportObject, connectedSystemObject, connectedSystemObjectType, unreadableAttributeNames);
         foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name).Where(name => !unreadableAttributeNames.Contains(name)))
         {
             // is there a matching attribute in the import object?
@@ -3741,7 +3742,7 @@ public class SyncImportTaskProcessor
 
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
+                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.DateTime));
                         if (existingCsoDateTimeAttributeValue == null)
                         {
                             // we don't have a CSO value for this attribute. set the initial value
@@ -3929,7 +3930,7 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo (#872): consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
+                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.Boolean));
                         if (csoBooleanAttributeValue == null)
                         {
                             // set initial value
@@ -3956,6 +3957,36 @@ public class SyncImportTaskProcessor
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }
+    }
+
+    /// <summary>
+    /// Removes what an attribute holds under a data type it no longer has (#2128). A schema refresh can redefine an
+    /// attribute whose Connected System Objects already hold values (Active Directory's Enumeration attributes were
+    /// discovered as Boolean, and are Number), and it keeps the attribute, so those values stay in the column the old type
+    /// used. <see cref="UpdateConnectedSystemObjectFromImportObject"/> compares only the column of the attribute's current
+    /// type, so without this the value read under the new type is added beside the old one instead of replacing it, and a
+    /// single-valued attribute holds two values for good: every single-valued Attribute Flow from it then fails. An
+    /// import that carries the attribute says what it holds, so anything held in another type's column goes. One it could
+    /// not read says nothing (#2066), and one it does not carry has all its values removed already.
+    /// </summary>
+    private static void RemoveValuesHeldUnderAnotherDataType(
+        ConnectedSystemImportObject importObject,
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType objectType,
+        HashSet<string> unreadableAttributeNames)
+    {
+        var importedAttributeNames = importObject.Attributes.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var importedAttributeTypes = new Dictionary<int, AttributeDataType>();
+        foreach (var attribute in objectType.Attributes.Where(a => importedAttributeNames.Contains(a.Name) && !unreadableAttributeNames.Contains(a.Name)))
+            importedAttributeTypes.TryAdd(attribute.Id, attribute.Type);
+
+        if (importedAttributeTypes.Count == 0)
+            return;
+
+        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av =>
+            (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) is { } attributeId &&
+            importedAttributeTypes.TryGetValue(attributeId, out var type) &&
+            av.IsHeldUnderAnotherDataType(type)));
     }
 
     /// <summary>

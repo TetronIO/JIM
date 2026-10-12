@@ -386,5 +386,71 @@ public class ConnectedSystemServerChangeTrackingTests
             "RPEI's ConnectedSystemObject navigation must still reference the source CSO");
     }
 
+    /// <summary>
+    /// A schema refresh can redefine an attribute whose Connected System Objects already hold values (#2128), and the
+    /// next import removes what was stored under the old type. That value holds nothing in the column of the attribute's
+    /// current type, which is what a corrupt value looks like; recorded as corrupt, it would error every such object.
+    /// </summary>
+    [Test]
+    public void LinkUpdateChangeRecords_ValueRemovedFromUnderAnotherDataType_RecordsItAsTheValueItWas()
+    {
+        var (cso, sAMAccountType) = CsoWithAttribute(AttributeDataType.Number);
+        var heldAsBoolean = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = sAMAccountType, AttributeId = sAMAccountType.Id, BoolValue = false };
+        cso.AttributeValues.Add(heldAsBoolean);
+        cso.PendingAttributeValueRemovals.Add(heldAsBoolean);
+        cso.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = sAMAccountType, AttributeId = sAMAccountType.Id, IntValue = 805306368 });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+
+        _jim.ConnectedSystems.LinkUpdateChangeRecords([cso], [rpei], changeTrackingEnabled: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet).Or.Null);
+            Assert.That(rpei.ConnectedSystemObjectChange?.AttributeChanges.SelectMany(c => c.ValueChanges).Select(v => (v.ValueChangeType, v.BoolValue, v.IntValue)),
+                Is.EquivalentTo(new (ValueChangeType, bool?, int?)[]
+                {
+                    (ValueChangeType.Remove, false, null),
+                    (ValueChangeType.Add, null, 805306368)
+                }), "The history says what went, as the value it was, and what replaced it.");
+        }
+    }
+
+    /// <summary>
+    /// Only a removal can be a value left from an earlier type: nothing adds a value under a type its attribute does not
+    /// have, so an addition holding nothing in its attribute's column is still reported as corrupt.
+    /// </summary>
+    [Test]
+    public void LinkUpdateChangeRecords_AdditionHoldingNothingInItsAttributesColumn_ErrorsTheObject()
+    {
+        var (cso, sAMAccountType) = CsoWithAttribute(AttributeDataType.Number);
+        cso.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = sAMAccountType, AttributeId = sAMAccountType.Id, BoolValue = false });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
+
+        _jim.ConnectedSystems.LinkUpdateChangeRecords([cso], [rpei], changeTrackingEnabled: true);
+
+        Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UnhandledError));
+    }
+
+    private (ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Attribute) CsoWithAttribute(AttributeDataType type)
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "sAMAccountType", Type = type, Selected = true };
+        var userType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "user",
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { _externalIdAttr, attribute }
+        };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            TypeId = 1,
+            Type = userType,
+            ExternalIdAttributeId = _externalIdAttr.Id
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = _externalIdAttr, AttributeId = _externalIdAttr.Id, GuidValue = Guid.NewGuid() });
+        return (cso, attribute);
+    }
+
     #endregion
 }

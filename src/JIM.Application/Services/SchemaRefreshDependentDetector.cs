@@ -152,22 +152,32 @@ public static class SchemaRefreshDependentDetector
                     return (DescribeDefinitionChange(sourceChange, refreshDescription), false);
             }
 
-            if (string.IsNullOrWhiteSpace(source.Expression) || removedAttributeNames == null)
+            if (string.IsNullOrWhiteSpace(source.Expression) || (removedAttributeNames == null && changedAttributes == null))
                 continue;
 
-            var removedInput = ExpressionInputResolver.ResolveCached(source.Expression)
-                .FirstOrDefault(input => input.Source == ExpressionInputSource.ConnectedSystem && removedAttributeNames.Contains(input.AttributeName));
+            var expressionInputNames = ExpressionInputResolver.ResolveCached(source.Expression)
+                .Where(input => input.Source == ExpressionInputSource.ConnectedSystem)
+                .Select(input => input.AttributeName)
+                .ToList();
+
+            var removedInput = removedAttributeNames == null ? null : expressionInputNames.FirstOrDefault(removedAttributeNames.Contains);
             if (removedInput != null)
-                return ($"Attribute '{removedInput.AttributeName}', read by this mapping's Expression, is no longer reported by the Connected System ({refreshDescription}).", true);
+                return ($"Attribute '{removedInput}', read by this mapping's Expression, is no longer reported by the Connected System ({refreshDescription}).", true);
+
+            // An Expression written against an attribute's old definition receives the new one (#2128: a Boolean
+            // comparison handed a number), so it is as invalidated as a mapping reading the attribute directly.
+            var redefinedInput = changedAttributes?.Values.FirstOrDefault(change => expressionInputNames.Contains(change.AttributeName, StringComparer.OrdinalIgnoreCase));
+            if (redefinedInput != null)
+                return (DescribeDefinitionChange(redefinedInput, refreshDescription, ", read by this mapping's Expression,"), true);
         }
 
         return null;
     }
 
-    private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription)
+    private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription, string readBy = "")
     {
         var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
-        return $"Attribute '{change.AttributeName}' changed {aspect} from {change.OldValue} to {change.NewValue} at the Connected System ({refreshDescription}).";
+        return $"Attribute '{change.AttributeName}'{readBy} changed {aspect} from {change.OldValue} to {change.NewValue} at the Connected System ({refreshDescription}).";
     }
 
     private static void CollectMatchingRuleReferences(
