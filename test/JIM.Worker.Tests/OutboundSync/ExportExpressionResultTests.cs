@@ -202,6 +202,32 @@ public class ExportExpressionResultTests
     }
 
     [Test]
+    public void ComputeAttributeValueChanges_TextResultIntoBooleanTarget_StagesABoolean()
+    {
+        Target(AttributeDataType.Boolean);
+        Expression("\"TRUE\"");
+
+        var changes = Create(Person(), []);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes.Single().BoolValue, Is.True, "the value is converted to the target attribute's type");
+            Assert.That(changes.Single().StringValue, Is.Null, "a Boolean attribute can record only a true or false value");
+        }
+    }
+
+    [Test]
+    public void ComputeAttributeValueChanges_TextResultIntoBooleanTargetAlreadyHoldingIt_StagesNothing()
+    {
+        var target = Target(AttributeDataType.Boolean);
+        Expression("\"TRUE\"");
+
+        var changes = Update(Person(), [], new ConnectedSystemObjectAttributeValue { AttributeId = target.Id, BoolValue = true });
+
+        Assert.That(changes, Is.Empty, "the export must not be staged again on every synchronisation");
+    }
+
+    [Test]
     public void ComputeAttributeValueChanges_ResultNotConvertibleToTheTargetType_StagesNothingAndRecordsAnError()
     {
         Target(AttributeDataType.Number);

@@ -185,7 +185,7 @@ Three consequences are worth knowing:
 
 - **Changes made to the file outside JIM go unseen.** JIM compares against what it wrote, not against the file. If another process edits the file, use Bidirectional mode, so a confirming import reads the file after each export.
 - **Exported objects stay Pending Provisioning in the Connector Space.** Only an import moves an object to Normal, and Export Only never imports. This does not hold anything up: changes and deletions are exported as usual, and an object JIM deletes from the file is removed from the Connector Space at the same time.
-- **Nothing is lost if JIM cannot record what it wrote.** The export is left unconfirmed, the next export run writes the same rows again (which changes nothing in the file) and records them, and the export's Activity finishes with a warning saying so. A value an export Attribute Flow expression returns as another type than its attribute, such as text for a Number attribute, cannot be recorded at all, so that warning repeats on every export run until the expression returns the attribute's type.
+- **Nothing is lost if JIM cannot record what it wrote.** The export is left unconfirmed, the next export run writes the same rows again (which changes nothing in the file) and records them, and the export's Activity finishes with a warning saying so.
 
 ### Bringing JIM up to date with an existing file
 

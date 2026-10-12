@@ -2641,9 +2641,10 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Logs, once per batch, the exported changes optimistic apply could not record (#2183): each was written with its
-    /// value in another data type's column than its attribute's, which an export Attribute Flow expression returning
-    /// another type produces. A Warning, because the target now holds a value JIM has no record of; the Activity of an
-    /// auto-confirmed export says so too, and names this log as where the cause is.
+    /// value in another data type's column than its attribute's, which only a fault elsewhere produces, since export
+    /// staging converts expression results to the attribute's type (#2179). A Warning, because the target now holds a
+    /// value JIM has no record of; the Activity of an auto-confirmed export says so too, and names this log as where
+    /// the cause is.
     /// </summary>
     private static void LogUnrecordedChanges(IReadOnlyCollection<OptimisticExportUnrecordedChange> unrecordedChanges, int connectedSystemId)
     {

@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 An import no longer fails an object with an unhandled error when an export Attribute Flow expression returns another type than its target attribute, and an auto-confirmed export JIM cannot record for that reason is left unconfirmed with a warning instead of confirmed. (#2183)
+- 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, now exports and confirms the attribute's own value, instead of failing the confirming import with an unhandled error. (#2183)
 - 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
 - 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
 - 🐛 An attribute now exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, a target is no longer cleared in error or left with stray values, and a SQL related table no longer accumulates rows. (#2182)

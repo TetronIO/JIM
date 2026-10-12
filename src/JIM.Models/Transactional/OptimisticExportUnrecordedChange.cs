@@ -7,9 +7,9 @@ namespace JIM.Models.Transactional;
 
 /// <summary>
 /// A successfully exported Pending Export attribute change that optimistic export apply could not record on its
-/// Connected System Object (#2183), because its value is held in another data type's column than its attribute's: an
-/// export Attribute Flow expression stages its result as the type it returns, so "TRUE" for a Boolean attribute is
-/// staged as text. The Connector wrote it, but a value built from the attribute's own column would hold nothing.
+/// Connected System Object (#2183), because its value is held in another data type's column than its attribute's.
+/// Export staging converts expression results to the attribute's type (#2179), so only a fault elsewhere stages one.
+/// The Connector wrote it, but a value built from the attribute's own column would hold nothing.
 /// </summary>
 /// <param name="PendingExportId">The Pending Export the change belongs to.</param>
 /// <param name="ConnectedSystemObjectId">The Connected System Object it was exported for.</param>
