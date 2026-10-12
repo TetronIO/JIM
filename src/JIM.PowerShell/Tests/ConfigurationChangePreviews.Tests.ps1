@@ -416,6 +416,30 @@ Describe 'New-JIMConfigurationChangePreview' {
             }
         }
 
+        It 'Sends an expression source as written, so the preview judges the expression the save would' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                $rule = @{
+                    Order = 0
+                    ConnectedSystemObjectTypeId = 9
+                    MetaverseObjectTypeId = 3
+                    TargetMetaverseAttributeId = 201
+                    Sources = @(
+                        @{ Order = 0; Expression = '"E" + Trim(cs["employeeId"])' }
+                    )
+                }
+                New-JIMConfigurationChangePreview -ConnectedSystemId 5 -MatchingRule $rule | Out-Null
+
+                $script:capturedBody.rules[0].Sources[0].Expression | Should -BeExactly '"E" + Trim(cs["employeeId"])'
+            }
+        }
+
         It 'Sends an empty array as an empty array, because that proposes a system that joins nothing' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

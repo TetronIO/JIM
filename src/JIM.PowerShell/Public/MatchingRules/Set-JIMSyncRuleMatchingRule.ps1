@@ -24,7 +24,16 @@ function Set-JIMSyncRuleMatchingRule {
 
     .PARAMETER SourceAttributeId
         The new Connected System attribute ID to use as the source.
-        Note: This replaces all existing sources with a single new source.
+        Note: This replaces all existing sources with a single new source. Give this or
+        -SourceExpression, not both; give neither to leave the source as it is.
+
+    .PARAMETER SourceExpression
+        Replaces the rule's source with an expression computing the value to match on, for identifiers
+        that differ in format between systems: for example '"E" + Trim(cs["employeeId"])'.
+        It reads the Connected System Object only, through cs["attributeName"]; its result is converted
+        to the type of the rule's Metaverse attribute, and a list of text values is matched value by value.
+        JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or
+        one the Object Type does not have, or calls a function that returns a different value each time.
 
     .PARAMETER CaseSensitive
         Whether the matching should be case-sensitive.
@@ -44,6 +53,11 @@ function Set-JIMSyncRuleMatchingRule {
         Updates the order of Matching Rule 12 on Synchronisation Rule 5 to be first (order 0).
 
     .EXAMPLE
+        Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 -SourceExpression 'Lower(Trim(cs["mail"]))'
+
+        Replaces the rule's source with an expression that trims the directory's address and lowers its case.
+
+    .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 | Set-JIMSyncRuleMatchingRule -CaseSensitive $false
 
         Updates case sensitivity using pipeline input.
@@ -53,7 +67,7 @@ function Set-JIMSyncRuleMatchingRule {
         New-JIMSyncRuleMatchingRule
         Remove-JIMSyncRuleMatchingRule
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'NoSource')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -68,8 +82,13 @@ function Set-JIMSyncRuleMatchingRule {
         [Parameter()]
         [int]$TargetMetaverseAttributeId,
 
-        [Parameter()]
+        [Parameter(Mandatory, ParameterSetName = 'Attribute')]
         [int]$SourceAttributeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'Expression')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+        [string]$SourceExpression,
 
         [Parameter()]
         [bool]$CaseSensitive,
@@ -94,13 +113,13 @@ function Set-JIMSyncRuleMatchingRule {
             $body.targetMetaverseAttributeId = $TargetMetaverseAttributeId
         }
 
-        if ($PSBoundParameters.ContainsKey('SourceAttributeId')) {
-            $body.sources = @(
-                @{
-                    order = 0
-                    connectedSystemAttributeId = $SourceAttributeId
-                }
-            )
+        # A source is an attribute or an expression, never both (#2052); the parameter sets enforce that, and
+        # giving neither leaves the rule's source as it is.
+        if ($PSCmdlet.ParameterSetName -eq 'Attribute') {
+            $body.sources = @(@{ order = 0; connectedSystemAttributeId = $SourceAttributeId })
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'Expression') {
+            $body.sources = @(@{ order = 0; expression = $SourceExpression })
         }
 
         if ($PSBoundParameters.ContainsKey('CaseSensitive')) {

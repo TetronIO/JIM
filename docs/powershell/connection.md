@@ -151,6 +151,7 @@ Disconnect-JIM -All
 
 Tests whether the current connection to a JIM instance is active and healthy.
 
+<!-- BEGIN GENERATED: Test-JIMConnection -->
 ### Syntax
 
 ```powershell
@@ -161,23 +162,16 @@ Test-JIMConnection [-Quiet]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Quiet` | `switch` | No | `$false` | Returns only `$true` or `$false` instead of the full status object |
+| `Quiet` | `switch` | No |  | Returns only $true or $false instead of the connection's status. |
 
 ### Output
 
-**Default mode** returns a `PSCustomObject` with the following properties:
+The connection's status: Connected, whether a connection exists and JIM answered; Url, the JIM instance's address; AuthMethod, ApiKey or OAuth; ServerVersion, the JIM version it reported; Status, JIM's health status; Message, a sentence describing the result; and TokenExpiresAt, when the access token expires, for OAuth only. With -Quiet, $true if connected; otherwise $false.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Connected` | `bool` | Whether the connection is currently active |
-| `Url` | `string` | The JIM instance URL |
-| `AuthMethod` | `string` | Authentication method in use (`OAuth` or `ApiKey`) |
-| `ServerVersion` | `string` | Version of the connected JIM server |
-| `Status` | `string` | Human-readable status message |
-| `Message` | `string` | Additional detail about the connection state |
-| `TokenExpiresAt` | `DateTime?` | Token expiry time (OAuth only; `$null` for API key connections) |
+**`ConnectionStatus`**
 
-**Quiet mode** (`-Quiet`) returns a `bool`: `$true` if connected and healthy, `$false` otherwise.
+**`bool`**
+<!-- END GENERATED: Test-JIMConnection -->
 
 ### Examples
 

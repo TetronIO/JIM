@@ -16,16 +16,7 @@ $tab = if ($cell.Runtime -eq 'docker') { 'Docker' } else { 'Podman' }
 $apiKey = 'jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true)
 
 # The JIM PowerShell module of each release, from its bundle, for the data checks.
-$modules = @{}
-foreach ($release in @(@{ Version = $previousVersion; Path = $PreviousBundlePath }, @{ Version = $newVersion; Path = $BundlePath })) {
-    $folder = Join-Path $OutputPath "module-$($release.Version)"
-    New-Item -ItemType Directory -Path $folder -Force | Out-Null
-    & tar -xzf $release.Path -C $folder --wildcards '*/powershell/JIM/*' --strip-components=2
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not take the PowerShell module out of $(Split-Path $release.Path -Leaf)"
-    }
-    $modules[$release.Version] = Join-Path $folder 'JIM' 'JIM.psd1'
-}
+$modules = @{ $previousVersion = (Get-BundleModule $PreviousBundlePath); $newVersion = (Get-BundleModule $BundlePath) }
 
 function Invoke-LabData {
     # Seeds or verifies the upgrade data from the lab host, with the module of the release JIM runs; returns whether
@@ -97,18 +88,18 @@ function Add-AppArmorSignalRule {
 }
 
 # 1. The previous release, installed with its own installer, as a customer installed it.
-$installSettings = @{
-    JIM_SSO_AUTHORITY = $authority; JIM_SSO_CLIENT_ID = 'jim-web'; JIM_SSO_SECRET = 'jim-dev-secret'
-    JIM_SSO_API_SCOPE = 'jim-api'; JIM_SSO_CLAIM_TYPE = 'sub'; JIM_SSO_MV_ATTRIBUTE = 'Subject Identifier'
-    JIM_SSO_INITIAL_ADMIN = '00000000-0000-0000-0000-000000000001'; JIM_SETUP_DB_MODE = 'bundled'; JIM_WEB_PORT = '443'
-    JIM_SETUP_TLS_MODE = 'generate'; JIM_SETUP_TLS_NAMES = "$hostName,$address"; JIM_TRUSTED_PROXIES = ''
-    JIM_SETUP_AUTO_START = 'true'; JIM_SETUP_RUNTIME = $cell.Runtime; JIM_SETUP_PODMAN_ROOTLESS = "$($rootless.ToString().ToLower())"
-    JIM_SETUP_FIX_APPARMOR = 'true'; JIM_SETUP_OPEN_FIREWALL = 'true'; JIM_INFRASTRUCTURE_API_KEY = $apiKey
+if ($cell.Runtime -eq 'podman' -and -not $rootless -and -not $ubuntu -and $fromSixteenOrEarlier) {
+    # v0.16.0's rootful pods on AlmaLinux are unplugged by NetworkManager now and then, so that JIM never becomes
+    # ready (#2009, fixed after it). A customer who met it applied the documented setting, which the upgrade's note
+    # applies again later; done here first, the cell does not fail on the previous release's defect by chance.
+    $networkManager = Invoke-Documented -Rootful -Title "NetworkManager left out of Podman's interfaces, for $previousVersion (#2009)" `
+        -Command (Get-DocumentedCommand -Page 'podman.md' -Heading 'Firewall, SELinux, AppArmor and NetworkManager')
+    if ($networkManager -ne 0) {
+        throw 'Could not tell NetworkManager to leave Podman''s interfaces alone'
+    }
 }
-Write-CellLog "installing $previousVersion with its own installer (install-$previousVersion.log)"
-Invoke-LabVm -Name $vm -WorkingDirectory $previousFolder -Environment $installSettings -Command @('./setup.sh') `
-    -AllowFailure -LogPath (Join-Path $OutputPath "install-$previousVersion.log") | Out-Null
-$installed = $LASTEXITCODE -eq 0
+$installed =(Invoke-Setup -Folder $previousFolder -Settings (New-SetupSettings @{ JIM_INFRASTRUCTURE_API_KEY = $apiKey }) `
+        -Log "install-$previousVersion.log").ExitCode -eq 0
 Add-Check "$previousVersion installed with its own installer" $installed $(if (-not $installed) { "see install-$previousVersion.log" })
 if (-not $installed) {
     throw "stopped: $previousVersion did not install"
@@ -151,6 +142,46 @@ if (-not $seeded) {
     throw 'stopped: the data could not be set up'
 }
 Test-SignInCheck $previousVersion
+
+if ($cell.Runtime -eq 'docker') {
+    # The installer's refusals, each of which must leave the installation exactly as it was, still running.
+    $before = Get-Fingerprint
+    $declined = Invoke-Setup -Folder $bundleFolder -Argument '--upgrade' -Answer 'n' -Log 'upgrade-declined.log'
+    $cancelled = Get-LabSetupMessage -Line $declined.Output -Level INFO | Where-Object { $_ -match 'cancelled' } | Select-Object -First 1
+    Add-Check 'an upgrade cancelled when the administrator has no backup' ([bool]$cancelled) "exit $($declined.ExitCode); $cancelled"
+    Test-UnchangedCheck 'the declined upgrade left every file and container as it was' $before
+
+    # A bundle damaged in transit (an image cut short) fails partway through, after the files are replaced.
+    $broken = "$bundleFolder-broken"
+    Invoke-LabVm -Name $vm -Command @('sh', '-ec', "cp -a $bundleFolder $broken && truncate -s 10M $broken/docker-images/jim-web.tar") | Out-Null
+    $partway = Invoke-Setup -Folder $broken -Argument '--upgrade' -Settings @{ JIM_SETUP_BACKUP_CONFIRMED = 'true' } -Log 'upgrade-partway.log'
+    Add-Check 'an upgrade from a damaged bundle fails' ($partway.ExitCode -ne 0) "exit $($partway.ExitCode)"
+    $difference = @(Compare-LabFingerprint -Before $before -After (Get-Fingerprint))
+    $changed = @($difference | Where-Object { $_ -like '- *' })
+    Add-Check 'the failed upgrade put every file back, and JIM runs as it did' ($changed.Count -eq 0) "$($changed | Select-Object -First 4)"
+    # Copies it made on the way, such as .previous files, would replace those an earlier upgrade left for rolling back.
+    $added = @($difference | Where-Object { $_ -like '+ *' })
+    Add-Check 'the failed upgrade left nothing of its own behind' ($added.Count -eq 0) "$($added | Select-Object -First 4)"
+    if (Test-ReadyCheck 'after the failed upgrade') {
+        Test-VersionCheck 'after the failed upgrade' $previousVersion
+    }
+    Invoke-LabVm -Name $vm -Command @('rm', '-rf', $broken) | Out-Null
+
+    # An edit to a compose file the upgrade replaces would be lost, so it stops the upgrade; a release before the
+    # installer recorded its compose files cannot tell, and says so instead.
+    Invoke-LabVm -Name $vm -AllowFailure -Command @('test', '-f', "$installPath/compose-files.sha256") | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Invoke-LabVm -Name $vm -Command @('sh', '-ec', "cp -p $installPath/docker-compose.yml /root/docker-compose.yml.kept && echo '# edited by hand' >> $installPath/docker-compose.yml") | Out-Null
+        $edited = Get-Fingerprint
+        $refused = Invoke-Setup -Folder $bundleFolder -Argument '--upgrade' -Settings @{ JIM_SETUP_BACKUP_CONFIRMED = 'true' } -Log 'upgrade-edited.log'
+        Add-Check 'an upgrade refused over a compose file edited by hand' ($refused.ExitCode -ne 0) "$(Get-LabSetupMessage -Line $refused.Output -Level ERR | Select-Object -First 1)"
+        Test-UnchangedCheck 'the refused upgrade left every file and container as it was' $edited
+        Invoke-LabVm -Name $vm -Command @('cp', '-p', '/root/docker-compose.yml.kept', "$installPath/docker-compose.yml") | Out-Null
+    }
+    else {
+        Write-CellLog "$previousVersion keeps no record of its compose files as installed, so an edited one cannot be refused"
+    }
+}
 
 # 2. Before upgrading: stop JIM, leaving the database running, and back up the database and the encryption keys by
 # Backup & Disaster Recovery.
@@ -222,6 +253,16 @@ else {
 
 # 4. Verified, then again after a reboot.
 Test-RunningRelease 'upgraded' $newVersion -Sizing
+if ($cell.Runtime -eq 'docker') {
+    # Running the installer again, or the previous release's, changes nothing.
+    $before = Get-Fingerprint
+    $same = Invoke-Setup -Folder $bundleFolder -Argument '--upgrade' -Settings @{ JIM_SETUP_BACKUP_CONFIRMED = 'true' } -Log 'upgrade-same.log'
+    Add-Check "the same upgrade again says there is nothing to upgrade" ($same.ExitCode -eq 0 -and
+        (Get-LabSetupMessage -Line $same.Output -Level OK) -match 'nothing to upgrade') "exit $($same.ExitCode)"
+    $older = Invoke-Setup -Folder $previousFolder -Argument '--upgrade' -Settings @{ JIM_SETUP_BACKUP_CONFIRMED = 'true' } -Log 'upgrade-downgrade.log'
+    Add-Check "$previousVersion's installer refuses to downgrade" ($older.ExitCode -ne 0) "exit $($older.ExitCode)"
+    Test-UnchangedCheck 'both left every file and container as it was' $before
+}
 Write-CellLog 'rebooting the VM'
 Restart-LabVm -Name $vm
 Test-RunningRelease 'upgraded, after a reboot' $newVersion -Sizing

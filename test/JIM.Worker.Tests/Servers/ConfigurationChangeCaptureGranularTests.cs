@@ -134,10 +134,12 @@ public class ConfigurationChangeCaptureGranularTests
             ConnectedSystemObjectTypeId = 7,
             ConnectedSystemObjectType = new ConnectedSystemObjectType
             {
-                Id = 7, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" }
+                Id = 7, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" },
+                Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "employeeId", Type = AttributeDataType.Text }]
             },
             MetaverseObjectTypeId = 11,
             TargetMetaverseAttributeId = 201,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID", Type = AttributeDataType.Text },
             Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttributeId = 101 }]
         };
 

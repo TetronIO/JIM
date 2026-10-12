@@ -790,7 +790,12 @@ public class ObjectMatchingModeTests
             ConnectedSystemId = 1,
             ConnectedSystem = connectedSystem,
             MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the
+            // rule its Metaverse attribute, as the portal's loaded copies do.
+            ConnectedSystemObjectType = new ConnectedSystemObjectType
+            {
+                Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+            },
             ObjectMatchingRules = new List<ObjectMatchingRule>
             {
                 new()
@@ -798,6 +803,7 @@ public class ObjectMatchingModeTests
                     Id = 0,
                     Order = 0,
                     TargetMetaverseAttributeId = 100,
+                    TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                     Sources = new List<ObjectMatchingRuleSource>
                     {
                         new() { Order = 0, ConnectedSystemAttributeId = 10 }
@@ -837,7 +843,12 @@ public class ObjectMatchingModeTests
             ConnectedSystemId = 1,
             ConnectedSystem = connectedSystem,
             MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+            // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the
+            // rule its Metaverse attribute, as the portal's loaded copies do.
+            ConnectedSystemObjectType = new ConnectedSystemObjectType
+            {
+                Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+            },
             ObjectMatchingRules = new List<ObjectMatchingRule>
             {
                 new()
@@ -845,6 +856,7 @@ public class ObjectMatchingModeTests
                     Id = 0,
                     Order = 0,
                     TargetMetaverseAttributeId = 100,
+                    TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                     Sources = new List<ObjectMatchingRuleSource>
                     {
                         new() { Order = 0, ConnectedSystemAttributeId = 10 }
@@ -976,7 +988,12 @@ public class ObjectMatchingModeTests
             ObjectMatchingRuleMode = mode
         },
         MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
-        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+        // What the matching rule compares is checked on save (#2052), so the type carries its attribute and the rule
+        // its Metaverse attribute, as the portal's loaded copies do.
+        ConnectedSystemObjectType = new ConnectedSystemObjectType
+        {
+            Id = 1, Name = "user", Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "employeeId", Type = AttributeDataType.Text }]
+        },
         ObjectMatchingRules = new List<ObjectMatchingRule>
         {
             new()
@@ -984,6 +1001,7 @@ public class ObjectMatchingModeTests
                 Id = 0,
                 Order = 0,
                 TargetMetaverseAttributeId = 100,
+                TargetMetaverseAttribute = new MetaverseAttribute { Id = 100, Name = "Employee ID", Type = AttributeDataType.Text },
                 Sources = new List<ObjectMatchingRuleSource>
                 {
                     new() { Order = 0, ConnectedSystemAttributeId = 10 }

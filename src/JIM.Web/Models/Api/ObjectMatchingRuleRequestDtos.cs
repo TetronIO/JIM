@@ -18,10 +18,18 @@ public class CreateObjectMatchingRuleSourceRequest
     public int Order { get; set; } = 0;
 
     /// <summary>
-    /// The Connected System attribute ID. Required: sources are matched against the rule's
-    /// Target Metaverse Attribute, for both import and export matching.
+    /// The Connected System attribute whose values are compared with the rule's Target Metaverse Attribute, for both
+    /// import and export matching. Give exactly one of this or <see cref="Expression"/>.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// An expression computing the value to compare with the rule's Target Metaverse Attribute, such as
+    /// <c>"E" + Trim(cs["employeeId"])</c>. It reads the Connected System Object only (<c>cs["attributeName"]</c>), and
+    /// its result is converted to the Target Metaverse Attribute's type; a list of text values is compared value by
+    /// value. Give exactly one of this or <see cref="ConnectedSystemAttributeId"/>.
+    /// </summary>
+    public string? Expression { get; set; }
 }
 
 /// <summary>

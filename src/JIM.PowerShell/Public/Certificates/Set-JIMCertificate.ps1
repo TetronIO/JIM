@@ -20,20 +20,20 @@ function Set-JIMCertificate {
         New notes for the certificate.
 
     .PARAMETER Enable
-        Enable the certificate.
+        Enables the certificate for use.
 
     .PARAMETER Disable
-        Disable the certificate.
+        Disables the certificate without removing it.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the certificate's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated certificate object.
+        Returns the certificate as updated.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated certificate object.
+        With -PassThru, the certificate as updated; otherwise nothing.
 
     .EXAMPLE
         Set-JIMCertificate -Id $certId -Name "New Name"
@@ -57,7 +57,7 @@ function Set-JIMCertificate {
         Test-JIMCertificate
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TrustedCertificateDetailDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

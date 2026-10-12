@@ -14,32 +14,32 @@ function Set-JIMApiKey {
         The unique identifier (GUID) of the API Key to update.
 
     .PARAMETER Name
-        The new name for the API Key.
+        The new name.
 
     .PARAMETER Description
-        The new description for the API Key.
+        The new description.
 
     .PARAMETER RoleIds
-        Array of Role IDs to assign to this API Key.
+        The IDs of the Roles the API Key has, replacing those it had. Omit it to keep its Roles.
 
     .PARAMETER ExpiresAt
-        New expiry date for the API Key. Use $null to remove expiry.
+        When the API Key expires. $null removes the expiry.
 
     .PARAMETER Enable
-        Enable the API Key.
+        Enables the API Key.
 
     .PARAMETER Disable
-        Disable the API Key.
+        Disables the API Key without removing it.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the API Key's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated API Key object.
+        Returns the API Key as updated.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated API Key object.
+        With -PassThru, the API Key as updated; otherwise nothing.
 
     .EXAMPLE
         Set-JIMApiKey -Id $keyId -Name "New Name" -PassThru
@@ -67,7 +67,7 @@ function Set-JIMApiKey {
         Remove-JIMApiKey
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ApiKeyDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id,

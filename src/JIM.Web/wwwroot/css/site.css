@@ -3122,6 +3122,27 @@ html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input 
     cursor: default;
 }
 
+/* What an expression produced (<ExpressionTester />, the Object Matching Rule editor's Try it): in the editor's
+   typeface, with whitespace kept, so a value carrying a stray space reads differently from one that does not. That
+   difference is often the whole answer to "why did this not match". */
+.jim-expression-output {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The "equals" between an Object Matching Rule's source and its Metaverse attribute, on the inputs' row rather than
+   centred on its grid cell: an expression's cell grows with its helper text and the Insert attribute menu, and
+   centring on the cell would leave the word hanging below both fields. Its line box is made the input's box (the
+   select's 8px control margin, then the 38px outlined input), so the text centres on the input by construction
+   rather than by a font-dependent nudge. Qualified with .mud-typography because MudBlazor's own margin reset loads
+   after this sheet and would win a tie. */
+.jim-matching-rule-equals.mud-typography {
+    margin-top: 8px;
+    line-height: 38px;
+    align-self: flex-start;
+}
+
 /* Attribute table styles (<AttributeTable />: Connected System Object, Pending Export, Metaverse Object) */
 .jim-attribute-table {
     border-radius: var(--jim-container-radius);

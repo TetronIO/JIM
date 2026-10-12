@@ -64,7 +64,7 @@ Scoping criteria decide which objects a rule applies to: only objects that match
 
 ## Object Matching Rules
 
-Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing pairs of attributes. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
+Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing a Connected System attribute, or an [expression](object-matching-rules.md#matching-on-an-expression) worked out from the Connected System Object, with a Metaverse attribute. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
 
 ## Projection and provisioning
 
@@ -75,6 +75,8 @@ These determine what happens when no match is found.
 Where the object type is deleted [When Authoritative Source Disconnected](metaverse.md#authoritative-source-trigger-modes), a projecting rule's Connected System should normally be one of the type's authoritative sources; otherwise the objects it creates are governed by no source. Saving a rule that newly projects from a system that is not one asks you to confirm first. A rule that only joins (projection off) never does: that is the normal way to add a system that contributes attributes without governing lifecycle.
 
 **Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new Connected System Object in the target system's Connector Space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
+
+Before provisioning, the rule's Object Matching Rules look for an unjoined account already in the target, so it is joined rather than duplicated; if several match, JIM provisions nothing for that rule and reports an **Ambiguous Provisioning Match**. See [Matching outcomes](object-matching-rules.md#matching-outcomes).
 
 If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
 

@@ -12,18 +12,13 @@ function Test-JIMConnection {
         authentication method used.
 
     .PARAMETER Quiet
-        If specified, returns only $true or $false instead of the full status object.
+        Returns only $true or $false instead of the connection's status.
 
     .OUTPUTS
-        By default, returns a PSCustomObject with connection details including:
-        - Connected: Whether a connection exists
-        - Url: The JIM instance URL
-        - AuthMethod: The authentication method (ApiKey or OAuth)
-        - Status: The JIM health status
-        - Message: A status message
-        - TokenExpiresAt: (OAuth only) When the access token expires
-
-        With -Quiet, returns $true if connected, $false otherwise.
+        The connection's status: Connected, whether a connection exists and JIM answered; Url, the JIM
+        instance's address; AuthMethod, ApiKey or OAuth; ServerVersion, the JIM version it reported; Status,
+        JIM's health status; Message, a sentence describing the result; and TokenExpiresAt, when the access
+        token expires, for OAuth only. With -Quiet, $true if connected; otherwise $false.
 
     .EXAMPLE
         Test-JIMConnection
@@ -45,6 +40,8 @@ function Test-JIMConnection {
         Disconnect-JIM
     #>
     [CmdletBinding()]
+    [OutputType('JIM.ConnectionStatus')]
+    [OutputType([bool])]
     param(
         [switch]$Quiet
     )

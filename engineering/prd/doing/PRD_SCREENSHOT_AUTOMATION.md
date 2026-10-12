@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (Phases 1 to 4 and 6 complete, and junctional.io distribution built: the release's pre-release run captures the library and opens the site's pull request; the README reads the fixed address; the first automated publish, at the next release, and tetron.io are outstanding)
+- **Status:** Doing (all phases built: the release's pre-release run captures the library and opens pull requests on junctional.io and tetron.io, and the README reads junctional.io's fixed address; junctional.io's first automated publish was TetronIO/junctional.io#17, and tetron.io's first is at the next release)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -111,7 +111,7 @@ The integration runner resets the environment at the start of a run and leaves i
 |---|---|---|
 | junctional.io | A PR adding `src/assets/tour/<version>/` with the images the tour shows (22 of the 78; the whole library stays in the run's artefact, because every image committed to the site stays in its history for good) and setting `tour.imageVersion` in both `src/i18n/en-GB.ts` and `src/i18n/en-US.ts`. The site's Astro pipeline makes the AVIF/WebP variants, so only the PNG sources are needed. Opened by the release's pre-release run, merged by a person once the release is published. | 5 ✅ |
 | JIM README | Point the hero image at `https://junctional.io/assets/screenshots/homepage-dark.png`, which every publish writes, instead of the content-hashed `/_astro/` path, which stops resolving at the first publish. Light and dark, as the README's diagrams are. | 5 ✅ |
-| tetron.io | To be scoped: find where its screenshots live and how it deploys. | 5 |
+| tetron.io | A PR replacing `assets/images/homepage-dark.png`, the homepage hero (the same capture as junctional.io's homepage image; Hugo's `resized-figure` shortcode makes the WebP). The publisher first checks a page still names the image, so a redesign stops the publish rather than having each release commit a file nothing shows. Opened by the same job with its own token and steps, merged by a person after looking at the PR's preview deployment. | 5 ✅ |
 | docs.junctional.io | Not in scope (see Non-Goals). | n/a |
 
 ## Implementation Phases
@@ -120,7 +120,7 @@ The integration runner resets the environment at the start of a run and leaves i
 2. **Scenario 8 data and Production mode** ✅. `-PrepareData`, then the remaining tour entries.
 3. **Terminal screenshots** ✅. The HTML terminal window, built after the mock-ups were approved: `powershell-1` (signing in) to `powershell-3` (a session longer than the terminal).
 4. **The rest of the library** ✅. The 54 images in junctional.io's asset folder that are not on a tour page. Reaching a particular object (a user, a group, the first Full Sync) uses a `fill` step to type into a page's search box, or a list's own URL state (`?q=`, `desc=0`), never an id that changes from run to run.
-5. **Distribution.** The junctional.io pull request ✅; the README reading the fixed address ✅ (the address added by TetronIO/junctional.io#16); tetron.io.
+5. **Distribution** ✅. The junctional.io pull request; the README reading the fixed address (the address added by TetronIO/junctional.io#16); the tetron.io pull request (`Publish-TetronScreenshots.ps1`).
 6. **Release workflow** ✅. The `jim-screenshots` job in `pre-release.yml`, after a passing suite, on the same runner and commit. A job there rather than a workflow of its own, because the `jim-prerelease` runner group admits that one file; it cannot hold up a release, since the gate reads the status the suite has already posted.
 
 ## Affected Areas

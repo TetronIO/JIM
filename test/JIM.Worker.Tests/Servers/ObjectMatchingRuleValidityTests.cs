@@ -172,6 +172,86 @@ public class ObjectMatchingRuleValidityTests
         _connectedSystemRepo.Verify(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
     }
 
+    #region What the rule compares (#2052)
+
+    [Test]
+    public void CreateObjectMatchingRuleAsync_ExpressionReadingTheMetaverse_IsRefusedAsync()
+    {
+        var rule = SimpleModeRule();
+        rule.Sources[0].ConnectedSystemAttributeId = null;
+        rule.Sources[0].Expression = "Trim(cs[\"employeeId\"]) + Trim(mv[\"Department\"])";
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("mv[\"Department\"]"));
+
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public void CreateObjectMatchingRuleAsync_AttributeOfADifferentTypeToTheMetaverseAttribute_IsRefusedAsync()
+    {
+        var rule = SimpleModeRule();
+        rule.Sources[0].ConnectedSystemAttributeId = 102;
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("'employeeNumber' is Number"));
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRuleAsync_WorkableExpressionRule_IsStoredAsync()
+    {
+        var rule = SimpleModeRule();
+        rule.Sources[0].ConnectedSystemAttributeId = null;
+        rule.Sources[0].Expression = "\"E\" + cs[\"employeeId\"]";
+
+        await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey());
+
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(rule), Times.Once);
+    }
+
+    [Test]
+    public void UpdateObjectMatchingRuleAsync_ObjectTypeLoadedWithoutItsAttributes_IsJudgedAgainstThePersistedTypeAsync()
+    {
+        // GetObjectMatchingRuleAsync includes the Object Type but not its attributes, so an update arriving that way
+        // must not read "no attributes" as "an attribute the type does not have", nor wave an unknown one through.
+        var rule = SimpleModeRule();
+        rule.ConnectedSystemObjectType!.Attributes = [];
+        rule.Sources[0].ConnectedSystemAttributeId = null;
+        rule.Sources[0].Expression = "cs[\"costCentre\"]";
+        _connectedSystemRepo.Setup(r => r.GetObjectTypeAsync(7))
+            .ReturnsAsync(new ConnectedSystemObjectType { Id = 7, Name = "User", ConnectedSystemId = 3, Attributes = UserAttributes() });
+
+        Assert.That(async () => await _jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("cs[\"costCentre\"]"));
+    }
+
+    [Test]
+    public void CreateObjectMatchingRuleAsync_MetaverseAttributeNamedOnlyByItsId_IsJudgedAgainstThePersistedAttributeAsync()
+    {
+        var rule = SimpleModeRule();
+        rule.TargetMetaverseAttribute = null;
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        metaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(201, It.IsAny<bool>()))
+            .ReturnsAsync(new MetaverseAttribute { Id = 201, Name = "Leaver", Type = AttributeDataType.Boolean });
+        _repo.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("'Leaver' is Boolean"));
+    }
+
+    [Test]
+    public void CreateObjectMatchingRuleAsync_MetaverseAttributeThatDoesNotExist_IsRefusedAsync()
+    {
+        var rule = SimpleModeRule();
+        rule.TargetMetaverseAttribute = null;
+        _repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
+
+        Assert.That(async () => await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, ApiKey()),
+            Throws.TypeOf<InvalidDataException>().And.Message.Contains("201"));
+    }
+
+    #endregion
+
     private static ObjectMatchingRule SimpleModeRule() => new()
     {
         Id = 9,
@@ -182,7 +262,8 @@ public class ObjectMatchingRuleValidityTests
             Id = 7,
             Name = "User",
             ConnectedSystemId = 3,
-            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" }
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" },
+            Attributes = UserAttributes()
         },
         MetaverseObjectTypeId = 3,
         MetaverseObjectType = new MetaverseObjectType { Id = 3, Name = "Person" },
@@ -208,7 +289,9 @@ public class ObjectMatchingRuleValidityTests
             Name = "Import Users",
             Direction = SyncRuleDirection.Import,
             ConnectedSystemId = 3,
-            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ObjectMatchingRuleMode = systemMode }
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ObjectMatchingRuleMode = systemMode },
+            ConnectedSystemObjectTypeId = 7,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 7, Name = "User", ConnectedSystemId = 3, Attributes = UserAttributes() }
         },
         TargetMetaverseAttributeId = 201,
         TargetMetaverseAttribute = new MetaverseAttribute
@@ -220,6 +303,12 @@ public class ObjectMatchingRuleValidityTests
         },
         Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttributeId = 101 }]
     };
+
+    private static List<ConnectedSystemObjectTypeAttribute> UserAttributes() =>
+    [
+        new() { Id = 101, Name = "employeeId", Type = AttributeDataType.Text },
+        new() { Id = 102, Name = "employeeNumber", Type = AttributeDataType.Number }
+    ];
 
     private static ApiKey ApiKey() => new()
     {

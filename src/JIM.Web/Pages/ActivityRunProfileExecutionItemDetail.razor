@@ -1135,7 +1135,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             return GetUnresolvedReferenceStatusDescription();
 
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return "An error occurred while synchronising the Connected System Object.";
+        {
+            // An item recording a Metaverse Object and no Connected System Object (matching before provisioning, #2052)
+            // is about the Metaverse Object.
+            return _activityRunProfileExecutionItem is { ConnectedSystemObjectId: null, MetaverseObjectId: not null }
+                ? "An error occurred while synchronising the Metaverse Object."
+                : "An error occurred while synchronising the Connected System Object.";
+        }
 
         var description = GetOperationStatusDescription();
         return _unresolvedReferenceTone == UnresolvedReferenceTone.Warning

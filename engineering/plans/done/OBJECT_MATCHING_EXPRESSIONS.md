@@ -1,9 +1,9 @@
 # Object Matching Rules: Match on an Expression
 
-- **Status:** Doing (Layer 1, engine and import, in progress)
+- **Status:** Done (Layers 1, 2 and 3 complete)
 - **Issue:** [#2052](https://github.com/TetronIO/JIM/issues/2052)
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
-- **Builds on:** [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
+- **Builds on:** [CASE_SENSITIVITY_POLICY.md](../doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
 
 ## Overview
 
@@ -182,7 +182,7 @@ Export:  MVO values --> attribute rule: prefetch or per-object query      --> 0 
 
 This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1. Each layer follows TDD and keeps the build and tests green.
 
-### Layer 1: Engine and import
+### Layer 1: Engine and import ✅
 
 1. `MatchValueResolver`, `MatchValueResolution`, and the shared scalar converter (extracted, with Attribute Flow switched to it under its existing tests).
 2. `FindMetaverseObjectIdsByMatchValuesAsync` in PostgreSQL and in-memory. `RequiresPostgres` tests cover:
@@ -211,7 +211,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 
 **Docs:** the matching outcomes in `docs/configuration/synchronisation-rules.md`.
 
-### Layer 2: Export
+### Layer 2: Export ✅
 
 1. `ExportMatchingValue.Resolve` returns every value. The prefetch (`PrefetchExportMatchCandidatesForPageAsync`, `GetExportMatchCandidateIdsAsync`) and the per-object query take every value.
 2. Ambiguity is detected on all three paths, with no lowest-id claim. Error type 29 (`AmbiguousProvisioningMatch`), with every site in section 5. Its candidates (Connected System Objects) are recorded per section 8.
@@ -226,6 +226,12 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 6. Run Scenario 008, as required for export staging changes.
 
 **Changelog:** 🐛 "When more than one existing account matches before provisioning, JIM now reports it for you to resolve instead of joining one of them." **Docs:** the export matching outcomes.
+
+**As built:**
+- The per-object path and the prefetch share one lookup, `GetExportMatchCandidateIdsAsync`; the old per-object repository query is gone. Every candidate is reloaded and re-checked as unjoined before it counts, on every path.
+- `ExpressionMatchValueIndex` holds objects unjoined when it is built. An object that becomes unjoined later in the same run (a Disconnect deprovisioning, say) is considered by the next run's index, not this one's.
+- An incomplete index fails only a lookup that finds nothing; one finding exactly one eligible object still joins it. The error names the first object that could not be worked out, so the administrator has somewhere to start.
+- Sync Preview passes its own cache, so a preview over many objects builds an expression index once rather than per object.
 
 ### Layer 3: Surfaces
 
@@ -266,6 +272,13 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 
 **Changelog:** ✨ "Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match."
 
+**As built:**
+- Section 7's checks live in `ObjectMatchingRuleValidator` (JIM.Application), because parsing an expression needs the evaluator. Saving, the Preview Impact adapter and the portal editor's live warning all call it, so the three cannot disagree about what is workable.
+- Try it calls `ObjectMatchingServer.ResolveSampleMatchValues`, which converts each sample to its attribute's type and then runs the same `MatchValueResolver` a synchronisation does.
+- The expression documentation lives in `docs/configuration/object-matching-rules.md` ("Matching on an expression"), the page that owns Object Matching Rules. `docs/configuration/synchronisation-rules.md` links to it rather than repeating it. The multi-source suggestion the plan names had already gone.
+- Preview Impact's Matches column shows each candidate without its type, to keep the row to one line. The chip's tooltip names the type.
+- Scenario 005's four steps share helpers with the existing ExportMatchJoin step. Those helpers append an HR row, reset the HR file, and create or delete an out-of-band directory account on each directory type.
+
 ## Success Criteria
 
 - Expression rules join on import and match on export in both modes, across the portal, REST API and PowerShell.
@@ -281,7 +294,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 
 ## Dependencies
 
-- [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
+- [CASE_SENSITIVITY_POLICY.md](../doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
 - #1750 derived Metaverse attributes, already shipped, for normalising the Metaverse side.
 - No new packages.
 

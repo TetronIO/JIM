@@ -33,6 +33,9 @@ public class ExportMatchingClaimDatabaseTests
 
     private const string ExportRuleName = "Yellowstone Users Export";
 
+    /// <summary>The Object Matching Rule that found the object, recorded on the join (#2052).</summary>
+    private int _objectMatchingRuleId;
+
     private JimDbContext NewContext()
     {
         var options = new DbContextOptionsBuilder<JimDbContext>()
@@ -92,9 +95,11 @@ public class ExportMatchingClaimDatabaseTests
             ConnectedSystemObjectType = csType,
             MetaverseObjectType = mvType
         };
-        seed.AddRange(connectorDefinition, system, csType, mvType, exportRule);
+        var objectMatchingRule = new ObjectMatchingRule { Order = 1, ConnectedSystemObjectType = csType };
+        seed.AddRange(connectorDefinition, system, csType, mvType, exportRule, objectMatchingRule);
         await seed.SaveChangesAsync();
         _exportRuleId = exportRule.Id;
+        _objectMatchingRuleId = objectMatchingRule.Id;
 
         var firstMvo = new MetaverseObject { Type = mvType };
         var secondMvo = new MetaverseObject { Type = mvType };
@@ -127,7 +132,8 @@ public class ExportMatchingClaimDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName);
+        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(
+            csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName, _objectMatchingRuleId, "E1001, E1002");
 
         Assert.That(claimed, Is.True, "The first claim on an unclaimed CSO must succeed");
 
@@ -142,6 +148,8 @@ public class ExportMatchingClaimDatabaseTests
         Assert.That(row.JoinMethod, Is.EqualTo(ConnectedSystemObjectJoinMethod.ExportMatching), "the claim must record how it joined (#348)");
         Assert.That(row.JoinSyncRuleId, Is.EqualTo(_exportRuleId), "the claim must record the matching rule (#348)");
         Assert.That(row.JoinSyncRuleName, Is.EqualTo(ExportRuleName));
+        Assert.That(row.JoinObjectMatchingRuleId, Is.EqualTo(_objectMatchingRuleId), "the claim must record the Object Matching Rule (#2052)");
+        Assert.That(row.JoinMatchValue, Is.EqualTo("E1001, E1002"), "the claim must record what it matched on (#2052)");
     }
 
     /// <summary>
@@ -157,13 +165,13 @@ public class ExportMatchingClaimDatabaseTests
 
         await using var firstCtx = NewContext();
         var firstRepository = new PostgresDataRepository(firstCtx);
-        var firstClaimed = await firstRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, firstDateJoined, _exportRuleId, ExportRuleName);
+        var firstClaimed = await firstRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, firstDateJoined, _exportRuleId, ExportRuleName, null, null);
         Assert.That(firstClaimed, Is.True, "Precondition: the first claim must succeed");
 
         await using var secondCtx = NewContext();
         var secondRepository = new PostgresDataRepository(secondCtx);
         var secondClaimed = await secondRepository.Sync.TryClaimConnectedSystemObjectForJoinAsync(
-            csoId, secondMvoId, DateTime.UtcNow.AddSeconds(1), _exportRuleId, "Another Rule");
+            csoId, secondMvoId, DateTime.UtcNow.AddSeconds(1), _exportRuleId, "Another Rule", _objectMatchingRuleId, "E9999");
 
         Assert.That(secondClaimed, Is.False, "A second claim on an already-claimed CSO must fail");
 
@@ -175,6 +183,7 @@ public class ExportMatchingClaimDatabaseTests
             "The failed second claim must not overwrite the first claim's DateJoined");
         Assert.That(row.JoinSyncRuleName, Is.EqualTo(ExportRuleName),
             "The failed second claim must not overwrite the first claim's join record");
+        Assert.That(row.JoinMatchValue, Is.Null, "nor what the first claim matched on");
     }
 
     /// <summary>
@@ -197,7 +206,7 @@ public class ExportMatchingClaimDatabaseTests
         // in the same run (e.g. AttemptExportMatchingAsync's candidate lookup).
         var trackedCso = await ctx.ConnectedSystemObjects.SingleAsync(c => c.Id == csoId);
 
-        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName);
+        var claimed = await repository.Sync.TryClaimConnectedSystemObjectForJoinAsync(csoId, firstMvoId, dateJoined, _exportRuleId, ExportRuleName, null, null);
         Assert.That(claimed, Is.True);
 
         // Fix up the tracked instance exactly as CreateOrUpdatePendingExportWithNoNetChangeAsync does,
