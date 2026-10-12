@@ -46,7 +46,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person.
 
-**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/synchronisation-rules.md#matching-outcomes) describes.
+**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
 
@@ -78,7 +78,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** The Connected System refused an export, and the rest of the message is its own reason: the account JIM connects as lacks the rights, the change breaks the system's own rules, or a required value is missing. JIM records any refusal it cannot classify as an error it did not anticipate, so the run ends **Complete with error** even though the cause is usually the Connected System's configuration. The change is still waiting, as a Pending Export: JIM tries it again at each Export run after waiting 2, 4, 8 and then 16 minutes, and marks it Failed after the fifth refusal.
 
-**How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/synchronisation-rules.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector.md#active-directory-will-not-enable-an-account-that-has-no-password).
+**How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector.md#active-directory-will-not-enable-an-account-that-has-no-password).
 
 **Check.** The next Export run writes the change, and its Pending Export clears. A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
 

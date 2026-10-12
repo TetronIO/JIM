@@ -333,7 +333,7 @@ Each pass says what it removed, on its own Activity, so retention is something y
 
 | To | See |
 |---|---|
-| Switch on initial passwords for a rule | [Synchronisation Rules: Initial password](../configuration/synchronisation-rules.md#initial-password) |
+| Switch on initial passwords for a rule | [Initial Password](../configuration/initial-password.md) |
 | See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-system-passwords.md#password-policy-and-the-password-channel) |
 | Set a password on one Connected System Object, or on a Metaverse Object | [Connected Systems: Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) |
 | Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) |

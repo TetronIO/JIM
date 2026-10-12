@@ -28,7 +28,7 @@ For more detail on these concepts, see [Connected Systems](../configuration/conn
 
 ## 🛠️ Available Connectors
 
-JIM ships with the following built-in connectors. **Passwords** means the connector can set passwords, so it can receive initial passwords, on-demand password changes and Password Synchronisation. **Probe** means that when a synchronisation generates a value, such as an account name, the connector can ask its Connected System directly whether the value is already in use, which catches accounts JIM does not import (see [Checking availability in target systems](../configuration/synchronisation-rules.md#checking-availability-in-target-systems)).
+JIM ships with the following built-in connectors. **Passwords** means the connector can set passwords, so it can receive initial passwords, on-demand password changes and Password Synchronisation. **Probe** means that when a synchronisation generates a value, such as an account name, the connector can ask its Connected System directly whether the value is already in use, which catches accounts JIM does not import (see [Checking availability in target systems](../configuration/generated-values.md#checking-availability-in-target-systems)).
 
 | Connector | Description | Capabilities | Probe |
 |-----------|-------------|--------------|-------|

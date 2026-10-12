@@ -18,7 +18,6 @@ LANG-3	configuration/roles.md	2
 LANG-3	configuration/schedules.md	2
 LANG-3	configuration/service-settings.md	1
 LANG-3	configuration/sync-preview.md	2
-LANG-3	configuration/synchronisation-rules.md	24
 LANG-3	connectors/index.md	6
 LANG-3	getting-started/index.md	1
 LANG-3	powershell/api-keys.md	3
@@ -38,7 +37,6 @@ LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
 LANG-3	reference/glossary.md	1
-LANG-4	configuration/synchronisation-rules.md	24
 LANG-4	connectors/index.md	3
 LANG-4	connectors/jim-file-connector.md	1
 LANG-4	powershell/connected-systems.md	3
@@ -51,7 +49,6 @@ LANG-7	concepts/expressions.md	2
 LANG-7	configuration/data-flow.md	1
 LANG-7	configuration/metaverse.md	2
 LANG-7	configuration/schedules.md	1
-LANG-7	configuration/synchronisation-rules.md	3
 LANG-7	connectors/jim-ldap-connector.md	2
 LANG-7	connectors/jim-scim-connector.md	1
 LANG-7	connectors/jim-sql-connector-delta-import-watermark.md	1
@@ -92,7 +89,6 @@ STR-2	configuration/roles.md	3
 STR-2	configuration/schedules.md	3
 STR-2	configuration/service-settings.md	3
 STR-2	configuration/sync-preview.md	3
-STR-2	configuration/synchronisation-rules.md	3
 STR-2	connectors/index.md	4
 STR-2	connectors/jim-file-connector.md	4
 STR-2	connectors/jim-ldap-connector.md	4
