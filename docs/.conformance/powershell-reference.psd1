@@ -11,5 +11,6 @@
     # object returns a type the API does not have; list it here with the reason, and describe its
     # properties in the cmdlet's .OUTPUTS help instead. An entry no cmdlet declares fails the check.
     NonApiOutputTypes = @{
+        'JIM.ConnectionStatus' = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
     }
 }

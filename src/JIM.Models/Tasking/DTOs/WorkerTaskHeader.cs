@@ -79,15 +79,20 @@ public class WorkerTaskHeader
     public int? ScheduleStepIndex { get; set; }
 
     /// <summary>
-    /// The number of step groups the Schedule Execution is working through (#1162). Needed to draw the
-    /// whole Schedule rather than only the part of it still in the queue: finished steps have had their
-    /// tasks deleted, so a rail counted from the queue alone would shorten as the Schedule progressed.
+    /// The number of step groups the Schedule Execution is working through.
     /// </summary>
+    /// <remarks>
+    /// Needed to draw the whole Schedule rather than only the part of it still in the queue (#1162):
+    /// finished steps have had their tasks deleted, so a rail counted from the queue alone would shorten
+    /// as the Schedule progressed.
+    /// </remarks>
     public int? ScheduleTotalSteps { get; set; }
 
     /// <summary>
-    /// The step group the Schedule Execution has reached (0-based), which settles where a step that
-    /// left no record of its own sits relative to the Schedule's progress.
+    /// The step group the Schedule Execution has reached, counting from 0.
     /// </summary>
+    /// <remarks>
+    /// Settles where a step that left no record of its own sits relative to the Schedule's progress.
+    /// </remarks>
     public int? ScheduleCurrentStepIndex { get; set; }
 }

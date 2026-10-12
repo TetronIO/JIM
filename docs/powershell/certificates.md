@@ -40,10 +40,44 @@ Get-JIMCertificate [-Name <string>] [-EnabledOnly]
 
 Listing returns each certificate's summary; -Id returns the certificate in full.
 
-| Type | Returned by | Properties |
-|------|-------------|------------|
-| `TrustedCertificateHeader` | List, Enabled | `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `ValidFrom`, `ValidTo`, `SourceType`, `IsEnabled`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry` |
-| `TrustedCertificateDetailDto` | ById | `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry` |
+**`TrustedCertificateHeader`** (List, Enabled):
+
+| Property | Type |
+|----------|------|
+| `Id` | `guid` |
+| `Name` | `string` |
+| `Thumbprint` | `string` |
+| `Subject` | `string` |
+| `Issuer` | `string` |
+| `ValidFrom` | `datetime` |
+| `ValidTo` | `datetime` |
+| `SourceType` | `CertificateSourceType` |
+| `IsEnabled` | `bool` |
+| `IsExpired` | `bool` |
+| `IsExpiringSoon` | `bool` |
+| `DaysUntilExpiry` | `int` |
+
+**`TrustedCertificateDetailDto`** (ById):
+
+| Property | Type |
+|----------|------|
+| `Id` | `guid` |
+| `Name` | `string` |
+| `Thumbprint` | `string` |
+| `Subject` | `string` |
+| `Issuer` | `string` |
+| `SerialNumber` | `string` |
+| `ValidFrom` | `datetime` |
+| `ValidTo` | `datetime` |
+| `SourceType` | `CertificateSourceType` |
+| `FilePath` | `string` |
+| `IsEnabled` | `bool` |
+| `CreatedAt` | `datetime` |
+| `CreatedBy` | `string` |
+| `Notes` | `string` |
+| `IsExpired` | `bool` |
+| `IsExpiringSoon` | `bool` |
+| `DaysUntilExpiry` | `int` |
 <!-- END GENERATED: Get-JIMCertificate -->
 
 ### Examples
@@ -97,16 +131,14 @@ Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] 
 | `CertificateData` | `byte[]` | Yes (FromData) |  | Raw certificate data as a byte array. |
 | `CertificateBase64` | `string` | Yes (FromBase64) |  | Certificate data as a Base64-encoded string. |
 | `Notes` | `string` | No |  | Optional notes about the certificate. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the certificate added. |
 
 ### Output
 
 With -PassThru, the certificate added; otherwise nothing.
 
-| Type | Properties |
-|------|------------|
-| `TrustedCertificateDetailDto` | `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry` |
+**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Add-JIMCertificate -->
 
 ### Examples
@@ -156,16 +188,14 @@ Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Dis
 | `Notes` | `string` | No |  | New notes for the certificate. |
 | `Enable` | `switch` | No |  | Enables the certificate for use. |
 | `Disable` | `switch` | No |  | Disables the certificate without removing it. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the certificate as updated. |
 
 ### Output
 
 With -PassThru, the certificate as updated; otherwise nothing.
 
-| Type | Properties |
-|------|------------|
-| `TrustedCertificateDetailDto` | `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry` |
+**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Set-JIMCertificate -->
 
 ### Examples
@@ -214,7 +244,7 @@ Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-F
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of the certificate to delete. Accepts pipeline input by property name. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The certificate to remove, as Get-JIMCertificate returns it. Accepts pipeline input. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 | `PassThru` | `switch` | No |  | Returns the certificate as it was before it was removed. |
 
@@ -222,9 +252,7 @@ Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-F
 
 With -PassThru, the certificate as it was before it was removed; otherwise nothing.
 
-| Type | Properties |
-|------|------------|
-| `TrustedCertificateDetailDto` | `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry` |
+**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Remove-JIMCertificate -->
 
 ### Examples
@@ -273,9 +301,13 @@ Test-JIMCertificate -Id <guid>
 
 The result of the checks. IsValid is true when the certificate passed every one; Warnings lists problems that do not stop it being used, such as expiring soon, and Errors those that do, such as having expired or an untrusted chain.
 
-| Type | Properties |
-|------|------------|
-| `CertificateValidationResult` | `IsValid`, `Errors`, `Warnings` |
+**`CertificateValidationResult`**:
+
+| Property | Type |
+|----------|------|
+| `IsValid` | `bool` |
+| `Errors` | `string[]` |
+| `Warnings` | `string[]` |
 <!-- END GENERATED: Test-JIMCertificate -->
 
 ### Examples
@@ -338,9 +370,7 @@ Export-JIMCertificate -Id <guid> -PassThru
 
 With -PassThru, the certificate's bytes, DER-encoded; otherwise nothing, the certificate being written to -Path.
 
-| Type | Returned by | Properties |
-|------|-------------|------------|
-| `byte[]` | PassThru |  |
+**`byte[]`** (PassThru)
 <!-- END GENERATED: Export-JIMCertificate -->
 
 ### Examples

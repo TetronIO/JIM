@@ -13,16 +13,17 @@ function Reset-JIMServiceSetting {
         An audit activity is created for each revert operation.
 
     .PARAMETER Key
-        The unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").
+        The key of the setting to revert, such as "ChangeTracking.CsoChanges.Enabled".
 
     .PARAMETER ChangeReason
-        An optional reason for the revert, recorded against the setting's configuration change history.
+        Optional reason for the revert, recorded on the audit Activity and shown in the setting's
+        Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the reverted service setting object.
+        Returns the setting as reverted.
 
     .OUTPUTS
-        If -PassThru is specified, returns the reverted service setting object.
+        With -PassThru, the setting as reverted; otherwise nothing.
 
     .EXAMPLE
         Reset-JIMServiceSetting -Key "ChangeTracking.CsoChanges.Enabled"
@@ -41,7 +42,7 @@ function Reset-JIMServiceSetting {
         Set-JIMServiceSetting
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ServiceSettingDto')]
     param(
         [Parameter(Mandatory, Position = 0, ValueFromPipelineByPropertyName)]
         [string]$Key,
