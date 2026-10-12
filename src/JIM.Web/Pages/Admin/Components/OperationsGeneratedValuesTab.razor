@@ -99,7 +99,7 @@
     <ToolBarExtras>
         @* Acts on the filter shown, not on a selection: every held value matching the Connected System and Synchronisation
            Rule filters. An allowed rename is never released by Try again, so it is not counted. *@
-        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Variant="Variant.Outlined"
                    Disabled="@(_busy || _summary.NeedsDecisionCount == 0)" OnClick="TryAgainAllAsync"
                    data-testid="generated-values-try-again-all">
             Try again for all @_summary.NeedsDecisionCount.ToString("N0")
@@ -158,7 +158,7 @@
                                    OnClick="@(() => AllowRenameAsync(context.Item))" data-testid="generated-value-allow-rename">
                             Allow the rename…
                         </MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@_busy"
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_busy"
                                    OnClick="@(() => TryAgainAsync(context.Item))" data-testid="generated-value-try-again">
                             Try again
                         </MudButton>

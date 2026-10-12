@@ -147,7 +147,7 @@
 
             @if (IsRunContext && ConnectedSystemObjectId is { } objectId && _context != null)
             {
-                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="mt-3"
+                <MudButton Variant="Variant.Text" Class="mt-3"
                            Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{objectId}")">
                     View the Connected System Object
                 </MudButton>

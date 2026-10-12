@@ -7,15 +7,19 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Holds the design system's button emphasis rule (<c>engineering/DESIGN.md</c> > Buttons): emphasis comes from the
-/// variant, filled then outlined then text, never from the colour, and a view keeps one filled button for its main
-/// action. Before the rule, a lesser action was "lowered" by filling it Secondary or Default, which is just as heavy, so
-/// most pages carried two or three filled blocks competing for attention.
+/// Holds the design system's button rule (<c>engineering/DESIGN.md</c> > Buttons): colour says what a button does and
+/// the variant how much it matters. Primary is the view's main action and is always filled, at most one per view; error
+/// and warning are dangerous actions; every other action is outlined or text in the default colour. Before the rule,
+/// lesser actions were outlined in primary, so a page with no main action still offered three purple buttons, each
+/// competing with the links and the Metaverse-side chips that are primary too.
 /// </summary>
 /// <remarks>
 /// <para>What the sweep can see in one file, it enforces:</para>
 /// <list type="bullet">
-/// <item>a filled button in a colour other than Primary, Error or Warning (recolouring is not a way to lower emphasis);</item>
+/// <item>a filled button in a colour other than Primary, Error or Warning (a filled default reads as disabled, and the
+/// rest carry no button meaning);</item>
+/// <item>an outlined or text button in Primary, bar a text button on a table row, which reads as a link;</item>
+/// <item>an outlined or text button in Secondary, Tertiary, Info, Success or Dark;</item>
 /// <item>a filled Error or Warning button outside a dialog's actions (a destructive action on a page is outlined; it is
 /// filled only as the confirming button of its own dialog);</item>
 /// <item>more than one filled button that can render at once in a dialog's actions;</item>
@@ -41,14 +45,14 @@ public class ButtonEmphasisConventionTests
         "Pages/Dev/ErrorPagePreview.razor"
     ];
 
-    private static readonly string[] RowContexts = ["CellTemplate", "RowTemplate", "ChildRowContent", "MudTd"];
+    private static readonly string[] RowContexts = ["CellTemplate", "RowTemplate", "ChildRowContent", "MudTd", "td"];
 
     // Comments, the buttons themselves (tolerant of '>' inside quoted attribute values such as lambdas), and the
     // containers whose nesting matters.
     private static readonly Regex Token = new(
         @"@\*.*?\*@" +
         @"|<(?:MudButton|MudMenu|MudButtonGroup)\b(?:[^>""']|""[^""]*""|'[^']*')*>" +
-        @"|</?(?:DialogActions|CellTemplate|RowTemplate|ChildRowContent|MudTd)\b[^>]*>",
+        @"|</?(?:DialogActions|CellTemplate|RowTemplate|ChildRowContent|MudTd|td)\b[^>]*>",
         RegexOptions.Compiled | RegexOptions.Singleline);
 
     private static readonly Regex VariantAttribute = new(@"\bVariant=""([^""]*)""", RegexOptions.Compiled);
@@ -96,13 +100,84 @@ public class ButtonEmphasisConventionTests
     }
 
     [Test]
-    public void FindOffences_LowerEmphasisByVariant_IsNotReported()
+    public void FindOffences_LowerEmphasisByVariantInTheNeutralColour_IsNotReported()
     {
         const string source = "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\">Save</MudButton>\n" +
-                              "<MudButton Variant=\"Variant.Outlined\" Color=\"Color.Secondary\">Preview</MudButton>\n" +
+                              "<MudButton Variant=\"Variant.Outlined\">Preview</MudButton>\n" +
+                              "<MudButton Variant=\"Variant.Outlined\" Color=\"Color.Error\">Delete</MudButton>\n" +
                               "<MudButton Color=\"Color.Default\">Cancel</MudButton>";
 
         Assert.That(FindOffences(source, "Page.razor"), Is.Empty);
+    }
+
+    [Test]
+    public void FindOffences_AnOutlinedPrimaryButton_IsReported()
+    {
+        // Primary marks the main action, and the main action is filled; an outlined one says "main" and "lesser" at once.
+        const string source = "<MudButton Variant=\"Variant.Outlined\" Color=\"Color.Primary\">Preview</MudButton>";
+
+        Assert.That(FindOffences(source, "Page.razor"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void FindOffences_ATextPrimaryButtonOutsideATableRow_IsReported()
+    {
+        const string source = "<MudButton Variant=\"Variant.Text\" Color=\"Color.Primary\">Check again</MudButton>";
+
+        Assert.That(FindOffences(source, "Page.razor"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void FindOffences_APrimaryButtonWithNoVariant_IsReported()
+    {
+        // A button names no variant when it is a text button, MudBlazor's default.
+        const string source = "<MudButton Color=\"Color.Primary\" OnClick=\"Close\">Close</MudButton>";
+
+        Assert.That(FindOffences(source, "Dialog.razor"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void FindOffences_AnOutlinedPrimaryMenu_IsReported()
+    {
+        const string source = "<MudMenu Label=\"Columns\" Variant=\"Variant.Outlined\" Color=\"Color.Primary\">\n</MudMenu>";
+
+        Assert.That(FindOffences(source, "List.razor"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void FindOffences_ATextPrimaryButtonInAPlainTableCell_IsNotReported()
+    {
+        // A row action reads as a link, and links are primary; the row is the same whether a MudTd or a td draws it.
+        const string source = "<tr>\n  <td>\n" +
+                              "    <MudButton Variant=\"Variant.Text\" Color=\"Color.Primary\" Size=\"Size.Small\">Select</MudButton>\n" +
+                              "  </td>\n</tr>";
+
+        Assert.That(FindOffences(source, "Dialog.razor"), Is.Empty);
+    }
+
+    [Test]
+    public void FindOffences_AnOutlinedPrimaryButtonOnATableRow_IsReported()
+    {
+        // The row exception is for text buttons, which read as links; an outlined one reads as a button.
+        const string source = "<CellTemplate>\n" +
+                              "  <MudButton Variant=\"Variant.Outlined\" Color=\"Color.Primary\" Size=\"Size.Small\">View</MudButton>\n" +
+                              "</CellTemplate>";
+
+        Assert.That(FindOffences(source, "List.razor"), Has.Count.EqualTo(1));
+    }
+
+    [TestCase("Color.Secondary")]
+    [TestCase("Color.Tertiary")]
+    [TestCase("Color.Info")]
+    [TestCase("Color.Success")]
+    [TestCase("Color.Dark")]
+    public void FindOffences_ALesserButtonInAColourWithNoIntent_IsReported(string colour)
+    {
+        // A button's colour says what it does: primary for the main action, error and warning for the dangerous ones.
+        // Secondary means the Connected System side in JIM, and the rest are an alert's to give (AlertButton).
+        var source = $"<MudButton Variant=\"Variant.Outlined\" Color=\"{colour}\">Preview</MudButton>";
+
+        Assert.That(FindOffences(source, "Page.razor"), Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -265,10 +340,16 @@ public class ButtonEmphasisConventionTests
             if (TryTrackContainer(text, ref rowDepth, ref dialogActionsDepth))
                 continue;
 
-            if (exempt || !IsFilled(text))
+            if (exempt)
                 continue;
 
             var name = Regex.Match(text, @"^<(\w+)").Groups[1].Value;
+            if (!IsFilled(text))
+            {
+                offences.AddRange(FindLesserButtonOffences(text, name, rowDepth > 0, relativePath, line));
+                continue;
+            }
+
             if (name == "MudButtonGroup")
             {
                 offences.Add($"{relativePath}:{line} a filled MudButtonGroup fills every button in it; fill only the main action");
@@ -281,7 +362,7 @@ public class ButtonEmphasisConventionTests
 
             var lowered = colours.Count == 0 ? ["(none)"] : colours.Where(c => c is not ("Primary" or "Error" or "Warning")).ToList();
             if (lowered.Count > 0)
-                offences.Add($"{relativePath}:{line} a filled {name} in {string.Join("/", lowered)}; lower emphasis by variant (outlined or text), not colour");
+                offences.Add($"{relativePath}:{line} a filled {name} in {string.Join("/", lowered)}; fill only the main action (Primary) or a dialog's dangerous confirmation (Error, Warning), and outline the rest in the default colour");
 
             if (colours.Any(c => c is "Error" or "Warning") && dialogActionsDepth == 0)
                 offences.Add($"{relativePath}:{line} a filled destructive {name} outside a dialog's actions; outline it, and fill only the dialog's confirming button");
@@ -292,6 +373,32 @@ public class ButtonEmphasisConventionTests
 
         offences.AddRange(FindCrowdedDialogActions(source, relativePath));
         return offences;
+    }
+
+    /// <summary>
+    /// The offences of a button that is not filled. Its colour says what it does: the neutral default, or error or warning
+    /// for a dangerous action. Primary marks the view's main action, which is filled, save for a text button on a table
+    /// row: it reads as a link, and links are primary. The other colours are a chip's (secondary is the Connected System
+    /// side) or an alert's to give, through AlertButton.
+    /// </summary>
+    private static IEnumerable<string> FindLesserButtonOffences(string tag, string name, bool onATableRow, string relativePath, int line)
+    {
+        var variant = VariantAttribute.Match(tag);
+        // A variant chosen at run time, or a menu drawn as an icon button, says nothing the sweep can judge.
+        if ((variant.Success && variant.Groups[1].Value.StartsWith('@')) ||
+            (name == "MudMenu" && Regex.IsMatch(tag, @"\bIcon=""")))
+            yield break;
+
+        var isText = !variant.Success || variant.Groups[1].Value.Contains("Variant.Text", StringComparison.Ordinal);
+        var kind = isText ? "a text" : "an outlined";
+        var colours = ColoursOf(tag);
+
+        if (colours.Contains("Primary") && !(isText && onATableRow))
+            yield return $"{relativePath}:{line} {kind} {name} in Primary; primary marks the view's main action, which is filled, so a lesser action takes the default colour";
+
+        var withoutIntent = colours.Where(c => c is "Secondary" or "Tertiary" or "Info" or "Success" or "Dark").ToList();
+        if (withoutIntent.Count > 0)
+            yield return $"{relativePath}:{line} {kind} {name} in {string.Join("/", withoutIntent)}; a button's colour says what it does: default, or error or warning for a dangerous action";
     }
 
     /// <summary>Follows the containers whose nesting matters; true when the token was one of them.</summary>

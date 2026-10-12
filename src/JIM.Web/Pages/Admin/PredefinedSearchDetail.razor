@@ -224,11 +224,11 @@
 
         <div class="mt-4">
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Color="Color.Primary" Class="me-3"
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Class="me-3"
                            OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria</MudButton>
             </MudTooltip>
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
-                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined" Color="Color.Primary"
+                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Outlined"
                            OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria Group</MudButton>
             </MudTooltip>
         </div>

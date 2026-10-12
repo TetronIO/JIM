@@ -301,19 +301,21 @@ The MkDocs Material docs site uses a standard two-column layout (nav plus conten
 
 ### Buttons
 
-Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Outlined buttons use transparent background with `primary` text and border. Hover state darkens to `primary-darken`.
+Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Outlined buttons use a transparent background with the default text colour and a border drawn from it. Hover state darkens to `primary-darken` on a primary button, and tints the background on an outlined one.
 
-**One filled button per view.** Emphasis comes from the variant, not the colour: filled is high emphasis, outlined medium, text low. A view (a page as it is seen at once, or a dialog) has at most one filled `primary` button, its main action; every other action is outlined, or a text button where it is lesser still.
+**Colour says what a button does; the variant says how much it matters.** `primary` is the page's main action, `error` and `warning` are dangerous ones, and every other action takes the neutral default colour. Filled is reserved for the one action a view most wants taken, outlined is an ordinary action, and text is the least of them.
 
-- A panel's own action on a page that already has a main action is outlined: the Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's filled **Save Changes**.
-- In a dialog, the filled button is the recommended way out, which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** outlined and **Cancel** as text.
-- Lower emphasis by variant, never by recolouring. A filled `secondary` button is just as heavy as a filled `primary` one (and `secondary` means the Connected System side in JIM's chips), and a filled default grey reads as disabled.
-- A destructive action on a page (**Delete Connected System**, **Delete All Objects**, **Cancel Execution**) is outlined in `error`. It is filled in `error` only as the confirming button of its own dialog, where it is that dialog's one filled button.
-- An action repeated on every row of a table (**View**, **Preview Sync**) is a text button, so a long list does not become a column of blocks.
-- Choosing between views or sibling pages (Connected Systems and Connectors, the Metaverse Object's Form, Tabs and Inspect) is a segmented control, not a button group with the chosen option filled: the choice is a state, not an action.
-- Outside the rule: buttons inside alerts, which follow the paragraph below, and the small filled icon buttons that act on one item in a list or table.
+- **A view has at most one filled `primary` button, and a `primary` button is always filled.** A view is a page as it is seen at once, or a dialog. Its main action is the one filled `primary` button: the Details tab's **Save Changes**. A page with no main action (a Connected System Object, a Metaverse Object) has no `primary` button at all.
+- **Every other action is outlined in the default colour,** or a text button where it is lesser still. The Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's filled **Save Changes** as a neutral outlined button, and a Connected System Object's **Preview Sync** and **Set Password** are a pair of them.
+- **Never fill a button in the default colour:** MudBlazor draws it as a grey block, which reads as disabled.
+- **The colours with no button meaning stay off buttons.** `secondary` means the Connected System side in JIM's chips, and `info` and `success` belong to alerts, whose buttons take the alert's colour (see below).
+- **A destructive action** on a page (**Delete Connected System**, **Delete All Objects**, **Cancel Execution**) is outlined in `error`. It is filled in `error` only as the confirming button of its own dialog, where it is that dialog's one filled button.
+- **In a dialog, the filled button is the recommended way out,** which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** outlined and **Cancel** as text.
+- **An action repeated on every row of a table** (**View**, **Preview Sync**, **Explore**) is a text button in `primary`. It is the one exception to the colour rule, because a row action reads and behaves as a link, and links are `primary` throughout the portal; outlined, it would turn a long list into a column of boxes.
+- **Choosing between views or sibling pages** (Connected Systems and Connectors, the Metaverse Object's Form, Tabs and Inspect) is a segmented control, not a button group with the chosen option filled: the choice is a state, not an action.
+- Outside the rule: buttons inside alerts, which follow the paragraph below, and the small icon buttons that act on one item in a list or table.
 
-In the portal a build check (`ButtonEmphasisConventionTests`) holds every component to what one file can show: no filled button lowered by colour, no filled destructive button outside a dialog's actions, no more than one filled button showing in a dialog's actions, no filled button on a table row, and no filled button group. "One filled button per page" spans several components, so that half is for review.
+In the portal a build check (`ButtonEmphasisConventionTests`) holds every component to what one file can show: no filled button in a colour without a main or dangerous meaning, no `primary` button that is not filled (bar a text button on a table row), no outlined or text button in a colour with no button meaning, no filled destructive button outside a dialog's actions, no more than one filled button showing in a dialog's actions, no filled button on a table row, and no filled button group. "One filled button per page" spans several components, so that half is for review.
 
 A button inside an alert is filled in the alert's severity colour (`warning` on a warning, `error` on an error, and so on), never `primary`, so the action reads as part of the message it answers. A lesser action beside it is a text button in the alert's colour. In the portal this is the `<AlertButton>` component, enforced by a build check; see `src/JIM.Web/CLAUDE.md` > Alerts.
 
