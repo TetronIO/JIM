@@ -87,7 +87,7 @@ Each step's work is recorded as an [Activity](activities.md) of its own, which n
 
 ### When a run is due
 
-The Scheduler checks for Schedules that are due at least every 30 seconds. A Schedule that falls due while its previous run is still going does not start a second run beside it: it starts at the first check after the running one ends. A Schedule with no steps never runs: nothing starts when it falls due, and running it by hand is refused.
+The Scheduler checks for Schedules that are due every 30 seconds, and again as soon as a step of a running Schedule finishes. A Schedule that falls due while its previous run is still going does not start a second run beside it: it starts at the first check after the running one ends. A Schedule with no steps never runs: nothing starts when it falls due, and running it by hand is refused. To run it, add at least one step.
 
 ### Seeing how a run ended
 
