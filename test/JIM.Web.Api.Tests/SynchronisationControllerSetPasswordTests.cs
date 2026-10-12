@@ -323,6 +323,22 @@ public class SynchronisationControllerSetPasswordTests
         }
     }
 
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162).
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WithEnableAccountFalse_RefusesBeforeQueueingAnythingAsync()
+    {
+        var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = Password, EnableAccount = false, Wait = 0 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("enableAccount"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
     [TestCase(-1)]
     [TestCase(31)]
     public async Task SetConnectedSystemObjectPasswordAsync_WaitOutOfRange_RefusesBeforeQueueingAnythingAsync(int wait)
