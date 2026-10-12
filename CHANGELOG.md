@@ -92,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Sync Preview now shows that an object with no import Synchronisation Rule would join through its Object Type's Object Matching Rules in simple mode, and no longer predicts such joins in advanced mode, where the synchronisation ignores those rules. (#2176)
 - 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
 - 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)
+- 🐛 A cancelled or failed export run no longer leaves its batch stuck as **Executing** until the Worker restarts. On cancel, changes already written are recorded and the rest wait for the next run, so the SQL and SCIM Connectors no longer send a Create twice. (#2083)
+- 🐛 An export that times out is now recorded as a failed export, rather than ending as though someone had cancelled it. (#2083)
 - 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)

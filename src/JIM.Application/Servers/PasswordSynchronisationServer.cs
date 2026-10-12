@@ -404,10 +404,11 @@ public class PasswordSynchronisationServer
     public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// How long an export may be Executing before a delivery stops waiting for it (#2173). A run that fails or is
-    /// cancelled can leave its batch Executing until the Worker restarts, and a delivery waiting on that would wait
-    /// until the change expired. An hour is far longer than an export batch takes, so an export still Executing after
-    /// it is treated as stranded: the delivery logs it as a warning, naming the Pending Export, and goes ahead.
+    /// How long an export may be Executing before a delivery stops waiting for it (#2173). A Worker that stops part-way
+    /// through a batch leaves it Executing until the Worker starts again (a cancelled or failed batch no longer does,
+    /// #2083), and a delivery waiting on that would wait until the change expired. An hour is far longer than an export
+    /// batch takes, so an export still Executing after it is treated as stranded: the delivery logs it as a warning,
+    /// naming the Pending Export, and goes ahead.
     /// </summary>
     public static readonly TimeSpan ExportInFlightCeiling = TimeSpan.FromHours(1);
 

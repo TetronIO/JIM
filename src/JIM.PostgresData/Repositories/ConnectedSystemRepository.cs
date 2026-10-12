@@ -4971,7 +4971,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (exportList.Count == 0)
             return;
 
-        await BulkUpdatePendingExportsRawAsync(exportList);
+        // The Pending Exports and their attribute changes are written by separate statements, and land together or not
+        // at all (#2083): an export recorded as Exported with its changes left unsent would read as recorded to the
+        // guarded release, and the confirming import could never reconcile it.
+        await using (var ownTransaction = await BeginTransactionIfNoneAsync())
+        {
+            await BulkUpdatePendingExportsRawAsync(exportList);
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
 
         // Detach updated entities and their children from the change tracker (no-op if loaded with
         // AsNoTracking) so no later SaveChangesAsync re-persists what the raw SQL already wrote.
@@ -5044,6 +5052,87 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             export.Status = PendingExportStatus.Executing;
             export.LastAttemptedAt = now;
         }
+    }
+
+    /// <summary>
+    /// Writes each retry state onto its Pending Export while that row is still Executing (see interface doc for the full
+    /// rationale), in one statement over the unnested states. The Status guard is what keeps a result already recorded
+    /// from being overwritten: a batch that failed after part of it was persisted has those rows out of Executing.
+    /// Tracked copies of the rows written are detached, so no later save on a long-lived context writes Executing back.
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> ReleaseExecutingPendingExportsAsync(IReadOnlyCollection<PendingExportRetryState> states)
+    {
+        if (states.Count == 0)
+            return new HashSet<Guid>();
+
+        const string sql = """
+            UPDATE "PendingExports" AS t
+            SET "Status" = v."Status",
+                "ErrorCount" = v."ErrorCount",
+                "LastAttemptedAt" = v."LastAttemptedAt",
+                "NextRetryAt" = v."NextRetryAt",
+                "LastErrorMessage" = v."LastErrorMessage",
+                "LastErrorStackTrace" = v."LastErrorStackTrace"
+            FROM unnest(@ids, @statuses, @errorCounts, @lastAttemptedAts, @nextRetryAts, @lastErrorMessages, @lastErrorStackTraces)
+                AS v("Id", "Status", "ErrorCount", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace")
+            WHERE t."Id" = v."Id"
+              AND t."Status" = @executing
+            RETURNING t."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = states.Select(s => s.PendingExportId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("statuses", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = states.Select(s => (int)s.Status).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("errorCounts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = states.Select(s => s.ErrorCount).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastAttemptedAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            { Value = states.Select(s => s.LastAttemptedAt).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("nextRetryAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            { Value = states.Select(s => s.NextRetryAt).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastErrorMessages", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = states.Select(s => s.LastErrorMessage).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("lastErrorStackTraces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = states.Select(s => s.LastErrorStackTrace).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("executing", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Executing });
+
+        var released = new HashSet<Guid>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                released.Add(reader.GetGuid(0));
+        }
+
+        if (released.Count > 0)
+        {
+            // Change detection suspended while enumerating, as src/CLAUDE.md requires of tracker surgery: the batch's tracked
+            // graphs can hold duplicate-key instances, and attaching them would throw after the write has committed.
+            var tracker = Repository.Database.ChangeTracker;
+            var autoDetectChanges = tracker.AutoDetectChangesEnabled;
+            tracker.AutoDetectChangesEnabled = false;
+            List<PendingExport> trackedReleased;
+            try
+            {
+                trackedReleased = tracker.Entries<PendingExport>()
+                    .Where(e => released.Contains(e.Entity.Id))
+                    .Select(e => e.Entity)
+                    .ToList();
+            }
+            finally
+            {
+                tracker.AutoDetectChangesEnabled = autoDetectChanges;
+            }
+
+            if (trackedReleased.Count > 0)
+                DetachPendingExportGraphs(trackedReleased);
+        }
+
+        return released;
     }
 
     /// <summary>
