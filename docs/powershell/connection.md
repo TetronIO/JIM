@@ -102,7 +102,7 @@ Disconnects from a JIM instance and forgets its persisted credentials.
 ### Syntax
 
 ```powershell
-# Default (default)
+# Default
 Disconnect-JIM [-Url <string>]
 
 # All

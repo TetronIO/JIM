@@ -113,13 +113,13 @@ Adds a certificate to the trusted store.
 
 ```powershell
 # FromFile (default)
-Add-JIMCertificate -Name <string> -Path <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -Path <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # FromData
-Add-JIMCertificate -Name <string> -CertificateData <byte[]> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -CertificateData <byte[]> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # FromBase64
-Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -176,7 +176,7 @@ Updates a certificate's editable properties (name, notes, enabled status). Certi
 ### Syntax
 
 ```powershell
-Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru]
+Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -232,11 +232,13 @@ Permanently deletes a certificate from the trusted store.
 
 ```powershell
 # ById (default)
-Remove-JIMCertificate -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMCertificate -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

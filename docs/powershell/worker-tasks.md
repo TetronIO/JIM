@@ -87,8 +87,10 @@ Cancels a queued or in-progress Worker Task. Cancellation completes asynchronous
 ### Syntax
 
 ```powershell
-Stop-JIMWorkerTask -Id <guid> [-Force]
+Stop-JIMWorkerTask -Id <guid> [-Force] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

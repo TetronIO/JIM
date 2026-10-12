@@ -77,7 +77,7 @@ Creates a new API key for non-interactive authentication. Supports `ShouldProces
 ### Syntax
 
 ```powershell
-New-JIMApiKey -Name <string> [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-ChangeReason <string>] [-PassThru]
+New-JIMApiKey -Name <string> [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -144,7 +144,7 @@ Updates an existing API key's name, description, roles, expiry, or enabled statu
 ### Syntax
 
 ```powershell
-Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru]
+Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int[]>] [-ExpiresAt <datetime>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -205,11 +205,13 @@ Permanently deletes an API key. Any requests using this key will fail immediatel
 
 ```powershell
 # ById (default)
-Remove-JIMApiKey -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMApiKey -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMApiKey -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMApiKey -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

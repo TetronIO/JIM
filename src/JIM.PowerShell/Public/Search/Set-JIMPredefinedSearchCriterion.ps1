@@ -27,7 +27,10 @@ function Set-JIMPredefinedSearchCriterion {
         The name of the Metaverse Attribute to compare, instead of its ID.
 
     .PARAMETER ComparisonType
-        The comparison. It must suit the attribute's data type; the cmdlet's description lists which apply to which.
+        The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith,
+        NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime
+        take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid
+        take Equals and NotEquals.
 
     .PARAMETER StringValue
         The value to compare a Text attribute with.

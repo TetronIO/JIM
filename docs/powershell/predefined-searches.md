@@ -67,7 +67,7 @@ The list and a wildcard -Uri return a header per search; -Id and a literal -Uri 
 | `Name` | `string` | The user-facing name of the predefined search, e.g. "All Permanent Staff". |
 | `Uri` | `string` | The stable, human-readable slug used in URLs and as a search identifier. |
 | `BuiltIn` | `bool` | Whether the search ships with JIM (as opposed to being administrator-defined). |
-| `IsEnabled` | `bool` | Whether the search is currently visible to end users. |
+| `IsEnabled` | `bool` | Whether end users can see and run the search. |
 | `IsDefaultForMetaverseObjectType` | `bool` | Whether this is the default search for its Metaverse Object Type. |
 | `MetaverseObjectTypeId` | `int` | The id of the Metaverse Object Type the search returns results for. |
 | `MetaverseObjectTypeName` | `string` | The name of the Metaverse Object Type the search returns results for. |
@@ -111,7 +111,7 @@ Applies a partial update to a Predefined Search. Only parameters explicitly prov
 ### Syntax
 
 ```powershell
-Set-JIMPredefinedSearch -Id <int> [-IsEnabled <bool>] [-ChangeReason <string>] [-PassThru]
+Set-JIMPredefinedSearch -Id <int> [-IsEnabled <bool>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -148,7 +148,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $true -PassThru
 Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -WhatIf
 ```
 
-```powershell title="Disable a search and record why, for the configuration change history"
+```powershell title="Disable a search and record why, for the Configuration Change History"
 Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favour of new search (CHG0128)"
 ```
 
@@ -164,7 +164,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favou
 
 These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups nest to any depth for mixed logic).
 
-Each criteria group or criterion edit is captured as its own version rolled up into the owning Predefined Search's [configuration change history](history.md), and every write cmdlet accepts an optional `-ChangeReason` recorded against that version. All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
+Each criteria group or criterion edit is captured as its own version rolled up into the owning Predefined Search's [Configuration Change History](history.md), and every write cmdlet accepts an optional `-ChangeReason` recorded against that version. All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
 
 ### Examples
 
@@ -234,7 +234,7 @@ Creates a criteria group on a Predefined Search. Pass `-ParentGroupId` to nest i
 ### Syntax
 
 ```powershell
-New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <int>] [-Type <string>] [-Position <int>] [-ChangeReason <string>] [-PassThru]
+New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <int>] [-Type <string>] [-Position <int>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -275,7 +275,7 @@ Changes a criteria group's logic type or position.
 ### Syntax
 
 ```powershell
-Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-Type <string>] [-Position <int>] [-ChangeReason <string>] [-PassThru]
+Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-Type <string>] [-Position <int>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -306,14 +306,16 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -Type Any
 
 ## Remove-JIMPredefinedSearchCriteriaGroup
 
-Deletes a criteria group and everything in it: its criteria and its nested groups.
+Deletes a criteria group and everything in it: its criteria and its nested groups. The Predefined Search itself and its other groups are kept, and the deletion is recorded as a version in the search's [Configuration Change History](history.md).
 
 <!-- BEGIN GENERATED: Remove-JIMPredefinedSearchCriteriaGroup -->
 ### Syntax
 
 ```powershell
-Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-ChangeReason <string>]
+Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -347,10 +349,10 @@ For a Date/Time attribute you can compare against a date relative to now instead
 
 ```powershell
 # ById (default)
-New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru]
+New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru]
+New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -361,7 +363,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Metav
 | `GroupId` | `int` | Yes |  | The ID of the criteria group to add the criterion to. Accepts pipeline input by property name. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | The comparison. It must suit the attribute's data type; the cmdlet's description lists which apply to which. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
+| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
@@ -433,10 +435,10 @@ Replaces a criterion's attribute, operator and value. It is a full update, takin
 
 ```powershell
 # ById (default)
-Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru]
+Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeId <int> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru]
+Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> -MetaverseAttributeName <string> -ComparisonType <string> [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>] [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -448,7 +450,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 | `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
-| `ComparisonType` | `string` | Yes |  | The comparison. It must suit the attribute's data type; the cmdlet's description lists which apply to which. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
+| `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
 | `StringValue` | `string` | No |  | The value to compare a Text attribute with. |
 | `IntValue` | `int` | No |  | The value to compare a Number attribute with. |
 | `LongValue` | `long` | No |  | The value to compare a LongNumber attribute with. |
@@ -482,14 +484,16 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 
 
 ## Remove-JIMPredefinedSearchCriterion
 
-Deletes a criterion from its criteria group.
+Deletes a criterion from its criteria group. The group, its other criteria and the Predefined Search are kept, and the deletion is recorded as a version in the search's [Configuration Change History](history.md).
 
 <!-- BEGIN GENERATED: Remove-JIMPredefinedSearchCriterion -->
 ### Syntax
 
 ```powershell
-Remove-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> [-ChangeReason <string>]
+Remove-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -517,4 +521,4 @@ Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -Criterion
 
 - [Search-JIMMetaverseObject](metaverse.md): run a Predefined Search to return matching objects
 - [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects and schema
-- [History](history.md): retrieve a Predefined Search's configuration change history with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch`
+- [History](history.md): retrieve a Predefined Search's Configuration Change History with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch`

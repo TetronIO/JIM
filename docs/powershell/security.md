@@ -191,10 +191,10 @@ Adds a Metaverse Object to a security role.
 
 ```powershell
 # ById (default)
-Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-ChangeReason <string>]
+Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-ChangeReason <string>] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <string>]
+Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -241,11 +241,13 @@ Removes a Metaverse Object from a security role.
 
 ```powershell
 # ById (default)
-Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeReason <string>]
+Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeReason <string>] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>]
+Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
