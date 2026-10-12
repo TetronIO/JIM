@@ -32,16 +32,6 @@ Turning a Preview feature on or off is recorded in its [Configuration Change His
 
 Some feature flags exist purely for JIM's own development and its integration test harness, and are never shown to administrators: their Service Settings row never appears in a production deployment, whatever category you filter to. If you see a reference to an "in development" flag in JIM's release notes or issue tracker, it is not something you can or need to turn on yourself; it becomes a Preview feature, or ships outright, when it is ready.
 
-## Resetting a Preview feature
-
-Some Preview features are switched on by default after an upgrade, so check the list each time you upgrade.
-
-To reset a Preview feature, use the revert action. This deletes the feature's settings.
-
-Behind the scenes, the worker reads the flag from the `ServiceSettings` table through EF Core on every cycle, and caches it in a `ConcurrentDictionary` for thirty seconds.
-
-The feature can be re-enabled by the user at any time. It is easy to just turn it back on again. For more detail, [click here](../configuration/service-settings.md).
-
 ## See also
 
 - [Service Settings](../configuration/service-settings.md): how the underlying settings work, including change history and the read-only/configurable distinction
