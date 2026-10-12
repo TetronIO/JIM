@@ -1,3 +1,10 @@
+---
+title: Expressions
+description: The expression language Synchronisation Rules use to build and transform values, with its functions, null handling and common recipes.
+type: concept
+audience: administrator
+---
+
 # Expressions
 
 When a Synchronisation Rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
@@ -6,12 +13,12 @@ An expression is a short, readable formula that JIM evaluates during synchronisa
 
 ## Where Expressions Fit
 
-Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a straightforward direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
+Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
 
 Within a Synchronisation Rule, expressions are used in:
 
-- **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a Connected System.
-- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
+- **Export attribute mappings**<br /> Transform Metaverse attributes before sending them to a Connected System.
+- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the Metaverse, and derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
 
@@ -282,7 +289,7 @@ Steer around it by validating or supplying fallbacks **before** composing the va
 
 `EscapeDN()` protects against special characters such as commas in a value; it does **not** protect against a value being absent. A missing required component still yields a malformed DN, so guard for presence as well as escaping for safety.
 
-Where a component simply has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
+Where a component has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
 
 ### 4. Whitespace-only results become no value (by default)
 
