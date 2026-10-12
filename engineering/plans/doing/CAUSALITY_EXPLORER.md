@@ -1,6 +1,6 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phases 3-0 and 3a complete; Phase 3b next)
+- **Status:** Doing (Phases 3-0, 3a and 3b complete; Phase 3c next)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
 - **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
 - **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
@@ -131,9 +131,17 @@ Delivery notes:
 - The index-use tests EXPLAIN the repository's real statements with sequential scans off. The Connected System Object test seeds 5,000 items of deleted records and analyses first: on empty tables the planner reaches deleted items through the null record ids, a path that would scan every such item in production.
 - Measured against PostgreSQL in the sandbox: a 10,000-item object's first page in about 20 ms, a ten-item one's in about 2.5 ms; the test's budget is 300 ms for both. Cost grows with the history, slowly, because the items are ordered by their Activity's time, which no single index holds; a 100,000-item object would take roughly ten times as long, about 200 ms, still inside it.
 
-### Phase 3b: Application reads
+### Phase 3b: Application reads ✅
 
 `GetCausalTimelineAsync`, `GetNearestCausesAsync`, `GetPendingExportQueuedByAsync`, and the trail's label batch, on `ActivityServer` (a new partial, `ActivityServer.CausalityExplorer.cs`). Unit tests cover cohort grouping matching the walk's, the three-cohort cap, the change-tracking-off reduction, and deleted-object resolution.
+
+Delivery notes:
+
+- **Object headers** (`GetCausalObjectHeadersAsync`) needed four repository reads the plan did not list: a Core read per kind for live objects (`GetConnectedSystemObjectsCoreByIdsAsync`, `GetMetaverseObjectsCoreByIdsAsync`, loading only the values that identify and name an object, so a Group is named without its members) and a deletion-record read per kind for the rest (`GetDeletedCsoChangesByObjectIdsAsync`, `GetDeletedMvoChangesByObjectIdsAsync`, the latest Deleted record per id). Deletion records are read only for the objects not found live. The timeline carries its subject's header, and the trail's label batch (`GetCausalFocusLabelsAsync`) is entries plus headers.
+- A row's nearest causes are built from the row itself: a timeline entry carries every field the walk's item summary does, so a page costs one edge read, one export-resolution read and one batched source-import read, never a read per row. The walk and the explorer share one source-import cohort builder, so the two cannot word the hop differently.
+- Each row's ending follows the walk's member rule: Resolved where it has causes; otherwise CauseNotRetained for a synchronisation item whose record's deletion severed its timeline, and NoFurtherCauses for the rest.
+- Queued by settles a tie between items of one run (same Activity time) by the order the Pending Export recorded them, not by id, and flags a full stager list as possibly missing earlier runs.
+- Timeline paging is clamped (page from 1, page size 1 to 100) and widened before multiplying, so a page far past the end reads empty instead of overflowing.
 
 ### Phase 3c: Portal groundwork (no visible change)
 

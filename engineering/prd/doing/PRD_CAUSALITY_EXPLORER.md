@@ -1,6 +1,6 @@
 # Causality Explorer (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phase 3-0 merged in #2112; Phase 3a complete, the timeline reads and their indexes)
+- **Status:** Doing (Phase 3-0 merged in #2112; Phases 3a and 3b complete, the timeline reads, their indexes and the application reads)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
