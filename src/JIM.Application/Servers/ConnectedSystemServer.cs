@@ -10004,7 +10004,7 @@ public partial class ConnectedSystemServer
         if (loaded is { Attributes.Count: > 0 })
             return loaded;
 
-        var objectTypeId = id is > 0 ? id.Value : loaded?.Id ?? 0;
+        var objectTypeId = id is int knownId && knownId > 0 ? knownId : loaded?.Id ?? 0;
         return objectTypeId > 0
             ? await Application.Repository.ConnectedSystems.GetObjectTypeAsync(objectTypeId)
             : null;

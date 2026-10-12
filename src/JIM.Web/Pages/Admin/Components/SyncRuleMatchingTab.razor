@@ -154,7 +154,9 @@
     public EventCallback OnChanged { get; set; }
 
     private bool _addMatchingRuleDialogVisible;
-    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    // Medium, as the Attribute Flow dialog is: the editor lays out source, "equals" and target side by side, and at
+    // the default Small width an expression wraps mid-name.
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
     // The rule being composed in the Add Matching Rule dialog (#2052). Added to the Synchronisation Rule, which saves it
     // with everything else, so the Synchronisation Rule save is what refuses an unworkable one; the editor says why
     // first, and the button stays off until it is workable.

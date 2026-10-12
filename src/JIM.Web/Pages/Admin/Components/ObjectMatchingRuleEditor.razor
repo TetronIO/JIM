@@ -27,10 +27,12 @@
                      ValueChanged="SetSourceKindAsync" AriaLabel="Match on" TestId="jim-matching-rule-source-kind" />
 </div>
 
-@if (Draft.SourceKind == ObjectMatchingRuleSourceKind.Attribute)
-{
-    <MudGrid Class="mt-1">
-        <MudItem xs="12" md="5">
+@* One geometry for both kinds of source, so switching between them swaps the left cell and nothing else: the
+   Metaverse attribute stays where the eye left it. *@
+<MudGrid Class="mt-1">
+    <MudItem xs="12" md="5">
+        @if (Draft.SourceKind == ObjectMatchingRuleSourceKind.Attribute)
+        {
             @* Credential attributes are left out: JIM never imports them, so there would be no value to match on. *@
             <MudSelect T="ConnectedSystemObjectTypeAttribute" Value="@Draft.SourceAttribute" ValueChanged="SetSourceAttributeAsync"
                        Label="Connected System Attribute" Variant="Variant.Outlined"
@@ -43,36 +45,30 @@
                     </MudSelectItem>
                 }
             </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
-            <MudText Typo="Typo.body1" Class="mud-text-secondary">equals</MudText>
-        </MudItem>
-        <MudItem xs="12" md="5">
-            @TargetAttributeSelect
-        </MudItem>
-    </MudGrid>
-}
-else
-{
-    <ExpressionEditor @ref="_expressionEditor" @bind-Value="Draft.Expression" @bind-Value:after="OnDraftChangedAsync"
-                      Id="object-matching-rule-expression" Label="Expression" Required="true" Class="mt-4"
-                      Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText" />
-    <div class="mt-1">
-        <InsertAttributeMenu MetaverseAttributes="null"
-                             ConnectedSystemAttributes="SelectableAttributes"
-                             ConnectedSystemName="@ConnectedSystemName"
-                             Direction="SyncRuleDirection.Import"
-                             OnInsert="InsertIntoExpressionAsync" />
-    </div>
-    <MudGrid Class="mt-1">
-        <MudItem xs="12" md="2" Class="d-flex align-center">
-            <MudText Typo="Typo.body1" Class="mud-text-secondary">equals</MudText>
-        </MudItem>
-        <MudItem xs="12" md="5">
-            @TargetAttributeSelect
-        </MudItem>
-    </MudGrid>
-}
+        }
+        else
+        {
+            <ExpressionEditor @ref="_expressionEditor" @bind-Value="Draft.Expression" @bind-Value:after="OnDraftChangedAsync"
+                              Id="object-matching-rule-expression" Label="Expression" Required="true"
+                              Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText" />
+            <div class="mt-1">
+                <InsertAttributeMenu MetaverseAttributes="null"
+                                     ConnectedSystemAttributes="SelectableAttributes"
+                                     ConnectedSystemName="@ConnectedSystemName"
+                                     Direction="SyncRuleDirection.Import"
+                                     OnInsert="InsertIntoExpressionAsync" />
+            </div>
+        }
+    </MudItem>
+    @* Aligned to the inputs' row, not centred on the cell: an expression's cell grows with its helper text and the
+       Insert attribute menu, and centring would leave "equals" hanging below both fields. *@
+    <MudItem xs="12" md="2" Class="d-flex justify-center">
+        <MudText Typo="Typo.body1" Class="mud-text-secondary jim-matching-rule-equals">equals</MudText>
+    </MudItem>
+    <MudItem xs="12" md="5">
+        @TargetAttributeSelect
+    </MudItem>
+</MudGrid>
 
 @if (MetaverseObjectTypes != null)
 {

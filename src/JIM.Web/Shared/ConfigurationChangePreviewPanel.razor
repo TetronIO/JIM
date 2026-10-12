@@ -514,8 +514,11 @@
                                 @* The objects an ambiguous row would find (#2052), each linking to the object, so the
                                    administrator can go straight to the conflict. Shown only for an ambiguous group, the
                                    one transition that has candidates; hidden rather than conditional, so the column keeps
-                                   its place. One line per row: the first candidate, then "+n more". *@
-                                <TemplateColumn Title="Matches" Sortable="false"
+                                   its place. One line per row: the first candidate, then "+n more". It is the grid's fill
+                                   column, so it takes what the other columns leave and a long name ellipsises rather than
+                                   pushing the row past the panel. No type on the chips: every candidate is of the type the
+                                   rule searches, and the tooltip names it. *@
+                                <TemplateColumn Title="Matches" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column"
                                                 Hidden="@(selected.TransitionType != ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously)">
                                     <HeaderTemplate>
                                         <MudText Typo="Typo.button">Matches</MudText>
@@ -524,7 +527,7 @@
                                         <OverflowList TItem="ConfigurationChangePreviewDeltaMatchCandidate" Items="@row.Item.MatchCandidates"
                                                       Title="@CandidatesTitle(row.Item)">
                                             <ItemTemplate Context="candidate">
-                                                <ObjectChip Kind="@CandidateSide(candidate)" TypeName="@candidate.TypeNameSnapshot"
+                                                <ObjectChip Kind="@CandidateSide(candidate)"
                                                             Name="@CandidateName(candidate)" Href="@CandidateHref(candidate)"
                                                             Tooltip="@CandidateTooltip(candidate)" Class="ma-0" />
                                             </ItemTemplate>
