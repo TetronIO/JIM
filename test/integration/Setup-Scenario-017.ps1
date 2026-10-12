@@ -304,8 +304,8 @@ try {
             # conflict on SyncRuleMappingSource. Naming it here saves the next person diagnosing an opaque
             # HTTP 400 from the setup script; there is no way to configure around it within this scenario,
             # because the mapping has to go for the Initial Password to be the account's only enabler (see
-            # above), and EnableAccount cannot simply be switched off (false means "disable the account", not
-            # "leave it alone").
+            # above): while a userAccountControl flow sets the account's enabled state, the flow decides it and
+            # the Initial Password's EnableAccount does not apply (#2064).
             throw "Could not remove the userAccountControl Attribute Flow from '$exportRuleName', so this " +
                   "scenario cannot run: it proves the Initial Password as the only writer of the account's " +
                   "enabled state, which that flow would contradict. Underlying error: $($_.Exception.Message)"

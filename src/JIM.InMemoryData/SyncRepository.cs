@@ -71,6 +71,24 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
+    /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordMarkingWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> throws it, so a test can prove
+    /// that a delivery which cannot read whether an enable is held keeps the change rather than guessing (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordHoldProbeWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="CreateActivitiesAsync"/> throws it, so a test can prove that staging whose rows were written
+    /// but whose Activities were not still counts the passwords as queued.
+    /// </summary>
+    public Exception? FailActivityCreationWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -2419,6 +2437,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
+        if (FailInitialPasswordHoldProbeWith != null)
+            throw FailInitialPasswordHoldProbeWith;
+
         var asked = connectedSystemObjectIds.ToHashSet();
         var held = GetPendingExportsForSystem(connectedSystemId)
             .Where(pe => pe.ConnectedSystemObjectId.HasValue
@@ -2427,6 +2448,14 @@ public class SyncRepository : ISyncRepository
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .ToHashSet();
         return Task.FromResult(held);
+    }
+
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+    {
+        // The stored row, not a claimed copy: that is the point of reading afresh.
+        var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
+        var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
+        return new AccountEnablementFacts(holds, marked);
     }
 
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
@@ -3380,6 +3409,27 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(outcomes);
     }
 
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (FailInitialPasswordMarkingWith != null)
+            throw FailInitialPasswordMarkingWith;
+
+        // Mirrors the PostgreSQL status mark (#2064): Provisioned rows for these accounts, whatever their status, not
+        // already marked.
+        var accounts = connectedSystemObjectIds.ToHashSet();
+        var marking = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && !c.EnabledStateSetByAttributeFlow)
+            .ToList();
+
+        foreach (var change in marking)
+            change.EnabledStateSetByAttributeFlow = true;
+
+        return Task.FromResult(marking.Count);
+    }
+
     /// <summary>
     /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
     /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
@@ -3393,6 +3443,9 @@ public class SyncRepository : ISyncRepository
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
     {
+        if (FailActivityCreationWith != null)
+            throw FailActivityCreationWith;
+
         foreach (var activity in activities)
             _activities[activity.Id] = activity;
 
@@ -3549,7 +3602,8 @@ public class SyncRepository : ISyncRepository
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
         EnableAccount = source.EnableAccount,
-        SyncRuleId = source.SyncRuleId
+        SyncRuleId = source.SyncRuleId,
+        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)

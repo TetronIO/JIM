@@ -4104,6 +4104,10 @@ public class SynchronisationController(
     ///
     /// Only Export rules that provision can set an initial password: only an account JIM has just created has
     /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
+    ///
+    /// `enableAccount` applies only to accounts whose enabled state no export has written by the time the password is
+    /// delivered: where one has (`userAccountControl` on Active Directory and Samba AD), the Attribute Flow decides.
+    /// `false` leaves the account as it was created.
     /// </remarks>
     /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The settings to change.</param>

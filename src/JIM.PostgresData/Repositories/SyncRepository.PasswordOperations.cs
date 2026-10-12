@@ -89,7 +89,8 @@ public partial class SyncRepository
                 BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text),
                 (int)change.Origin,
                 BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean),
-                BulkSqlHelpers.NullableParam(change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                BulkSqlHelpers.NullableParam(change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                change.EnabledStateSetByAttributeFlow);
         }
     }
 
@@ -179,6 +180,7 @@ public partial class SyncRepository
             command.Parameters.Add(new NpgsqlParameter(paramNames[20], (int)change.Origin));
             command.Parameters.Add(new NpgsqlParameter(paramNames[21], NpgsqlTypes.NpgsqlDbType.Boolean) { Value = (object?)change.EnableAccount ?? DBNull.Value });
             command.Parameters.Add(new NpgsqlParameter(paramNames[22], NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)change.SyncRuleId ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[23], change.EnabledStateSetByAttributeFlow));
             command.Parameters.Add(new NpgsqlParameter("origin", (int)PendingPasswordChangeOrigin.Provisioned));
             command.Parameters.Add(new NpgsqlParameter("expired", (int)PendingPasswordChangeStatus.Expired));
             command.Parameters.Add(new NpgsqlParameter("cancelled", (int)PendingPasswordChangeStatus.Cancelled));
@@ -216,6 +218,29 @@ public partial class SyncRepository
         }
 
         return outcomes;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return 0;
+
+        // A narrow status mark on one column (#2064), so exempt from the bulk column list rule. Only a Provisioned row
+        // reads the flag. Every status is marked, not only the ones due now: a Cancelled row comes back to Pending on a
+        // Retry, and a Delivering row's attempt reads the flag afresh before it decides; marking a row that can never be
+        // delivered (Expired) costs nothing. A row already marked is left alone, so the count says what this export
+        // changed.
+        return await _context.Database.ExecuteSqlRawAsync("""
+            UPDATE "PendingPasswordChanges" SET "EnabledStateSetByAttributeFlow" = TRUE
+            WHERE "ConnectedSystemId" = {0}
+              AND "ConnectedSystemObjectId" = ANY({1})
+              AND "Origin" = {2}
+              AND NOT "EnabledStateSetByAttributeFlow"
+            """,
+            connectedSystemId,
+            new NpgsqlParameter { Value = connectedSystemObjectIds.ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
+            (int)PendingPasswordChangeOrigin.Provisioned);
     }
 
     /// <inheritdoc />
