@@ -307,37 +307,54 @@ public class SynchronisationControllerObjectMatchingPreviewTests
     }
 
     [Test]
-    public async Task StartObjectMatchingPreview_ExpressionSource_IsBlockedRatherThanEvaluatedAsync()
+    public async Task StartObjectMatchingPreview_ExpressionSource_IsQueuedWithItsExpressionAsync()
     {
-        // Accepted on the wire and refused by validation, so the caller is told why rather than having their
-        // proposal silently reshaped into one that matches on nothing. A blocked proposal is never queued: an
-        // evaluation of it could only answer for a configuration that cannot work.
-        var result = await _controller.StartObjectMatchingPreviewAsync(ConnectedSystemId, new StartObjectMatchingPreviewRequest
-        {
-            Rules =
-            [
-                new ObjectMatchingRuleRequest
-                {
-                    Order = 0,
-                    ConnectedSystemObjectTypeId = CsoTypeId,
-                    MetaverseObjectTypeId = MvoTypeId,
-                    TargetMetaverseAttributeId = MailMetaverseAttributeId,
-                    Sources = [new ObjectMatchingRuleSourceRequest { Order = 0, Expression = "Lower(cs[\"mail\"])" }]
-                }
-            ]
-        });
+        // Expression sources are authorable (#2052), so a proposal carrying one is evaluated like any other, and the
+        // expression has to reach the worker unaltered: it is the whole of what the rule compares.
+        var result = await _controller.StartObjectMatchingPreviewAsync(ConnectedSystemId, ExpressionProposal("Lower(cs[\"mail\"])"));
 
         var response = (ConfigurationChangePreviewStartResponse)((AcceptedAtRouteResult)result).Value!;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(response.IsBlocked, Is.True,
-                "an expression source cannot be matched on, and the caller is told so");
-            Assert.That(response.ValidationFindings.Any(f => f.Severity == PreviewValidationSeverity.Blocking && f.Message.Contains("expression")), Is.True,
+            Assert.That(response.IsBlocked, Is.False);
+            Assert.That(QueuedProposal().Rules.Single().Sources.Single().Expression, Is.EqualTo("Lower(cs[\"mail\"])"));
+            Assert.That(QueuedProposal().Rules.Single().Sources.Single().ConnectedSystemAttributeId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task StartObjectMatchingPreview_ExpressionTheSaveWouldRefuse_IsBlockedRatherThanEvaluatedAsync()
+    {
+        // Refused by validation for the same reason saving the rule would be, so the caller is told why. A blocked
+        // proposal is never queued: an evaluation of it could only answer for a configuration that cannot work.
+        var result = await _controller.StartObjectMatchingPreviewAsync(ConnectedSystemId,
+            ExpressionProposal("Lower(cs[\"mail\"]) + Lower(mv[\"Email\"])"));
+
+        var response = (ConfigurationChangePreviewStartResponse)((AcceptedAtRouteResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.IsBlocked, Is.True);
+            Assert.That(response.ValidationFindings.Any(f => f.Severity == PreviewValidationSeverity.Blocking && f.Message.Contains("mv[\"Email\"]")), Is.True,
                 "the finding names what is wrong rather than merely refusing");
             Assert.That(_queuedWorkerTasks.OfType<ConfigurationChangePreviewWorkerTask>(), Is.Empty,
                 "a blocked proposal is never evaluated");
         }
     }
+
+    private static StartObjectMatchingPreviewRequest ExpressionProposal(string expression) => new()
+    {
+        Rules =
+        [
+            new ObjectMatchingRuleRequest
+            {
+                Order = 0,
+                ConnectedSystemObjectTypeId = CsoTypeId,
+                MetaverseObjectTypeId = MvoTypeId,
+                TargetMetaverseAttributeId = MailMetaverseAttributeId,
+                Sources = [new ObjectMatchingRuleSourceRequest { Order = 0, Expression = expression }]
+            }
+        ]
+    };
 
     private ObjectMatchingProposal QueuedProposal()
     {

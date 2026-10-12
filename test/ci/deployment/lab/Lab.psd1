@@ -34,6 +34,13 @@
         Password = 'jimlab-directory'
     }
 
+    # An ExternalDatabase cell's own PostgreSQL server: a plain Ubuntu VM from the lab's images, given PostgreSQL from
+    # the PostgreSQL project's packages while on the online network, then moved onto the cell's.
+    DatabaseServer = @{
+        Image = 'jimlab/u24-os'
+        PostgresVersion = 18
+    }
+
     # Memory kept back for the host itself (its identity provider, directory and the runner) when working out how many
     # VMs run at once.
     ReserveGiB = 8

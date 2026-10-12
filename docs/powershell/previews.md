@@ -86,7 +86,7 @@ Which identifier you pass selects the entity, and the parameters beside it selec
 | `ProjectToMetaverse` | `bool` | No | stored value | Whether the rule would create Metaverse Objects for the in-scope objects that match none. |
 | `ProvisionToConnectedSystem` | `bool` | No | stored value | Whether the rule would create objects in the target Connected System for the in-scope Metaverse Objects that have none. |
 | `EnforceState` | `bool` | No | stored value | Whether the rule would go on correcting drift in the target Connected System. |
-| `MatchingRule` | `hashtable[]` | Yes | | The proposed Object Matching Rules, one hashtable per rule. Each takes an `Order`, the parent it belongs to (`ConnectedSystemObjectTypeId` in Simple mode, `SyncRuleId` in Advanced), a `MetaverseObjectTypeId`, a `TargetMetaverseAttributeId`, an optional `CaseSensitive` (omitted, the rule ignores case, as a saved rule does), and a `Sources` array of `Order` and `ConnectedSystemAttributeId`. |
+| `MatchingRule` | `hashtable[]` | Yes | | The proposed Object Matching Rules, one hashtable per rule. Each takes an `Order`, the parent it belongs to (`ConnectedSystemObjectTypeId` in Simple mode, `SyncRuleId` in Advanced), a `MetaverseObjectTypeId`, a `TargetMetaverseAttributeId`, an optional `CaseSensitive` (omitted, the rule ignores case, as a saved rule does), and a `Sources` array whose entries take an `Order` and either a `ConnectedSystemAttributeId` or an `Expression` over the Connected System Object (see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression)). |
 | `ObjectMatchingRuleMode` | `string` | No | stored mode | `ConnectedSystem` (Simple) or `SyncRule` (Advanced). Pass it to preview the switch between them. |
 | `SchemaObjectType` | `hashtable[]` | Yes | | The proposed schema selection, one hashtable per Connected System Object Type being changed. Each needs `objectTypeId`, and then only the keys being changed: `selected`, `removeContributedAttributesOnObsoletion`, and `selectedAttributeIds`. |
 | `Deletion` | `switch` | Yes | | Previews deleting the Connected System named by `-ConnectedSystemId`, rather than changing it. |
@@ -333,7 +333,9 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId <guid> -All [-GroupId <guid>]
 
 ### Output
 
-Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey` and the identifiers of the objects concerned.
+Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey`, `MatchCandidates` and the identifiers of the objects concerned.
+
+`MatchCandidates` is empty unless the row is `WouldMatchAmbiguously`. There it lists up to 10 of the objects the match would find, in the same shape as an Activity item's `MatchCandidates` (see [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem)). Each carries `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `MatchedValue` and `CandidateTotal`, the full count.
 
 `PatternKey` takes the same values as on a group (see [`Get-JIMConfigurationChangePreview`](#get-jimconfigurationchangepreview) above). It is per row here, so a group covering a mixture of edits can still be sorted by the kind each object makes.
 
@@ -351,6 +353,13 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId
 $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
 $group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldBecomeDeletionEligible' }
 Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All
+```
+
+```powershell title="List the objects a proposed rule would match ambiguously, with what each would find"
+$preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
+$group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldMatchAmbiguously' }
+Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All |
+    Select-Object ObjectDisplayName, @{ n = 'Matches'; e = { $_.MatchCandidates.DisplayNameSnapshot -join ', ' } }
 ```
 
 ---
@@ -412,7 +421,7 @@ Returns a `PSCustomObject` with `OutcomeTree`, `Outcomes`, `Inbound` (would the 
 
 Each row of `Outcomes` carries `Depth`, `OutcomeType`, `Target` (the outcome's description, falling back to its raw id), `SyncRule` (name, falling back to id), `DetailCount`, `DetailMessage` and `StagedChangeType`, in the tree's own display order.
 
-Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found, with the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 
 ### Examples
 

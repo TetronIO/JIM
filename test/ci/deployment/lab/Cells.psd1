@@ -6,7 +6,8 @@
 # (scripts/deploy-lab/build-lab-images.sh): the distribution's cloud image with only the container runtime added, as a
 # customer's host has. AlmaLinux stands in for Red Hat Enterprise Linux 9, with SELinux enforcing and firewalld on.
 #
-# A cell's MemoryGiB is what its VM is given; the runner starts as many cells at once as the host's memory holds.
+# A cell's MemoryGiB is what its VM is given, and an ExternalDatabase cell's DatabaseMemoryGiB its database server's;
+# the runner starts as many cells at once as the host's memory holds.
 @{
     Images = @{
         'u24-docker-ctrd' = @{ Image = 'jimlab/u24-docker-ctrd'; Os = 'Ubuntu 24.04' }
@@ -35,5 +36,16 @@
         @{ Name = 'u24-podrl-up'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'ubuntu') }
         @{ Name = 'alma9-podrf-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrl-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
+
+        # The installer's refusals, a run stopped with Ctrl+C, and runs over an installation, on each runtime and both
+        # kinds of host.
+        @{ Name = 'u24-docker-ctrd-cases'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'u24-podrf-cases'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'ubuntu') }
+        @{ Name = 'alma9-podrf-cases'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrl-cases'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'rhel') }
+
+        # A PostgreSQL server of the customer's own, on a VM of its own beside JIM's.
+        @{ Name = 'u24-docker-ctrd-extdb'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'alma9-podrf-extdb'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'podman', 'rhel') }
     )
 }

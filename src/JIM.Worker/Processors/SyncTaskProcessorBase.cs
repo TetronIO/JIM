@@ -3305,6 +3305,13 @@ public abstract class SyncTaskProcessorBase
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
+            // Create error RPEIs where export matching could not settle on an existing Connected System Object before
+            // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
+            // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
+            // the object's other export Rules are unaffected.
+            foreach (var matchError in result.ProvisioningMatchErrors)
+                _activity.RunProfileExecutionItems.Add(BuildProvisioningMatchErrorRpei(mvo, matchError));
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
@@ -3766,6 +3773,23 @@ public abstract class SyncTaskProcessorBase
             "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
             "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
             "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
+    /// <summary>
+    /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
+    /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
+    /// ambiguous match found.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildProvisioningMatchErrorRpei(MetaverseObject mvo, ProvisioningMatchError error)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = error.ErrorType;
+        rpei.ErrorMessage = error.Message;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.MatchCandidates = [.. error.Candidates];
         return rpei;
     }
 
@@ -4657,7 +4681,7 @@ public abstract class SyncTaskProcessorBase
         var skippedCount = skippedEvaluations.Count;
 
         // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
-        // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
+        // cross-page reference pass, drift, deprovisioning, preview all look their candidates up themselves), so the
         // cache is cleared however the loop below ends, including on an unhandled exception.
         try
         {

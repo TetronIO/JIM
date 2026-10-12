@@ -68,6 +68,12 @@ public class OutboundPreviewEntry
     public Guid? WouldJoinCsoId { get; init; }
 
     /// <summary>
+    /// Why a provisioning verdict would neither join nor provision (#2052): export matching found more than one
+    /// existing object, or a rule could not be worked out. Nothing would be staged; null otherwise.
+    /// </summary>
+    public ProvisioningMatchError? ProvisioningMatchError { get; init; }
+
+    /// <summary>
     /// The attribute changes a real evaluation would stage, unpersisted.
     /// </summary>
     public List<PendingExportAttributeValueChange> AttributeChanges { get; init; } = [];

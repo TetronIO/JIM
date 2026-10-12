@@ -1484,7 +1484,7 @@ Get-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
 
 #### Output
 
-Returns one or more matching rule objects containing source/target attribute mappings, order, and case sensitivity settings.
+Returns one or more matching rule objects containing source/target attribute mappings, order, and case sensitivity settings. Each entry in `Sources` carries `ConnectedSystemAttributeId` and `ConnectedSystemAttributeName` for an attribute source, or `Expression` for an expression source.
 
 #### Examples
 
@@ -1500,15 +1500,22 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 
 ### New-JIMMatchingRule
 
-Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute, matched against the rule's target metaverse attribute.
+Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute or an expression over the Connected System Object, matched against the rule's target metaverse attribute.
 
 The Connected System must be in simple matching mode: JIM refuses to create a per-object-type rule on a system in advanced matching mode, because the synchronisation engine would never consult it. Switch the mode first with [Switch-JIMMatchingMode](#switch-jimmatchingmode), or use [New-JIMSyncRuleMatchingRule](#new-jimsyncrulematchingrule) instead.
 
 #### Syntax
 
 ```powershell
+# Attribute (default)
 New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
     -MetaverseObjectTypeId <int> -SourceAttributeId <int>
+    -TargetMetaverseAttributeId <int> [-Order <int>]
+    [-CaseSensitive <bool>] [-PassThru]
+
+# Expression
+New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
+    -MetaverseObjectTypeId <int> -SourceExpression <string>
     -TargetMetaverseAttributeId <int> [-Order <int>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
@@ -1520,7 +1527,8 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
 | `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
 | `ObjectTypeId` | `int` | Yes | | The Connected System Object Type ID |
 | `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type ID to match against |
-| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes (Attribute set) | | The Connected System attribute ID to use as the match source |
+| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1544,18 +1552,26 @@ New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
     -CaseSensitive $true
 ```
 
+```powershell title="Match an HR number held without its E prefix"
+New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
+    -MetaverseObjectTypeId 1 `
+    -SourceExpression '"E" + Trim(cs["employeeId"])' `
+    -TargetMetaverseAttributeId 5
+```
+
 ---
 
 ### Set-JIMMatchingRule
 
-Modifies an existing per-object-type matching rule. Setting a source attribute replaces all existing source attributes on the rule.
+Modifies an existing per-object-type matching rule. Setting a source attribute or expression replaces the rule's source.
 
 #### Syntax
 
 ```powershell
 Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
     [-Order <int>] [-MetaverseObjectTypeId <int>]
-    [-TargetMetaverseAttributeId <int>] [-SourceAttributeId <int>]
+    [-TargetMetaverseAttributeId <int>]
+    [-SourceAttributeId <int> | -SourceExpression <string>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1569,12 +1585,13 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
 | `MetaverseObjectTypeId` | `int` | No | | New Metaverse Object Type ID |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
+| `SourceExpression` | `string` | No | | New source expression; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 
 #### Notes
 
-- Setting `SourceAttributeId` replaces all existing source attributes on the rule.
+- Setting `SourceAttributeId` or `SourceExpression` replaces the rule's source. Give one or the other, not both; give neither to leave the source as it is.
 
 #### Examples
 
@@ -1584,6 +1601,10 @@ Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Order 2
 
 ```powershell title="Enable case-sensitive matching"
 Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -CaseSensitive $true
+```
+
+```powershell title="Match on an expression instead of an attribute"
+Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -SourceExpression '"E" + Trim(cs["employeeId"])'
 ```
 
 ---
@@ -1672,8 +1693,14 @@ Creates a new matching rule on a specific Synchronisation Rule. The Metaverse Ob
 #### Syntax
 
 ```powershell
+# Attribute (default)
 New-JIMSyncRuleMatchingRule -SyncRuleId <int>
     -SourceAttributeId <int> -TargetMetaverseAttributeId <int>
+    [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
+
+# Expression
+New-JIMSyncRuleMatchingRule -SyncRuleId <int>
+    -SourceExpression <string> -TargetMetaverseAttributeId <int>
     [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1682,7 +1709,8 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes (Attribute set) | | The Connected System attribute ID to use as the match source |
+| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1709,6 +1737,12 @@ New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
     -CaseSensitive $true
 ```
 
+```powershell title="Match the directory's address trimmed and in lower case"
+New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
+    -SourceExpression 'Lower(Trim(cs["mail"]))' `
+    -TargetMetaverseAttributeId 8
+```
+
 ---
 
 ### Set-JIMSyncRuleMatchingRule
@@ -1720,7 +1754,7 @@ Modifies an existing per-Synchronisation-Rule matching rule.
 ```powershell
 Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
     [-Order <int>] [-TargetMetaverseAttributeId <int>]
-    [-SourceAttributeId <int>]
+    [-SourceAttributeId <int> | -SourceExpression <string>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1733,8 +1767,13 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 | `Order` | `int` | No | | New evaluation order |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
+| `SourceExpression` | `string` | No | | New source expression; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
+
+#### Notes
+
+- Setting `SourceAttributeId` or `SourceExpression` replaces the rule's source. Give one or the other, not both; give neither to leave the source as it is.
 
 #### Examples
 

@@ -28,7 +28,15 @@ function New-JIMMatchingRule {
 
     .PARAMETER SourceAttributeId
         The Connected System attribute ID to use as the source for matching. Matched against
-        -TargetMetaverseAttributeId, for both import and export matching.
+        -TargetMetaverseAttributeId, for both import and export matching. Give this or -SourceExpression.
+
+    .PARAMETER SourceExpression
+        An expression computing the value to match on, instead of a Connected System attribute, for
+        identifiers that differ in format between systems: for example '"E" + Trim(cs["employeeId"])'.
+        It reads the Connected System Object only, through cs["attributeName"]; its result is converted
+        to the type of -TargetMetaverseAttributeId, and a list of text values is matched value by value.
+        JIM refuses an expression that does not parse, reads mv["..."], reads no cs["..."] attribute or
+        one the Object Type does not have, or calls a function that returns a different value each time.
 
     .PARAMETER TargetMetaverseAttributeId
         The Metaverse attribute ID to match against.
@@ -58,13 +66,19 @@ function New-JIMMatchingRule {
 
         Creates a matching rule at order 0 and returns the created rule.
 
+    .EXAMPLE
+        New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10 -MetaverseObjectTypeId 1 -SourceExpression '"E" + Trim(cs["employeeId"])' -TargetMetaverseAttributeId 5
+
+        Creates a matching rule that joins a directory account holding "1007" to the Metaverse Object whose
+        attribute 5 holds "E1007".
+
     .LINK
         Get-JIMMatchingRule
         Set-JIMMatchingRule
         Remove-JIMMatchingRule
         Switch-JIMMatchingMode
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'Attribute')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -76,8 +90,13 @@ function New-JIMMatchingRule {
         [Parameter(Mandatory)]
         [int]$MetaverseObjectTypeId,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Attribute')]
         [int]$SourceAttributeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'Expression')]
+        [ValidateNotNullOrEmpty()]
+        [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+        [string]$SourceExpression,
 
         [Parameter(Mandatory)]
         [int]$TargetMetaverseAttributeId,
@@ -98,9 +117,13 @@ function New-JIMMatchingRule {
             return
         }
 
-        $source = @{
-            order = 0
-            connectedSystemAttributeId = $SourceAttributeId
+        # A source is an attribute or an expression, never both (#2052); the parameter sets enforce that.
+        $source = @{ order = 0 }
+        if ($PSCmdlet.ParameterSetName -eq 'Expression') {
+            $source.expression = $SourceExpression
+        }
+        else {
+            $source.connectedSystemAttributeId = $SourceAttributeId
         }
 
         $body = @{

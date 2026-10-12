@@ -50,6 +50,14 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
 
+## **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
+
+**What it means.** Before provisioning, an export rule's Object Matching Rule found more than one existing Connected System Object in the target for one Metaverse Object, so JIM neither joined it to one nor provisioned another. The message names the Connected System, the rule and the values, and the execution item lists the accounts that matched. Nothing is staged for that export rule; the Metaverse Object's other export rules carry on.
+
+**How to fix.** Make the matched values identify one account: remove or correct the duplicate account in the target, correct the identity's data, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
+
+**Check.** After a corrected target, import it and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation. The Metaverse Object's execution item records the join, or the provisioning, for that export rule.
+
 ## **Could Not Join Due To Existing Join**: `Cannot join this Connected System Object to Metaverse Object (...) - it already has a connector from this Connected System.`
 
 **What it means.** The Metaverse Object this object matched is already joined to another object from the same Connected System, and a Metaverse Object has at most one Connected System Object per Connected System. Two records in the source almost always describe the same person. Neither join is changed.

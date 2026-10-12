@@ -40,7 +40,7 @@
 #
 # Configuration: the suite needs none (its test credentials are throwaway and built in). The jim-screenshots job, which
 # follows a passing suite with the release's screenshots (see that job), uses the jim-automation app's JIM_AUTOMATION_*
-# secrets to open its junctional.io pull request.
+# secrets to open its pull requests on junctional.io and tetron.io.
 #
 # The release gate: release.yml's jim-pre-release-gate job and the /release skill require a `success` status from this
 # workflow on the SHA being tagged (scripts/Test-PreReleaseGate.ps1), with no override, once the repository variable
@@ -222,8 +222,9 @@ jobs:
   # The release's screenshots (#582): once the suite has passed on the commit the release will tag, the same runner
   # loads integration Scenario 8 at Scale100k50Groups, captures every image in scripts/screenshots/manifest.json with
   # the portal in Production mode, keeps the whole library as an artefact, and opens a pull request on junctional.io
-  # with the images its product tour shows (scripts/screenshots/Publish-TourScreenshots.ps1). Nothing merges by
-  # itself: a person looks through the images and merges once the release is published.
+  # with the images its product tour shows (scripts/screenshots/Publish-TourScreenshots.ps1), and one on tetron.io
+  # replacing the JIM screenshot in its homepage hero (scripts/screenshots/Publish-TetronScreenshots.ps1). Nothing
+  # merges by itself: a person looks through the images and merges once the release is published.
   #
   # A job here rather than a workflow of its own, because the jim-prerelease runner group admits exactly this file. It
   # cannot hold up a release: the gate reads the jim-pre-release commit status, which the job above has already posted.
@@ -232,7 +233,7 @@ jobs:
   # scripts/toolchain/install-playwright-for-runner.sh (re-run it with the new pin when PLAYWRIGHT_MCP_VERSION in
   # .devcontainer/setup.sh moves); the 20+ GB the Scale100k50Groups template needs; the Scale100k50Groups OpenLDAP
   # snapshot, which the first run builds and keeps. The jim-automation app needs Contents and Pull requests write on
-  # junctional.io.
+  # junctional.io and tetron.io.
   jim-screenshots:
     name: jim-screenshots
     needs: jim-pre-release
@@ -303,7 +304,7 @@ jobs:
           pwsh -File ./scripts/Capture-Screenshots.ps1 -Version $version -PrepareData -OutputPath artifacts/screenshots
           exit $LASTEXITCODE
 
-      # The whole library, including the images not on the site; the junctional.io pull request links to it.
+      # The whole library, including the images not on the sites; both sites' pull requests link to it.
       - name: Upload the screenshots
         if: ${{ always() && steps.capture.outputs.version != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -342,6 +343,38 @@ jobs:
         run: |
           pwsh -File ./scripts/screenshots/Publish-TourScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
             -Version $env:VERSION_FOLDER -SitePath junctional.io -Repository "$env:GITHUB_REPOSITORY_OWNER/junctional.io" -RunUrl $env:RUN_URL
+          exit $LASTEXITCODE
+
+      # tetron.io's homepage hero shows JIM's home page. Its own token and steps, run whether or not junctional.io's
+      # succeeded, so one site's failure does not keep the other's screenshots back (the job still fails).
+      - name: Mint a tetron.io token
+        id: tetron-token
+        if: ${{ !cancelled() && steps.capture.outcome == 'success' && !contains(steps.capture.outputs.version, '-') }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: tetron.io
+
+      - name: Check out tetron.io
+        if: ${{ !cancelled() && steps.tetron-token.outcome == 'success' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ github.repository_owner }}/tetron.io
+          token: ${{ steps.tetron-token.outputs.token }}
+          path: tetron.io
+          persist-credentials: false
+
+      - name: Open the tetron.io pull request
+        if: ${{ !cancelled() && steps.tetron-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.tetron-token.outputs.token }}
+          VERSION_FOLDER: ${{ steps.capture.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pwsh -File ./scripts/screenshots/Publish-TetronScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
+            -Version $env:VERSION_FOLDER -SitePath tetron.io -Repository "$env:GITHUB_REPOSITORY_OWNER/tetron.io" -RunUrl $env:RUN_URL
           exit $LASTEXITCODE
 
       # A serial run's stack carries the SambaAD lane's names (the serial defaults), whatever directory it used.

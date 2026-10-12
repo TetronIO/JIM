@@ -137,6 +137,11 @@ flowchart TD
     TryCatch --> Unhandled{Unhandled<br/>exception?}
     Unhandled -->|Yes| UnhandledRPEI2[RPEI: UnhandledError<br/>+ stack trace<br/>Processing continues to next CSO]
 
+    PerCSO --> ExportEval{Export evaluation<br/>at the page flush}
+    ExportEval -->|Matching before provisioning<br/>found several objects, #2052| ProvAmbiguousRPEI[RPEI on the MVO:<br/>AmbiguousProvisioningMatch<br/>with match candidates]
+    ExportEval -->|Matching rule failed<br/>before provisioning| ProvRuleFailedRPEI[RPEI on the MVO:<br/>ObjectMatchingRuleFailed]
+    ExportEval -->|Rule targets another<br/>Object Type in the system| TypeConflictRPEI[RPEI: CouldNotExportDueTo<br/>ExistingConnectedSystemObject]
+
     PerCSO --> Obsolete{CSO<br/>obsolete?}
     Obsolete -->|Yes| ObsoleteRPEIs[One RPEI per CSO:<br/>Disconnected root outcome with<br/>CsoDeleted and any MvoDeleted or<br/>MvoDeletionScheduled children,<br/>or Deleted when it was not joined]
 ```
