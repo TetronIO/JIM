@@ -281,34 +281,93 @@ function Format-Parameters {
     "### Parameters`n`n| Name | Type | Required | Default | Description |`n|------|------|----------|---------|-------------|`n" + ($rows -join "`n")
 }
 
-# A schema's property names in the order declared, those it takes through allOf first.
+# A property's type as the site writes it, from its schema: a referenced schema or enum by name, an array
+# as its items' type with [], and JSON types as their PowerShell names. null is left out of a union.
+function Get-SchemaTypeName {
+    param($Property)
+
+    if ($Property.Contains('$ref')) { return $Property['$ref'] -replace '^#/components/schemas/', '' }
+    foreach ($composite in 'oneOf', 'anyOf', 'allOf') {
+        if ($Property.Contains($composite)) {
+            $parts = @($Property[$composite] | Where-Object { -not ($_.Contains('type') -and $_['type'] -eq 'null') })
+            if ($parts.Count -eq 1) { return Get-SchemaTypeName $parts[0] }
+            return 'object'
+        }
+    }
+    $types = @($(if ($Property.Contains('type')) { $Property['type'] }) | Where-Object { $_ -ne 'null' })
+    $format = if ($Property.Contains('format')) { $Property['format'] } else { '' }
+    if ($types -contains 'array') {
+        $items = if ($Property.Contains('items')) { Get-SchemaTypeName $Property['items'] } else { 'object' }
+        return "$items[]"
+    }
+    if ($types -contains 'integer') { return $(if ($format -eq 'int64') { 'long' } else { 'int' }) }
+    if ($types -contains 'number') { return $(if ($format -eq 'float') { 'float' } elseif ($format -eq 'decimal') { 'decimal' } else { 'double' }) }
+    if ($types -contains 'boolean') { return 'bool' }
+    if ($types -contains 'string') {
+        switch ($format) {
+            'uuid' { return 'guid' }
+            'date-time' { return 'datetime' }
+            'date' { return 'date' }
+            'byte' { return 'byte[]' }
+            default { return 'string' }
+        }
+    }
+    if ($types -contains 'object' -and $Property.Contains('additionalProperties')) { return 'hashtable' }
+    'object'
+}
+
+# A schema's properties in the order declared, those it takes through allOf first: each one's name in
+# the PascalCase the module returns, its type, and its description.
 function Get-SchemaProperties {
     param($Schemas, [string]$Name, [System.Collections.Generic.HashSet[string]]$Seen)
 
     if (-not $Seen) { $Seen = [System.Collections.Generic.HashSet[string]]::new() }
     if (-not $Seen.Add($Name)) { return @() }
     $schema = $Schemas[$Name]
-    $names = [System.Collections.Generic.List[string]]::new()
+    $properties = [System.Collections.Generic.List[object]]::new()
+    $addFrom = {
+        param($bag)
+        foreach ($key in $bag.Keys) {
+            $property = $bag[$key]
+            $description = if ($property.Contains('description')) { ($property['description'] -replace '\s+', ' ').Trim() } else { '' }
+            $properties.Add([pscustomobject]@{
+                Name        = $key.Substring(0, 1).ToUpperInvariant() + $key.Substring(1)
+                Type        = Get-SchemaTypeName $property
+                Description = $description
+            })
+        }
+    }
     if ($schema.Contains('allOf')) {
         foreach ($part in $schema['allOf']) {
             if ($part.Contains('$ref')) {
-                foreach ($inherited in (Get-SchemaProperties -Schemas $Schemas -Name ($part['$ref'] -replace '^#/components/schemas/', '') -Seen $Seen)) { $names.Add($inherited) }
+                foreach ($inherited in (Get-SchemaProperties -Schemas $Schemas -Name ($part['$ref'] -replace '^#/components/schemas/', '') -Seen $Seen)) { $properties.Add($inherited) }
             }
-            elseif ($part.Contains('properties')) {
-                foreach ($key in $part['properties'].Keys) { $names.Add($key) }
-            }
+            elseif ($part.Contains('properties')) { & $addFrom $part['properties'] }
         }
     }
-    if ($schema.Contains('properties')) {
-        foreach ($key in $schema['properties'].Keys) { $names.Add($key) }
-    }
-    @($names | ForEach-Object { $_.Substring(0, 1).ToUpperInvariant() + $_.Substring(1) } | Select-Object -Unique)
+    if ($schema.Contains('properties')) { & $addFrom $schema['properties'] }
+
+    $seenNames = @{}
+    @($properties | Where-Object { if ($seenNames.ContainsKey($_.Name)) { $false } else { $seenNames[$_.Name] = $true; $true } })
 }
 
-function Format-Output {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [System.Collections.Generic.List[string]]$Problems)
+# The anchor MkDocs gives a cmdlet's heading.
+function Get-HeadingAnchor {
+    param([string]$Heading)
+    ($Heading.ToLowerInvariant() -replace '[^\w\s-]', '' -replace '\s+', '-').Trim('-')
+}
 
-    $rows = [System.Collections.Generic.List[object]]::new()
+# Each type the cmdlet declares: a schema's properties are tabled the first time the page returns it, and
+# later cmdlets on the page refer back to that one rather than repeat the table.
+function Format-Output {
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
+
+    if ($Reference.OutputTypes.Count -eq 0) {
+        $Problems.Add("$($Reference.Name) declares nothing about its output; name what it returns with [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], or add [OutputType([void])] if it returns nothing")
+    }
+
+    $everySet = @($Reference.Sets | ForEach-Object Name)
+    $sections = [System.Collections.Generic.List[string]]::new()
     foreach ($typeName in $Reference.OutputTypes.Keys) {
         $sets = $Reference.OutputTypes[$typeName]
         if ($typeName -in @('System.Void', 'void')) { continue }
@@ -318,11 +377,10 @@ function Format-Output {
         }
 
         $display = $typeName
-        $properties = @()
+        $schemaName = $null
         if ($typeName -like 'JIM.*') {
-            $schemaName = $typeName.Substring(4)
-            $display = $schemaName
-            if ($Schemas.Contains($schemaName)) { $properties = Get-SchemaProperties -Schemas $Schemas -Name $schemaName }
+            $display = $typeName.Substring(4)
+            if ($Schemas.Contains($display)) { $schemaName = $display }
             elseif (-not $NonApiOutputTypes.ContainsKey($typeName)) {
                 $Problems.Add("$($Reference.Name) declares output type $typeName, which is not a schema in the OpenAPI document; correct the name, or list it in NonApiOutputTypes with the reason")
             }
@@ -332,50 +390,52 @@ function Format-Output {
             if ($resolved) { $display = Get-FriendlyTypeName $resolved }
         }
 
-        $rows.Add([pscustomobject]@{
-            Type       = $display
-            Sets       = $sets
-            Properties = @($properties)
-        })
+        # The sets, where the type is returned by some and not others.
+        $label = "**``$display``**"
+        if ($sets -notcontains $script:AllSets -and @($everySet | Where-Object { $sets -notcontains $_ }).Count -gt 0) {
+            $label += ' (' + (@($everySet | Where-Object { $sets -contains $_ }) -join ', ') + ')'
+        }
+
+        if (-not $schemaName) {
+            $sections.Add($label)
+        }
+        elseif ($TabledOnPage.ContainsKey($schemaName)) {
+            $first = $TabledOnPage[$schemaName]
+            $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
+        }
+        else {
+            $TabledOnPage[$schemaName] = $Reference.Name
+            $properties = @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)
+            # A Description column the schema leaves wholly empty says nothing; its descriptions come from
+            # the DTO's XML comments, so documenting the DTO is what fills it.
+            if (@($properties | Where-Object Description).Count -gt 0) {
+                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell $property.Description) }
+                $sections.Add("${label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n"))
+            }
+            else {
+                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
+                $sections.Add("${label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n"))
+            }
+        }
     }
 
     $text = "### Output"
     if ($Reference.Outputs.Count -gt 0) { $text += "`n`n" + ($Reference.Outputs -join "`n`n") }
-    if ($rows.Count -eq 0) {
+    if ($sections.Count -eq 0) {
         if ($Reference.Outputs.Count -eq 0) { $text += "`n`nNone." }
         return $text
     }
-
-    # The Returned by column earns its place only when some type is returned by some sets and not others.
-    $everySet = @($Reference.Sets | ForEach-Object Name)
-    $showSets = @($rows | Where-Object {
-            $row = $_
-            $row.Sets -notcontains $script:AllSets -and @($everySet | Where-Object { $row.Sets -notcontains $_ }).Count -gt 0
-        }).Count -gt 0
-
-    $propertyCell = { param($row) ConvertTo-TableCell ((@($row.Properties) | ForEach-Object { "``$_``" }) -join ', ') }
-    if ($showSets) {
-        $lines = foreach ($row in $rows) {
-            $returnedBy = if ($row.Sets -contains $script:AllSets) { 'All' } else { @($everySet | Where-Object { $row.Sets -contains $_ }) -join ', ' }
-            '| `{0}` | {1} | {2} |' -f $row.Type, $returnedBy, (& $propertyCell $row)
-        }
-        $text += "`n`n| Type | Returned by | Properties |`n|------|-------------|------------|`n" + ($lines -join "`n")
-    }
-    else {
-        $lines = foreach ($row in $rows) { '| `{0}` | {1} |' -f $row.Type, (& $propertyCell $row) }
-        $text += "`n`n| Type | Properties |`n|------|------------|`n" + ($lines -join "`n")
-    }
-    $text
+    $text + "`n`n" + ($sections -join "`n`n")
 }
 
 function Format-Block {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [System.Collections.Generic.List[string]]$Problems)
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
     foreach ($parameter in @($Reference.Parameters | Where-Object { -not $_.Description })) {
         $Problems.Add("$($Reference.Name) has no .PARAMETER help for -$($parameter.Name)")
     }
     (Format-Syntax $Reference) + "`n`n" + (Format-Parameters $Reference) + "`n`n" +
-        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -Problems $Problems)
+        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -TabledOnPage $TabledOnPage -Problems $Problems)
 }
 
 function Get-LineNumber {
@@ -453,7 +513,10 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         }
     }
 
-    foreach ($block in @($blocks | Sort-Object { $_.Begin.Index } -Descending)) {
+    # Rendered in page order, since a schema is tabled where the page first returns it; written back from
+    # the last block to the first, so the earlier indices stay valid.
+    $tabledOnPage = @{}
+    $rendered = foreach ($block in @($blocks | Sort-Object { $_.Begin.Index })) {
         $line = Get-LineNumber $text $block.Begin.Index
         $generatedHere[$block.Name] = $true
         if ($seenBlocks.ContainsKey($block.Name)) {
@@ -471,12 +534,17 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         $blockCount++
         $problems = [System.Collections.Generic.List[string]]::new()
         $reference = Get-CmdletReference -Command $exported[$block.Name]
-        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -Problems $problems) + "`n"
+        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -TabledOnPage $tabledOnPage -Problems $problems) + "`n"
         foreach ($problem in $problems) {
             Write-Finding $relative $line $problem
             $failures++
         }
+        [pscustomobject]@{ Block = $block; Line = $line; Content = $content }
+    }
 
+    foreach ($item in @($rendered | Sort-Object { $_.Block.Begin.Index } -Descending)) {
+        $block = $item.Block
+        $content = $item.Content
         $start = $block.Begin.Index + $block.Begin.Length
         $current = $text.Substring($start, $block.End.Index - $start)
         if ($current -ne $content) {
@@ -487,7 +555,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
                 while ($index -lt $expectedLines.Count -and $index -lt $foundLines.Count -and $expectedLines[$index] -eq $foundLines[$index]) { $index++ }
                 $expected = if ($index -lt $expectedLines.Count) { $expectedLines[$index] } else { '(end of block)' }
                 $found = if ($index -lt $foundLines.Count) { $foundLines[$index] } else { '(end of block)' }
-                Write-Finding $relative ($line + $index) "the generated block for $($block.Name) differs from the module; run scripts/Update-PowerShellReference.ps1 to regenerate it, and change the cmdlet's help rather than the page. Expected: '$expected'; found: '$found'"
+                Write-Finding $relative ($item.Line + $index) "the generated block for $($block.Name) differs from the module; run scripts/Update-PowerShellReference.ps1 to regenerate it, and change the cmdlet's help rather than the page. Expected: '$expected'; found: '$found'"
                 $failures++
             }
             else {

@@ -134,6 +134,47 @@ function Get-JIMUndescribed {
 }
 '@
 
+    # Returns a schema that describes none of its properties.
+    $script:GetSummary = @'
+function Get-JIMWidgetSummary {
+    <#
+    .SYNOPSIS
+        Counts Widgets.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetSummary')]
+    param()
+}
+'@
+
+    # Declares nothing about what it returns.
+    $script:GetSilent = @'
+function Get-JIMSilent {
+    <#
+    .SYNOPSIS
+        Says nothing about its output.
+    #>
+    [CmdletBinding()]
+    param()
+}
+'@
+
+    # Declares that it returns nothing.
+    $script:InvokeQuiet = @'
+function Invoke-JIMQuiet {
+    <#
+    .SYNOPSIS
+        Returns nothing, and says so.
+
+    .OUTPUTS
+        None.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param()
+}
+'@
+
     # Builds its own object, so its type is not an OpenAPI schema.
     $script:GetHealth = @'
 function Get-JIMHealth {
@@ -158,9 +199,20 @@ function Get-JIMHealth {
       "WidgetHeader": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
+          "id": { "type": "string", "format": "uuid", "description": "The Widget's identifier." },
           "name": { "type": [ "null", "string" ] },
-          "isEnabled": { "type": "boolean" }
+          "isEnabled": { "type": "boolean", "description": "Whether the Widget | is enabled." },
+          "status": { "$ref": "#/components/schemas/WidgetStatus" },
+          "count": { "pattern": "^-?(?:0|[1-9]\\d*)$", "type": [ "integer", "string" ], "format": "int32" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "WidgetStatus": { "enum": [ "Active", "Retired" ] },
+      "WidgetSummary": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer", "format": "int32" },
+          "enabled": { "type": "integer", "format": "int32" }
         }
       },
       "WidgetDetail": {
@@ -271,6 +323,25 @@ function Get-JIMHealth {
         }
     }
 
+    # Each type an Output section names: its name, the sets in brackets after it, the rest of its line,
+    # and the property table that follows it, if any.
+    function Get-OutputTypes {
+        param([string]$Block)
+        $output = Get-Subsection $Block 'Output'
+        $matches = [regex]::Matches($output, '(?m)^\*\*`(?<type>[^`]+)`\*\*(?: \((?<sets>[^)]*)\))?(?<rest>.*)$')
+        for ($i = 0; $i -lt $matches.Count; $i++) {
+            $m = $matches[$i]
+            $end = if ($i + 1 -lt $matches.Count) { $matches[$i + 1].Index } else { $output.Length }
+            $after = $output.Substring($m.Index + $m.Length, $end - $m.Index - $m.Length)
+            [pscustomobject]@{
+                Type  = $m.Groups['type'].Value
+                Sets  = $m.Groups['sets'].Value
+                Rest  = $m.Groups['rest'].Value
+                Table = @(ConvertFrom-MarkdownTable $after)
+            }
+        }
+    }
+
     function Get-SyntaxLines {
         param([string]$Block)
         $syntax = Get-Subsection $Block 'Syntax'
@@ -351,24 +422,48 @@ Describe 'Update-PowerShellReference: generating a block' {
         Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; -Id returns the whole Widget\."
     }
 
-    It 'lists each output type with the sets that return it and its properties in PascalCase' {
-        $rows = ConvertFrom-MarkdownTable (Get-Subsection $script:GetBlock 'Output')
-        $header = $rows | Where-Object Type -eq 'WidgetHeader'
-        $header.'Returned by' | Should -Be 'List'
-        ($header.Properties -split ',\s*') | Should -Be @('Id', 'Name', 'IsEnabled')
+    It 'tables each output type with the sets that return it, and its properties in PascalCase with their types' {
+        $header = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader'
+        $header.Sets | Should -Be 'List'
+        $header.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
+        $header.Table.Type | Should -Be @('guid', 'string', 'bool', 'WidgetStatus', 'int', 'string[]')
     }
 
-    It "includes the properties a schema takes from another through allOf" {
-        $rows = ConvertFrom-MarkdownTable (Get-Subsection $script:GetBlock 'Output')
-        $detail = $rows | Where-Object Type -eq 'WidgetDetail'
-        $detail.'Returned by' | Should -Be 'ById'
-        ($detail.Properties -split ',\s*') | Should -Be @('Id', 'Name', 'IsEnabled', 'Notes', 'CreatedAt')
+    It "gives each property the description the schema has for it, and none where it has none" {
+        $table = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader').Table
+        ($table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
+        ($table | Where-Object Property -eq 'IsEnabled').Description | Should -Be 'Whether the Widget | is enabled.'
+        ($table | Where-Object Property -eq 'Name').Description | Should -BeNullOrEmpty
     }
 
-    It 'leaves out the Returned by column when every type is returned by every set' {
-        $rows = @(ConvertFrom-MarkdownTable (Get-Subsection $script:RemoveBlock 'Output'))
-        $rows.Count | Should -Be 1
-        $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Returned by'
+    It 'includes the properties a schema takes from another through allOf' {
+        $detail = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail'
+        $detail.Sets | Should -Be 'ById'
+        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt')
+    }
+
+    It 'refers back to the cmdlet above that already tables a type, instead of repeating it' {
+        $detail = @(Get-OutputTypes $script:RemoveBlock)
+        $detail.Count | Should -Be 1
+        $detail[0].Type | Should -Be 'WidgetDetail'
+        $detail[0].Table.Count | Should -Be 0
+        $detail[0].Rest | Should -Match ([regex]::Escape('[Get-JIMWidget](#get-jimwidget)'))
+    }
+
+    It 'tables a type without a Description column when its schema describes none of its properties' {
+        $fixture = New-Fixture -Functions @($script:GetSummary) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetSummary') }
+        Invoke-Generator $fixture | Out-Null
+        $summary = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetSummary'))
+        $summary[0].Table.Property | Should -Be @('Total', 'Enabled')
+        $summary[0].Table[0].PSObject.Properties.Name | Should -Not -Contain 'Description'
+    }
+
+    It 'names no sets for a type every set returns' {
+        $fixture = New-Fixture -Functions @($script:RemoveWidget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMWidget') }
+        Invoke-Generator $fixture | Out-Null
+        $detail = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Remove-JIMWidget'))
+        $detail[0].Sets | Should -BeNullOrEmpty
+        $detail[0].Table.Property | Should -Contain 'CreatedAt'
     }
 
     It 'leaves everything outside the markers as it was' {
@@ -428,6 +523,22 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'OutputType'
     }
 
+    It 'fails when a cmdlet declares nothing about its output' {
+        $fixture = New-Fixture -Functions @($script:GetSilent) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMSilent') }
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'Get-JIMSilent'
+        $result.Output | Should -Match 'OutputType\(\[void\]\)'
+    }
+
+    It 'accepts a cmdlet that declares it returns nothing' {
+        $fixture = New-Fixture -Functions @($script:InvokeQuiet) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Invoke-JIMQuiet') }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Subsection (Get-Block (Get-Page $fixture) 'Invoke-JIMQuiet') 'Output' | Should -Match 'None\.'
+    }
+
     It 'fails when a JIM output type is neither an OpenAPI schema nor allowed' {
         $fixture = New-Fixture -Functions @($script:GetHealth) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') }
         $result = Invoke-Generator $fixture -Check
@@ -440,8 +551,9 @@ Describe 'Update-PowerShellReference -Check' {
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $rows = @(ConvertFrom-MarkdownTable (Get-Subsection (Get-Block (Get-Page $fixture) 'Get-JIMHealth') 'Output'))
-        $rows[0].Type | Should -Be 'HealthSummary'
+        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMHealth'))
+        $types[0].Type | Should -Be 'HealthSummary'
+        $types[0].Table.Count | Should -Be 0
     }
 
     It 'fails on an allowed output type that no cmdlet declares' {
