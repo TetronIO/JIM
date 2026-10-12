@@ -1220,6 +1220,13 @@ public interface ISyncRepository
     Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
 
     /// <summary>
+    /// A Connected System's <see cref="ConnectedSystem.ObjectMatchingRuleMode"/>, read on its own, or null when the system
+    /// does not exist. Sync Preview (#2176) takes the join decision the run takes from it: in simple mode the Connected
+    /// System Object Type's own Object Matching Rules apply, in advanced mode only each import Synchronisation Rule's.
+    /// </summary>
+    Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId);
+
+    /// <summary>
     /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
     /// they provision.
     /// <para>

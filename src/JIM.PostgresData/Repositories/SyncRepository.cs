@@ -460,6 +460,15 @@ public partial class SyncRepository : ISyncRepository
         return watermarks == null ? null : (watermarks.LastSyncCompletedAt, watermarks.ConfigurationLastFullyAppliedAt);
     }
 
+    public async Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystems
+            .AsNoTracking()
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => (ObjectMatchingRuleMode?)cs.ObjectMatchingRuleMode)
+            .SingleOrDefaultAsync();
+    }
+
     public async Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         if (syncRuleIds.Count == 0)
