@@ -641,7 +641,7 @@ public class TestExpressionResponse
     /// <summary>
     /// The result as the portal's expression tester shows it: one line per value, each written as JIM writes the value
     /// as text (a date as 2026-03-15 10:30:00Z, a Binary value described by its size). Empty when the expression
-    /// produced no value; null when it failed.
+    /// produced no value, and not set when it failed, when ErrorMessage says why.
     /// </summary>
     public IReadOnlyList<string>? ResultLines { get; set; }
 
