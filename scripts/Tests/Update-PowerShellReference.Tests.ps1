@@ -191,6 +191,81 @@ function Get-JIMHealth {
 }
 '@
 
+    # Gives the API's WidgetHeader a type name of its own, so the name is not a schema but the properties are.
+    $script:GetGadget = @'
+function Get-JIMGadget {
+    <#
+    .SYNOPSIS
+        Gets Gadgets, which are Widgets under the module's own name.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.Gadget')]
+    param()
+}
+'@
+
+    # Declares positions, so they are part of its interface: a mandatory one, an optional one, and a switch.
+    $script:SetWidgetName = @'
+function Set-JIMWidgetName {
+    <#
+    .SYNOPSIS
+        Renames a Widget.
+
+    .PARAMETER Id
+        The Widget to rename.
+
+    .PARAMETER Name
+        The new name.
+
+    .PARAMETER PassThru
+        Returns the renamed Widget.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetHeader')]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [int]$Id,
+
+        [Parameter(Position = 1)]
+        [string]$Name,
+
+        [switch]$PassThru
+    )
+}
+'@
+
+    # Declares no position, so PowerShell gives its parameter one nobody chose.
+    $script:GetWidgetCount = @'
+function Get-JIMWidgetCount {
+    <#
+    .SYNOPSIS
+        Counts a Widget's parts.
+
+    .PARAMETER Id
+        The Widget.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetSummary')]
+    param(
+        [Parameter(Mandatory)]
+        [int]$Id
+    )
+}
+'@
+
+    # Returns a schema whose descriptions carry the text .NET renders for a <see cref> to a member.
+    $script:GetReport = @'
+function Get-JIMWidgetReport {
+    <#
+    .SYNOPSIS
+        Reports on Widgets.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetReport')]
+    param()
+}
+'@
+
     $script:OpenApi = @'
 {
   "openapi": "3.1.1",
@@ -215,12 +290,20 @@ function Get-JIMHealth {
           "enabled": { "type": "integer", "format": "int32" }
         }
       },
+      "WidgetReport": {
+        "type": "object",
+        "properties": {
+          "worst": { "type": "string", "description": "The worst status among List&lt;WidgetHeader&gt; WidgetReport.Widgets; The WidgetReport.Widgets list stays." },
+          "limit": { "type": "integer", "format": "int32", "description": "Never ordered: the sentinel (int int.MaxValue), unlike ServiceHealthStatus WidgetReport.Worst." }
+        }
+      },
       "WidgetDetail": {
         "allOf": [ { "$ref": "#/components/schemas/WidgetHeader" } ],
         "type": "object",
         "properties": {
           "notes": { "type": [ "null", "string" ] },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "createdAt": { "type": "string", "format": "date-time" },
+          "replacedBy": { "oneOf": [ { "type": "null" }, { "description": "The Widget that replaced this one.", "$ref": "#/components/schemas/WidgetHeader" } ] }
         }
       }
     }
@@ -241,7 +324,8 @@ function Get-JIMHealth {
         param(
             [string[]]$Functions = @($script:GetWidget, $script:RemoveWidget),
             [hashtable]$Pages = @{ 'widgets.md' = "---`ntitle: Widgets`n---`n`n# Widgets`n`n$script:Intro`n`n" + (New-Section 'Get-JIMWidget') + "`n" + (New-Section 'Remove-JIMWidget') },
-            [hashtable]$NonApiOutputTypes = @{}
+            [hashtable]$NonApiOutputTypes = @{},
+            [hashtable]$OutputTypeSchemas = @{}
         )
 
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
@@ -260,8 +344,9 @@ function Get-JIMHealth {
         Set-Content -LiteralPath $openApiPath -Value $script:OpenApi
 
         $entries = ($NonApiOutputTypes.Keys | ForEach-Object { "        '$_' = '$($NonApiOutputTypes[$_])'" }) -join "`n"
+        $mappings = ($OutputTypeSchemas.Keys | ForEach-Object { "        '$_' = '$($OutputTypeSchemas[$_])'" }) -join "`n"
         $configPath = Join-Path $root 'config.psd1'
-        Set-Content -LiteralPath $configPath -Value "@{`n    NonApiOutputTypes = @{`n$entries`n    }`n}"
+        Set-Content -LiteralPath $configPath -Value "@{`n    NonApiOutputTypes = @{`n$entries`n    }`n    OutputTypeSchemas = @{`n$mappings`n    }`n}"
 
         [pscustomobject]@{
             Root     = $root
@@ -444,7 +529,13 @@ Describe 'Update-PowerShellReference: generating a block' {
     It 'includes the properties a schema takes from another through allOf' {
         $detail = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail'
         $detail.Sets | Should -Be 'ById'
-        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt')
+        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt', 'ReplacedBy')
+    }
+
+    It 'gives a nullable reference the description the document puts beside the reference, not on the property' {
+        $replacedBy = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail').Table | Where-Object Property -eq 'ReplacedBy'
+        $replacedBy.Type | Should -Be 'WidgetHeader'
+        $replacedBy.Description | Should -Be 'The Widget that replaced this one.'
     }
 
     It 'refers back to the cmdlet above that already tables a type, instead of repeating it' {
@@ -453,6 +544,33 @@ Describe 'Update-PowerShellReference: generating a block' {
         $detail[0].Type | Should -Be 'WidgetDetail'
         $detail[0].Table.Count | Should -Be 0
         $detail[0].Rest | Should -Match ([regex]::Escape('[Get-JIMWidget](#get-jimwidget)'))
+    }
+
+    It "names a member a description cross-references, without the type and owner .NET renders with it" {
+        $fixture = New-Fixture -Functions @($script:GetReport) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetReport') }
+        Invoke-Generator $fixture | Out-Null
+        $table = (Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
+        ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst status among Widgets; The WidgetReport.Widgets list stays.'
+        ($table | Where-Object Property -eq 'Limit').Description | Should -Be 'Never ordered: the sentinel (MaxValue), unlike Worst.'
+    }
+
+    It 'shows the positions a cmdlet declares, in the syntax and in the parameter table' {
+        $fixture = New-Fixture -Functions @($script:SetWidgetName) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Set-JIMWidgetName') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Set-JIMWidgetName'
+        Get-SyntaxLines $block | Should -Be @('Set-JIMWidgetName [-Id] <int> [[-Name] <string>] [-PassThru]')
+        $rows = ConvertFrom-MarkdownTable (Get-Subsection $block 'Parameters')
+        ($rows | Where-Object Name -eq 'Id').Description | Should -Be 'The Widget to rename. Can be given by position, as the first argument.'
+        ($rows | Where-Object Name -eq 'Name').Description | Should -Be 'The new name. Can be given by position, as the second argument.'
+        ($rows | Where-Object Name -eq 'PassThru').Description | Should -Be 'Returns the renamed Widget.'
+    }
+
+    It 'says nothing of a position the cmdlet did not declare' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetCount) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetCount') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMWidgetCount'
+        Get-SyntaxLines $block | Should -Be @('Get-JIMWidgetCount -Id <int>')
+        (ConvertFrom-MarkdownTable (Get-Subsection $block 'Parameters') | Where-Object Name -eq 'Id').Description | Should -Be 'The Widget.'
     }
 
     It 'tables a type without a Description column when its schema describes none of its properties' {
@@ -583,6 +701,32 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'JIM\.Stale'
     }
 
+    It "tables a type the module names itself with the properties of the API schema it carries" {
+        $fixture = New-Fixture -Functions @($script:GetGadget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMGadget'))
+        $types[0].Type | Should -Be 'Gadget'
+        @($types[0].Table | ForEach-Object Property) | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
+        ($types[0].Table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
+    }
+
+    It 'fails on a type mapped to a schema that no cmdlet declares' {
+        $fixture = New-Fixture -OutputTypeSchemas @{ 'JIM.Stale' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'JIM\.Stale'
+    }
+
+    It 'fails on a type mapped to a schema the OpenAPI document does not have' {
+        $fixture = New-Fixture -Functions @($script:GetGadget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'GadgetResponse' }
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'GadgetResponse'
+    }
+
     It 'fails on a BEGIN marker with no END' {
         $fixture = New-Fixture -Pages @{ 'widgets.md' = "# Widgets`n`n## Get-JIMWidget`n`n<!-- BEGIN GENERATED: Get-JIMWidget -->`n" }
         $result = Invoke-Generator $fixture -Check
@@ -598,5 +742,30 @@ Describe 'Update-PowerShellReference -Check' {
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Match 'Remove-JIMWidget'
         Get-Page $fixture | Should -Match 'Hand-written, not generated yet\.'
+    }
+
+    It 'warns about every exported cmdlet with no block, whether or not it has a section, whatever its name' {
+        # Connect-JIM has nothing after "JIM", which a heading pattern can miss; Remove-JIMWidget is only
+        # mentioned in a table, so there is no heading to find at all.
+        $connect = @'
+function Connect-JIM {
+    <#
+    .SYNOPSIS
+        Connects.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param()
+}
+'@
+        $page = "# Widgets`n`n" + (New-Section 'Get-JIMWidget') + "`n## Connect-JIM`n`nHand-written.`n`n| Cmdlet | Purpose |`n|---|---|`n| ``Remove-JIMWidget -Id <int>`` | Removes one. |`n"
+        $fixture = New-Fixture -Functions @($script:GetWidget, $script:RemoveWidget, $connect) -Pages @{ 'widgets.md' = $page }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'widgets\.md: Connect-JIM\b'
+        $result.Output | Should -Match '\(no section\): Remove-JIMWidget'
+        $result.Output | Should -Match '2 cmdlets have no generated block'
+        $result.Output | Should -Not -Match ': Get-JIMWidget'
     }
 }

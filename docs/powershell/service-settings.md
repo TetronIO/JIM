@@ -23,14 +23,14 @@ Retrieves service settings. When called without parameters, returns all settings
 Get-JIMServiceSetting
 
 # ByKey
-Get-JIMServiceSetting -Key <string>
+Get-JIMServiceSetting [-Key] <string>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes (ByKey) |  | The key of the one setting to return, such as "ChangeTracking.CsoChanges.Enabled". |
+| `Key` | `string` | Yes (ByKey) |  | The key of the one setting to return, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. |
 
 ### Output
 
@@ -80,15 +80,15 @@ Updates a service setting value. Read-only settings cannot be modified; attempti
 ### Syntax
 
 ```powershell
-Set-JIMServiceSetting -Key <string> -Value <string> [-ChangeReason <string>] [-PassThru]
+Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes |  | The key of the setting to change, such as "ChangeTracking.CsoChanges.Enabled". |
-| `Value` | `string` | Yes |  | The new value, as a string. |
+| `Key` | `string` | Yes |  | The key of the setting to change, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. |
+| `Value` | `string` | Yes |  | The new value, as a string. Can be given by position, as the second argument. |
 | `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the setting's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the setting as updated. |
 
@@ -133,14 +133,14 @@ Reverts a service setting to its default value by clearing the administrator ove
 ### Syntax
 
 ```powershell
-Reset-JIMServiceSetting -Key <string> [-ChangeReason <string>] [-PassThru]
+Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Key` | `string` | Yes |  | The key of the setting to revert, such as "ChangeTracking.CsoChanges.Enabled". Accepts pipeline input by property name. |
+| `Key` | `string` | Yes |  | The key of the setting to revert, such as "ChangeTracking.CsoChanges.Enabled". Can be given by position, as the first argument. Accepts pipeline input by property name. |
 | `ChangeReason` | `string` | No |  | Optional reason for the revert, recorded on the audit Activity and shown in the setting's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the setting as reverted. |
 

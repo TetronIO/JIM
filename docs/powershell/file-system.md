@@ -73,14 +73,14 @@ Checks whether a file system path is within the JIM Container's allowed mount po
 ### Syntax
 
 ```powershell
-Test-JIMFileSystemPath -Path <string>
+Test-JIMFileSystemPath [-Path] <string>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Path` | `string` | Yes |  | The path to validate. Accepts pipeline input by property name. |
+| `Path` | `string` | Yes |  | The path to validate. Can be given by position, as the first argument. Accepts pipeline input by property name. |
 
 ### Output
 

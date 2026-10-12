@@ -21,8 +21,11 @@ public class RoleMemberDto
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// The object type (id and name). Nested to match the single-object response shape.
+    /// The Metaverse Object Type, with its Id and Name.
     /// </summary>
+    /// <remarks>
+    /// Nested to match the single-object response shape.
+    /// </remarks>
     public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>

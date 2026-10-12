@@ -25,11 +25,13 @@
       [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], the sets that return it, and the
       properties of that schema in the OpenAPI document, in the PascalCase the module returns them in.
       A JIM type that is not an OpenAPI schema (a cmdlet that builds its own object) must be listed in
-      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help.
+      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help;
+      one the module names itself but whose properties are an API schema's is listed in
+      OutputTypeSchemas with that schema, whose properties are tabled for it.
 
     -Check writes nothing, and fails (rule ACC-5 of engineering/DOCUMENTATION_STANDARD.md) when a block
     differs from what this script would write, names a cmdlet the module does not export, or belongs to
-    a cmdlet with an undescribed parameter or undescribed output. Cmdlet sections with no block yet are
+    a cmdlet with an undescribed parameter or undescribed output. Exported cmdlets with no block yet are
     listed as a warning while the pages migrate.
 
 .PARAMETER ModulePath
@@ -43,7 +45,8 @@
     Generate-OpenApiDoc.ps1, which builds the solution.
 
 .PARAMETER ConfigPath
-    The configuration (NonApiOutputTypes). Defaults to docs/.conformance/powershell-reference.psd1.
+    The configuration (NonApiOutputTypes, OutputTypeSchemas). Defaults to
+    docs/.conformance/powershell-reference.psd1.
 
 .PARAMETER Check
     Write nothing; fail if any page differs from what would be written.
@@ -136,10 +139,26 @@ function Join-Choices {
 }
 
 # What a parameter's attributes say, as sentences to follow its description.
+function Get-Ordinal {
+    param([int]$Position)
+    $words = 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'
+    if ($Position -lt $words.Count) { return $words[$Position] }
+    "number $($Position + 1)"
+}
+
 function Get-AttributeSentences {
-    param($Parameter, [object[]]$SetMetadata)
+    param($Parameter, [object[]]$SetMetadata, [switch]$DeclaresPositions)
 
     $sentences = [System.Collections.Generic.List[string]]::new()
+
+    # Only positions the cmdlet declares: PowerShell gives one to every parameter of a cmdlet that declares
+    # none, and those are an accident of declaration order, not an interface.
+    if ($DeclaresPositions) {
+        $positions = @($SetMetadata | Where-Object { $_.Position -ge 0 } | ForEach-Object Position | Sort-Object -Unique)
+        if ($positions.Count -gt 0) {
+            $sentences.Add("Can be given by position, as the $((@($positions | ForEach-Object { Get-Ordinal $_ })) -join ' or ') argument.")
+        }
+    }
 
     $byValue = @($SetMetadata | Where-Object ValueFromPipeline).Count -gt 0
     $byProperty = @($SetMetadata | Where-Object ValueFromPipelineByPropertyName).Count -gt 0
@@ -198,6 +217,12 @@ function Get-CmdletReference {
         }
     }
 
+    $declaresPositions = $null -ne $paramBlock -and $null -ne $paramBlock.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.NamedAttributeArgumentAst] -and $node.ArgumentName -eq 'Position' -and
+                $node.Parent.TypeName.Name -in 'Parameter', 'System.Management.Automation.Parameter', 'ParameterAttribute'
+        }, $true)
+
     $outputTypes = [ordered]@{}
     foreach ($attribute in @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
         foreach ($type in $attribute.Type) {
@@ -213,6 +238,7 @@ function Get-CmdletReference {
         Sets        = $sets
         NamedSets   = $named
         Parameters  = @($parameters)
+        DeclaresPositions = $declaresPositions
         Outputs     = @(if ($help) { $help.Outputs | ForEach-Object { ConvertTo-Paragraphs $_ } })
         OutputTypes = $outputTypes
     }
@@ -229,10 +255,20 @@ function Format-Syntax {
             $lines.Add('# ' + $set.Name + $(if ($set.IsDefault) { ' (default)' }))
         }
         $inSet = @($Reference.Parameters | Where-Object { @($_.Sets | ForEach-Object Name) -contains $set.Name })
+        $positionOf = @{}
+        if ($Reference.DeclaresPositions) {
+            foreach ($metadata in @($set.Parameters | Where-Object { $_.Position -ge 0 })) { $positionOf[$metadata.Name] = $metadata.Position }
+        }
+        $positional = @($inSet | Where-Object { $positionOf.ContainsKey($_.Name) } | Sort-Object { $positionOf[$_.Name] })
+        $inSet = @($inSet | Where-Object { -not $positionOf.ContainsKey($_.Name) })
         $mandatory = @($inSet | Where-Object { ($set.Parameters | Where-Object Name -eq $_.Name).IsMandatory })
         $mandatoryNames = @($mandatory | ForEach-Object Name)
         $optional = @($inSet | Where-Object { $mandatoryNames -notcontains $_.Name })
         $tokens = @($Reference.Name)
+        foreach ($parameter in $positional) {
+            $token = "[-$($parameter.Name)] <$(Get-FriendlyTypeName $parameter.Type)>"
+            $tokens += if (($set.Parameters | Where-Object Name -eq $parameter.Name).IsMandatory) { $token } else { "[$token]" }
+        }
         foreach ($parameter in $mandatory) {
             $tokens += if ($parameter.IsSwitch) { "-$($parameter.Name)" } else { "-$($parameter.Name) <$(Get-FriendlyTypeName $parameter.Type)>" }
         }
@@ -268,7 +304,7 @@ function Format-Parameters {
     if ($Reference.Parameters.Count -eq 0) { return "### Parameters`n`nNone." }
 
     $rows = foreach ($parameter in $Reference.Parameters) {
-        $sentences = @(Get-AttributeSentences -Parameter $parameter.Metadata -SetMetadata $parameter.SetMetadata)
+        $sentences = @(Get-AttributeSentences -Parameter $parameter.Metadata -SetMetadata $parameter.SetMetadata -DeclaresPositions:$Reference.DeclaresPositions)
         $description = $parameter.Description
         if ($sentences.Count -gt 0) {
             if ($description -and $description -notmatch '[.!?]$') { $description += '.' }
@@ -317,12 +353,18 @@ function Get-SchemaTypeName {
 }
 
 # A DTO's XML comment, which is written for the code, as a public page may carry it: on one line, without the
-# issue and pull request numbers comments cite (LANG-8), and without the gaps and brackets they leave.
+# issue and pull request numbers comments cite (LANG-8), and without the gaps and brackets they leave. A
+# <see cref> to a member reaches the document as its type, owner and name ("int Summary.Total", with a
+# generic's brackets as HTML entities); only the name is kept. The type is a C# keyword, a generic, or a
+# PascalCase name of two or more words, so the capitalised first word of a sentence ("The Summary.Total") is
+# never taken for one.
 function ConvertTo-PublicDescription {
     param([AllowNull()][string]$Text)
 
     if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
     $text = $Text -replace '\s+', ' '
+    $type = '(?:(?:string|int|long|short|byte|bool|decimal|double|float|object|Guid|DateTime|DateTimeOffset|TimeSpan)\??|[A-Za-z_]\w*(?:<[^<>]*>|&lt;(?:(?!&gt;).)*&gt;)\??|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+\??)(?:\[\])?'
+    $text = $text -creplace "(?<![\w.])$type (?:[A-Za-z_]\w*\.)+(?<member>[A-Za-z_]\w*)\b", '${member}'
     $text = $text -replace '\s*\(\s*#\d+(?:\s*,\s*#\d+)*\s*\)', ''
     $text = $text -replace ',\s*#\d+\b', ''
     $text = $text -replace '#\d+\s*,\s*', ''
@@ -333,6 +375,22 @@ function ConvertTo-PublicDescription {
 
 # A schema's properties in the order declared, those it takes through allOf first: each one's name in
 # the PascalCase the module returns, its type, and its description.
+# A property's description. For a nullable reference (an enum or object that may be null), the OpenAPI
+# document puts it beside the reference, inside the oneOf, rather than on the property.
+function Get-SchemaDescription {
+    param($Property)
+
+    if ($Property.Contains('description')) { return $Property['description'] }
+    foreach ($composite in 'oneOf', 'anyOf', 'allOf') {
+        if ($Property.Contains($composite)) {
+            foreach ($part in $Property[$composite]) {
+                if ($part.Contains('description')) { return $part['description'] }
+            }
+        }
+    }
+    ''
+}
+
 function Get-SchemaProperties {
     param($Schemas, [string]$Name, [System.Collections.Generic.HashSet[string]]$Seen)
 
@@ -344,7 +402,7 @@ function Get-SchemaProperties {
         param($bag)
         foreach ($key in $bag.Keys) {
             $property = $bag[$key]
-            $description = if ($property.Contains('description')) { ConvertTo-PublicDescription $property['description'] } else { '' }
+            $description = ConvertTo-PublicDescription (Get-SchemaDescription $property)
             $properties.Add([pscustomobject]@{
                 Name        = $key.Substring(0, 1).ToUpperInvariant() + $key.Substring(1)
                 Type        = Get-SchemaTypeName $property
@@ -375,7 +433,7 @@ function Get-HeadingAnchor {
 # Each type the cmdlet declares: a schema's properties are tabled the first time the page returns it, and
 # later cmdlets on the page refer back to that one rather than repeat the table.
 function Format-Output {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$OutputTypeSchemas, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
     if ($Reference.OutputTypes.Count -eq 0) {
         $Problems.Add("$($Reference.Name) declares nothing about its output; name what it returns with [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], or add [OutputType([void])] if it returns nothing")
@@ -395,7 +453,12 @@ function Format-Output {
         $schemaName = $null
         if ($typeName -like 'JIM.*') {
             $display = $typeName.Substring(4)
-            if ($Schemas.Contains($display)) { $schemaName = $display }
+            # A name the module gives the API's object: tabled with that object's properties.
+            if ($OutputTypeSchemas.ContainsKey($typeName)) {
+                if ($Schemas.Contains($OutputTypeSchemas[$typeName])) { $schemaName = $OutputTypeSchemas[$typeName] }
+                else { $Problems.Add("OutputTypeSchemas maps $typeName to $($OutputTypeSchemas[$typeName]), which is not a schema in the OpenAPI document; correct the schema's name") }
+            }
+            elseif ($Schemas.Contains($display)) { $schemaName = $display }
             elseif (-not $NonApiOutputTypes.ContainsKey($typeName)) {
                 $Problems.Add("$($Reference.Name) declares output type $typeName, which is not a schema in the OpenAPI document; correct the name, or list it in NonApiOutputTypes with the reason")
             }
@@ -444,13 +507,13 @@ function Format-Output {
 }
 
 function Format-Block {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$OutputTypeSchemas, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
     foreach ($parameter in @($Reference.Parameters | Where-Object { -not $_.Description })) {
         $Problems.Add("$($Reference.Name) has no .PARAMETER help for -$($parameter.Name)")
     }
     (Format-Syntax $Reference) + "`n`n" + (Format-Parameters $Reference) + "`n`n" +
-        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -TabledOnPage $TabledOnPage -Problems $Problems)
+        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -OutputTypeSchemas $OutputTypeSchemas -TabledOnPage $TabledOnPage -Problems $Problems)
 }
 
 function Get-LineNumber {
@@ -477,6 +540,7 @@ function Write-Finding {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $config = if (Test-Path -LiteralPath $ConfigPath) { Import-PowerShellDataFile -LiteralPath $ConfigPath } else { @{} }
 $nonApi = if ($config.ContainsKey('NonApiOutputTypes') -and $config.NonApiOutputTypes) { $config.NonApiOutputTypes } else { @{} }
+$schemaFor = if ($config.ContainsKey('OutputTypeSchemas') -and $config.OutputTypeSchemas) { $config.OutputTypeSchemas } else { @{} }
 
 if (-not $OpenApiPath) {
     $OpenApiPath = Join-Path ([System.IO.Path]::GetTempPath()) "jim-openapi-$([guid]::NewGuid().ToString('N')).json"
@@ -497,7 +561,7 @@ $failures = 0
 $blockCount = 0
 $changedPages = 0
 $seenBlocks = @{}
-$notGenerated = [System.Collections.Generic.List[string]]::new()
+$sectionPage = @{}
 
 foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | Sort-Object Name)) {
     $text = Get-Content -LiteralPath $page.FullName -Raw
@@ -507,7 +571,6 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
 
     $begins = @([regex]::Matches($text, $script:BeginPattern))
     $ends = @([regex]::Matches($text, $script:EndPattern))
-    $generatedHere = @{}
 
     # Blocks are replaced from the last to the first, so earlier indices stay valid.
     $blocks = foreach ($begin in $begins) {
@@ -533,7 +596,6 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
     $tabledOnPage = @{}
     $rendered = foreach ($block in @($blocks | Sort-Object { $_.Begin.Index })) {
         $line = Get-LineNumber $text $block.Begin.Index
-        $generatedHere[$block.Name] = $true
         if ($seenBlocks.ContainsKey($block.Name)) {
             Write-Finding $relative $line "$($block.Name) is generated on $($seenBlocks[$block.Name]) as well; give each cmdlet one block"
             $failures++
@@ -549,7 +611,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         $blockCount++
         $problems = [System.Collections.Generic.List[string]]::new()
         $reference = Get-CmdletReference -Command $exported[$block.Name]
-        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -TabledOnPage $tabledOnPage -Problems $problems) + "`n"
+        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -OutputTypeSchemas $schemaFor -TabledOnPage $tabledOnPage -Problems $problems) + "`n"
         foreach ($problem in $problems) {
             Write-Finding $relative $line $problem
             $failures++
@@ -579,12 +641,11 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         }
     }
 
-    # Cmdlet sections that have no block yet: the migration still to do (#1083).
-    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?<name>[A-Za-z]+-JIM[A-Za-z0-9]+)\s*$')) {
+    # Where each cmdlet's section is, so the cmdlets with no block can be listed by page. A name can end at
+    # "JIM" (Connect-JIM).
+    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?<name>[A-Za-z]+-JIM[A-Za-z0-9]*)\s*$')) {
         $name = $heading.Groups['name'].Value
-        if ($exported.ContainsKey($name) -and -not $generatedHere.ContainsKey($name)) {
-            $notGenerated.Add("${relative}: $name")
-        }
+        if (-not $sectionPage.ContainsKey($name)) { $sectionPage[$name] = $relative }
     }
 
     if (-not $Check -and $updated -cne $text) {
@@ -593,7 +654,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
     }
 }
 
-# An allowed non-API output type that no exported cmdlet declares any more.
+# An allowed non-API output type, or a mapped one, that no exported cmdlet declares any more.
 $declared = @{}
 foreach ($command in $exported.Values) {
     foreach ($attribute in @($command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
@@ -606,9 +667,21 @@ foreach ($typeName in $nonApi.Keys) {
         $failures++
     }
 }
+foreach ($typeName in $schemaFor.Keys) {
+    if (-not $declared.ContainsKey($typeName)) {
+        Write-Finding '' 0 "OutputTypeSchemas lists $typeName, which no cmdlet declares; remove the entry"
+        $failures++
+    }
+}
 
+# Exported cmdlets with no block anywhere: the migration still to do (#1083). Counted from the module, not
+# from the pages' headings, so a cmdlet the pages give no section at all is listed too.
+$notGenerated = @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | ForEach-Object {
+        $page = if ($sectionPage.ContainsKey($_)) { $sectionPage[$_] } else { '(no section)' }
+        "${page}: $_"
+    } | Sort-Object)
 if ($notGenerated.Count -gt 0) {
-    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlet sections are not generated yet:"
+    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlets have no generated block yet:"
     foreach ($entry in $notGenerated) { Write-Host "  $entry" }
 }
 
