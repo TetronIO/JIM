@@ -91,8 +91,6 @@ public class ExampleDataControllerTemplateCrudTests
         };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
         var httpContext = new DefaultHttpContext { User = principal };
-        // The initiator triad helper reads the API key id from HttpContext.Items, where the API key middleware stashes it.
-        httpContext.Items["ApiKeyId"] = apiKeyId;
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         // Schema fixtures the resolution mocks hand back.

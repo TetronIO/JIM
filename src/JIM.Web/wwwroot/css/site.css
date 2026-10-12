@@ -2640,6 +2640,19 @@ html[lang] .jim-schema-change-table td {
     box-shadow: none !important;
 }
 
+/* Who started an Activity (<ActivityInitiator />): the icon stays beside the name, centred on its first line, however
+   narrow the column; a long name wraps beside the icon rather than under it. */
+.jim-activity-initiator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    vertical-align: middle;
+}
+
+.jim-activity-initiator > .mud-icon-root {
+    flex-shrink: 0;
+}
+
 /* Activity detail slide-out panel (Operations History) */
 .jim-activity-panel {
     position: fixed;

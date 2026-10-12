@@ -833,7 +833,9 @@ public static class Helpers
 
     #region Initiator Icon Helpers
     /// <summary>
-    /// Gets the MudBlazor icon for an activity initiator type.
+    /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
+    /// appears (<see cref="Shared.ActivityInitiator"/>, change history). System has its own rather than the Schedule's
+    /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
     /// </summary>
     public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
     {
@@ -841,6 +843,8 @@ public static class Helpers
         {
             ActivityInitiatorType.User => Icons.Material.Filled.Person,
             ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
+            ActivityInitiatorType.System => Icons.Material.Filled.Dns,
+            ActivityInitiatorType.Anonymous => Icons.Material.Filled.QuestionMark,
             _ => Icons.Material.Filled.HelpOutline
         };
     }
@@ -938,7 +942,7 @@ public static class Helpers
 
     /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
-    /// Accepts "User", "ApiKey", "Import", or other values.
+    /// Accepts "User", "ApiKey", "Import", "System", or other values.
     /// </summary>
     public static string GetInitiatorIcon(string? initiatorType)
     {
@@ -947,6 +951,7 @@ public static class Helpers
             "User" => Icons.Material.Filled.Person,
             "ApiKey" => Icons.Material.Filled.Key,
             "Import" => Icons.Material.Filled.Input,
+            "System" => Icons.Material.Filled.Dns,
             _ => Icons.Material.Filled.HelpOutline
         };
     }
