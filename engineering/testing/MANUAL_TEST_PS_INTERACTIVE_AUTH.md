@@ -19,7 +19,7 @@ behaviour.
 > **Run these tests on your host machine, not inside the devcontainer.** Interactive
 > SSO needs a browser and host-reachable IdP endpoints; the devcontainer has neither,
 > so the browser flow only works from a host PowerShell session. See
-> [PowerShell Module (developer guide)](../../docs/developer/powershell-module.md) for
+> [PowerShell Module (developer guide)](../developer/powershell-module.md) for
 > the host-install workflow and the reasoning. API-key auth (Test A4) is the only part
 > that also works inside the devcontainer.
 

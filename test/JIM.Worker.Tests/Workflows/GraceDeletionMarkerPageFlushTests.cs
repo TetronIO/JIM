@@ -156,7 +156,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
     /// (<see cref="SyncDeltaSyncTaskProcessor.PerformDeltaSyncAsync"/>) and still observe the map doing its
     /// job. On real PostgreSQL, JIM's single tracking DbContext already resolves both loads to one instance
     /// via EF's own identity map, so this scenario is latent there, not live; the map is defence in depth
-    /// (see <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// (see <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening).
     /// </para>
     /// </summary>

@@ -1,13 +1,11 @@
----
-title: PowerShell Module
----
-
 # PowerShell Module
 
 Developer guidance for loading, iterating on, and testing the JIM PowerShell module from source in the devcontainer.
 
-!!! note "Looking for end-user guidance?"
-    For installation, authentication, and cmdlet reference material aimed at administrators using the module against a deployed JIM instance, see [PowerShell Module](../powershell/index.md) under the PowerShell Module section.
+> [!NOTE]
+> **Looking for end-user guidance?**
+>
+> For installation, authentication, and cmdlet reference material aimed at administrators using the module against a deployed JIM instance, see [PowerShell Module](../../docs/powershell/index.md) under the PowerShell Module section.
 
 The module lives at `src/JIM.PowerShell/` and is a plain script module: no compilation, no packaging step. During development you import it directly from the source tree and iterate in place.
 
@@ -67,8 +65,10 @@ Replace `<repo>` with your host checkout path. Confirm the loaded copy is the on
 (Get-Module JIM).Path
 ```
 
-!!! warning "The copied folder shadows the gallery version"
-    While the dev folder sits in your module path it takes precedence over any gallery-installed `JIM`, and both report the same `ModuleVersion` (the branch does not bump it). `Get-Module JIM` alone cannot tell them apart; use `(Get-Module JIM).Path` to be sure which one is loaded. After editing module source on the branch, re-run the `Copy-Item` step before `Import-Module JIM -Force`, since `-Force` reloads from the copied location, not the repo.
+> [!WARNING]
+> **The copied folder shadows the gallery version**
+>
+> While the dev folder sits in your module path it takes precedence over any gallery-installed `JIM`, and both report the same `ModuleVersion` (the branch does not bump it). `Get-Module JIM` alone cannot tell them apart; use `(Get-Module JIM).Path` to be sure which one is loaded. After editing module source on the branch, re-run the `Copy-Item` step before `Import-Module JIM -Force`, since `-Force` reloads from the copied location, not the repo.
 
 ### Reverting to the gallery version
 
@@ -111,10 +111,12 @@ You can also paste the value directly:
 Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_ak_xxxxxxxxxxxx"
 ```
 
-!!! note "The infrastructure key is the right one for dev"
-    JIM provisions the infrastructure API key automatically when `JIM_INFRASTRUCTURE_API_KEY` is set in `.env`; it shows as **Infrastructure** in the JIM web UI under **Admin** > **API Keys**. It is intended exactly for this kind of local automation and scripting. You can create additional personal keys via the UI or `New-JIMApiKey` once you are connected, but for day-to-day cmdlet development the infrastructure key is enough.
-
-    `JIM_INFRASTRUCTURE_API_KEY` is consumed by docker-compose at stack startup, not exported to your shell; that is why `Connect-JIM -ApiKey $env:JIM_INFRASTRUCTURE_API_KEY` does not work out of the box.
+> [!NOTE]
+> **The infrastructure key is the right one for dev**
+>
+> JIM provisions the infrastructure API key automatically when `JIM_INFRASTRUCTURE_API_KEY` is set in `.env`; it shows as **Infrastructure** in the JIM web UI under **Admin** > **API Keys**. It is intended exactly for this kind of local automation and scripting. You can create additional personal keys via the UI or `New-JIMApiKey` once you are connected, but for day-to-day cmdlet development the infrastructure key is enough.
+>
+> `JIM_INFRASTRUCTURE_API_KEY` is consumed by docker-compose at stack startup, not exported to your shell; that is why `Connect-JIM -ApiKey $env:JIM_INFRASTRUCTURE_API_KEY` does not work out of the box.
 
 Verify with:
 
@@ -122,14 +124,16 @@ Verify with:
 Test-JIMConnection
 ```
 
-!!! warning "Use API keys from inside the devcontainer"
-    Interactive browser-based SSO (`Connect-JIM -Url "http://localhost:5200"` with no `-ApiKey`) **does not work** from a PowerShell session running inside the devcontainer.
-
-    The browser-based flow needs the PowerShell session to (a) resolve `localhost:8181` to the bundled Keycloak container and (b) open a browser on the user's machine to complete sign-in. The devcontainer is a separate container with no access to the host's `localhost:8181` port binding and no display, so both prerequisites fail.
-
-    The browser-based flow does work from a PowerShell session **on the host machine** (outside any container), because that session can reach the port-forwarded `http://localhost:8181` Keycloak endpoint and has a browser available. The devcontainer's bundled Keycloak realm includes a `jim-powershell` public client with loopback redirect URIs and `docker-compose.override.yml` sets `JIM_SSO_PUBLIC_AUTHORITY` and `JIM_SSO_PUBLIC_CLIENT_ID` so `/api/v1/auth/config` advertises values the host can use.
-
-    For inside-the-devcontainer development, always use an API key.
+> [!WARNING]
+> **Use API keys from inside the devcontainer**
+>
+> Interactive browser-based SSO (`Connect-JIM -Url "http://localhost:5200"` with no `-ApiKey`) **does not work** from a PowerShell session running inside the devcontainer.
+>
+> The browser-based flow needs the PowerShell session to (a) resolve `localhost:8181` to the bundled Keycloak container and (b) open a browser on the user's machine to complete sign-in. The devcontainer is a separate container with no access to the host's `localhost:8181` port binding and no display, so both prerequisites fail.
+>
+> The browser-based flow does work from a PowerShell session **on the host machine** (outside any container), because that session can reach the port-forwarded `http://localhost:8181` Keycloak endpoint and has a browser available. The devcontainer's bundled Keycloak realm includes a `jim-powershell` public client with loopback redirect URIs and `docker-compose.override.yml` sets `JIM_SSO_PUBLIC_AUTHORITY` and `JIM_SSO_PUBLIC_CLIENT_ID` so `/api/v1/auth/config` advertises values the host can use.
+>
+> For inside-the-devcontainer development, always use an API key.
 
 ## Module layout
 
@@ -156,8 +160,10 @@ Auto-discovery in `JIM.psm1` means you do not need to edit the `.psm1` when addi
 4. Create the matching Pester test in `src/JIM.PowerShell/Tests/<Area>.Tests.ps1`.
 5. Reload the module (`Import-Module ./src/JIM.PowerShell/JIM.psd1 -Force`) and invoke the new cmdlet interactively to sanity-check.
 
-!!! note "Test first"
-    JIM follows TDD. Write the Pester test before the cmdlet implementation; it must fail before the function exists, then pass once you have written the minimum code to satisfy it. See [Testing](testing.md) for the full workflow.
+> [!NOTE]
+> **Test first**
+>
+> JIM follows TDD. Write the Pester test before the cmdlet implementation; it must fail before the function exists, then pass once you have written the minimum code to satisfy it. See [Testing](testing.md) for the full workflow.
 
 ## Running Pester tests
 
@@ -179,6 +185,6 @@ pwsh -NoProfile -Command "Import-Module Pester; Invoke-Pester -Path ./src/JIM.Po
 
 ## Further Reading
 
-- [PowerShell Module (end-user reference)](../powershell/index.md): installation, full cmdlet reference, scripting examples
+- [PowerShell Module (end-user reference)](../../docs/powershell/index.md): installation, full cmdlet reference, scripting examples
 - [Testing](testing.md): TDD workflow and .NET testing conventions
 - [Development Environment](dev-environment.md): devcontainer setup, shell aliases, and development workflows

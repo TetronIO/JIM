@@ -1,7 +1,3 @@
----
-title: Building
----
-
 # Building from Source
 
 This page covers building JIM from source, managing database migrations, and working with Docker Compose.
@@ -39,8 +35,8 @@ dotnet build test/JIM.Worker.Tests/
 dotnet build src/JIM.Web/
 ```
 
-!!! tip
-    Use targeted builds during development and reserve `dotnet build JIM.sln` for the final pre-PR check.
+> [!TIP]
+> Use targeted builds during development and reserve `dotnet build JIM.sln` for the final pre-PR check.
 
 ## Docker Builds
 
@@ -63,8 +59,10 @@ jim-build            # Rebuild and restart all services
 jim-build-light      # Remove JIM app containers, start db + Keycloak, run JIM.Web natively with hot reload
 ```
 
-!!! warning "Container rebuilds required"
-    When running the Docker stack, compiled code changes (Blazor pages, API controllers, worker processors) require a container rebuild. Simply refreshing the browser will not show changes.
+> [!WARNING]
+> **Container rebuilds required**
+>
+> When running the Docker stack, compiled code changes (Blazor pages, API controllers, worker processors) require a container rebuild. Simply refreshing the browser will not show changes.
 
 ### Building Behind a Proxy or TLS-Inspecting Network
 
@@ -102,11 +100,15 @@ In Docker, there is nothing to run: `jim.worker` applies any pending migrations 
 jim-build-worker
 ```
 
-!!! note "`dotnet ef` is not available inside the containers"
-    The service images are built on the ASP.NET runtime base image, which ships neither the .NET SDK nor the `dotnet-ef` tool, so `docker compose exec jim.web dotnet ef ...` fails. Run EF commands on the host against the project, as in [Adding a Migration](#adding-a-migration) above.
+> [!NOTE]
+> **`dotnet ef` is not available inside the containers**
+>
+> The service images are built on the ASP.NET runtime base image, which ships neither the .NET SDK nor the `dotnet-ef` tool, so `docker compose exec jim.web dotnet ef ...` fails. Run EF commands on the host against the project, as in [Adding a Migration](#adding-a-migration) above.
 
-!!! danger "Never squash or delete migrations"
-    JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. Removing existing migrations and replacing them with a combined migration will cause failures on every deployed instance. Migrations are append-only; once committed to `main`, they are permanent.
+> [!CAUTION]
+> **Never squash or delete migrations**
+>
+> JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. Removing existing migrations and replacing them with a combined migration will cause failures on every deployed instance. Migrations are append-only; once committed to `main`, they are permanent.
 
 ## Docker Compose File Layering
 
@@ -135,4 +137,4 @@ jim-db-stop && jim-db
 
 ### Production
 
-In production, the bundled PostgreSQL's memory comes from settings the installer sizes to the host's memory; see [Bundled PostgreSQL Memory](../administration/configuration.md#bundled-postgresql-memory). Unset, the defaults in `docker-compose.yml` suit a 4 GB host.
+In production, the bundled PostgreSQL's memory comes from settings the installer sizes to the host's memory; see [Bundled PostgreSQL Memory](../../docs/administration/configuration.md#bundled-postgresql-memory). Unset, the defaults in `docker-compose.yml` suit a 4 GB host.

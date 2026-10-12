@@ -82,7 +82,7 @@ Cross-reference the identified changes against the documentation and update any 
 - **`docs/administration/`** — Configuration env vars, SSO setup, troubleshooting
 - **`docs/connectors/`** — LDAP, File, etc.
 - **`docs/powershell/`** — Cmdlet reference pages
-- **`docs/developer/`** — Architecture, building, testing, contributing
+- **`engineering/developer/`** — Architecture, building, testing, contributing
 - **`docs/api/`** — REST endpoint docs
 - **`docs/reference/`** — Roadmap, glossary
 - **Any other `.md` files in `docs/`** that are affected by the changes
@@ -124,7 +124,7 @@ The C4 views (System Context, Containers, and the component views) are **hand-au
 
 #### Mermaid Process Diagrams
 
-Review each Mermaid diagram in `docs/developer/diagrams/` against the current codebase behaviour:
+Review each Mermaid diagram in `engineering/developer/diagrams/` against the current codebase behaviour:
 
 - `FULL_IMPORT_FLOW.md` — Object import, duplicate detection, deletion detection
 - `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree

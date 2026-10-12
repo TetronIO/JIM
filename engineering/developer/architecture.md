@@ -1,14 +1,10 @@
----
-title: Architecture
----
-
 # Architecture
 
 JIM implements an enterprise identity management system using the metaverse pattern. This page describes the layered architecture, the metaverse model, the service topology, and the key design decisions.
 
 ## System Context
 
---8<-- "assets/diagrams/system-context.svg"
+![system context](../../docs/assets/diagrams/system-context.svg)
 
 <p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
@@ -32,7 +28,7 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Container Diagram
 
---8<-- "assets/diagrams/containers.svg"
+![containers](../../docs/assets/diagrams/containers.svg)
 
 <p class="jim-diagram-caption">JIM's deployable containers. PostgreSQL doubles as the task queue: the Scheduler queues work and the Worker polls it, so the services coordinate through the database rather than calling each other.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
@@ -45,43 +41,43 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 - **SyncRule**<br /> Bidirectional mappings between Connected Systems and the metaverse
 - **Staging Areas**<br /> Import/export staging for transactional integrity
 
---8<-- "assets/diagrams/metaverse-pattern.svg"
+![metaverse pattern](../../docs/assets/diagrams/metaverse-pattern.svg)
 
 <p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
 ## Component Diagrams
 
-The component views use the docs site's hand-authored diagram system and are simplified for legibility (the Worker view also appears on the [customer architecture page](../concepts/architecture.md)); the [process diagrams](#process-diagrams) below carry the exact runtime flows.
+The component views use the docs site's hand-authored diagram system and are simplified for legibility (the Worker view also appears on the [customer architecture page](../../docs/concepts/architecture.md)); the [process diagrams](#process-diagrams) below carry the exact runtime flows.
 
 ### Application Layer
 
 `JIM.Application` exposes a single entry point, the `JimApplication` facade, which delegates to the domain servers. The Worker's processors bypass the facade and use `SyncServer` and `SyncEngine` directly for performance-critical synchronisation work.
 
---8<-- "assets/diagrams/app-layer-components.svg"
+![app layer components](../../docs/assets/diagrams/app-layer-components.svg)
 
 <p class="jim-diagram-caption">The facade fronts the domain servers for the Web and Scheduler services; the Worker's task processors use SyncServer and the stateless SyncEngine directly. Domain servers reach PostgreSQL through IJimRepository, the sync servers through the dedicated ISyncRepository (SyncServer also uses it directly; omitted for legibility).<span class="jimdg-caption-motion"> Moving dots trace calls and data in flight.</span></p>
 
 ### Web Application
 
---8<-- "assets/diagrams/webapp-components.svg"
+![webapp components](../../docs/assets/diagrams/webapp-components.svg)
 
 <p class="jim-diagram-caption">Every request enters through the authentication middleware, which validates OIDC sign-in against the Identity Provider and API keys, before reaching the Blazor pages or API controllers; both call the JimApplication facade.<span class="jimdg-caption-motion"> Moving dots trace requests in flight.</span></p>
 
 ### Worker Service
 
---8<-- "assets/diagrams/worker-components.svg"
+![worker components](../../docs/assets/diagrams/worker-components.svg)
 
 <p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
 
 ### Connectors
 
---8<-- "assets/diagrams/connector-components.svg"
+![connector components](../../docs/assets/diagrams/connector-components.svg)
 
 <p class="jim-diagram-caption">The Worker's import and export processors invoke the connectors, which carry data to and from the external systems.<span class="jimdg-caption-motion"> Moving dots trace data in flight.</span></p>
 
 ### Scheduler Service
 
---8<-- "assets/diagrams/scheduler-components.svg"
+![scheduler components](../../docs/assets/diagrams/scheduler-components.svg)
 
 <p class="jim-diagram-caption">The Scheduler Host's polling loop evaluates schedule due times and performs crash recovery, queueing tasks through the facade into PostgreSQL for the Worker to pick up.<span class="jimdg-caption-motion"> Moving dots trace tasks being queued.</span></p>
 
@@ -122,7 +118,7 @@ test/
 
 ## Service Architecture
 
-JIM runs as a set of container services (a Docker Compose stack on Docker, or two pods on Podman; see [Running on Podman](../administration/podman.md)):
+JIM runs as a set of container services (a Docker Compose stack on Docker, or two pods on Podman; see [Running on Podman](../../docs/administration/podman.md)):
 
 | Service | Description |
 |---------|-------------|
@@ -132,7 +128,7 @@ JIM runs as a set of container services (a Docker Compose stack on Docker, or tw
 | **jim.database** | PostgreSQL 18 database. |
 | **jim.keycloak** | Bundled Keycloak IdP for development SSO (port 8181). Not included in production deployments. |
 
-The Worker (for both its synchronisation loop and its Password Delivery Service) and the Scheduler each write a heartbeat to the database every 5 seconds; `GET /api/v1/system/health` and the Service Health panel on **Operations** read them to report whether each service is alive and what it is doing. See [Operations > Service Health](../configuration/operations.md#service-health).
+The Worker (for both its synchronisation loop and its Password Delivery Service) and the Scheduler each write a heartbeat to the database every 5 seconds; `GET /api/v1/system/health` and the Service Health panel on **Operations** read them to report whether each service is alive and what it is doing. See [Operations > Service Health](../../docs/configuration/operations.md#service-health).
 
 ### Real-Time Notifications
 
