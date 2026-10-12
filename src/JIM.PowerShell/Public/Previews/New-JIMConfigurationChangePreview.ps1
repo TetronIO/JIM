@@ -141,10 +141,9 @@ function New-JIMConfigurationChangePreview {
     .PARAMETER DeletionTriggerConnectedSystemIds
         The proposed authoritative sources. Omitted previews the stored list.
 
-        Worth knowing before reading the result: this list is consulted at the moment a Connected System
-        Object disconnects, not by the housekeeping pass that acts on objects already marked, so changing
-        it alone moves no object's deletion date and the preview will honestly report no impact from it.
-        What it can do is make the proposal invalid, which comes back as a blocking finding.
+        JIM reads this list when a Connected System Object disconnects, not during housekeeping of objects
+        already marked, so changing it alone moves no object's deletion date and the preview reports no
+        impact from it. It can still make the proposal invalid, which comes back as a blocking finding.
 
     .PARAMETER DeletionTriggerMode
         The proposed trigger mode. Omitted previews the stored mode. Read at the same moment as the
@@ -158,7 +157,7 @@ function New-JIMConfigurationChangePreview {
         The proposed action for a joined target object whose Metaverse Object leaves this export rule's
         scope: Disconnect leaves the object in the target Connected System; Delete stages a Delete export
         that removes it. Omitted previews the stored action. Read only by export Synchronisation Rules,
-        and the preview says so honestly when the rule is an import rule.
+        and the preview says so when the rule is an import rule.
 
     .PARAMETER InboundOutOfScopeAction
         The proposed action for a joined Connected System Object that leaves this import rule's scope or

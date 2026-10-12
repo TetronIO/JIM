@@ -14,7 +14,7 @@ public class ExampleDataSetHeader
     /// <summary>The name of the Example Data Set, for example "Firstnames (Female)".</summary>
     public string Name { get; set; } = null!;
 
-    /// <summary>Whether the Example Data Set ships with JIM, as opposed to being created by an administrator.</summary>
+    /// <summary>Whether the Example Data Set ships with JIM, rather than being created by an administrator.</summary>
     public bool BuiltIn { get; set; }
 
     /// <summary>When the Example Data Set was created, in UTC.</summary>

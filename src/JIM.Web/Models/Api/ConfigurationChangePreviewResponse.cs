@@ -63,8 +63,8 @@ public class ConfigurationChangePreviewResponse
     public List<PreviewValidationFinding> ValidationFindings { get; set; } = [];
 
     /// <summary>
-    /// Stage 2's per-transition counts, from set-based SQL over the whole population. Distinct from the summary
-    /// groups below, which come from the evaluated delta stream; an adapter may produce one and not the other.
+    /// Stage 2's counts per transition, taken over every object the change could affect. Separate from the summary
+    /// groups, which come from evaluating each object; a preview may report one and not the other.
     /// </summary>
     public List<PreviewImpactCount> ImpactCounts { get; set; } = [];
 
@@ -83,7 +83,7 @@ public class ConfigurationChangePreviewResponse
     /// </summary>
     public ConfigurationChangePreviewDeltaPersistence DeltaPersistence { get; set; }
 
-    /// <summary>Whether the evaluation ran in JIM.Worker. Diagnostic only; both paths produce identical results.</summary>
+    /// <summary>Whether the evaluation ran on the background worker service. Informational only; the result is the same either way.</summary>
     public bool DispatchedToWorker { get; set; }
 
     /// <summary>
