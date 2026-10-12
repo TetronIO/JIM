@@ -69,7 +69,7 @@ function Remove-JIMScheduleStep {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess("Step $StepIndex from Schedule $ScheduleId", "Remove Schedule Step")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target "Step $StepIndex from Schedule $ScheduleId" -Action "Remove Schedule Step" -Force:$Force) {
             Write-Verbose "Removing step $StepIndex from Schedule: $ScheduleId"
 
             try {

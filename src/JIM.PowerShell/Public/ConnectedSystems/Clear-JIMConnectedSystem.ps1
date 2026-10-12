@@ -137,7 +137,7 @@ function Clear-JIMConnectedSystem {
         }
 
         # Confirm clearing
-        if ($Force -or $PSCmdlet.ShouldProcess($systemName, "Clear all objects from Connected System")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $systemName -Action "Clear all objects from Connected System" -Force:$Force) {
             Write-Verbose "Queueing connector space clear for Connected System: $systemName (ID: $systemId)"
 
             try {

@@ -85,7 +85,7 @@ function Remove-JIMRoleMember {
 
         $objectId = if ($InputObject) { $InputObject.id } else { $MetaverseObjectId }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($objectId, "Remove from Role $RoleId")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $objectId -Action "Remove from Role $RoleId" -Force:$Force) {
             Write-Verbose "Removing metaverse object $objectId from role $RoleId"
 
             try {

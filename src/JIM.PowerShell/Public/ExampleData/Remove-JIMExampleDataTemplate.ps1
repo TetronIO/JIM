@@ -93,7 +93,7 @@ function Remove-JIMExampleDataTemplate {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($templateName, "Remove Data Generation Template")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $templateName -Action "Remove Data Generation Template" -Force:$Force) {
             Write-Verbose "Removing Data Generation Template: $Id ($templateName)"
 
             try {

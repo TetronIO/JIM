@@ -220,7 +220,7 @@ function Set-JIMConnectedSystemObjectPassword {
             $body.wait = $Wait
         }
 
-        if (-not ($Force -or $PSCmdlet.ShouldProcess($Id, "Set the password on this Connected System Object"))) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $Id -Action "Set the password on this Connected System Object" -Force:$Force)) {
             return
         }
 

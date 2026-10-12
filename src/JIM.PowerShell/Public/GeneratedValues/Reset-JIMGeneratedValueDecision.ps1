@@ -129,7 +129,7 @@ function Reset-JIMGeneratedValueDecision {
         elseif ($AllDecisions -and -not $named) { "every generated value needing a decision" }
         else { "the matching generated values needing a decision" }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Try again at the next export")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Try again at the next export" -Force:$Force)) {
             return
         }
 

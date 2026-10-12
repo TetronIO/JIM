@@ -145,7 +145,7 @@ function Resume-JIMPendingPasswordChange {
         elseif ($EntireQueue) { "every queued password change" }
         else { "the matching queued password changes" }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Attempt delivery again")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Attempt delivery again" -Force:$Force)) {
             return
         }
 

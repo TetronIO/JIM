@@ -60,7 +60,7 @@ function Remove-JIMMatchingRule {
             return
         }
 
-        $shouldProcess = $Force -or $PSCmdlet.ShouldProcess("Matching Rule $Id", "Remove")
+        $shouldProcess = Confirm-JIMAction -Cmdlet $PSCmdlet -Target "Matching Rule $Id" -Action "Remove" -Force:$Force
 
         if ($shouldProcess) {
             Write-Verbose "Removing Matching Rule ID: $Id from Connected System ID: $ConnectedSystemId"

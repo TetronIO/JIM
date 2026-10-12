@@ -51,7 +51,7 @@ function Stop-JIMWorkerTask {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($Id, "Cancel Worker Task")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $Id -Action "Cancel Worker Task" -Force:$Force) {
             Write-Verbose "Requesting cancellation of Worker Task: $Id"
 
             try {
