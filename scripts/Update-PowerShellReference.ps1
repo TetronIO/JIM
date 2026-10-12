@@ -517,7 +517,7 @@ function ConvertTo-PublicDescription {
     $text = $text -replace ',\s*#\d+\b', ''
     $text = $text -replace '#\d+\s*,\s*', ''
     $text = $text -replace '\s*#\d+\b', ''
-    $text = $text -replace '\(\s*\)', '' -replace '\s+([.,;:])', '$1' -replace '\s{2,}', ' '
+    $text = $text -replace '\(\s*\)', '' -replace '\s+([.,;:])(?=\s|$)', '$1' -replace '\s{2,}', ' '
     $text.Trim()
 }
 

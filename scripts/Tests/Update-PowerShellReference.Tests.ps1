@@ -474,7 +474,8 @@ function Test-JIMWidgetName {
         "type": "object",
         "properties": {
           "worst": { "type": "string", "description": "The worst status among List&lt;WidgetHeader&gt; WidgetReport.Widgets; The WidgetReport.Widgets list stays." },
-          "limit": { "type": "integer", "format": "int32", "description": "Never ordered: the sentinel (int int.MaxValue), unlike ServiceHealthStatus WidgetReport.Worst." }
+          "limit": { "type": "integer", "format": "int32", "description": "Never ordered: the sentinel (int int.MaxValue), unlike ServiceHealthStatus WidgetReport.Worst." },
+          "culture": { "type": "string", "description": "The .NET culture code (#12), for example en-GB." }
         }
       },
       "WidgetDetail": {
@@ -859,6 +860,7 @@ function Disconnect-JIMWidget {
         $table = (Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
         ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst status among Widgets; The WidgetReport.Widgets list stays.'
         ($table | Where-Object Property -eq 'Limit').Description | Should -Be 'Never ordered: the sentinel (MaxValue), unlike Worst.'
+        ($table | Where-Object Property -eq 'Culture').Description | Should -Be 'The .NET culture code, for example en-GB.' -Because 'only a gap a removed issue number leaves before punctuation closes, not the space before .NET'
     }
 
     It 'shows the positions a cmdlet declares, in the syntax and in the parameter table' {
