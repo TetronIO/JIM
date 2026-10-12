@@ -124,6 +124,7 @@
         'administration/troubleshooting.md'
         'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
+        'configuration/activities.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
