@@ -4469,6 +4469,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("SourceMetaverseObjectId")
                         .HasColumnType("uuid");
 
+                    b.PrimitiveCollection<List<Guid>>("StagedByRunProfileExecutionItemIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasDefaultValueSql("'{}'::uuid[]");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
