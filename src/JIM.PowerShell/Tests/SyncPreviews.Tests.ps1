@@ -110,6 +110,34 @@ Describe 'Get-JIMConnectedSystemObjectSyncPreview' {
         }
     }
 
+    It 'Returns every property the API reports, generated value probes included, with Outcomes added' {
+        # The cmdlet once rebuilt the response from a fixed list of properties, so GeneratedValueProbes, which the API
+        # added later, never reached PowerShell. It now returns the API's own object.
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    OutcomeTree          = @()
+                    Inbound              = $null
+                    ProposedExports      = @()
+                    Errors               = @()
+                    Warnings             = @()
+                    HasBlockingErrors    = $false
+                    AffectedSyncRules    = @()
+                    GeneratedValueProbes = @([PSCustomObject]@{ AttributeName = 'mail'; Value = 'jsmith@example.com' })
+                    AddedLater           = 'kept'
+                }
+            }
+
+            $result = Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id ([guid]::NewGuid())
+
+            @($result.GeneratedValueProbes).Count | Should -Be 1
+            $result.GeneratedValueProbes[0].Value | Should -Be 'jsmith@example.com'
+            $result.AddedLater | Should -Be 'kept'
+            $result.PSObject.Properties.Name | Should -Contain 'Outcomes'
+        }
+    }
+
     It 'Accepts ConnectedSystemId and Id from the pipeline by property name' {
         $command = Get-Command Get-JIMConnectedSystemObjectSyncPreview
         foreach ($name in @('ConnectedSystemId', 'Id')) {
@@ -187,6 +215,34 @@ Describe 'Get-JIMMetaverseObjectSyncPreview' {
 
             $result.ProposedExports.Count | Should -Be 1
             $result.ProposedExports[0].ChangeType | Should -Be 'Update'
+        }
+    }
+
+    It 'Returns every property the API reports, generated value probes included, with Outcomes added' {
+        # The cmdlet once rebuilt the response from a fixed list of properties, so GeneratedValueProbes, which the API
+        # added later, never reached PowerShell. It now returns the API's own object.
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    OutcomeTree          = @()
+                    Inbound              = $null
+                    ProposedExports      = @()
+                    Errors               = @()
+                    Warnings             = @()
+                    HasBlockingErrors    = $false
+                    AffectedSyncRules    = @()
+                    GeneratedValueProbes = @([PSCustomObject]@{ AttributeName = 'mail'; Value = 'jsmith@example.com' })
+                    AddedLater           = 'kept'
+                }
+            }
+
+            $result = Get-JIMMetaverseObjectSyncPreview -Id ([guid]::NewGuid())
+
+            @($result.GeneratedValueProbes).Count | Should -Be 1
+            $result.GeneratedValueProbes[0].Value | Should -Be 'jsmith@example.com'
+            $result.AddedLater | Should -Be 'kept'
+            $result.PSObject.Properties.Name | Should -Contain 'Outcomes'
         }
     }
 

@@ -223,6 +223,7 @@ nav:
       - Security: powershell/security.md
       - History: powershell/history.md
       - Previews: powershell/previews.md
+      - Sync Preview: powershell/sync-preview.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
       - Worker Tasks: powershell/worker-tasks.md

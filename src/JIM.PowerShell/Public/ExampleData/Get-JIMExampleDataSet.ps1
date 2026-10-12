@@ -11,16 +11,16 @@ function Get-JIMExampleDataSet {
         purposes. These contain pre-defined identity data.
 
     .PARAMETER Id
-        The unique identifier of a specific Example Data Set to retrieve, including its values.
+        The Example Data Set to get, with its values.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1. Not applicable when -Id is specified.
+        The page of Example Data Sets to return.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100. Not applicable when -Id is specified.
+        How many Example Data Sets per page.
 
     .OUTPUTS
-        PSCustomObject representing example data set(s).
+        A list returns each Example Data Set's header, and -Id the Example Data Set with its values.
 
     .EXAMPLE
         Get-JIMExampleDataSet
@@ -45,7 +45,8 @@ function Get-JIMExampleDataSet {
         Invoke-JIMExampleDataTemplate
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataSetHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ExampleDataSetDto', ParameterSetName = 'ById')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

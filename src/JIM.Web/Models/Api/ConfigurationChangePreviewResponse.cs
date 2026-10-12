@@ -30,14 +30,24 @@ public class ConfigurationChangePreviewResponse
     /// <summary>Why the preview failed, when it did. Never contains attribute values.</summary>
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Delta rows evaluated so far, and the number expected; the preview's progress.</summary>
+    /// <summary>How many drill-down rows the preview has evaluated so far; its progress.</summary>
     public int ObjectsProcessed { get; set; }
 
+    /// <summary>How many drill-down rows the preview expects to evaluate.</summary>
     public int ObjectsToProcess { get; set; }
 
+    /// <summary>How far stage 1, validating the proposal itself, has got.</summary>
     public ConfigurationChangePreviewStageStatus ValidationStatus { get; set; }
+
+    /// <summary>How far stage 2, counting the objects each transition would affect, has got.</summary>
     public ConfigurationChangePreviewStageStatus ImpactCountsStatus { get; set; }
+
+    /// <summary>How far stage 3, grouping the affected objects into the summary groups, has got.</summary>
     public ConfigurationChangePreviewStageStatus SummaryStatus { get; set; }
+
+    /// <summary>
+    /// How far stage 4, keeping the drill-down rows, has got. <c>NotApplicable</c> for a preview that only counts.
+    /// </summary>
     public ConfigurationChangePreviewStageStatus DeltasStatus { get; set; }
 
     /// <summary>True when every stage that was going to run has finished successfully.</summary>
@@ -61,9 +71,10 @@ public class ConfigurationChangePreviewResponse
     /// <summary>The summary groups, largest first. Counts here are exact even where drill-down rows were capped.</summary>
     public List<ConfigurationChangePreviewGroupResponse> Groups { get; set; } = [];
 
-    /// <summary>The affected population the adapter estimated before evaluation began.</summary>
+    /// <summary>How many objects the change was expected to touch, estimated before evaluation began.</summary>
     public int EstimatedAffectedObjects { get; set; }
 
+    /// <summary>How many drill-down rows the change was expected to produce, estimated before evaluation began.</summary>
     public long EstimatedDeltaRows { get; set; }
 
     /// <summary>

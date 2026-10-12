@@ -17,11 +17,14 @@
         'JIM.ConsequenceCohort' = 'Get-JIMActivityExecutionItem -Consequences flattens the consequences endpoint''s nested cohorts into one row per cohort'
     }
 
-    # A cmdlet that gives the API's object a type name of its own (PSObject.TypeNames) declares that name;
-    # map it here to the schema whose properties the object carries, and they are tabled under the name.
-    # An entry no cmdlet declares fails the check.
+    # A cmdlet that gives the API's object a type name of its own (PSObject.TypeNames), or adds properties
+    # to it, declares that name; map it here to the schema whose properties the object carries, and they
+    # are tabled under the name, followed by any the cmdlet adds and lists in its .OUTPUTS help. An entry
+    # no cmdlet declares fails the check.
     OutputTypeSchemas = @{
-        'JIM.ServiceHealth'        = 'ServiceHealthEntryResponse'
-        'JIM.ServiceHealthSummary' = 'ServiceHealthResponse'
+        'JIM.ExampleDataTemplateExecution' = 'ExampleDataTemplateExecutionResponse'
+        'JIM.ServiceHealth'                = 'ServiceHealthEntryResponse'
+        'JIM.ServiceHealthSummary'         = 'ServiceHealthResponse'
+        'JIM.SyncPreview'                  = 'SyncPreviewResponse'
     }
 }

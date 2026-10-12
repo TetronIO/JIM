@@ -83,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
+- 🐛 PowerShell's Sync Preview cmdlets now return the generated values a synchronisation would check (`GeneratedValueProbes`), which the REST API already reported. (#1083)
+- 🐛 `Invoke-JIMExampleDataTemplate -Wait -PassThru` reports how the generation finished, rather than `Queued`. (#1083)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
 - 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 An import's Activity message counts as updated only the objects that changed: objects compared and found unchanged count as unchanged, deletes as deleted, and objects a Full Import no longer found are reported apart from those it read. (#2129)

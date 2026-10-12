@@ -899,6 +899,37 @@ Describe 'Update-PowerShellReference -Check' {
         ($types[0].Table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
     }
 
+    It 'tables the properties a cmdlet adds to the API object after the schema''s own' {
+        $withParts = $script:GetGadget -replace '(?m)^    #>', "`n    .OUTPUTS`n        Each Gadget.`n`n        JIM.Gadget`n        Parts (string[]): The Gadget's parts, which the module adds.`n    #>"
+        $fixture = New-Fixture -Functions @($withParts) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMGadget'
+        $types = @(Get-OutputTypes $block)
+        @($types[0].Table | ForEach-Object Property) | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Parts')
+        ($types[0].Table | Where-Object Property -eq 'Parts').Description | Should -Be "The Gadget's parts, which the module adds."
+        $block | Should -Not -Match 'which the module adds\.\s*\n\s*JIM\.Gadget' -Because 'the list is tabled, not repeated as prose'
+    }
+
+    It 'fails on an added property the schema already has' {
+        $clash = $script:GetGadget -replace '(?m)^    #>', "`n    .OUTPUTS`n        Each Gadget.`n`n        JIM.Gadget`n        Name (string): A second Name.`n    #>"
+        $fixture = New-Fixture -Functions @($clash) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'Name.*JIM\.Gadget.*WidgetHeader'
+    }
+
+    It 'fails on a property list for a type the cmdlet does not declare' {
+        $stray = $script:GetGadget -replace '(?m)^    #>', "`n    .OUTPUTS`n        Each Gadget.`n`n        JIM.Gizmo`n        Parts (string[]): The parts.`n    #>"
+        $fixture = New-Fixture -Functions @($stray) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'JIM\.Gizmo'
+    }
+
     It 'fails on a type mapped to a schema that no cmdlet declares' {
         $fixture = New-Fixture -OutputTypeSchemas @{ 'JIM.Stale' = 'WidgetHeader' }
         Invoke-Generator $fixture | Out-Null

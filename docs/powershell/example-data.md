@@ -12,6 +12,7 @@ Cmdlets for generating sample identity data for testing and evaluation purposes.
 
 Retrieves available example data sets. Each data set is a named pool of string values (e.g. a list of cities, or first names) that Data Generation Templates can draw from.
 
+<!-- BEGIN GENERATED: Get-JIMExampleDataSet -->
 ### Syntax
 
 ```powershell
@@ -26,13 +27,39 @@ Get-JIMExampleDataSet -Id <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of a specific data set to retrieve, including its values. |
-| `Page` | `int` | No | `1` | Page number for paginated results. |
-| `PageSize` | `int` | No | `100` | Number of results per page (maximum 1000). |
+| `Id` | `int` | Yes (ById) |  | The Example Data Set to get, with its values. Accepts pipeline input by property name. |
+| `Page` | `int` | No (List) | `1` | The page of Example Data Sets to return. At least 1. |
+| `PageSize` | `int` | No (List) | `100` | How many Example Data Sets per page. From 1 to 1,000. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing example data sets.
+A list returns each Example Data Set's header, and `-Id` the Example Data Set with its values.
+
+**`ExampleDataSetHeader`** (List):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The unique identifier of the Example Data Set. |
+| `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
+| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, as opposed to being created by an administrator. |
+| `Created` | `datetime` | When the Example Data Set was created, in UTC. |
+| `Culture` | `string` | The.NET culture code the values are in, for example "en-GB". |
+| `ValueCount` | `int` | How many values the Example Data Set holds. |
+
+**`ExampleDataSetDto`** (ById):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The unique identifier of the Example Data Set. |
+| `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
+| `Culture` | `string` | The.NET culture code the values are in, for example "en-GB". |
+| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM (as opposed to being administrator-created). |
+| `Created` | `datetime` | When the Example Data Set was created (UTC). |
+| `CreatedByName` | `string` | The display name of the principal that created the Example Data Set. |
+| `LastUpdated` | `datetime` | When the Example Data Set was last modified (UTC). Empty if never modified after creation. |
+| `LastUpdatedByName` | `string` | The display name of the principal that last modified the Example Data Set. |
+| `Values` | `ExampleDataSetValueDto[]` | The values in the Example Data Set. |
+<!-- END GENERATED: Get-JIMExampleDataSet -->
 
 ### Examples
 
@@ -58,25 +85,29 @@ Get-JIMExampleDataSet | Select-Object Name, Culture, ValueCount
 
 Creates a new Example Data Set.
 
+<!-- BEGIN GENERATED: New-JIMExampleDataSet -->
 ### Syntax
 
 ```powershell
-New-JIMExampleDataSet -Name <string> -Culture <string> [-Values <string[]>] [-ChangeReason <string>] [-PassThru]
+New-JIMExampleDataSet [-Name] <string> -Culture <string> [-Values <string[]>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes | | The name for the data set. |
-| `Culture` | `string` | Yes | | The .NET culture the values are in, e.g. `en-GB`. |
-| `Values` | `string[]` | No | | The string values that make up this data set. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the data set's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the created data set object. |
+| `Name` | `string` | Yes |  | The name for the Example Data Set. Can be given by position, as the first argument. |
+| `Culture` | `string` | Yes |  | The .NET culture the values are in, for example "en-GB". |
+| `Values` | `string[]` | No |  | The values that make up the Example Data Set. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the created Example Data Set. |
 
 ### Output
 
-If `-PassThru` is specified, returns the created Example Data Set object.
+With `-PassThru`, the created Example Data Set, with its values; otherwise nothing.
+
+**`ExampleDataSetDto`**: as under [Get-JIMExampleDataSet](#get-jimexampledataset).
+<!-- END GENERATED: New-JIMExampleDataSet -->
 
 ### Examples
 
@@ -90,26 +121,30 @@ New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manc
 
 Updates an existing Example Data Set. Built-in data sets cannot be updated.
 
+<!-- BEGIN GENERATED: Set-JIMExampleDataSet -->
 ### Syntax
 
 ```powershell
-Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <string[]>] [-ChangeReason <string>] [-PassThru]
+Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <string[]>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes | | The ID of the data set to update. Accepts pipeline input. |
-| `Name` | `string` | No | | A new name for the data set. |
-| `Culture` | `string` | No | | A new .NET culture for the values. |
-| `Values` | `string[]` | No | | When specified, replaces the entire set of values. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the data set's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated data set object. |
+| `Id` | `int` | Yes |  | The Example Data Set to update. Accepts pipeline input by property name. |
+| `Name` | `string` | No |  | The new name. |
+| `Culture` | `string` | No |  | The .NET culture the values are in, for example "en-GB". |
+| `Values` | `string[]` | No |  | The values, replacing all of the Example Data Set's current ones. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the updated Example Data Set. |
 
 ### Output
 
-If `-PassThru` is specified, returns the updated Example Data Set object.
+With `-PassThru`, the updated Example Data Set; otherwise nothing.
+
+**`ExampleDataSetDto`**: as under [Get-JIMExampleDataSet](#get-jimexampledataset).
+<!-- END GENERATED: Set-JIMExampleDataSet -->
 
 ### Examples
 
@@ -127,23 +162,27 @@ Set-JIMExampleDataSet -Id 5 -Values "London", "Manchester", "Bristol", "Leeds" -
 
 Deletes an Example Data Set. Built-in data sets cannot be removed. This action cannot be undone.
 
+<!-- BEGIN GENERATED: Remove-JIMExampleDataSet -->
 ### Syntax
 
 ```powershell
-Remove-JIMExampleDataSet -Id <int> [-ChangeReason <string>] [-Force]
+Remove-JIMExampleDataSet -Id <int> [-ChangeReason <string>] [-Force] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes | | The ID of the data set to remove. Accepts pipeline input. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the data set's configuration change history. |
-| `Force` | `switch` | No | `$false` | Bypasses confirmation prompts. |
+| `Id` | `int` | Yes |  | The Example Data Set to delete. Accepts pipeline input by property name. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 
 ### Output
 
 None.
+<!-- END GENERATED: Remove-JIMExampleDataSet -->
 
 ### Examples
 
@@ -161,6 +200,7 @@ Remove-JIMExampleDataSet -Id 5 -Force
 
 Retrieves data generation templates that define how test data should be generated. Templates specify object types, attribute patterns, and generation rules used when creating sample identity data.
 
+<!-- BEGIN GENERATED: Get-JIMExampleDataTemplate -->
 ### Syntax
 
 ```powershell
@@ -178,14 +218,38 @@ Get-JIMExampleDataTemplate -Name <string>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of a specific template to retrieve. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName set) | | The name of a specific template to retrieve. |
-| `Page` | `int` | No (List set) | `1` | Page number for paginated results. |
-| `PageSize` | `int` | No (List set) | `100` | Number of results per page (maximum 1000). |
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to get, in full. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to get, in full. |
+| `Page` | `int` | No (List) | `1` | The page of Data Generation Templates to return. At least 1. |
+| `PageSize` | `int` | No (List) | `100` | How many Data Generation Templates per page. From 1 to 1,000. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing data generation templates. The list form returns `Id`, `Name`, `BuiltIn`, `Created`, and `ObjectTypeCount`; retrieving a single template by ID or name returns the full template including its Object Types.
+A list returns each Data Generation Template's header; `-Id` and `-Name` return the template in full, with its Object Types and their attribute configuration.
+
+**`ExampleDataTemplateHeader`** (List):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The unique identifier of the Data Generation Template. |
+| `Name` | `string` | The name of the Data Generation Template, for example "Demo Users". |
+| `BuiltIn` | `bool` | Whether the Data Generation Template ships with JIM, as opposed to being created by an administrator. |
+| `Created` | `datetime` | When the Data Generation Template was created, in UTC. |
+| `ObjectTypeCount` | `int` | How many Object Types the Data Generation Template generates objects for. |
+
+**`ExampleDataTemplateDto`** (ById, ByName):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | The unique identifier of the template. |
+| `Name` | `string` | The name of the template, for example "Demo Users". |
+| `BuiltIn` | `bool` | Whether the template ships with JIM (as opposed to being administrator-created). |
+| `Created` | `datetime` | When the template was created (UTC). |
+| `CreatedByName` | `string` | The display name of the principal that created the template. |
+| `LastUpdated` | `datetime` | When the template was last modified (UTC). Empty if never modified after creation. |
+| `LastUpdatedByName` | `string` | The display name of the principal that last modified the template. |
+| `ObjectTypes` | `ExampleDataTemplateObjectTypeDto[]` | The Object Types the template generates objects for. |
+<!-- END GENERATED: Get-JIMExampleDataTemplate -->
 
 ### Examples
 
@@ -211,24 +275,28 @@ Get-JIMExampleDataTemplate -Page 1 -PageSize 10
 
 Creates a Data Generation Template: a definition of which Metaverse Object Types to generate test objects for, how many of each, and how each attribute's values are generated.
 
-Supports `ShouldProcess`, so you can use `-WhatIf` or `-Confirm` to preview or confirm creation.
-
+<!-- BEGIN GENERATED: New-JIMExampleDataTemplate -->
 ### Syntax
 
 ```powershell
-New-JIMExampleDataTemplate -Name <string> -ObjectType <hashtable[]> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMExampleDataTemplate [-Name] <string> -ObjectType <hashtable[]> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes | | The name for the Data Generation Template. |
-| `ObjectType` | `hashtable[]` | Yes | | One hashtable per Object Type the template generates objects for. See the hashtable shape below. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the template's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the created Data Generation Template object. |
-| `WhatIf` | `switch` | No | | Preview the operation without performing it. |
-| `Confirm` | `switch` | No | | Prompt for confirmation before creating. |
+| `Name` | `string` | Yes |  | The name for the Data Generation Template. Can be given by position, as the first argument. |
+| `ObjectType` | `hashtable[]` | Yes |  | One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted) and Attributes, an optional array of attribute generation hashtables using the API's request field names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate, BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues, ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds, AttributeDependency, ConnectedSystemObjectTypeAttributeId), except that MetaverseAttribute may be a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order. Unknown keys throw, so a typo is caught before anything is sent. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the created Data Generation Template. |
+
+### Output
+
+With `-PassThru`, the created Data Generation Template; otherwise nothing.
+
+**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+<!-- END GENERATED: New-JIMExampleDataTemplate -->
 
 #### `-ObjectType` hashtable keys
 
@@ -261,10 +329,6 @@ New-JIMExampleDataTemplate -Name <string> -ObjectType <hashtable[]> [-ChangeReas
 
 Any other key in an `-ObjectType` or attribute hashtable throws, so a mis-typed key is caught before anything is sent.
 
-### Output
-
-If `-PassThru` is specified, returns the created Data Generation Template object: `Id`, `Name`, `BuiltIn`, `Created`, `CreatedByName`, `LastUpdated`, `LastUpdatedByName`, and `ObjectTypes` (each with `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `ObjectsToCreate` and `TemplateAttributes`).
-
 ### Examples
 
 ```powershell title="Create a template generating 500 Users"
@@ -296,6 +360,7 @@ Renames a Data Generation Template and/or replaces its Object Type configuration
 
 Supplying `-ObjectType` **replaces the template's entire Object Type graph**: every Object Type and attribute configuration not present in the supplied hashtables is removed. To add a single attribute without restating the rest, use [`Add-JIMExampleDataTemplateAttribute`](#add-jimexampledatatemplateattribute).
 
+<!-- BEGIN GENERATED: Set-JIMExampleDataTemplate -->
 ### Syntax
 
 ```powershell
@@ -310,20 +375,21 @@ Set-JIMExampleDataTemplate -Name <string> [-NewName <string>] [-ObjectType <hash
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of the template to update. Accepts pipeline input by property name. |
-| `Name` | `string` | Yes (ByName set) | | The name of the template to update. |
-| `NewName` | `string` | No | | A new name for the template. |
-| `ObjectType` | `hashtable[]` | No | | Replaces the template's entire Object Type graph. Hashtable shape is as `New-JIMExampleDataTemplate`. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the template's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Data Generation Template object. |
-| `WhatIf` | `switch` | No | | Preview the operation without performing it. |
-| `Confirm` | `switch` | No | | Prompt for confirmation before updating. |
-
-At least one of `-NewName` or `-ObjectType` must be supplied; the cmdlet errors without sending a request otherwise.
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to update. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to update. |
+| `NewName` | `string` | No |  | The new name. |
+| `ObjectType` | `hashtable[]` | No |  | Replaces the template's whole Object Type graph: every Object Type and attribute configuration not in these hashtables is removed. `Add-JIMExampleDataTemplateAttribute` adds one attribute without restating the rest. The hashtables take the same shape as `New-JIMExampleDataTemplate -ObjectType`. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the updated Data Generation Template. |
 
 ### Output
 
-If `-PassThru` is specified, returns the updated Data Generation Template object, in the same shape as `New-JIMExampleDataTemplate`.
+With `-PassThru`, the updated Data Generation Template; otherwise nothing.
+
+**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+<!-- END GENERATED: Set-JIMExampleDataTemplate -->
+
+At least one of `-NewName` or `-ObjectType` must be supplied; the cmdlet errors without sending a request otherwise.
 
 ### Examples
 
@@ -348,6 +414,7 @@ Set-JIMExampleDataTemplate -Id 7 -NewName "Demo Users v2" -WhatIf
 
 Deletes a Data Generation Template, including its whole per-Object-Type attribute configuration. Built-in templates cannot be removed. This action cannot be undone; objects the template has already generated are unaffected.
 
+<!-- BEGIN GENERATED: Remove-JIMExampleDataTemplate -->
 ### Syntax
 
 ```powershell
@@ -358,20 +425,21 @@ Remove-JIMExampleDataTemplate -Id <int> [-ChangeReason <string>] [-Force] [-What
 Remove-JIMExampleDataTemplate -Name <string> [-ChangeReason <string>] [-Force] [-WhatIf] [-Confirm]
 ```
 
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
+
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of the template to remove. Accepts pipeline input by property name. |
-| `Name` | `string` | Yes (ByName set) | | The name of the template to remove. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the template's configuration change history. |
-| `Force` | `switch` | No | `$false` | Bypasses confirmation prompts. |
-| `WhatIf` | `switch` | No | | Preview the deletion without performing it. |
-| `Confirm` | `switch` | No | | Prompt for confirmation before deleting. |
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to delete. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to delete. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
+| `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 
 ### Output
 
 None.
+<!-- END GENERATED: Remove-JIMExampleDataTemplate -->
 
 ### Examples
 
@@ -397,6 +465,7 @@ Adds one attribute's generation configuration to an Object Type within an existi
 
 Supply exactly one of `-MetaverseAttribute` or `-ConnectedSystemObjectTypeAttributeId` to say which attribute values are generated for.
 
+<!-- BEGIN GENERATED: Add-JIMExampleDataTemplateAttribute -->
 ### Syntax
 
 ```powershell
@@ -411,33 +480,38 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `TemplateId` | `int` | Yes (ById set) | | The ID of the template to add the attribute to. Accepts pipeline input by property name. |
-| `TemplateName` | `string` | Yes (ByName set) | | The name of the template to add the attribute to. |
-| `ObjectType` | `object` | Yes | | The Metaverse Object Type (name or ID) identifying which of the template's Object Types receives the attribute. |
-| `MetaverseAttribute` | `object` | Yes (unless targeting a Connected System) | | The Metaverse Attribute (name or ID) values are generated for. |
-| `ConnectedSystemObjectTypeAttributeId` | `int` | Yes (unless targeting the metaverse) | | The ID of the Connected System attribute values are generated for. |
-| `Pattern` | `string` | No | | A variable-replacement pattern for constructing string values, e.g. `{0}.{1}@contoso.com`. |
-| `Expression` | `string` | No | | An expression constructing the value from already-generated attributes via `mv["Attribute Name"]`. |
-| `ExampleDataSet` | `object[]` | No | | The Example Data Sets (names or IDs) values are drawn from. Order follows array order. |
-| `WeightedValue` | `hashtable[]` | No | | Specific values to choose from, weighted: `@{ Value = "active"; Weight = 0.9 }`. |
-| `PopulatedValuesPercentage` | `int` | No | | What percentage of generated objects receive a value for this attribute (0 to 100). |
-| `BoolTrueDistribution` | `int` | No | | For boolean attributes, what percentage of values are true (0 to 100). |
-| `BoolShouldBeRandom` | `bool` | No | | For boolean attributes, whether values are generated randomly. |
-| `MinDate` / `MaxDate` | `datetime` | No | | For date attributes, the earliest and latest values to generate. |
-| `MinNumber` / `MaxNumber` | `int` | No | | For number attributes, the smallest and largest values to generate. |
-| `SequentialNumbers` / `RandomNumbers` | `bool` | No | | For number attributes, whether values are generated sequentially or randomly. |
-| `ManagerDepthPercentage` | `int` | No | | For Manager attributes, how far into the organisational hierarchy managers are present (0 to 100). |
-| `MvaRefMinAssignments` / `MvaRefMaxAssignments` | `int` | No | | For multi-valued reference attributes, the minimum and maximum number of values to assign. |
-| `ReferenceMetaverseObjectType` | `object[]` | No | | For reference attributes, the Metaverse Object Types (names or IDs) generated references may point at. |
-| `AttributeDependency` | `hashtable` | No | | A condition that must hold for the attribute to be generated: `@{ MetaverseAttribute = <name or id>; ComparisonType = "Equals"; StringValue = "Contractor" }`. Valid comparison types are `Equals`, `NotEquals`, `LessThan`, `GreaterThan`, `GreaterThanOrEqual`, `LessThanOrEqual` and `Like`. |
-| `ChangeReason` | `string` | No | | Reason for the change, recorded on the audit Activity and shown in the template's configuration change history. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated Data Generation Template object. |
-| `WhatIf` | `switch` | No | | Preview the operation without performing it. |
-| `Confirm` | `switch` | No | | Prompt for confirmation before updating. |
+| `TemplateId` | `int` | Yes (ById) |  | The unique identifier of the Data Generation Template to add the attribute to. Accepts pipeline input by property name. |
+| `TemplateName` | `string` | Yes (ByName) |  | The name of the Data Generation Template to add the attribute to. |
+| `ObjectType` | `object` | Yes |  | The Metaverse Object Type (name or id) identifying which of the template's Object Types receives the attribute. |
+| `MetaverseAttribute` | `object` | No |  | The Metaverse Attribute (name or id) values are generated for, when targeting the Metaverse. |
+| `ConnectedSystemObjectTypeAttributeId` | `int` | No |  | The id of the Connected System attribute values are generated for, when targeting a Connected System. |
+| `Pattern` | `string` | No |  | A variable-replacement pattern for constructing string values, for example "{0}.{1}@contoso.com". |
+| `Expression` | `string` | No |  | An expression that constructs the value from other already-generated attributes via mv["Attribute Name"]. |
+| `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |
+| `WeightedValue` | `hashtable[]` | No |  | Specific string values to choose from, weighted to control their distribution: one @{ Value = ..; Weight = .. } hashtable per value. |
+| `PopulatedValuesPercentage` | `int` | No |  | What percentage of generated objects receive a value for this attribute. From 0 to 100. |
+| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, what percentage of values are true. From 0 to 100. |
+| `BoolShouldBeRandom` | `bool` | No |  | For boolean attributes, whether values are generated randomly. |
+| `MinDate` | `datetime` | No |  | For date attributes, the earliest value to generate. |
+| `MaxDate` | `datetime` | No |  | For date attributes, the latest value to generate. |
+| `MinNumber` | `int` | No |  | For number attributes, the smallest value to generate. |
+| `MaxNumber` | `int` | No |  | For number attributes, the largest value to generate. |
+| `SequentialNumbers` | `bool` | No |  | For number attributes, whether values are generated sequentially. |
+| `RandomNumbers` | `bool` | No |  | For number attributes, whether values are generated randomly. |
+| `ManagerDepthPercentage` | `int` | No |  | For Manager attributes, how far into the organisational hierarchy managers are present. From 0 to 100. |
+| `MvaRefMinAssignments` | `int` | No |  | For multi-valued reference attributes, the minimum number of values to assign. |
+| `MvaRefMaxAssignments` | `int` | No |  | For multi-valued reference attributes, the maximum number of values to assign. |
+| `ReferenceMetaverseObjectType` | `object[]` | No |  | For reference attributes, the Metaverse Object Types (names or ids) generated references may point at. |
+| `AttributeDependency` | `hashtable` | No |  | A condition on another attribute that must hold for this attribute to be generated: @{ MetaverseAttribute = <name or id>; ComparisonType = <Equals\|NotEquals\|LessThan\|GreaterThan\|GreaterThanOrEqual\|LessThanOrEqual\|Like>; StringValue = <value> }. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the updated Data Generation Template. |
 
 ### Output
 
-If `-PassThru` is specified, returns the updated Data Generation Template object, in the same shape as `New-JIMExampleDataTemplate`.
+With `-PassThru`, the updated Data Generation Template; otherwise nothing.
+
+**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+<!-- END GENERATED: Add-JIMExampleDataTemplateAttribute -->
 
 ### Examples
 
@@ -461,10 +535,9 @@ Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType "User" -MetaverseA
 
 ## Invoke-JIMExampleDataTemplate
 
-Executes a data generation template to create identity objects in the metaverse. Execution is queued to the JIM worker service and tracked by an Activity: the cmdlet returns as soon as the server has queued the request. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)), or use `-Wait` to block until generation completes with a live progress display.
+Executes a Data Generation Template to create objects in the Metaverse. Execution is queued to the JIM worker service and tracked by an Activity: the cmdlet returns as soon as the server has queued the request. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)), or use `-Wait` to block until generation completes with a live progress display.
 
-Supports `ShouldProcess`, so you can use `-WhatIf` or `-Confirm` to preview or confirm execution before it begins.
-
+<!-- BEGIN GENERATED: Invoke-JIMExampleDataTemplate -->
 ### Syntax
 
 ```powershell
@@ -479,17 +552,26 @@ Invoke-JIMExampleDataTemplate -Name <string> [-Wait] [-Timeout <int>] [-PassThru
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of the template to execute. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName set) | | The name of the template to execute. |
-| `Wait` | `switch` | No | `false` | Wait for generation to complete, showing live progress (object counts, throughput and estimated time remaining). |
-| `Timeout` | `int` | No | | Maximum seconds to wait when using `-Wait`; throws if exceeded. Waits indefinitely when omitted. |
-| `PassThru` | `switch` | No | `false` | Return execution information to the pipeline. |
-| `WhatIf` | `switch` | No | | Preview the operation without executing it. |
-| `Confirm` | `switch` | No | | Prompt for confirmation before executing. |
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to run. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to run. |
+| `Wait` | `switch` | No |  | Waits for generation to finish, showing its progress: object counts, throughput and the estimated time remaining. |
+| `Timeout` | `int` | No |  | How many seconds `-Wait` waits before it throws an error naming the Activity, which may still be running. Omit it to wait until generation finishes. At least 1. |
+| `PassThru` | `switch` | No |  | Returns the response to queuing the run. |
 
 ### Output
 
-By default, this cmdlet produces no output. When `-PassThru` is specified, returns a `PSCustomObject` with `TemplateId`, `ActivityId`, `TaskId`, `Status` and `Message` properties confirming the request was queued. `ActivityId` identifies the Activity tracking the generation; pass it to [`Get-JIMActivity`](activities.md) to check progress and completion (or combine with `-Wait`, in which case the object is returned after completion).
+With `-PassThru`, the response to queuing the run, with the template and where the run got to; otherwise nothing. `Get-JIMActivity -Follow` follows its ActivityId.
+
+**`ExampleDataTemplateExecution`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ActivityId` | `guid` | The Activity that records the execution. Follow it with `GET /api/v1/activities/{id}`, or the lighter `GET /api/v1/activities/{id}/progress`. |
+| `TaskId` | `guid` | The worker task ID for the queued execution. |
+| `Message` | `string` | Message describing the result. |
+| `TemplateId` | `int` | The Data Generation Template that was run. |
+| `Status` | `string` | Queued, or with `-Wait` the Activity's final status, for example Complete or FailedWithError. |
+<!-- END GENERATED: Invoke-JIMExampleDataTemplate -->
 
 ### Examples
 

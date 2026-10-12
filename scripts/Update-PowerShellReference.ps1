@@ -566,14 +566,27 @@ function Format-Output {
         elseif (-not $schemaName) {
             $sections.Add($label)
         }
-        elseif ($TabledOnPage.ContainsKey($schemaName)) {
-            $first = $TabledOnPage[$schemaName]
-            $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
-        }
         else {
-            $TabledOnPage[$schemaName] = $Reference.Name
-            $sections.Add((Format-PropertyTable -Label $label -Properties @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)))
+            # The API's object, with any properties the module adds to it (listed in .OUTPUTS) after its own.
+            $added = @(if ($Reference.OutputProperties.ContainsKey($typeName)) { $Reference.OutputProperties[$typeName] })
+            $key = if ($added.Count -gt 0) { "added:$typeName" } else { $schemaName }
+            if ($TabledOnPage.ContainsKey($key)) {
+                $first = $TabledOnPage[$key]
+                $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
+            }
+            else {
+                $TabledOnPage[$key] = $Reference.Name
+                $properties = @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)
+                foreach ($property in $added | Where-Object { $properties.Name -contains $_.Name }) {
+                    $Problems.Add("$($Reference.Name) lists $($property.Name) as a property it adds to $typeName, but the $schemaName schema already has it; describe it in the DTO's XML comment instead")
+                }
+                $sections.Add((Format-PropertyTable -Label $label -Properties ($properties + @($added | Where-Object { $properties.Name -notcontains $_.Name }))))
+            }
         }
+    }
+
+    foreach ($listed in $Reference.OutputProperties.Keys | Where-Object { -not $Reference.OutputTypes.Contains($_) }) {
+        $Problems.Add("$($Reference.Name) lists the properties of $listed in its .OUTPUTS help, but declares no such output type; declare it, or correct the name")
     }
 
     $text = "### Output"
