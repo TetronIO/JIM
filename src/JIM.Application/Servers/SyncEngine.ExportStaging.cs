@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -489,67 +488,26 @@ public partial class SyncEngine
                         continue;
                     }
 
-                    var result = evaluation.Result!;
-                    var change = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        Attribute = mapping.TargetConnectedSystemAttribute,
-                        AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        SyncRuleId = exportRule.Id,
-                        SyncRuleName = exportRule.Name
-                    };
-
-                    // Set the value based on the result type
-                    switch (result)
-                    {
-                        case string strValue:
-                            change.StringValue = strValue;
-                            break;
-                        case int intValue:
-                            change.IntValue = intValue;
-                            break;
-                        case long longValue:
-                            change.LongValue = longValue;
-                            break;
-                        case decimal decimalValue:
-                            change.DecimalValue = decimalValue;
-                            break;
-                        case DateTime dtValue:
-                            change.DateTimeValue = dtValue;
-                            break;
-                        case bool boolValue:
-                            change.BoolValue = boolValue;
-                            break;
-                        case Guid guidValue:
-                            change.GuidValue = guidValue;
-                            break;
-                        case byte[] byteValue:
-                            change.ByteValue = byteValue;
-                            break;
-                        default:
-                            // Fall back to string representation
-                            change.StringValue = result.ToString();
-                            break;
-                    }
+                    // Every change an expression stages is for its one target attribute, so the Connected System
+                    // Object's values for it are read once, for staging and for no-net-change detection alike.
+                    var heldValues = canDetectNoNetChange
+                        ? csoAttributeCache![(existingCso!.Id, mapping.TargetConnectedSystemAttribute.Id)].ToList()
+                        : null;
+                    var expressionChanges = StageExportExpressionResult(mapping, source, exportRule, evaluation.Result!, heldValues, flowErrors);
 
                     // No-net-change detection for expression-based mappings
-                    if (canDetectNoNetChange)
+                    var alreadyCurrent = heldValues == null
+                        ? []
+                        : expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+                    foreach (var change in alreadyCurrent)
                     {
-                        var cacheKey = (existingCso!.Id, change.AttributeId);
-                        var existingCsoValues = csoAttributeCache![cacheKey];
-
-                        if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
-                        {
-                            Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
-                                change.AttributeId, existingCso.Id);
-                            csoAlreadyCurrentCount++;
-                            noNetChangeSkipped?.Add(change);
-                            continue;
-                        }
+                        Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
+                            change.AttributeId, existingCso!.Id);
                     }
 
-                    changes.Add(change);
+                    csoAlreadyCurrentCount += alreadyCurrent.Count;
+                    noNetChangeSkipped?.AddRange(alreadyCurrent);
+                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrent.Contains(change)));
                     continue;
                 }
 
@@ -792,6 +750,154 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The Pending Export changes an export Expression's result stages (#2179), resolved through the one result
+    /// handler: every value converted to the target attribute's type, so text a Number attribute cannot hold is
+    /// reported rather than sent and "512" stages the number 512, and several values never become their type name.
+    /// <list type="bullet">
+    /// <item>No value (an empty collection, or blank text for a typed attribute): nothing, the same as a null result.</item>
+    /// <item>A value the target's type cannot hold: nothing, and an <see cref="AttributeFlowErrorKind.ExpressionResultNotConvertible"/> error.</item>
+    /// <item>Several values for a single-valued target: nothing, and an <see cref="AttributeFlowErrorKind.ExpressionResultMultiValued"/> error.</item>
+    /// <item>A single value (not a list), or the one value a single-valued target takes: one Update, as an expression
+    /// has always staged.</item>
+    /// <item>A list for a multi-valued target, whatever its length: an Add for each value and a Remove for each value
+    /// the Connected System Object holds that the result does not, so the target ends up holding exactly the
+    /// result. A list of one value is the whole set as much as a list of two is.</item>
+    /// </list>
+    /// </summary>
+    /// <param name="heldValues">The Connected System Object's current values for the target attribute, or null when
+    /// there is no object yet (a Create) or none was supplied.</param>
+    private static List<PendingExportAttributeValueChange> StageExportExpressionResult(
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        SyncRule exportRule,
+        object result,
+        IEnumerable<ConnectedSystemObjectAttributeValue>? heldValues,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var target = mapping.TargetConnectedSystemAttribute!;
+
+        // An export expression into a Reference attribute supplies the reference's text (for example a DN), staged as
+        // text exactly as it always has been; every other type converts to that type.
+        var valueType = target.Type == AttributeDataType.Reference ? AttributeDataType.Text : target.Type;
+        var resolution = ExpressionResultValues.Resolve(result, valueType, target.AttributePlurality);
+
+        switch (resolution.Kind)
+        {
+            case ExpressionResultResolutionKind.NoValue:
+                return [];
+
+            case ExpressionResultResolutionKind.NotConvertible:
+                // The value itself is source data, so it goes to the Run Profile Execution Item (AttributeFlowError.Value),
+                // never to the log.
+                Log.Warning("CreateAttributeValueChanges: Expression result cannot be stored in {Type} attribute {AttrName}; " +
+                    "no Pending Export generated for this attribute.",
+                    target.Type, target.Name);
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
+                    TargetAttributeName = target.Name,
+                    TargetAttributeType = target.Type,
+                    Expression = source.Expression,
+                    Value = resolution.UnconvertibleValue
+                });
+                return [];
+
+            case ExpressionResultResolutionKind.SeveralValues:
+                Log.Warning("CreateAttributeValueChanges: Expression returned {ValueCount} values for single-valued attribute {AttrName}; " +
+                    "no Pending Export generated for this attribute.",
+                    resolution.ValueCount, target.Name);
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultMultiValued,
+                    TargetAttributeName = target.Name,
+                    Expression = source.Expression,
+                    ValueCount = resolution.ValueCount
+                });
+                return [];
+        }
+
+        // A single value keeps the Update an expression has always staged; how a single value meets a multi-valued
+        // target is the target-plurality rule (#2182). A list is never routed here by its length: an Update is compared
+        // only with the first value the Connected System Object holds, so a list reduced to one value would leave a
+        // stale value behind, or not, depending on the order the held values were read in.
+        if (target.AttributePlurality != AttributePlurality.MultiValued || !ExpressionResultValues.IsCollection(result))
+            return [NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Update, resolution.Values[0])];
+
+        // A list for a multi-valued target. Whether this becomes one whole-set change is the target-plurality rule
+        // (#2182); until then each value is an Add, and each held value the result no longer has is a Remove, which
+        // every Connector already applies to a multi-valued attribute.
+        var changes = resolution.Values
+            .Select(value => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Add, value))
+            .ToList();
+
+        if (heldValues != null)
+        {
+            var wantedKeys = resolution.Values.Select(ExpressionResultValues.Key).ToHashSet();
+            changes.AddRange(heldValues
+                .Select(held => (Held: held, Value: HeldTypedValue(held, target.Type)))
+                .Where(held => held.Value != null && !wantedKeys.Contains(ExpressionResultValues.Key(held.Value)))
+                .Select(held => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Remove, held.Value!)));
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// A Connected System Object attribute value's value in the field of <paramref name="type"/>, or null when it holds
+    /// none there. Reference values are not compared with expression results, which supply them as text.
+    /// </summary>
+    private static object? HeldTypedValue(ConnectedSystemObjectAttributeValue held, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => held.StringValue,
+        AttributeDataType.Number => held.IntValue,
+        AttributeDataType.LongNumber => held.LongValue,
+        AttributeDataType.Decimal => held.DecimalValue,
+        AttributeDataType.DateTime => held.DateTimeValue,
+        AttributeDataType.Boolean => held.BoolValue,
+        AttributeDataType.Guid => held.GuidValue,
+        AttributeDataType.Binary => held.ByteValue,
+        _ => null
+    };
+
+    /// <summary>
+    /// A Pending Export change carrying one converted expression value in its typed field.
+    /// </summary>
+    private static PendingExportAttributeValueChange NewExpressionChange(
+        SyncRuleMapping mapping,
+        SyncRule exportRule,
+        PendingExportAttributeChangeType changeType,
+        object value)
+    {
+        var change = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = mapping.TargetConnectedSystemAttribute!,
+            AttributeId = mapping.TargetConnectedSystemAttribute!.Id,
+            ChangeType = changeType,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name
+        };
+
+        switch (value)
+        {
+            case string text: change.StringValue = text; break;
+            case int number: change.IntValue = number; break;
+            case long longNumber: change.LongValue = longNumber; break;
+            case decimal decimalNumber: change.DecimalValue = decimalNumber; break;
+            case DateTime date: change.DateTimeValue = date; break;
+            case bool flag: change.BoolValue = flag; break;
+            case Guid guid: change.GuidValue = guid; break;
+            case byte[] bytes: change.ByteValue = bytes; break;
+            default:
+                // ExpressionResultConverter only produces the types above; anything else is a JIM fault.
+                throw new InvalidOperationException(
+                    $"An expression value of type '{value.GetType().Name}' has no field on a Pending Export change.");
+        }
+
+        return change;
+    }
+
+    /// <summary>
     /// The result of evaluating one export mapping's Expression source (Unique Value Generation, #242, Phase 2
     /// work package H; #1361 Missing Input Behaviour): a pure collaboration detail shared by
     /// <see cref="ComputeAttributeValueChanges"/>'s ordinary expression-mapping branch and
@@ -886,22 +992,19 @@ public partial class SyncEngine
         }
 
         // Only the evaluation itself is guarded. A thrown export expression must be surfaced as an errored
-        // object, never swallowed and never conflated with a deliberate null result. Known failure modes are
-        // rethrown as SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError
-        // RPEI; anything else propagates to UnhandledError.
+        // object, never swallowed and never conflated with a deliberate null result. Every failure an expression can
+        // cause arrives as the one ExpressionEvaluationException (#2153, N5) and is rethrown as
+        // SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError RPEI; anything
+        // else is a JIM fault and propagates to UnhandledError.
         object? result;
         try
         {
             result = expressionEvaluator.Evaluate(source.Expression!, new ExpressionContext(mvAttributeDictionary, null));
         }
-        catch (DynamicExpressoException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (ArgumentException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (FormatException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (OverflowException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (InvalidOperationException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (ArithmeticException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (InvalidCastException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-        catch (KeyNotFoundException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (ExpressionEvaluationException ex)
+        {
+            throw BuildExportExpressionEvaluationException(mapping, source, ex);
+        }
 
         if (result == null)
         {
@@ -963,11 +1066,11 @@ public partial class SyncEngine
                 baseValue = null;
                 baseUnavailable = true;
             }
-            else if (evaluation.Result is string[])
+            else if (ExpressionResultValues.IsCollection(evaluation.Result))
             {
                 // A generated value's base must be a single text value: a uniqueness token is appended to
-                // exactly one candidate, so an array or other multi-valued result is a misconfiguration, not
-                // data to select from. Nothing is staged for this attribute this pass.
+                // exactly one candidate, so a collection of anything (#2179, not only a list of text) is a
+                // misconfiguration, not data to select from. Nothing is staged for this attribute this pass.
                 flowErrors?.Add(new AttributeFlowError
                 {
                     Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
@@ -976,9 +1079,21 @@ public partial class SyncEngine
                 });
                 return null;
             }
+            else if (!ExpressionText.TryFormat(evaluation.Result, out baseValue))
+            {
+                // A single value in JIM's text form (#2153, N1); a Binary value has none, so it cannot be a base.
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.ExpressionResultNotConvertible,
+                    TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
+                    TargetAttributeType = AttributeDataType.Text,
+                    Expression = source.Expression,
+                    Value = ExpressionText.Describe(evaluation.Result!)
+                });
+                return null;
+            }
             else
             {
-                baseValue = evaluation.Result!.ToString();
                 baseUnavailable = baseValue == null;
             }
         }

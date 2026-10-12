@@ -6706,6 +6706,18 @@ public abstract class SyncTaskProcessorBase
                     "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
                     $"text value, not an array: '{error.Expression}'.");
 
+            case AttributeFlowErrorKind.ExpressionResultNotConvertible:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The Expression for target attribute {target} returned '{error.Value}', which a {error.TargetAttributeType} " +
+                    $"attribute cannot hold, so {outcome}; the attribute keeps its current value and the object's other attributes " +
+                    $"were unaffected. Change the Expression so it returns a {error.TargetAttributeType} value: '{error.Expression}'.");
+
+            case AttributeFlowErrorKind.ExpressionResultMultiValued:
+                return (ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued,
+                    $"The Expression for target attribute {target} returned {error.ValueCount} values but the attribute is single-valued, " +
+                    $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
+                    $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting

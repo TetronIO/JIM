@@ -1030,6 +1030,12 @@ public class SyncPreviewServer
                 AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
                     SyncPreviewMessageCode.ExpressionEvaluationError,
                     $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
+                AttributeFlowErrorKind.ExpressionResultNotConvertible => (
+                    SyncPreviewMessageCode.ExpressionEvaluationError,
+                    $"The Expression targeting '{flowError.TargetAttributeName}' returned '{flowError.Value}', which a {flowError.TargetAttributeType} attribute cannot hold, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+                AttributeFlowErrorKind.ExpressionResultMultiValued => (
+                    SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                    $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
                 _ => (
                     SyncPreviewMessageCode.ExpressionEvaluationError,
                     $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")

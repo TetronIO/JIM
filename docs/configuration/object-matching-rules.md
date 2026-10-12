@@ -60,7 +60,7 @@ How the expression is read:
 - **Its result is converted to the Metaverse attribute's type**, as an Attribute Flow's would be. A result that will
   not convert (text where a number is expected) stops the object with an **Object Matching Rule Failed** error rather
   than letting it match nothing. Correct the expression or the source value, then synchronise again.
-- **A list of text values is matched value by value**, as every value of a multi-valued attribute is.
+- **A list of values is matched value by value**, as every value of a multi-valued attribute is.
 - **No value** (missing, empty or only whitespace) passes the object to the next rule.
 
 A rule compares for equality, and only equality. "Starts with" or "contains" could match many identities, so JIM does

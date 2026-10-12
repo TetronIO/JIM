@@ -980,6 +980,26 @@ public class DriftDetectionTests
     }
 
     [Test]
+    public void EvaluateDrift_ExportExpressionFails_StagesNothingRatherThanClearingTheTarget()
+    {
+        // A failing expression gives no expected value at all; reading it as "expected empty" cleared the target
+        // (#2179, N5). Correcting drift on expression mappings generally is #2180.
+        var exportRule = CreateExportRule();
+        var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
+        exportSource.MetaverseAttribute = null;
+        exportSource.MetaverseAttributeId = null;
+        exportSource.Expression = "ToFileTime(42)";
+
+        var result = EvaluateDivergedDisplayName(exportRule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False, "an expression that fails must never be read as the target having to be empty");
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    [Test]
     public void EvaluateDrift_ExportExpressionSource_ContributorReadsTheDivergedAttribute_DivergenceIsNotDrift()
     {
         CreateImportRule(); // DisplayName -> Display Name

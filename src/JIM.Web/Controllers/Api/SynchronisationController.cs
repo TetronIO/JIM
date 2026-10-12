@@ -7,6 +7,7 @@ using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
@@ -6523,6 +6524,9 @@ public class SynchronisationController(
         {
             IsValid = testResult.IsValid,
             Result = testResult.Result,
+            // The same lines the portal's tester shows, through the same helper, so an expression reads the same on
+            // every surface (#2179): the typed Result alone serialises a date in JSON's form and Binary as base64.
+            ResultLines = testResult.IsValid ? ExpressionText.ToDisplayLines(testResult.Result) : null,
             ResultType = testResult.ResultType,
             ErrorMessage = testResult.ErrorMessage
         });

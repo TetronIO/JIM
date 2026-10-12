@@ -178,7 +178,8 @@ public class DriftDetectionService
                     // Calculate expected value from MVO based on export rule
                     // Build MVO attribute dictionary lazily (only when needed for expressions)
                     mvAttributeDictionary ??= BuildAttributeDictionary(targetMvo);
-                    var expectedValue = GetExpectedValue(targetMvo, source, mvAttributeDictionary, mapping.TargetConnectedSystemAttribute);
+                    if (!TryGetExpectedValue(targetMvo, source, mvAttributeDictionary, mapping.TargetConnectedSystemAttribute, out var expectedValue))
+                        continue;
 
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
@@ -621,36 +622,52 @@ public class DriftDetectionService
     /// <param name="source">The Synchronisation Rule mapping source defining the attribute or expression.</param>
     /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
     /// <param name="targetCsoAttribute">The target CSO attribute - used to determine plurality for consistent comparison.</param>
-    private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
+    /// <param name="expectedValue">The expected value(s); null means the target is expected to hold nothing.</param>
+    /// <returns>False when there is no expectation to compare against: the mapping's expression failed. A failure is
+    /// not an expected empty value, so it must never correct the target to empty (#2179, N5).</returns>
+    private bool TryGetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary,
+        ConnectedSystemObjectTypeAttribute targetCsoAttribute, out object? expectedValue)
     {
         // Handle expression-based mappings
         if (!string.IsNullOrWhiteSpace(source.Expression))
         {
+            Log.Debug("GetExpectedValue: Evaluating expression for drift detection. " +
+                "Expression: '{Expression}', Available attributes: [{Attributes}]",
+                LogSanitiser.Sanitise(source.Expression), string.Join(", ", mvAttributeDictionary.Keys));
+
             try
             {
-                Log.Debug("GetExpectedValue: Evaluating expression for drift detection. " +
-                    "Expression: '{Expression}', Available attributes: [{Attributes}]",
-                    source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
-
-                var context = new ExpressionContext(mvAttributeDictionary, null);
-                var result = _expressionEvaluator.Evaluate(source.Expression, context);
-
-                if (result == null)
-                {
-                    Log.Debug("GetExpectedValue: Expression '{Expression}' for MVO {MvoId} returned null",
-                        source.Expression, mvo.Id);
-                }
-
-                return result;
+                expectedValue = _expressionEvaluator.Evaluate(source.Expression, new ExpressionContext(mvAttributeDictionary, null));
             }
-            catch (Exception ex)
+            catch (ExpressionEvaluationException ex)
             {
-                Log.Warning(ex, "GetExpectedValue: Failed to evaluate expression '{Expression}' for drift detection",
-                    source.Expression);
-                return null;
+                // Recording this against the object is #2180; until then it is logged, and the target is left alone.
+                Log.Warning(ex, "GetExpectedValue: Expression '{Expression}' failed for MVO {MvoId}; drift is not evaluated for " +
+                    "attribute {AttrName}, so the Connected System keeps its value",
+                    LogSanitiser.Sanitise(source.Expression), mvo.Id, targetCsoAttribute.Name);
+                expectedValue = null;
+                return false;
             }
+
+            if (expectedValue == null)
+            {
+                Log.Debug("GetExpectedValue: Expression '{Expression}' for MVO {MvoId} returned null",
+                    LogSanitiser.Sanitise(source.Expression), mvo.Id);
+            }
+
+            return true;
         }
 
+        expectedValue = GetExpectedAttributeValue(mvo, source, targetCsoAttribute);
+        return true;
+    }
+
+    /// <summary>
+    /// The expected value(s) of a direct attribute mapping: the Metaverse Object's value(s) for the source attribute,
+    /// shaped by the target attribute's plurality.
+    /// </summary>
+    private static object? GetExpectedAttributeValue(MetaverseObject mvo, SyncRuleMappingSource source, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
+    {
         // Handle direct attribute mapping
         if (source.MetaverseAttribute == null)
             return null;

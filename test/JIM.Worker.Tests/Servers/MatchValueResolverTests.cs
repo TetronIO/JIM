@@ -138,6 +138,36 @@ public class MatchValueResolverTests
     }
 
     [Test]
+    public void Resolve_ExpressionReturningSeveralNumbers_ReturnsEachConverted()
+    {
+        // Any collection gives candidates (#2179), not only a list of text.
+        var resolution = _resolver.Resolve(ExpressionRule("new int[] { 1, 2, 1 }", EmployeeNumberMv), [Text(EmployeeNumber, "E100")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Values));
+            Assert.That(resolution.Values, Is.EqualTo(new object[] { 1, 2 }));
+        }
+    }
+
+    [Test]
+    public void Resolve_ExpressionReturningAListWithAnUnconvertibleValue_Fails()
+    {
+        var resolution = _resolver.Resolve(ExpressionRule("Split(\"1;two\", \";\")", EmployeeNumberMv), [Text(EmployeeNumber, "E100")]);
+
+        Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
+    }
+
+    [Test]
+    public void Resolve_ExpressionFailingWithANullReference_Fails()
+    {
+        // Every failure an expression can cause is a failed resolution, never an unhandled error (#2179).
+        var resolution = _resolver.Resolve(ExpressionRule("cs[\"missing\"].ToString()", EmployeeId), [Text(EmployeeNumber, "E100")]);
+
+        Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
+    }
+
+    [Test]
     public void Resolve_ExpressionReadsInputsByNameIgnoringCase()
     {
         var resolution = _resolver.Resolve(ExpressionRule("cs[\"EMPLOYEENUMBER\"]", EmployeeId), [Text(EmployeeNumber, "E100")]);

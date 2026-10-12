@@ -26,7 +26,8 @@ function Test-JIMExpression {
         Keys are attribute names, values are the attribute values.
 
     .OUTPUTS
-        The result of evaluating the expression against the sample values.
+        The result of evaluating the expression against the sample values. ResultLines gives it as the portal's tester
+        shows it, one value per line.
 
     .EXAMPLE
         Test-JIMExpression -Expression '"Hello, " + mv["Display Name"] + "!"' -MvAttributes @{ "Display Name" = "John Doe" }
@@ -111,6 +112,7 @@ function Test-JIMExpression {
             [PSCustomObject]@{
                 IsValid = $result.isValid
                 Result = $result.result
+                ResultLines = $result.resultLines
                 ResultType = $result.resultType
                 ErrorMessage = $result.errorMessage
                 ErrorPosition = $result.errorPosition

@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
 - ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
 - ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
+- ✨ A new `ParseDate(text, format)` expression function reads a date written in any form, such as `ParseDate(cs["startDate"], "dd/MM/yyyy")`. Text that does not match the format is an error, so a source sending an unexpected form never clears the attribute. (#2153)
+- ✨ `Test-JIMExpression` and the REST expression tester now return `ResultLines`, the result exactly as the portal's tester shows it: one value per line, with dates as JIM writes them. (#2179)
 
 ### Changed
 
@@ -73,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
+- 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 
 ### Removed
 
@@ -81,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An import no longer fails an object with an unhandled error when an export Attribute Flow expression returns another type than its target attribute, and an auto-confirmed export JIM cannot record for that reason is left unconfirmed with a warning instead of confirmed. (#2183)
+- 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
+- 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
 - 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
