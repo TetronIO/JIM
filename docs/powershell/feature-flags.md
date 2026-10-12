@@ -33,8 +33,6 @@ Get-JIMFeature [[-Name] <string>] [-IncludeInDevelopment]
 
 Each feature flag.
 
-**`FeatureFlagDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Key` | `string` | The flag's key, e.g. "Features.SomeInDevelopmentFeature". |
@@ -90,7 +88,7 @@ Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru] [-WhatIf] [
 
 With `-PassThru`, the feature flag as updated; otherwise nothing.
 
-**`FeatureFlagDto`**: as under [Get-JIMFeature](#get-jimfeature).
+Properties as under [Get-JIMFeature](#get-jimfeature).
 <!-- END GENERATED: Enable-JIMFeature -->
 
 ### Examples
@@ -136,7 +134,7 @@ Disable-JIMFeature [-Name] <string> [-PassThru] [-WhatIf] [-Confirm]
 
 With `-PassThru`, the feature flag as updated; otherwise nothing.
 
-**`FeatureFlagDto`**: as under [Get-JIMFeature](#get-jimfeature).
+Properties as under [Get-JIMFeature](#get-jimfeature).
 <!-- END GENERATED: Disable-JIMFeature -->
 
 ### Examples

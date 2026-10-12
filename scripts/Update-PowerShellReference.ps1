@@ -22,8 +22,12 @@
       parameter's .PARAMETER help, followed by what its attributes say (pipeline input and the property
       names that bind it, other aliases, ValidateSet, ValidateRange, SupportsWildcards).
     - Output: the cmdlet's .OUTPUTS help, then each type it declares with
-      [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], the sets that return it, and the
-      properties of that schema in the OpenAPI document, in the PascalCase the module returns them in.
+      [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')] and the properties of that schema in the
+      OpenAPI document, in the PascalCase the module returns them in. No class name reaches the page, since
+      a reader cannot type one: each type is labelled by when it comes back, from the parameters that set
+      its parameter sets apart ("With -Id or -Follow", "By default"), and a property holding another object
+      is an object naming its properties, an enumeration a string naming its values. Where two types come
+      from one parameter set, the .OUTPUTS help labels each with a line "<type>: <when it is returned>".
       A JIM type that is not an OpenAPI schema (a cmdlet that builds its own object) must be listed in
       the config's NonApiOutputTypes with its reason, and its properties are tabled from the list its
       .OUTPUTS help gives (a paragraph whose first line is the type's name, then "Name (type): description");
@@ -123,19 +127,26 @@ function ConvertTo-Paragraphs {
         Where-Object { $_ })
 }
 
-# A cmdlet's .OUTPUTS help, split into its prose and the property lists of the types the module builds itself:
-# a paragraph whose first line names a JIM type and whose other lines read "Name (type): description", a line
-# that does not starting another being the previous description running on.
+# A cmdlet's .OUTPUTS help, split into its prose, the property lists of the types the module builds itself, and
+# the labels that say when each type comes back. A list is a paragraph whose first line names a JIM type and whose
+# other lines read "Name (type): description", a line that does not starting another being the previous description
+# running on. A label follows the type's name on that first line ("JIM.X: With -Quiet"), or stands on a line of its
+# own for a type with no list ("System.Boolean: With -Quiet").
 function Split-OutputsHelp {
     param([string[]]$Sections)
 
     $prose = [System.Collections.Generic.List[string]]::new()
     $lists = @{}
+    $labels = [ordered]@{}
+    $typeLine = '^(?<type>(?:JIM|System)\.[\w.]+(?:\[\])?)(?::\s*(?<label>\S.*))?$'
     foreach ($section in @($Sections | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
         foreach ($paragraph in (($section -replace "`r", '').Trim() -split "\n\s*\n")) {
             $lines = @($paragraph -split '\n' | ForEach-Object Trim | Where-Object { $_ })
             if ($lines.Count -eq 0) { continue }
-            if ($lines.Count -ge 2 -and $lines[0] -cmatch '^JIM\.\w+$' -and $lines[1] -cmatch $script:PropertyLinePattern) {
+            $type = [regex]::Match($lines[0], $typeLine)
+            if ($type.Success -and $type.Groups['label'].Success) { $labels[$type.Groups['type'].Value] = $type.Groups['label'].Value }
+            if ($type.Success -and $type.Groups['label'].Success -and $lines.Count -eq 1) { continue }
+            if ($lines.Count -ge 2 -and $type.Success -and $type.Groups['type'].Value -cmatch '^JIM\.\w+$' -and $lines[1] -cmatch $script:PropertyLinePattern) {
                 $properties = [System.Collections.Generic.List[object]]::new()
                 foreach ($line in $lines[1..($lines.Count - 1)]) {
                     $match = [regex]::Match($line, $script:PropertyLinePattern)
@@ -144,12 +155,12 @@ function Split-OutputsHelp {
                     }
                     else { $properties[$properties.Count - 1].Description += " $line" }
                 }
-                $lists[$lines[0]] = $properties
+                $lists[$type.Groups['type'].Value] = $properties
             }
             else { $prose.Add($lines -join ' ') }
         }
     }
-    [pscustomobject]@{ Prose = @($prose); Lists = $lists }
+    [pscustomobject]@{ Prose = @($prose); Lists = $lists; Labels = $labels }
 }
 
 # Text from help or a DTO comment, made fit for the page: a cmdlet with its parameters, a parameter, and $true,
@@ -184,6 +195,13 @@ function Join-Choices {
     $quoted = @($Items | ForEach-Object { "``$_``" })
     if ($quoted.Count -eq 1) { return $quoted[0] }
     ($quoted[0..($quoted.Count - 2)] -join ', ') + ' or ' + $quoted[-1]
+}
+
+function Join-All {
+    param([string[]]$Items)
+    $quoted = @($Items | ForEach-Object { "``$_``" })
+    if ($quoted.Count -eq 1) { return $quoted[0] }
+    ($quoted[0..($quoted.Count - 2)] -join ', ') + ' and ' + $quoted[-1]
 }
 
 # What a parameter's attributes say, as sentences to follow its description.
@@ -302,6 +320,7 @@ function Get-CmdletReference {
         ConfirmImpact = @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } | ForEach-Object ConfirmImpact | Select-Object -First 1)
         Outputs     = $outputsHelp.Prose
         OutputProperties = $outputsHelp.Lists
+        OutputLabels = $outputsHelp.Labels
         OutputTypes = $outputTypes
     }
 }
@@ -392,37 +411,93 @@ function Format-Parameters {
 
 # A property's type as the site writes it, from its schema: a referenced schema or enum by name, an array
 # as its items' type with [], and JSON types as their PowerShell names. null is left out of a union.
-function Get-SchemaTypeName {
-    param($Property)
+# What a property holds, as the module returns it. A primitive is its type. A reader cannot look up a class name,
+# and the module returns no such type, so another object is an object, and an enumeration (which the API sends
+# by name) a string; Note is the sentence naming that object's properties, or the enumeration's values (less the
+# null the document lists where any use of the enumeration is nullable), to follow the property's description.
+function Get-SchemaShape {
+    param($Property, $Schemas)
 
-    if ($Property.Contains('$ref')) { return $Property['$ref'] -replace '^#/components/schemas/', '' }
+    $shape = { param($type, $note) [pscustomobject]@{ Type = $type; Note = $note } }
+    if ($Property.Contains('$ref')) {
+        $name = $Property['$ref'] -replace '^#/components/schemas/', ''
+        $target = $Schemas[$name]
+        if ($null -eq $target) { return & $shape 'object' '' }
+        if ($target.Contains('enum')) { return & $shape 'string' "One of $(Join-Choices @($target['enum'] | Where-Object { $null -ne $_ }))." }
+        $names = @(Get-SchemaPropertyNames -Schemas $Schemas -Name $name)
+        if ($names.Count -eq 0) { return Get-SchemaShape -Property $target -Schemas $Schemas }
+        return & $shape 'object' "It has $(Join-All $names)."
+    }
     foreach ($composite in 'oneOf', 'anyOf', 'allOf') {
         if ($Property.Contains($composite)) {
             $parts = @($Property[$composite] | Where-Object { -not ($_.Contains('type') -and $_['type'] -eq 'null') })
-            if ($parts.Count -eq 1) { return Get-SchemaTypeName $parts[0] }
-            return 'object'
+            if ($parts.Count -eq 1) { return Get-SchemaShape -Property $parts[0] -Schemas $Schemas }
+            return & $shape 'object' ''
         }
     }
     $types = @($(if ($Property.Contains('type')) { $Property['type'] }) | Where-Object { $_ -ne 'null' })
     $format = if ($Property.Contains('format')) { $Property['format'] } else { '' }
     if ($types -contains 'array') {
-        $items = if ($Property.Contains('items')) { Get-SchemaTypeName $Property['items'] } else { 'object' }
-        return "$items[]"
+        $items = if ($Property.Contains('items')) { Get-SchemaShape -Property $Property['items'] -Schemas $Schemas } else { & $shape 'object' '' }
+        $note = $items.Note -creplace '^One of ', 'Each is one of ' -creplace '^It has ', 'Each has '
+        return & $shape "$($items.Type)[]" $note
     }
-    if ($types -contains 'integer') { return $(if ($format -eq 'int64') { 'long' } else { 'int' }) }
-    if ($types -contains 'number') { return $(if ($format -eq 'float') { 'float' } elseif ($format -eq 'decimal') { 'decimal' } else { 'double' }) }
-    if ($types -contains 'boolean') { return 'bool' }
+    if ($Property.Contains('enum')) { return & $shape 'string' "One of $(Join-Choices @($Property['enum'] | Where-Object { $null -ne $_ }))." }
+    if ($types -contains 'integer') { return & $shape $(if ($format -eq 'int64') { 'long' } else { 'int' }) '' }
+    if ($types -contains 'number') { return & $shape $(if ($format -eq 'float') { 'float' } elseif ($format -eq 'decimal') { 'decimal' } else { 'double' }) '' }
+    if ($types -contains 'boolean') { return & $shape 'bool' '' }
     if ($types -contains 'string') {
-        switch ($format) {
-            'uuid' { return 'guid' }
-            'date-time' { return 'datetime' }
-            'date' { return 'date' }
-            'byte' { return 'byte[]' }
-            default { return 'string' }
+        $type = switch ($format) {
+            'uuid' { 'guid' }
+            'date-time' { 'datetime' }
+            'date' { 'date' }
+            'byte' { 'byte[]' }
+            default { 'string' }
+        }
+        return & $shape $type ''
+    }
+    if ($types -contains 'object' -and $Property.Contains('additionalProperties')) { return & $shape 'hashtable' '' }
+    if ($Property.Contains('properties') -and $Property['properties'].Count -gt 0) {
+        return & $shape 'object' "It has $(Join-All @($Property['properties'].Keys | ForEach-Object { ConvertTo-PropertyName $_ }))."
+    }
+    & $shape 'object' ''
+}
+
+# A property a cmdlet's .OUTPUTS help lists, typed as the page types the API's: one whose type names a schema (an
+# enumeration, or another object) is resolved as the API's own properties are, so no class name reaches the page.
+function Resolve-ListedProperty {
+    param($Property, $Schemas)
+
+    $name = $Property.Type -replace '\[\]$', ''
+    if (-not $Schemas.Contains($name)) { return $Property }
+    $reference = @{ '$ref' = "#/components/schemas/$name" }
+    $shape = if ($Property.Type.EndsWith('[]')) { Get-SchemaShape -Property @{ type = 'array'; items = $reference } -Schemas $Schemas }
+    else { Get-SchemaShape -Property $reference -Schemas $Schemas }
+    [pscustomobject]@{ Name = $Property.Name; Type = $shape.Type; Description = (@($Property.Description, $shape.Note) | Where-Object { $_ }) -join ' ' }
+}
+
+# A schema's property name in the PascalCase the module returns.
+function ConvertTo-PropertyName {
+    param([string]$Name)
+    $Name.Substring(0, 1).ToUpperInvariant() + $Name.Substring(1)
+}
+
+# The names of a schema's properties, those it takes through allOf first.
+function Get-SchemaPropertyNames {
+    param($Schemas, [string]$Name, [System.Collections.Generic.HashSet[string]]$Seen)
+
+    if (-not $Seen) { $Seen = [System.Collections.Generic.HashSet[string]]::new() }
+    if (-not $Seen.Add($Name) -or -not $Schemas.Contains($Name)) { return @() }
+    $schema = $Schemas[$Name]
+    $names = [System.Collections.Generic.List[string]]::new()
+    if ($schema.Contains('allOf')) {
+        foreach ($part in $schema['allOf']) {
+            if ($part.Contains('$ref')) { foreach ($inherited in (Get-SchemaPropertyNames -Schemas $Schemas -Name ($part['$ref'] -replace '^#/components/schemas/', '') -Seen $Seen)) { $names.Add($inherited) } }
+            elseif ($part.Contains('properties')) { foreach ($key in $part['properties'].Keys) { $names.Add((ConvertTo-PropertyName $key)) } }
         }
     }
-    if ($types -contains 'object' -and $Property.Contains('additionalProperties')) { return 'hashtable' }
-    'object'
+    if ($schema.Contains('properties')) { foreach ($key in $schema['properties'].Keys) { $names.Add((ConvertTo-PropertyName $key)) } }
+    @($names | Select-Object -Unique)
 }
 
 # A DTO's XML comment, which is written for the code, as a public page may carry it: on one line, without the
@@ -475,10 +550,11 @@ function Get-SchemaProperties {
         param($bag)
         foreach ($key in $bag.Keys) {
             $property = $bag[$key]
-            $description = ConvertTo-PublicDescription (Get-SchemaDescription $property)
+            $shape = Get-SchemaShape -Property $property -Schemas $Schemas
+            $description = (@(ConvertTo-PublicDescription (Get-SchemaDescription $property)) + $shape.Note | Where-Object { $_ }) -join ' '
             $properties.Add([pscustomobject]@{
-                Name        = $key.Substring(0, 1).ToUpperInvariant() + $key.Substring(1)
-                Type        = Get-SchemaTypeName $property
+                Name        = ConvertTo-PropertyName $key
+                Type        = $shape.Type
                 Description = $description
             })
         }
@@ -503,8 +579,62 @@ function Get-HeadingAnchor {
     ($Heading.ToLowerInvariant() -replace '[^\w\s-]', '' -replace '\s+', '-').Trim('-')
 }
 
-# Each type the cmdlet declares: a schema's properties are tabled the first time the page returns it, and
-# later cmdlets on the page refer back to that one rather than repeat the table.
+# What sets one parameter set apart, in the reader's terms: the parameters that choose it. $null for the default set
+# when it needs nothing the others do not (the call made without the others' parameters). A parameter every set
+# requires tells no set apart, so it is left out. Join is how the parameters combine: all of them, where the set
+# requires them; any one of them, where they are optional but belong to this set alone.
+function Get-SetCondition {
+    param($Reference, [string]$SetName)
+
+    $own = @($Reference.Parameters | ForEach-Object Name)
+    $sets = @($Reference.Sets)
+    $set = $sets | Where-Object Name -eq $SetName
+    $others = @($sets | Where-Object Name -ne $SetName)
+    $mandatoryIn = { param($s) @($s.Parameters | Where-Object { $_.IsMandatory -and $own -contains $_.Name } | ForEach-Object Name) }
+    $memberOf = { param($s) @($s.Parameters | Where-Object { $own -contains $_.Name } | ForEach-Object Name) }
+    $common = @(& $mandatoryIn $sets[0])
+    foreach ($other in $sets) { $inOther = @(& $mandatoryIn $other); $common = @($common | Where-Object { $inOther -contains $_ }) }
+
+    $required = @(& $mandatoryIn $set | Where-Object { $common -notcontains $_ })
+    if ($set.IsDefault -and $required.Count -eq 0) { return $null }
+    $unique = @($required | Where-Object { $name = $_; -not @($others | Where-Object { (& $mandatoryIn $_) -contains $name }) })
+    if ($unique.Count -gt 0) { return [pscustomobject]@{ Parameters = $unique; Join = 'and' } }
+    $alone = @(& $memberOf $set | Where-Object { $name = $_; $common -notcontains $name -and -not @($others | Where-Object { (& $memberOf $_) -contains $name }) })
+    if ($alone.Count -gt 0) { return [pscustomobject]@{ Parameters = $alone; Join = 'or' } }
+    if ($required.Count -gt 0) { return [pscustomobject]@{ Parameters = $required; Join = 'and' } }
+    $null
+}
+
+# When a type comes back, from the sets that return it, in the order its [OutputType] lines name them: "By default",
+# "With -Id or -Follow", "By default, or with -All". Empty where every set returns it.
+function Get-OutputCondition {
+    param($Reference, [string[]]$Sets)
+
+    $everySet = @($Reference.Sets | ForEach-Object Name)
+    if ($Sets -contains $script:AllSets -or @($everySet | Where-Object { $Sets -notcontains $_ }).Count -eq 0) { return '' }
+    $byDefault = $false
+    $phrases = [System.Collections.Generic.List[string]]::new()
+    foreach ($setName in @($Sets | Where-Object { $everySet -contains $_ })) {
+        $condition = Get-SetCondition -Reference $Reference -SetName $setName
+        if ($null -eq $condition) { $byDefault = $true; continue }
+        $phrase = @($condition.Parameters | ForEach-Object { "``-$_``" }) -join " $($condition.Join) "
+        if (-not $phrases.Contains($phrase)) { $phrases.Add($phrase) }
+    }
+    $joiner = if (@($phrases | Where-Object { $_ -match ' (and|or) ' }).Count -gt 0) { ', or ' } else { ' or ' }
+    if ($byDefault -and $phrases.Count -eq 0) { return 'By default' }
+    if ($byDefault) { return 'By default, or with ' + ($phrases -join $joiner) }
+    'With ' + ($phrases -join $joiner)
+}
+
+# "a" or "an" before a type's name.
+function Get-Article {
+    param([string]$Word)
+    if ($Word -match '^[aeiouAEIOU]') { 'an' } else { 'a' }
+}
+
+# Each type the cmdlet declares, labelled by when it comes back: a schema's properties are tabled the first time the
+# page returns it, and later cmdlets on the page refer back to that one rather than repeat the table. The only type
+# a cmdlet returns, from every set, needs no label.
 function Format-Output {
     param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$OutputTypeSchemas, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
@@ -513,14 +643,49 @@ function Format-Output {
     }
 
     $everySet = @($Reference.Sets | ForEach-Object Name)
-    $sections = [System.Collections.Generic.List[string]]::new()
+    $declared = [ordered]@{}
     foreach ($typeName in $Reference.OutputTypes.Keys) {
-        $sets = $Reference.OutputTypes[$typeName]
         if ($typeName -in @('System.Void', 'void')) { continue }
         if ($typeName -in @('System.Management.Automation.PSObject', 'System.Management.Automation.PSCustomObject', 'PSCustomObject', 'psobject')) {
             $Problems.Add("$($Reference.Name) declares its output only as PSCustomObject; name what it returns with [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]")
             continue
         }
+        $sets = @($Reference.OutputTypes[$typeName])
+        foreach ($set in $sets | Where-Object { $_ -ne $script:AllSets -and $everySet -notcontains $_ }) {
+            $Problems.Add("$($Reference.Name) declares $typeName for parameter set $set, which it does not have; correct the set's name")
+        }
+        $declared[$typeName] = $sets
+    }
+
+    # Types that share a parameter set cannot be told apart by it, so the help must say when each comes back.
+    $shared = [System.Collections.Generic.List[string]]::new()
+    $names = @($declared.Keys)
+    for ($i = 0; $i -lt $names.Count; $i++) {
+        for ($j = $i + 1; $j -lt $names.Count; $j++) {
+            $a = @($declared[$names[$i]]); $b = @($declared[$names[$j]])
+            if ($a -contains $script:AllSets -or $b -contains $script:AllSets -or @($a | Where-Object { $b -contains $_ }).Count -gt 0) {
+                foreach ($name in $names[$i], $names[$j]) { if (-not $Reference.OutputLabels.Contains($name) -and -not $shared.Contains($name)) { $shared.Add($name) } }
+            }
+        }
+    }
+    if ($shared.Count -gt 0) {
+        $listed = if ($shared.Count -eq 2) { $shared -join ' and ' } else { ($shared[0..($shared.Count - 2)] -join ', ') + ' and ' + $shared[-1] }
+        $Problems.Add("$($Reference.Name) returns $listed from the same parameter set, which therefore cannot tell a reader which comes back; label each in its .OUTPUTS help with a line '<type>: <when it is returned>'")
+    }
+
+    $sections = [System.Collections.Generic.List[string]]::new()
+    $used = @{}
+    foreach ($typeName in $declared.Keys) {
+        $label = if ($Reference.OutputLabels.Contains($typeName)) { ConvertTo-PageText $Reference.OutputLabels[$typeName] }
+        elseif ($declared.Count -eq 1) { Get-OutputCondition -Reference $Reference -Sets $declared[$typeName] }
+        elseif ($shared.Contains($typeName)) { '' }
+        else { Get-OutputCondition -Reference $Reference -Sets $declared[$typeName] }
+        if ($label) {
+            $label = $label.Substring(0, 1).ToUpperInvariant() + $label.Substring(1)
+            if ($used.ContainsKey($label)) { $Problems.Add("$($Reference.Name) returns $($used[$label]) and $typeName under the same label, '$label'; label each in its .OUTPUTS help with a line '<type>: <when it is returned>'") }
+            else { $used[$label] = $typeName }
+        }
+        $bold = if ($label) { "**$label**" } else { '' }
 
         $display = $typeName
         $schemaName = $null
@@ -541,52 +706,48 @@ function Format-Output {
             if ($resolved) { $display = Get-FriendlyTypeName $resolved }
         }
 
-        # The sets, where the type is returned by some and not others.
-        $label = "**``$display``**"
-        if ($sets -notcontains $script:AllSets -and @($everySet | Where-Object { $sets -notcontains $_ }).Count -gt 0) {
-            $label += ' (' + (@($everySet | Where-Object { $sets -contains $_ }) -join ', ') + ')'
+        # The table, or a reference back to where the page already gives it.
+        $referBack = {
+            param($first)
+            $link = "[$first](#$(Get-HeadingAnchor $first))"
+            if ($bold) { "${bold}: properties as under $link." } else { "Properties as under $link." }
         }
+        $plain = if ($bold) { "${bold}: $(Get-Article $display) ``$display``." } else { "Returns $(Get-Article $display) ``$display``." }
 
         if (-not $schemaName -and $NonApiOutputTypes.ContainsKey($typeName)) {
             # A type the module builds: its properties come from its .OUTPUTS help.
             $key = "module:$typeName"
-            if ($TabledOnPage.ContainsKey($key)) {
-                $first = $TabledOnPage[$key]
-                $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
-            }
+            if ($TabledOnPage.ContainsKey($key)) { $sections.Add((& $referBack $TabledOnPage[$key])) }
             elseif ($Reference.OutputProperties.ContainsKey($typeName)) {
                 $TabledOnPage[$key] = $Reference.Name
-                $sections.Add((Format-PropertyTable -Label $label -Properties $Reference.OutputProperties[$typeName]))
+                $sections.Add((Format-PropertyTable -Label $bold -Properties @($Reference.OutputProperties[$typeName] | ForEach-Object { Resolve-ListedProperty -Property $_ -Schemas $Schemas })))
             }
             else {
                 $Problems.Add("$($Reference.Name) declares $typeName, a type the module builds, but its .OUTPUTS help lists none of its properties; add a paragraph whose first line is $typeName and whose others read 'Name (type): description'")
-                $sections.Add($label)
+                $sections.Add($plain)
             }
         }
         elseif (-not $schemaName) {
-            $sections.Add($label)
+            $sections.Add($plain)
         }
         else {
             # The API's object, with any properties the module adds to it (listed in .OUTPUTS) after its own.
-            $added = @(if ($Reference.OutputProperties.ContainsKey($typeName)) { $Reference.OutputProperties[$typeName] })
+            $added = @(if ($Reference.OutputProperties.ContainsKey($typeName)) { $Reference.OutputProperties[$typeName] | ForEach-Object { Resolve-ListedProperty -Property $_ -Schemas $Schemas } })
             $key = if ($added.Count -gt 0) { "added:$typeName" } else { $schemaName }
-            if ($TabledOnPage.ContainsKey($key)) {
-                $first = $TabledOnPage[$key]
-                $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
-            }
+            if ($TabledOnPage.ContainsKey($key)) { $sections.Add((& $referBack $TabledOnPage[$key])) }
             else {
                 $TabledOnPage[$key] = $Reference.Name
                 $properties = @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)
                 foreach ($property in $added | Where-Object { $properties.Name -contains $_.Name }) {
                     $Problems.Add("$($Reference.Name) lists $($property.Name) as a property it adds to $typeName, but the $schemaName schema already has it; describe it in the DTO's XML comment instead")
                 }
-                $sections.Add((Format-PropertyTable -Label $label -Properties ($properties + @($added | Where-Object { $properties.Name -notcontains $_.Name }))))
+                $sections.Add((Format-PropertyTable -Label $bold -Properties ($properties + @($added | Where-Object { $properties.Name -notcontains $_.Name }))))
             }
         }
     }
 
-    foreach ($listed in $Reference.OutputProperties.Keys | Where-Object { -not $Reference.OutputTypes.Contains($_) }) {
-        $Problems.Add("$($Reference.Name) lists the properties of $listed in its .OUTPUTS help, but declares no such output type; declare it, or correct the name")
+    foreach ($listed in @($Reference.OutputProperties.Keys) + @($Reference.OutputLabels.Keys) | Select-Object -Unique | Where-Object { -not $Reference.OutputTypes.Contains($_) }) {
+        $Problems.Add("$($Reference.Name) names $listed in its .OUTPUTS help, but declares no such output type; declare it, or correct the name")
     }
 
     $text = "### Output"
@@ -603,12 +764,13 @@ function Format-Output {
 function Format-PropertyTable {
     param([string]$Label, [object[]]$Properties)
 
+    $lead = if ($Label) { "${Label}:`n`n" } else { '' }
     if (@($Properties | Where-Object Description).Count -gt 0) {
         $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell (ConvertTo-PageText $property.Description)) }
-        return "${Label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n")
+        return "$lead| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n")
     }
     $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
-    "${Label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n")
+    "$lead| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n")
 }
 
 function Format-Block {

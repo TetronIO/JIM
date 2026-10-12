@@ -335,6 +335,117 @@ function Get-JIMWidgetReport {
 }
 '@
 
+    # Every set needs -Id, so -Causes is what tells the second apart.
+    $script:GetWidgetEvent = @'
+function Get-JIMWidgetEvent {
+    <#
+    .SYNOPSIS
+        Gets a Widget's events.
+
+    .PARAMETER Id
+        The Widget.
+
+    .PARAMETER Causes
+        Returns what caused the events instead.
+
+    .OUTPUTS
+        The events, or with -Causes what caused them.
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'Events')]
+    [OutputType('JIM.WidgetHeader', ParameterSetName = 'Events')]
+    [OutputType('JIM.WidgetSummary', ParameterSetName = 'Causes')]
+    param(
+        [Parameter(Mandatory, ParameterSetName = 'Events')]
+        [Parameter(Mandatory, ParameterSetName = 'Causes')]
+        [int]$Id,
+
+        [Parameter(Mandatory, ParameterSetName = 'Causes')]
+        [switch]$Causes
+    )
+}
+'@
+
+    # Two sets return the same object; the second also needs the first's -Id.
+    $script:GetWidgetFeed = @'
+function Get-JIMWidgetFeed {
+    <#
+    .SYNOPSIS
+        Gets Widgets, or follows one.
+
+    .PARAMETER Id
+        The Widget.
+
+    .PARAMETER Follow
+        Follows the Widget until it settles.
+
+    .PARAMETER Name
+        Filter Widgets by name.
+
+    .OUTPUTS
+        Each Widget's header, or one Widget in full.
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'List')]
+    [OutputType('JIM.WidgetHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.WidgetDetail', ParameterSetName = 'ById')]
+    [OutputType('JIM.WidgetDetail', ParameterSetName = 'Follow')]
+    param(
+        [Parameter(Mandatory, ParameterSetName = 'ById')]
+        [Parameter(Mandatory, ParameterSetName = 'Follow')]
+        [int]$Id,
+
+        [Parameter(Mandatory, ParameterSetName = 'Follow')]
+        [switch]$Follow,
+
+        [Parameter(ParameterSetName = 'List')]
+        [string]$Name
+    )
+}
+'@
+
+    # Returns one of two things from its only parameter set, so the set cannot say which; the help labels each.
+    $script:TestWidget = @'
+function Test-JIMWidget {
+    <#
+    .SYNOPSIS
+        Tests JIM's Widgets.
+
+    .PARAMETER Quiet
+        Returns only whether every Widget passed.
+
+    .OUTPUTS
+        The result, or with -Quiet whether every Widget passed.
+
+        JIM.HealthSummary: By default
+        Status (string): Healthy or Unhealthy.
+
+        System.Boolean: With -Quiet
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.HealthSummary')]
+    [OutputType([bool])]
+    param([switch]$Quiet)
+}
+'@
+
+    # Returns a primitive, and only that.
+    $script:TestWidgetName = @'
+function Test-JIMWidgetName {
+    <#
+    .SYNOPSIS
+        Tests whether a Widget name is free.
+
+    .PARAMETER Name
+        The name.
+
+    .OUTPUTS
+        $true if the name is free; otherwise $false.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([string]$Name)
+}
+'@
+
     $script:OpenApi = @'
 {
   "openapi": "3.1.1",
@@ -351,7 +462,7 @@ function Get-JIMWidgetReport {
           "tags": { "type": "array", "items": { "type": "string" }, "description": "Labels (#12), set by the #789 tagger (Widget tags, #345)." }
         }
       },
-      "WidgetStatus": { "enum": [ "Active", "Retired" ] },
+      "WidgetStatus": { "enum": [ "Active", "Retired", null ] },
       "WidgetSummary": {
         "type": "object",
         "properties": {
@@ -372,7 +483,9 @@ function Get-JIMWidgetReport {
         "properties": {
           "notes": { "type": [ "null", "string" ] },
           "createdAt": { "type": "string", "format": "date-time" },
-          "replacedBy": { "oneOf": [ { "type": "null" }, { "description": "The Widget that replaced this one.", "$ref": "#/components/schemas/WidgetHeader" } ] }
+          "replacedBy": { "oneOf": [ { "type": "null" }, { "description": "The Widget that replaced this one.", "$ref": "#/components/schemas/WidgetHeader" } ] },
+          "parts": { "type": "array", "items": { "$ref": "#/components/schemas/WidgetSummary" }, "description": "The Widget's parts." },
+          "history": { "type": "array", "items": { "$ref": "#/components/schemas/WidgetStatus" } }
         }
       }
     }
@@ -477,19 +590,21 @@ function Get-JIMWidgetReport {
         }
     }
 
-    # Each type an Output section names: its name, the sets in brackets after it, the rest of its line,
-    # and the property table that follows it, if any.
-    function Get-OutputTypes {
+    # Each section of an Output: its label (the bold text before the colon, code spans unwrapped), the rest of
+    # its line, and the table that follows it, if any. A table no label precedes is a section with no label.
+    function Get-OutputSections {
         param([string]$Block)
         $output = Get-Subsection $Block 'Output'
-        $matches = [regex]::Matches($output, '(?m)^\*\*`(?<type>[^`]+)`\*\*(?: \((?<sets>[^)]*)\))?(?<rest>.*)$')
-        for ($i = 0; $i -lt $matches.Count; $i++) {
-            $m = $matches[$i]
-            $end = if ($i + 1 -lt $matches.Count) { $matches[$i + 1].Index } else { $output.Length }
+        $labels = @([regex]::Matches($output, '(?m)^\*\*(?<label>.+?)\*\*:(?<rest>.*)$'))
+        $leadEnd = if ($labels.Count -gt 0) { $labels[0].Index } else { $output.Length }
+        $lead = @(ConvertFrom-MarkdownTable $output.Substring(0, $leadEnd))
+        if ($lead.Count -gt 0) { [pscustomobject]@{ Label = ''; Rest = ''; Table = $lead } }
+        for ($i = 0; $i -lt $labels.Count; $i++) {
+            $m = $labels[$i]
+            $end = if ($i + 1 -lt $labels.Count) { $labels[$i + 1].Index } else { $output.Length }
             $after = $output.Substring($m.Index + $m.Length, $end - $m.Index - $m.Length)
             [pscustomobject]@{
-                Type  = $m.Groups['type'].Value
-                Sets  = $m.Groups['sets'].Value
+                Label = $m.Groups['label'].Value -replace '`', ''
                 Rest  = $m.Groups['rest'].Value
                 Table = @(ConvertFrom-MarkdownTable $after)
             }
@@ -682,49 +797,66 @@ function Disconnect-JIMWidget {
         Get-Subsection $script:GetBlock 'Output' | Should -Match "A list returns each Widget's header; ``-Id`` returns the whole Widget\."
     }
 
-    It 'tables each output type with the sets that return it, and its properties in PascalCase with their types' {
-        $header = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader'
-        $header.Sets | Should -Be 'List'
-        $header.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
-        $header.Table.Type | Should -Be @('guid', 'string', 'bool', 'WidgetStatus', 'int', 'string[]')
+    It 'labels each output by the parameters that return it, never by its class name, and tables its properties in PascalCase with their types' {
+        $sections = @(Get-OutputSections $script:GetBlock)
+        $sections.Label | Should -Be @('By default', 'With -Id')
+        $sections[0].Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
+        $sections[0].Table.Type | Should -Be @('guid', 'string', 'bool', 'string', 'int', 'string[]')
+        Get-Subsection $script:GetBlock 'Output' | Should -Not -Match 'WidgetHeader|WidgetDetail|WidgetStatus'
+    }
+
+    It 'shows an enumeration as a string, naming its values' {
+        $status = (Get-OutputSections $script:GetBlock)[0].Table | Where-Object Property -eq 'Status'
+        $status.Type | Should -Be 'string'
+        $status.Description | Should -Be 'One of Active or Retired.'
+        $history = (Get-OutputSections $script:GetBlock)[1].Table | Where-Object Property -eq 'History'
+        $history.Type | Should -Be 'string[]'
+        $history.Description | Should -Be 'Each is one of Active or Retired.'
+    }
+
+    It 'shows a nested object as an object, naming its properties' {
+        $table = (Get-OutputSections $script:GetBlock)[1].Table
+        $parts = $table | Where-Object Property -eq 'Parts'
+        $parts.Type | Should -Be 'object[]'
+        $parts.Description | Should -Be "The Widget's parts. Each has Total and Enabled."
     }
 
     It "gives each property the description the schema has for it, and none where it has none" {
-        $table = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader').Table
+        $table = (Get-OutputSections $script:GetBlock)[0].Table
         ($table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
         ($table | Where-Object Property -eq 'IsEnabled').Description | Should -Be 'Whether the Widget | is enabled.'
         ($table | Where-Object Property -eq 'Name').Description | Should -BeNullOrEmpty
     }
 
     It "leaves out the issue numbers a schema's description cites, since a public page cannot carry them" {
-        $table = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader').Table
+        $table = (Get-OutputSections $script:GetBlock)[0].Table
         ($table | Where-Object Property -eq 'Tags').Description | Should -Be 'Labels, set by the tagger (Widget tags).'
     }
 
     It 'includes the properties a schema takes from another through allOf' {
-        $detail = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail'
-        $detail.Sets | Should -Be 'ById'
-        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt', 'ReplacedBy')
+        $detail = (Get-OutputSections $script:GetBlock)[1]
+        $detail.Label | Should -Be 'With -Id'
+        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt', 'ReplacedBy', 'Parts', 'History')
     }
 
     It 'gives a nullable reference the description the document puts beside the reference, not on the property' {
-        $replacedBy = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail').Table | Where-Object Property -eq 'ReplacedBy'
-        $replacedBy.Type | Should -Be 'WidgetHeader'
-        $replacedBy.Description | Should -Be 'The Widget that replaced this one.'
+        $replacedBy = (Get-OutputSections $script:GetBlock)[1].Table | Where-Object Property -eq 'ReplacedBy'
+        $replacedBy.Type | Should -Be 'object'
+        $replacedBy.Description | Should -Be 'The Widget that replaced this one. It has Id, Name, IsEnabled, Status, Count and Tags.'
     }
 
     It 'refers back to the cmdlet above that already tables a type, instead of repeating it' {
-        $detail = @(Get-OutputTypes $script:RemoveBlock)
-        $detail.Count | Should -Be 1
-        $detail[0].Type | Should -Be 'WidgetDetail'
-        $detail[0].Table.Count | Should -Be 0
-        $detail[0].Rest | Should -Match ([regex]::Escape('[Get-JIMWidget](#get-jimwidget)'))
+        $output = Get-Subsection $script:RemoveBlock 'Output'
+        @(Get-OutputSections $script:RemoveBlock).Count | Should -Be 0
+        $output | Should -Match ([regex]::Escape('Properties as under [Get-JIMWidget](#get-jimwidget).'))
+        $output | Should -Not -Match 'WidgetDetail'
+
     }
 
     It "names a member a description cross-references, without the type and owner .NET renders with it" {
         $fixture = New-Fixture -Functions @($script:GetReport) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetReport') }
         Invoke-Generator $fixture | Out-Null
-        $table = (Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
+        $table = (Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
         ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst status among Widgets; The WidgetReport.Widgets list stays.'
         ($table | Where-Object Property -eq 'Limit').Description | Should -Be 'Never ordered: the sentinel (MaxValue), unlike Worst.'
     }
@@ -751,17 +883,38 @@ function Disconnect-JIMWidget {
     It 'tables a type without a Description column when its schema describes none of its properties' {
         $fixture = New-Fixture -Functions @($script:GetSummary) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetSummary') }
         Invoke-Generator $fixture | Out-Null
-        $summary = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetSummary'))
+        $summary = @(Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMWidgetSummary'))
         $summary[0].Table.Property | Should -Be @('Total', 'Enabled')
         $summary[0].Table[0].PSObject.Properties.Name | Should -Not -Contain 'Description'
     }
 
-    It 'names no sets for a type every set returns' {
+    It 'gives no label to the only thing a cmdlet returns, when every set returns it' {
         $fixture = New-Fixture -Functions @($script:RemoveWidget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMWidget') }
         Invoke-Generator $fixture | Out-Null
-        $detail = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Remove-JIMWidget'))
-        $detail[0].Sets | Should -BeNullOrEmpty
+        $detail = @(Get-OutputSections (Get-Block (Get-Page $fixture) 'Remove-JIMWidget'))
+        $detail.Count | Should -Be 1
+        $detail[0].Label | Should -Be ''
         $detail[0].Table.Property | Should -Contain 'CreatedAt'
+    }
+
+    It 'names the parameter that tells a set apart, not one every set needs' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetEvent) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetEvent') }
+        Invoke-Generator $fixture | Out-Null
+        @(Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMWidgetEvent')).Label | Should -Be @('By default', 'With -Causes')
+    }
+
+    It 'names every set that returns a type, by what sets each apart' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetFeed) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetFeed') }
+        Invoke-Generator $fixture | Out-Null
+        @(Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMWidgetFeed')).Label | Should -Be @('By default', 'With -Id or -Follow')
+    }
+
+    It 'says what a primitive output is in a sentence' {
+        $fixture = New-Fixture -Functions @($script:TestWidgetName) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Test-JIMWidgetName') }
+        Invoke-Generator $fixture | Out-Null
+        $output = Get-Subsection (Get-Block (Get-Page $fixture) 'Test-JIMWidgetName') 'Output'
+        $output | Should -Match ([regex]::Escape('Returns a `bool`.'))
+        $output | Should -Not -Match '\*\*'
     }
 
     It 'leaves everything outside the markers as it was' {
@@ -864,13 +1017,27 @@ Describe 'Update-PowerShellReference -Check' {
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $block = Get-Block (Get-Page $fixture) 'Get-JIMHealth'
-        $types = @(Get-OutputTypes $block)
-        $types[0].Type | Should -Be 'HealthSummary'
+        $types = @(Get-OutputSections $block)
+        $types[0].Label | Should -Be ''
         @($types[0].Table | ForEach-Object Property) | Should -Be @('Status', 'CheckedAt')
         ($types[0].Table | Where-Object Property -eq 'CheckedAt').Type | Should -Be 'datetime'
         ($types[0].Table | Where-Object Property -eq 'CheckedAt').Description | Should -Be 'When the check ran, which is UTC.'
         Get-Subsection $block 'Output' | Should -Match "A summary of JIM's health\."
         Get-Subsection $block 'Output' | Should -Not -Match 'JIM\.HealthSummary|Status \(string\)'
+    }
+
+    It 'resolves a listed property type that names a schema as the API''s own are, so no class name reaches the page' {
+        $lines = '${1}Status (WidgetStatus): How the Widgets stand.', '${1}Worst (WidgetHeader): The worst Widget.', '${1}Each (WidgetStatus[]): Every Widget''s status.'
+        $typed = $script:GetHealth -replace '(?m)^( *)Status \(string\): Healthy or Unhealthy\.', ($lines -join "`n")
+        $fixture = New-Fixture -Functions @($typed) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet from several API calls' }
+        Invoke-Generator $fixture | Out-Null
+        $table = (Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMHealth'))[0].Table
+        ($table | Where-Object Property -eq 'Status').Type | Should -Be 'string'
+        ($table | Where-Object Property -eq 'Status').Description | Should -Be 'How the Widgets stand. One of Active or Retired.'
+        ($table | Where-Object Property -eq 'Worst').Type | Should -Be 'object'
+        ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst Widget. It has Id, Name, IsEnabled, Status, Count and Tags.'
+        ($table | Where-Object Property -eq 'Each').Type | Should -Be 'string[]'
+        ($table | Where-Object Property -eq 'Each').Description | Should -Be "Every Widget's status. Each is one of Active or Retired."
     }
 
     It 'fails when a type the module builds lists none of its properties' {
@@ -893,8 +1060,8 @@ Describe 'Update-PowerShellReference -Check' {
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMGadget'))
-        $types[0].Type | Should -Be 'Gadget'
+        $types = @(Get-OutputSections (Get-Block (Get-Page $fixture) 'Get-JIMGadget'))
+        $types[0].Label | Should -Be ''
         @($types[0].Table | ForEach-Object Property) | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
         ($types[0].Table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
     }
@@ -906,7 +1073,7 @@ Describe 'Update-PowerShellReference -Check' {
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $block = Get-Block (Get-Page $fixture) 'Get-JIMGadget'
-        $types = @(Get-OutputTypes $block)
+        $types = @(Get-OutputSections $block)
         @($types[0].Table | ForEach-Object Property) | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Parts')
         ($types[0].Table | Where-Object Property -eq 'Parts').Description | Should -Be "The Gadget's parts, which the module adds."
         $block | Should -Not -Match 'which the module adds\.\s*\n\s*JIM\.Gadget' -Because 'the list is tabled, not repeated as prose'
@@ -928,6 +1095,37 @@ Describe 'Update-PowerShellReference -Check' {
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Not -Be 0
         $result.Output | Should -Match 'JIM\.Gizmo'
+    }
+
+    It 'takes a label from the .OUTPUTS help for types its parameter sets cannot tell apart, and keeps it out of the prose' {
+        $fixture = New-Fixture -Functions @($script:TestWidget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Test-JIMWidget') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $block = Get-Block (Get-Page $fixture) 'Test-JIMWidget'
+        $sections = @(Get-OutputSections $block)
+        $sections.Label | Should -Be @('By default', 'With -Quiet')
+        $sections[0].Table.Property | Should -Be @('Status')
+        $sections[1].Rest | Should -Be ' a `bool`.'
+        Get-Subsection $block 'Output' | Should -Not -Match 'System\.Boolean|JIM\.HealthSummary'
+    }
+
+    It 'fails when a parameter set returns two types and the help labels neither' {
+        $unlabelled = $script:TestWidget -replace 'JIM\.HealthSummary: By default', 'JIM.HealthSummary' -replace '(?m)^\s*System\.Boolean: With -Quiet\s*$', ''
+        $fixture = New-Fixture -Functions @($unlabelled) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Test-JIMWidget') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'Test-JIMWidget.*JIM\.HealthSummary.*System\.Boolean'
+    }
+
+    It 'fails on an output type declared for a parameter set the cmdlet does not have' {
+        $typo = $script:GetWidget -replace "'JIM\.WidgetDetail', ParameterSetName = 'ById'", "'JIM.WidgetDetail', ParameterSetName = 'ByIdd'"
+        $fixture = New-Fixture -Functions @($typo, $script:RemoveWidget)
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'Get-JIMWidget.*ByIdd'
     }
 
     It 'fails on a type mapped to a schema that no cmdlet declares' {

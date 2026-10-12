@@ -49,36 +49,36 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <string> -CompareFrom <int>
 
 The list returns one record per change, newest first. `-Version` returns that change in full, and `-CompareFrom` with `-CompareTo` the diff between two versions; with `-AsDiff`, either is rendered as lines of text instead. A secret is never returned: a changed secret is reported only as changed.
 
-**`ConfigurationChangeHistoryItem`** (Page, All):
+**By default, or with `-All`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ActivityId` | `guid` | The Activity that recorded the change. |
 | `Version` | `int` | The object's version this change produced, counting from 1 for its creation. |
-| `Operation` | `ActivityTargetOperationType` | What the change did: Create, Update or Delete. |
-| `InitiatedByType` | `ActivityInitiatorType` | What made the change: a User, an API key, or JIM itself (System). |
+| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
+| `InitiatedByType` | `string` | What made the change: a User, an API key, or JIM itself (System). One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The security principal's id, where one applies (User / API key); empty for System or unattributed changes. |
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
 | `When` | `datetime` | When the change was made (UTC). |
 | `Reason` | `string` | The reason given for the change, if one was. |
 | `Summary` | `string` | A short description of what the change touched, for example "Scope, Attribute Flow". |
-| `Diff` | `ConfigurationDiff` | The structured diff of this version against its predecessor. For the first version (no predecessor) it shows the whole object as created. Empty only when the version carries no deserialisable snapshot. |
+| `Diff` | `object` | The structured diff of this version against its predecessor. For the first version (no predecessor) it shows the whole object as created. Empty only when the version carries no deserialisable snapshot. It has `ObjectType`, `ObjectId`, `ObjectGuidId`, `ObjectName`, `OldVersion`, `NewVersion`, `Root`, `AddedCount`, `RemovedCount`, `ModifiedCount` and `HasChanges`. |
 
-**`ConfigurationChangeDetail`** (Version):
+**With `-Version`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ActivityId` | `guid` | The Activity that recorded the change. |
 | `Version` | `int` | The object's version this change produced, counting from 1 for its creation. |
-| `Operation` | `ActivityTargetOperationType` | What the change did: Create, Update or Delete. |
-| `InitiatedByType` | `ActivityInitiatorType` | What made the change: a User, an API key, or JIM itself (System). |
+| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
+| `InitiatedByType` | `string` | What made the change: a User, an API key, or JIM itself (System). One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
 | `When` | `datetime` | When the change was made (UTC). |
 | `Reason` | `string` | The reason given for the change, if one was. |
-| `Snapshot` | `ConfigurationSnapshot` | The complete, redacted snapshot of the object at this version. |
-| `Diff` | `ConfigurationDiff` | The structured diff against the immediately preceding version (every node added, for the first version). |
+| `Snapshot` | `object` | The complete, redacted snapshot of the object at this version. It has `SchemaVersion`, `ObjectType`, `ObjectId`, `ObjectGuidId`, `ObjectKey`, `ObjectName` and `Root`. |
+| `Diff` | `object` | The structured diff against the immediately preceding version (every node added, for the first version). It has `ObjectType`, `ObjectId`, `ObjectGuidId`, `ObjectName`, `OldVersion`, `NewVersion`, `Root`, `AddedCount`, `RemovedCount`, `ModifiedCount` and `HasChanges`. |
 
-**`ConfigurationDiff`** (Compare):
+**With `-CompareFrom` and `-CompareTo`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -88,13 +88,13 @@ The list returns one record per change, newest first. `-Version` returns that ch
 | `ObjectName` | `string` | The display name of the configuration object (from the newer snapshot). |
 | `OldVersion` | `int` | The per-object version of the older snapshot, or empty when comparing against nothing (a creation). |
 | `NewVersion` | `int` | The per-object version of the newer snapshot, when known. |
-| `Root` | `ConfigurationDiffNode` | The root node of the diff tree. |
+| `Root` | `object` | The root node of the diff tree. It has `Key`, `Label`, `NodeType`, `ChangeType`, `OldValue`, `NewValue`, `OldDisplayValue`, `NewDisplayValue`, `IsSecret`, `ItemId`, `ItemGuidId` and `Children`. |
 | `AddedCount` | `int` | Count of added items and scalars. |
 | `RemovedCount` | `int` | Count of removed items and scalars. |
 | `ModifiedCount` | `int` | Count of modified scalars. |
 | `HasChanges` | `bool` | True when anything changed between the two snapshots. |
 
-**`string`** (Version, Compare)
+**With `-AsDiff`**: a `string`.
 <!-- END GENERATED: Get-JIMConfigurationChangeHistory -->
 
 ### Examples
@@ -189,20 +189,20 @@ Get-JIMDeletedObject [-ObjectType <string>] [-ConnectedSystemId <int>] [-Metaver
 
 One page of results, whose Items are the deleted objects. A deleted Metaverse Object carries Id, DisplayName, ObjectTypeName, ObjectTypeId, ChangeTime, InitiatedByType and InitiatedByName; a deleted Connected System Object carries Id, ExternalId, DisplayName, ObjectTypeName, ConnectedSystemId, ConnectedSystemName, ChangeTime, InitiatedByType and InitiatedByName.
 
-**`DeletedObjectsPagedResponseOfDeletedMvoResponse`**:
+**By default, or with `-ObjectType MVO`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Items` | `DeletedMvoResponse[]` | The deleted object records. |
+| `Items` | `object[]` | The deleted object records. Each has `Id`, `DisplayName`, `ObjectTypeName`, `ObjectTypeId`, `ChangeTime`, `InitiatedByType` and `InitiatedByName`. |
 | `TotalCount` | `int` | Total count of matching records (for pagination). |
 | `Page` | `int` | Current page number (1-based). |
 | `PageSize` | `int` | Number of items per page. |
 
-**`DeletedObjectsPagedResponseOfDeletedCsoResponse`**:
+**With `-ObjectType CSO`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Items` | `DeletedCsoResponse[]` | The deleted object records. |
+| `Items` | `object[]` | The deleted object records. Each has `Id`, `ExternalId`, `DisplayName`, `ObjectTypeName`, `ConnectedSystemId`, `ConnectedSystemName`, `ChangeTime`, `InitiatedByType` and `InitiatedByName`. |
 | `TotalCount` | `int` | Total count of matching records (for pagination). |
 | `Page` | `int` | Current page number (1-based). |
 | `PageSize` | `int` | Number of items per page. |
@@ -266,8 +266,6 @@ Get-JIMHistoryCount -ConnectedSystemName <string>
 
 One object giving how many Connected System Object change records the Connected System holds.
 
-**`HistoryCountResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `ConnectedSystemId` | `int` | Connected System ID. |
@@ -320,8 +318,6 @@ Invoke-JIMHistoryCleanup [-PassThru]
 ### Output
 
 With `-PassThru`, what the pass removed and the retention settings it applied; otherwise nothing.
-
-**`HistoryCleanupResponse`**:
 
 | Property | Type | Description |
 |----------|------|-------------|

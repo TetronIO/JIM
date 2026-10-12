@@ -60,7 +60,7 @@ Get-JIMPendingPasswordChange -Summary
 
 One object per queued change, one entry per Metaverse Object per Connected System, or with `-Summary` one object of counts. No password is returned, in any form.
 
-**`PendingPasswordChangeResponse`** (List, ListAll):
+**By default, or with `-All`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -70,12 +70,12 @@ One object per queued change, one entry per Metaverse Object per Connected Syste
 | `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
 | `ConnectedSystemId` | `int` | The Connected System the change is queued for. |
 | `ConnectedSystemName` | `string` | That Connected System's name. |
-| `Status` | `PendingPasswordChangeStatus` | Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or Cancelled (an administrator stopped it). |
-| `Origin` | `PendingPasswordChangeOrigin` | Where the change came from: `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). |
+| `Status` | `string` | Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or Cancelled (an administrator stopped it). One of `Pending`, `Parked`, `Expired`, `Cancelled` or `Delivering`. |
+| `Origin` | `string` | Where the change came from: `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). One of `Propagated`, `Explicit` or `Provisioned`. |
 | `SyncRuleId` | `int` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt, or empty for every other origin. |
 | `Due` | `bool` | Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff from one that is due but not yet reached, which `Status` alone cannot. It is never true for a held change, whose Connected System is switched off. |
 | `Held` | `bool` | Whether the change is waiting on somebody switching Password Synchronisation back on for its Connected System, rather than on JIM. A configured system that is switched off accumulates queued changes instead of discarding them, and enabling it delivers what accumulated; until then nothing is attempted, so the remedy is a person's rather than a retry's. |
-| `FailureReason` | `PasswordSetFailureReason` | How the last attempt failed; empty for a change that has not been attempted. |
+| `FailureReason` | `string` | How the last attempt failed; empty for a change that has not been attempted. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
 | `TargetMessage` | `string` | The target's own words for why the last attempt failed, which say where the remedy lies; empty for a change that has not been attempted. |
 | `AttemptCount` | `int` | How many delivery attempts have been made. |
 | `NextRetryAt` | `datetime` | When the next attempt falls due, or empty for a change that is due now or is no longer being attempted. |
@@ -85,7 +85,7 @@ One object per queued change, one entry per Metaverse Object per Connected Syste
 | `CancelledAt` | `datetime` | When an administrator cancelled the change, or empty where nobody has. |
 | `CancelledByName` | `string` | Who cancelled the change; empty where nobody has, and for a cancellation made with an API key, which has no person behind it. |
 
-**`PasswordQueueSummary`** (Summary):
+**With `-Summary`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -162,8 +162,6 @@ Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Stat
 
 One object, whose AffectedCount says how many changes were made due again. Zero is an answer, not an error.
 
-**`PasswordQueueActionResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `AffectedCount` | `int` | How many queued password changes the action applied to. May be lower than the number of identifiers a caller named, and that is not an error: a change delivered, expired or already cancelled between the caller reading the queue and acting on it no longer matches. |
@@ -227,7 +225,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 
 One object, whose AffectedCount says how many changes were cancelled. Zero is an answer, not an error.
 
-**`PasswordQueueActionResponse`**: as under [Resume-JIMPendingPasswordChange](#resume-jimpendingpasswordchange).
+Properties as under [Resume-JIMPendingPasswordChange](#resume-jimpendingpasswordchange).
 <!-- END GENERATED: Stop-JIMPendingPasswordChange -->
 
 ### Examples

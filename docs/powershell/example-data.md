@@ -35,7 +35,7 @@ Get-JIMExampleDataSet -Id <int>
 
 A list returns each Example Data Set's header, and `-Id` the Example Data Set with its values.
 
-**`ExampleDataSetHeader`** (List):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -46,7 +46,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | `Culture` | `string` | The.NET culture code the values are in, for example "en-GB". |
 | `ValueCount` | `int` | How many values the Example Data Set holds. |
 
-**`ExampleDataSetDto`** (ById):
+**With `-Id`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -58,7 +58,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | `CreatedByName` | `string` | The display name of the principal that created the Example Data Set. |
 | `LastUpdated` | `datetime` | When the Example Data Set was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the Example Data Set. |
-| `Values` | `ExampleDataSetValueDto[]` | The values in the Example Data Set. |
+| `Values` | `object[]` | The values in the Example Data Set. Each has `Id` and `StringValue`. |
 <!-- END GENERATED: Get-JIMExampleDataSet -->
 
 ### Examples
@@ -106,7 +106,7 @@ New-JIMExampleDataSet [-Name] <string> -Culture <string> [-Values <string[]>] [-
 
 With `-PassThru`, the created Example Data Set, with its values; otherwise nothing.
 
-**`ExampleDataSetDto`**: as under [Get-JIMExampleDataSet](#get-jimexampledataset).
+Properties as under [Get-JIMExampleDataSet](#get-jimexampledataset).
 <!-- END GENERATED: New-JIMExampleDataSet -->
 
 ### Examples
@@ -143,7 +143,7 @@ Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <s
 
 With `-PassThru`, the updated Example Data Set; otherwise nothing.
 
-**`ExampleDataSetDto`**: as under [Get-JIMExampleDataSet](#get-jimexampledataset).
+Properties as under [Get-JIMExampleDataSet](#get-jimexampledataset).
 <!-- END GENERATED: Set-JIMExampleDataSet -->
 
 ### Examples
@@ -227,7 +227,7 @@ Get-JIMExampleDataTemplate -Name <string>
 
 A list returns each Data Generation Template's header; `-Id` and `-Name` return the template in full, with its Object Types and their attribute configuration.
 
-**`ExampleDataTemplateHeader`** (List):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -237,7 +237,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 | `Created` | `datetime` | When the Data Generation Template was created, in UTC. |
 | `ObjectTypeCount` | `int` | How many Object Types the Data Generation Template generates objects for. |
 
-**`ExampleDataTemplateDto`** (ById, ByName):
+**With `-Id` or `-Name`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -248,7 +248,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 | `CreatedByName` | `string` | The display name of the principal that created the template. |
 | `LastUpdated` | `datetime` | When the template was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the template. |
-| `ObjectTypes` | `ExampleDataTemplateObjectTypeDto[]` | The Object Types the template generates objects for. |
+| `ObjectTypes` | `object[]` | The Object Types the template generates objects for. Each has `Id`, `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `ObjectsToCreate` and `TemplateAttributes`. |
 <!-- END GENERATED: Get-JIMExampleDataTemplate -->
 
 ### Examples
@@ -295,7 +295,7 @@ New-JIMExampleDataTemplate [-Name] <string> -ObjectType <hashtable[]> [-ChangeRe
 
 With `-PassThru`, the created Data Generation Template; otherwise nothing.
 
-**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 <!-- END GENERATED: New-JIMExampleDataTemplate -->
 
 #### `-ObjectType` hashtable keys
@@ -386,7 +386,7 @@ Set-JIMExampleDataTemplate -Name <string> [-NewName <string>] [-ObjectType <hash
 
 With `-PassThru`, the updated Data Generation Template; otherwise nothing.
 
-**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 <!-- END GENERATED: Set-JIMExampleDataTemplate -->
 
 At least one of `-NewName` or `-ObjectType` must be supplied; the cmdlet errors without sending a request otherwise.
@@ -510,7 +510,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 
 With `-PassThru`, the updated Data Generation Template; otherwise nothing.
 
-**`ExampleDataTemplateDto`**: as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 <!-- END GENERATED: Add-JIMExampleDataTemplateAttribute -->
 
 ### Examples
@@ -561,8 +561,6 @@ Invoke-JIMExampleDataTemplate -Name <string> [-Wait] [-Timeout <int>] [-PassThru
 ### Output
 
 With `-PassThru`, the response to queuing the run, with the template and where the run got to; otherwise nothing. `Get-JIMActivity -Follow` follows its ActivityId.
-
-**`ExampleDataTemplateExecution`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
