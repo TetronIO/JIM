@@ -5388,6 +5388,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.Id == id);
     }
 
+    /// <inheritdoc />
+    public async Task<PendingExport?> GetPendingExportCoreAsync(Guid id)
+    {
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pe => pe.Id == id);
+    }
+
     private const int PendingExportCappedMvaLimit = 10;
 
     /// <inheritdoc />

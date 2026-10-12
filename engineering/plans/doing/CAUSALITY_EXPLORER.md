@@ -1,9 +1,9 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Planned
+- **Status:** Doing (Phases 3-0 and 3a complete; Phase 3b next)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
-- **PRD:** [PRD_CAUSALITY_EXPLORER.md](../prd/PRD_CAUSALITY_EXPLORER.md)
-- **Earlier phases:** [Phase 1 plan](done/CAUSAL_PROVENANCE.md), [Phase 2 plan](done/CAUSAL_PROVENANCE_PHASE_2.md)
+- **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
+- **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
 - **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
 - **Created:** 2026-10-11
 
@@ -62,14 +62,14 @@ The trail is the `trail` query value: comma-separated tokens `i:`, `c:` and `m:`
 |---------|--------------|
 | Live Connected System Object | items by `ConnectedSystemObjectId` |
 | Deleted Connected System Object | items whose change records carry `DeletedConnectedSystemObjectId`; items in its Connected System's Activities with its `ExternalIdSnapshot` (the walk's existing fallback) |
-| Live Metaverse Object | items its `MetaverseObjectChanges` name; items of its currently joined Connected System Objects; items with `MetaverseObjectId` |
+| Live Metaverse Object | items its `MetaverseObjectChanges` name; items of its currently joined Connected System Objects; items with `MetaverseObjectId`; the item that scheduled its deletion (`DeletionScheduledByRunProfileExecutionItemId`, Phase 2-0), which a disconnection can leave with no change record |
 | Deleted Metaverse Object | items its change records name through `DeletedMetaverseObjectId`; items with `MetaverseObjectId` |
 
 Raw SQL into a header DTO (the Summary tier: four sources unioned is one statement, not four EF queries). Where change tracking is off, the Metaverse Object sources reduce to its joined objects' items, and the timeline says what it cannot show (PRD Scenario 5).
 
 **5. Nearest causes in one batch (`ActivityServer.GetNearestCausesAsync`).** For a page of item ids: their causal edges in one read (existing), grouped into first-level cohorts by the walk's own `GroupIntoCohorts`, plus the source-import hop for synchronisation items, read for the whole page by a new batched repository method (a lateral join per object, replacing the per-object call in this path only). The result is `CausalChainCohort`s, the walk's own type, so the portal words them with the existing `CausalityCauseWording.Sentence` and the API returns the existing `-Causes` row shape. Each item keeps at most three cohorts and the total.
 
-**6. A Pending Export's queueing runs (`ActivityServer.GetPendingExportQueuedByAsync`).** The runs the Pending Export lists itself (`PendingExport.Stagers()`, at most 50), newest first, each with its nearest causes from (5). One row read and one batch of item headers; no index needed.
+**6. A Pending Export's queueing runs (`ActivityServer.GetPendingExportQueuedByAsync`).** The runs the Pending Export lists itself (`PendingExport.Stagers()`, at most 50), newest first, each with its nearest causes from (5). One row read (`GetPendingExportCoreAsync`, the row without its graph) and one batch of item entries (`GetCausalTimelineEntriesAsync`); no index needed.
 
 **7. One migration, three filtered indexes.**
 
@@ -115,9 +115,21 @@ Each phase is test-first (red, green, refactor) and builds clean with zero warni
 
 Merged as #2112, a stack layer below the feature. A later synchronisation changing an object whose export was still queued replaced the Pending Export under a new id, so the earlier run could no longer be found from it, and Phase 2's walk from that run could not reach its own change. Fixed by a stager list on the Pending Export (`StagedByRunProfileExecutionItemIds`, recorded only through `RecordStager`), a replacement that inherits the original's stagers and, while it is still `Pending`, its id, and one queueing edge per stager at export. A Delete superseded by an Update is withdrawn and carries neither. Queued by now reads the list, so the planned outcome index, the plan's largest performance risk, is no longer needed.
 
-### Phase 3a: Indexes and reads
+### Phase 3a: Indexes and reads ✅
 
-The migration (§7), regenerated if `main` gains migrations first. `RequiresPostgres` tests for each timeline source (live and deleted, both object kinds), the Queued by read, and an index-use assertion (`EXPLAIN`) for each new read. A 10,000-item object opens its first page within the same budget as a ten-item one, asserted against real PostgreSQL.
+The migration (§7, `CausalTimelineIndexes`) and the repository reads behind §4 to §6, as raw SQL in `ActivitiesRepository.CausalTimeline.cs`:
+
+- `GetCausalTimelinePageAsync(CausalTimelineSubject, skip, take)`: one statement per object kind gathers every source, live and deleted alike (a live object has no deletion record, a deleted one nothing under its own id), then orders, pages and counts in the database. A page past the end still carries the total.
+- `GetCausalTimelineEntriesAsync(ids)`: items as `CausalTimelineEntry` rows (the item and its Activity's own snapshots of the run), for Queued by and the trail's labels.
+- `GetLatestImportEventsForItemsAsync(ids)`: the source-import hop for a page of items in one lateral read, on the walk's exact rules; a test pins it to the per-item reads, and both now break a same-run tie by id, so they always agree.
+- `GetPendingExportCoreAsync(id)`: the Pending Export's row alone, for `Stagers()`.
+
+Delivery notes:
+
+- A deleted Connected System Object's external-ID fallback is bounded twice, each against a real neighbour: to items whose record id is null (a live record reusing the external ID is not it) and to items no later than its deletion (a record created after it and since deleted is not it).
+- The live Metaverse Object timeline also takes the item that scheduled its deletion (§4 table).
+- The index-use tests EXPLAIN the repository's real statements with sequential scans off. The Connected System Object test seeds 5,000 items of deleted records and analyses first: on empty tables the planner reaches deleted items through the null record ids, a path that would scan every such item in production.
+- Measured against PostgreSQL in the sandbox: a 10,000-item object's first page in about 20 ms, a ten-item one's in about 2.5 ms; the test's budget is 300 ms for both. Cost grows with the history, slowly, because the items are ordered by their Activity's time, which no single index holds; a 100,000-item object would take roughly ten times as long, about 200 ms, still inside it.
 
 ### Phase 3b: Application reads
 

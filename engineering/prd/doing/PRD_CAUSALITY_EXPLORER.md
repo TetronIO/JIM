@@ -1,12 +1,12 @@
 # Causality Explorer (Causal Provenance Phase 3)
 
-- **Status:** Planned
+- **Status:** Doing (Phase 3-0 merged in #2112; Phase 3a complete, the timeline reads and their indexes)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
-- **Plan:** [CAUSALITY_EXPLORER.md](../plans/CAUSALITY_EXPLORER.md)
+- **Plan:** [CAUSALITY_EXPLORER.md](../../plans/doing/CAUSALITY_EXPLORER.md)
 - **UI mock:** [Causality Explorer](https://claude.ai/artifact/56hNH8ryx3TvQzTFdeJrxP) (revision 1, approved 2026-10-11)
-- **Parent PRD:** [Causal Provenance](done/PRD_CAUSAL_PROVENANCE.md), whose Phase 3 was sketched directionally and left to "its own design pass". This is that pass.
+- **Parent PRD:** [Causal Provenance](../done/PRD_CAUSAL_PROVENANCE.md), whose Phase 3 was sketched directionally and left to "its own design pass". This is that pass.
 
 ## Problem Statement
 

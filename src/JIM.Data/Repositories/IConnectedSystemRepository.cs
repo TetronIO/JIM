@@ -447,6 +447,15 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportAsync(Guid id);
 
     /// <summary>
+    /// Retrieves a single Pending Export's own row by ID, with nothing it points at: for reads that need its columns
+    /// alone, such as the runs that staged it (<see cref="PendingExport.Stagers"/>, #2100), without loading its
+    /// changes and both objects' attribute values as <see cref="GetPendingExportAsync"/> does.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    /// <returns>The Pending Export, untracked and without navigations, or null if it no longer exists.</returns>
+    public Task<PendingExport?> GetPendingExportCoreAsync(Guid id);
+
+    /// <summary>
     /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
