@@ -75,7 +75,7 @@ sudo podman logs jim-worker
 sudo podman healthcheck run jim-web && echo "JIM is ready"
 ```
 
-Restarting `jim.service` restarts the web, worker and scheduler together; `jim-database.service` runs the bundled PostgreSQL separately. Both start at boot. The installer's copy, `/opt/jim/setup.sh`, looks after the certificate as it does on Docker (see [Renewing the Certificate](deployment.md#renewing-the-certificate)); on Podman, installing a new certificate restarts the whole JIM pod, so do it outside a synchronisation run.
+Restarting `jim.service` restarts the web, worker and scheduler together; `jim-database.service` runs the bundled PostgreSQL separately. Both start at boot. The installer's copy, `/opt/jim/setup.sh`, looks after the certificate as it does on Docker (see [Renewing the Certificate](tls-and-reverse-proxy.md#renewing-the-certificate)); on Podman, installing a new certificate restarts the whole JIM pod, so do it outside a synchronisation run.
 
 ### Rootless commands {#rootless-commands}
 
@@ -124,7 +124,7 @@ None of these checks starts until its service has finished starting, however lon
     ```
 
     The `+=` keeps any interfaces the host already tells NetworkManager to leave alone, and the reload applies the setting without restarting NetworkManager. Do not delete the "Wired connection" profiles it made: they go away with their interfaces, and a server's own network card can use a profile with the same kind of name. A rootless JIM needs neither: NetworkManager cannot see its network.
-- **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
+- **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](tls-and-reverse-proxy.md#apache-httpd-example)).
 - **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
 
     - It allows the container no network at all, so JIM cannot reach its database or identity provider.
@@ -171,7 +171,7 @@ If your organisation's policy requires every step by hand, these steps do what t
     for image in $(awk '$1 == "image:" { print $2 }' /opt/jim/jim.yaml /opt/jim/jim-database.yaml); do podman pull "$image"; done
     ```
 
-4. **Store the secrets.** Fill in a copy of `jim-secrets.yaml` (for the bundled PostgreSQL, choose a strong password: the database is created with it on first start), store it, and delete the copy. Then put JIM's certificate and key in `/opt/jim/tls` as `tls.crt` and `tls.key` (see [The Certificate](deployment.md#the-certificate)) and store them too:
+4. **Store the secrets.** Fill in a copy of `jim-secrets.yaml` (for the bundled PostgreSQL, choose a strong password: the database is created with it on first start), store it, and delete the copy. Then put JIM's certificate and key in `/opt/jim/tls` as `tls.crt` and `tls.key` (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)) and store them too:
 
     ```bash
     podman kube play - < jim-secrets.yaml && shred -u jim-secrets.yaml

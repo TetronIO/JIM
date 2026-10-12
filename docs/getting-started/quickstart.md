@@ -67,7 +67,7 @@ To install without the installer, connected or air-gapped, follow the [Deploymen
 Once running, open `https://<JIM's name>` in a browser (the setup script prints the address) and log in with your identity provider. Then use the **Example Data** feature to populate JIM with sample users and groups for testing. When you execute a template, a live progress bar appears on the template page so you can watch generation and persistence progress without leaving it; the same task is also visible on the Operations page.
 
 !!! tip "A certificate warning on first visit"
-    If the setup script created JIM's certificate, browsers warn about it until the certificate authority it also created is trusted on that machine; see [Distributing the certificate authority](../administration/deployment.md#distributing-the-certificate-authority).
+    If the setup script created JIM's certificate, browsers warn about it until the certificate authority it also created is trusted on that machine; see [Distributing the certificate authority](../administration/tls-and-reverse-proxy.md#distributing-the-certificate-authority).
 
 For TLS, upgrades, monitoring and the rest of production deployment, see the [Deployment Guide](../administration/deployment.md).
 
