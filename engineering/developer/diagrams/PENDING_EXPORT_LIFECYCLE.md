@@ -16,7 +16,7 @@ stateDiagram-v2
 
     Executing --> Exported: Connector reports<br/>success, or worker start<br/>recovery when a change<br/>was already sent
 
-    Executing --> Pending: Connector reports failure<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed,<br/>or worker start recovery<br/>when nothing was sent
+    Executing --> Pending: Connector reports failure<br/>or the batch fails<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed,<br/>or the run is cancelled before<br/>it is written (no attempt counted),<br/>or worker start recovery<br/>when nothing was sent
     Executing --> ExportNotConfirmed: File-based export<br/>throws (retryable)
     Executing --> Failed: ErrorCount >= MaxRetries
 
@@ -133,7 +133,7 @@ Pending Exports are confirmed only by the confirming import path shown in "3. Co
 
 - **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
 - **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation.)
-- **Executing** Pending Exports left behind by a worker crash or restart are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
+- **Executing** never outlives the run that set it (#2083): a cancelled run puts the changes it did not write back as they were, with no attempt counted, and a batch that fails as a whole records one failed attempt on each change. Only the release write itself failing, or a worker crash or restart part-way through a batch, leaves a Pending Export Executing, and those are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking
 
