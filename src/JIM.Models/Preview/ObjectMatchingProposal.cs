@@ -147,8 +147,8 @@ public record ObjectMatchingRuleProposal(
 /// <param name="Order">Where this source sits; sources are evaluated in ascending order.</param>
 /// <param name="ConnectedSystemAttributeId">The Connected System attribute read.</param>
 /// <param name="Expression">
-/// An expression producing the value instead. Carried because the model allows it, and refused by the preview's
-/// validation: the matching query reads attributes only, and an expression source fails at match time (#207).
+/// An expression computing the value instead, over the Connected System Object (#2052). The preview judges it as
+/// saving the rule would, and evaluates it as synchronisation does.
 /// </param>
 public record ObjectMatchingRuleSourceProposal(
     int Order,

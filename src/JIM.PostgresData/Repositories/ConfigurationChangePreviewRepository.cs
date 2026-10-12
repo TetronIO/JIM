@@ -115,6 +115,10 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             .ThenBy(d => d.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            // An ambiguous row's candidates (#2052), at most ten each and absent from every other row; split so a page
+            // is not repeated once per candidate.
+            .Include(d => d.MatchCandidates.OrderBy(c => c.Ordinal))
+            .AsSplitQuery()
             .ToListAsync();
 
         return new PagedResultSet<ConfigurationChangePreviewDelta>

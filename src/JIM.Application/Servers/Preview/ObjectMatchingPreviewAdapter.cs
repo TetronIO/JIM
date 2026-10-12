@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using JIM.Application.Expressions;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -42,18 +43,16 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     private const string FailedValue = "Rule could not be evaluated; neither joins nor projects";
 
     /// <summary>
-    /// The Connected System attribute types the matching query can compare. Anything else makes the query throw
-    /// at run time, so a proposal naming one is refused before an administrator can save it.
-    /// </summary>
-    /// <summary>
     /// How many objects are fetched per round trip while evaluating. Batched because the population is read as
     /// identifiers and the objects behind them are needed in memory to be matched, and a preview over hundreds of
     /// thousands of accounts must not put all of them there at once.
     /// </summary>
     private const int EvaluationBatchSize = 200;
 
-    private static readonly AttributeDataType[] MatchableAttributeTypes =
-        [AttributeDataType.Text, AttributeDataType.Number, AttributeDataType.LongNumber, AttributeDataType.Decimal, AttributeDataType.Guid];
+    /// <summary>
+    /// The checks the save applies (#2052), so the preview refuses exactly what saving the proposal would refuse.
+    /// </summary>
+    private static readonly ObjectMatchingRuleValidator Validator = new(new DynamicExpressoEvaluator());
 
     public ObjectMatchingPreviewAdapter(JimApplication application)
     {
@@ -280,7 +279,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         }
         catch (MultipleMatchesException ex)
         {
-            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues);
+            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues, Candidates: ex.Candidates);
         }
         catch (ObjectMatchingRuleFailedException ex)
         {
@@ -360,7 +359,9 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
             ConnectedSystemId: connectedSystemId,
             AttributeName: MatchAttributeName,
             OldValue: stored.Describe(),
-            NewValue: proposed.Describe());
+            NewValue: proposed.Describe(),
+            // The row describes the proposal, so it lists what the proposal would find when that is ambiguous.
+            MatchCandidates: proposed.Kind == MatchKind.Ambiguous ? proposed.Candidates : null);
     }
 
     private enum MatchKind
@@ -375,8 +376,15 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     /// <param name="MatchValues">What the deciding rule computed, so a row shows the value it matched on.</param>
     /// <param name="FailureMessage">Why a rule could not be worked out, for <see cref="MatchKind.Failed"/>.</param>
-    private record MatchOutcome(MatchKind Kind, MetaverseObject? MetaverseObject, IReadOnlyList<object>? MatchValues = null, string? FailureMessage = null)
+    /// <param name="Candidates">The identities an <see cref="MatchKind.Ambiguous"/> match found (#2052).</param>
+    private record MatchOutcome(
+        MatchKind Kind,
+        MetaverseObject? MetaverseObject,
+        IReadOnlyList<object>? MatchValues = null,
+        string? FailureMessage = null,
+        IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate>? Candidates = null)
     {
+
         public static readonly MatchOutcome NoMatch = new(MatchKind.NoMatch, null);
 
         /// <summary>How this outcome reads in a drill-down row's value column.</summary>
@@ -398,8 +406,9 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     #region validation helpers
 
     /// <summary>
-    /// The proposed rules the matching engine could not evaluate. Every one of these throws or silently matches
-    /// nothing at run time, so they are refused here rather than discovered during a synchronisation.
+    /// The proposed rules the matching engine could not evaluate. Every one of these fails each object it meets at run
+    /// time, or matches nothing, so they are refused here rather than discovered during a synchronisation. What a rule
+    /// compares is judged by the validator the save uses, so the preview and the save cannot disagree.
     /// </summary>
     private static IEnumerable<PreviewValidationFinding> DescribeUnusableRules(ObjectMatchingProposal proposal, MatchingConfiguration configuration)
     {
@@ -407,48 +416,31 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             var where = DescribeRule(rule, configuration);
 
-            if (rule.Sources.Count == 0)
-            {
-                yield return Blocking($"{where} has no source attribute, so it has nothing to match on.");
-                continue;
-            }
-
-            if (rule.Sources.Count > 1)
-                yield return Blocking($"{where} has more than one source. Object Matching Rules support a single source; multi-source (advanced) matching is not implemented.");
-
-            foreach (var source in rule.Sources)
-            {
-                if (!string.IsNullOrWhiteSpace(source.Expression))
-                {
-                    yield return Blocking($"{where} matches on an expression. Object Matching Rules compare attribute values only; expression sources are not supported yet.");
-                    continue;
-                }
-
-                if (source.ConnectedSystemAttributeId is not { } attributeId)
-                {
-                    yield return Blocking($"{where} has a source naming no Connected System attribute.");
-                    continue;
-                }
-
-                var attribute = configuration.ConnectedSystemAttributesById.GetValueOrDefault(attributeId);
-                if (attribute == null)
-                {
-                    yield return Blocking($"{where} matches on a Connected System attribute that is not part of this system's schema.");
-                    continue;
-                }
-
-                if (!MatchableAttributeTypes.Contains(attribute.Type))
-                    yield return Blocking($"{where} matches on '{attribute.Name}', which is of type {attribute.Type}. Object Matching compares Text, Number, Long Number, Decimal and Guid attributes only.");
-            }
-
-            if (rule.TargetMetaverseAttributeId is not { } targetId)
-                yield return Blocking($"{where} names no target Metaverse Attribute, so there is nothing to compare its source against.");
-            else if (!configuration.MetaverseAttributesById.ContainsKey(targetId))
-                yield return Blocking($"{where} targets a Metaverse Attribute that no longer exists.");
-
             if (proposal.Mode == ObjectMatchingRuleMode.ConnectedSystem && rule.MetaverseObjectTypeId == null)
                 yield return Blocking($"{where} names no Metaverse Object Type to search. Simple mode rules must name one; in Advanced mode the Synchronisation Rule supplies it.");
+
+            var problem = DescribeComparisonProblem(rule, configuration);
+            if (problem != null)
+                yield return Blocking($"{where}: {problem}");
         }
+    }
+
+    /// <summary>
+    /// Why what <paramref name="rule"/> compares could never be worked out, or null when it can.
+    /// </summary>
+    private static string? DescribeComparisonProblem(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
+    {
+        var materialised = Materialise(rule, configuration, fallback: null);
+        var shape = materialised.DescribeComparisonInvalidity();
+        if (shape != null)
+            return shape;
+
+        if (materialised.TargetMetaverseAttribute is not { } target)
+            return "It targets a Metaverse Attribute that no longer exists.";
+
+        return ObjectTypeOf(rule, configuration) is { } objectTypeId && configuration.ObjectTypesById.TryGetValue(objectTypeId, out var objectType)
+            ? Validator.DescribeProblem(materialised, objectType, target)
+            : "It belongs to a Connected System Object Type that is not part of this system's schema.";
     }
 
     private static PreviewValidationFinding Blocking(string message) =>

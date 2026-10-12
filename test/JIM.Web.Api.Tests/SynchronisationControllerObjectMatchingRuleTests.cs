@@ -266,6 +266,142 @@ public class SynchronisationControllerObjectMatchingRuleTests
         Assert.That(switchResult.NewMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
     }
 
+    #region Expression sources (#2052)
+
+    [Test]
+    public async Task CreateObjectMatchingRule_ExpressionSource_CreatesTheRuleAndReturnsTheExpressionAsync()
+    {
+        var created = CaptureCreatedRule();
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created()!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(created()!.Sources[0].ConnectedSystemAttributeId, Is.Null);
+            Assert.That(dto.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(dto.Sources[0].ConnectedSystemAttributeId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_ExpressionSource_CreatesTheRuleAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var created = CaptureCreatedRule();
+        var request = SyncRuleScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(created()!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SourceWithAnAttributeAndAnExpression_ReturnsBadRequestAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, ConnectedSystemAttributeId = EmployeeIdAttributeId, Expression = PrefixedEmployeeId }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("not both"));
+        _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SourceWithNeitherAnAttributeNorAnExpression_ReturnsBadRequestNamingBothAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = "  " }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message,
+            Does.Contain("ConnectedSystemAttributeId").And.Contain("Expression"));
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_ExpressionTheApplicationRefuses_ReturnsBadRequestWithItsReasonAsync()
+    {
+        var request = TypeScopedRequest();
+        request.Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = "Trim(cs[\"employeeID\"]) + Trim(mv[\"Department\"])" }];
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("mv[\"Department\"]"));
+    }
+
+    [Test]
+    public async Task UpdateObjectMatchingRule_SourcesReplacedWithAnExpression_StoresTheExpressionAsync()
+    {
+        var stored = StoredTypeScopedRule();
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        ObjectMatchingRule? updated = null;
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => updated = rule).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateObjectMatchingRuleAsync(ConnectedSystemId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.Sources, Has.Count.EqualTo(1));
+            Assert.That(updated!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+            Assert.That(updated!.Sources[0].ConnectedSystemAttributeId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleObjectMatchingRule_SourcesReplacedWithAnExpression_StoresTheExpressionAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var stored = StoredTypeScopedRule();
+        stored.ConnectedSystemObjectTypeId = null;
+        stored.ConnectedSystemObjectType = null;
+        stored.MetaverseObjectTypeId = null;
+        stored.SyncRuleId = SyncRuleId;
+        _connectedSystemRepo.Setup(r => r.GetObjectMatchingRuleAsync(stored.Id)).ReturnsAsync(stored);
+        ObjectMatchingRule? updated = null;
+        _connectedSystemRepo.Setup(r => r.UpdateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()))
+            .Callback<ObjectMatchingRule>(rule => updated = rule).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateSyncRuleObjectMatchingRuleAsync(SyncRuleId, stored.Id, new UpdateObjectMatchingRuleRequest
+        {
+            Sources = [new CreateObjectMatchingRuleSourceRequest { Order = 0, Expression = PrefixedEmployeeId }]
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(updated!.Sources[0].Expression, Is.EqualTo(PrefixedEmployeeId));
+    }
+
+    private const string PrefixedEmployeeId = "\"E\" + Trim(cs[\"employeeID\"])";
+
+    private ObjectMatchingRule StoredTypeScopedRule() => new()
+    {
+        Id = 77,
+        Order = 0,
+        ConnectedSystemObjectTypeId = CsoTypeId,
+        ConnectedSystemObjectType = _csoType,
+        MetaverseObjectTypeId = MvoTypeId,
+        TargetMetaverseAttributeId = EmployeeIdMetaverseAttributeId,
+        TargetMetaverseAttribute = new MetaverseAttribute { Id = EmployeeIdMetaverseAttributeId, Name = "Employee ID", Type = AttributeDataType.Text },
+        Sources = [new ObjectMatchingRuleSource { Id = 1, Order = 0, ConnectedSystemAttributeId = EmployeeIdAttributeId }]
+    };
+
+    #endregion
+
     private Func<ObjectMatchingRule?> CaptureCreatedRule()
     {
         ObjectMatchingRule? created = null;

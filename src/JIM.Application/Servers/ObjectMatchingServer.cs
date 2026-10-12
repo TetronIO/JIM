@@ -39,6 +39,66 @@ public class ObjectMatchingServer
     #region public methods
 
     /// <summary>
+    /// What <paramref name="rule"/> would compare for an object of <paramref name="objectType"/> holding
+    /// <paramref name="sampleValues"/>: the portal's Try it (#2052). Worked out by the resolver synchronisation uses,
+    /// so the answer in the editor cannot differ from the answer a run gives.
+    /// </summary>
+    /// <param name="rule">The rule as composed, with its Target Metaverse Attribute and source set.</param>
+    /// <param name="objectType">The Object Type the rule reads, with its attributes.</param>
+    /// <param name="sampleValues">A value per attribute, by attribute name, as typed; each is read as its attribute's
+    /// type, exactly as an imported value would be. An empty value is an attribute the object has no value for.</param>
+    public MatchValueResolution ResolveSampleMatchValues(
+        ObjectMatchingRule rule,
+        ConnectedSystemObjectType objectType,
+        IReadOnlyDictionary<string, string?> sampleValues)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(objectType);
+        ArgumentNullException.ThrowIfNull(sampleValues);
+
+        // An empty sample is an attribute the object has no value for; a sample naming no attribute of the type is
+        // left out, because the validator already says so and the resolver would read nothing for it either way.
+        var inputs = sampleValues
+            .Where(sample => !string.IsNullOrEmpty(sample.Value))
+            .Select(sample => (Sample: sample.Value!, Attribute: objectType.Attributes.FirstOrDefault(
+                attribute => string.Equals(attribute.Name, sample.Key, StringComparison.OrdinalIgnoreCase))))
+            .Where(input => input.Attribute != null);
+
+        var attributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        foreach (var (sample, attribute) in inputs)
+        {
+            if (!ExpressionResultConverter.TryConvert(sample, attribute!.Type, out var typed) || typed == null)
+                return MatchValueResolution.Failed(
+                    $"The sample value '{sample}' for cs[\"{attribute.Name}\"] is not a {attribute.Type} value, the type of that attribute.",
+                    rule.TargetMetaverseAttribute?.Type ?? AttributeDataType.NotSet,
+                    rule.Sources.Count == 1 ? rule.Sources[0].Expression : null);
+
+            attributeValues.Add(ToAttributeValue(attribute, typed));
+        }
+
+        return _matchValueResolver.Resolve(rule, attributeValues, objectType);
+    }
+
+    /// <summary>A sample value held as an imported value of <paramref name="attribute"/> would be.</summary>
+    private static ConnectedSystemObjectAttributeValue ToAttributeValue(ConnectedSystemObjectTypeAttribute attribute, object value)
+    {
+        var attributeValue = new ConnectedSystemObjectAttributeValue { Attribute = attribute, AttributeId = attribute.Id };
+        switch (value)
+        {
+            case string text: attributeValue.StringValue = text; break;
+            case int number: attributeValue.IntValue = number; break;
+            case long longNumber: attributeValue.LongValue = longNumber; break;
+            case decimal decimalNumber: attributeValue.DecimalValue = decimalNumber; break;
+            case Guid guid: attributeValue.GuidValue = guid; break;
+            case DateTime dateTime: attributeValue.DateTimeValue = dateTime; break;
+            case bool flag: attributeValue.BoolValue = flag; break;
+            case byte[] bytes: attributeValue.ByteValue = bytes; break;
+        }
+
+        return attributeValue;
+    }
+
+    /// <summary>
     /// Attempts to find a Metaverse Object that matches a Connected System Object using the provided matching rules.
     /// This is used during import to join CSOs to existing MVOs.
     /// The caller is responsible for resolving which rules apply based on the matching mode.

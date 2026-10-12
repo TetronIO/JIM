@@ -64,7 +64,7 @@ Scoping criteria decide which objects a rule applies to: only objects that match
 
 ## Object Matching Rules
 
-Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing pairs of attributes. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
+Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing a Connected System attribute, or an [expression](object-matching-rules.md#matching-on-an-expression) worked out from the Connected System Object, with a Metaverse attribute. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
 
 ## Projection and provisioning
 
