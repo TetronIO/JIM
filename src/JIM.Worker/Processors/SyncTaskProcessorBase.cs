@@ -6261,7 +6261,7 @@ public abstract class SyncTaskProcessorBase
     /// distinct CLR instance of the same row. On real PostgreSQL, JIM's single tracking DbContext already
     /// resolves both loads to one instance via EF's own identity map, so this is hardening against a future
     /// change to how Metaverse Objects are loaded, not a fix for an observed production defect (see
-    /// <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
+    /// <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page Disconnect-Then-Rejoin
     /// Hardening). Resolving here means every downstream use of the returned Metaverse Object (join
     /// establishment, deletion-marker checks, attribute flow) sees the one canonical instance the page is
     /// tracking state on, regardless of how it was loaded.

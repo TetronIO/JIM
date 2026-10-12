@@ -1,7 +1,3 @@
----
-title: Testing
----
-
 # Testing
 
 JIM follows Test-Driven Development (TDD) as the standard development practice. Tests are written **before** the implementation they cover, not after.
@@ -79,8 +75,8 @@ dotnet test test/JIM.Web.Api.Tests/
 dotnet test --filter "FullyQualifiedName~TestName"
 ```
 
-!!! tip
-    Use targeted tests during development and reserve `dotnet test JIM.sln` for the final pre-PR check.
+> [!TIP]
+> Use targeted tests during development and reserve `dotnet test JIM.sln` for the final pre-PR check.
 
 ## Test Project Locations
 
@@ -190,11 +186,13 @@ Integration tests run against a real PostgreSQL database to verify repository im
 - Verify EF Core migrations work correctly
 - Run the integration test runner script: `./test/integration/Run-IntegrationTests.ps1`
 
-!!! warning "EF Core in-memory tracking"
-    EF Core's in-memory database auto-tracks navigation properties, which can mask missing `.Include()` calls in queries. Always run integration tests when modifying repository queries to catch these issues.
+> [!WARNING]
+> **EF Core in-memory tracking**
+>
+> EF Core's in-memory database auto-tracks navigation properties, which can mask missing `.Include()` calls in queries. Always run integration tests when modifying repository queries to catch these issues.
 
-!!! note
-    The integration test runner handles setup, environment management, and teardown automatically. Do not invoke scenario scripts directly.
+> [!NOTE]
+> The integration test runner handles setup, environment management, and teardown automatically. Do not invoke scenario scripts directly.
 
 ### Active Directory lab
 
