@@ -27,6 +27,8 @@ public class LdapConnectorImportUnreadableValueTests
     private const string NotADateAndTime = "Not a valid date and time.";
     private const string NotTrueOrFalse = "Not a valid true or false value.";
     private const string NotAGuid = "Not a valid GUID.";
+    private const string OneDateHeldOfTwo = "JIM holds one value for a date and time attribute, and the directory returned 2.";
+    private const string OneBooleanHeldOfTwo = "JIM holds one value for a true or false attribute, and the directory returned 2.";
 
     [Test]
     public void ConvertEntries_NumberValueThatIsNotAWholeNumber_ReportsItAndLeavesTheAttributeOff()
@@ -229,6 +231,44 @@ public class LdapConnectorImportUnreadableValueTests
     }
 
     [Test]
+    public void ConvertEntries_DateTimeWithMoreThanOneValue_ReportsEachAndLeavesTheAttributeOff()
+    {
+        // JIM holds one value for a date and time. The attribute was added with no value, which the import took as the
+        // directory holding none: the date JIM held was removed, and the removal flowed on (#2153).
+        var imported = ConvertUser(("whenChanged", ["20231215143000Z", "20240101000000Z"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(imported.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+            Assert.That(imported.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value, e.Reason)), Is.EqualTo(new[]
+            {
+                ("whenChanged", (string?)"20231215143000Z", OneDateHeldOfTwo),
+                ("whenChanged", (string?)"20240101000000Z", OneDateHeldOfTwo)
+            }));
+            Assert.That(AttributeNames(imported), Has.None.EqualTo("whenChanged").IgnoreCase,
+                "Left off, so JIM keeps the date it already holds rather than reading the attribute as empty.");
+            Assert.That(imported.SourceLocation, Is.EqualTo(UserDn));
+            Assert.That(AttributeNames(imported), Has.Some.EqualTo("cn").IgnoreCase, "Every other attribute still imports.");
+        }
+    }
+
+    [Test]
+    public void ConvertEntries_BooleanWithMoreThanOneValue_ReportsEachAndLeavesTheAttributeOff()
+    {
+        var imported = ConvertUser(("isCriticalSystemObject", ["TRUE", "FALSE"]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(imported.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value, e.Reason)), Is.EqualTo(new[]
+            {
+                ("isCriticalSystemObject", (string?)"TRUE", OneBooleanHeldOfTwo),
+                ("isCriticalSystemObject", (string?)"FALSE", OneBooleanHeldOfTwo)
+            }));
+            Assert.That(AttributeNames(imported), Has.None.EqualTo("isCriticalSystemObject").IgnoreCase);
+        }
+    }
+
+    [Test]
     public void ConvertEntries_GuidValueThatIsNotSixteenBytes_ReportsItAsHexAndLeavesTheAttributeOff()
     {
         // objectGUID is Active Directory's External ID. A value of the wrong length threw out of the conversion,
@@ -344,6 +384,29 @@ public class LdapConnectorImportUnreadableValueTests
             Assert.That(warnings[0], Does.Contain("uidNumber: 2"));
             Assert.That(warnings[0], Does.Contain("isCriticalSystemObject: 1"));
             Assert.That(sink.Events.Select(e => e.RenderMessage()).Where(m => m.Contains("12a") || m.Contains("34b") || m.Contains("maybe")), Is.Empty,
+                "No log line carries a value.");
+        }
+    }
+
+    [Test]
+    public void ConvertEntries_EntriesWithMoreValuesThanJimHolds_AreCountedInTheOneWarning()
+    {
+        var sink = new CapturingSink();
+        using var logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
+
+        Convert(UserObjectType(), logger,
+            UserEntry(UserDn, ("whenChanged", ["20231215143000Z", "20240101000000Z"]), ("uidNumber", ["12a"])),
+            UserEntry("CN=Sam Jones,OU=Users,DC=corp,DC=local", ("isCriticalSystemObject", ["TRUE", "FALSE"])));
+
+        var warnings = sink.Events.Where(e => e.Level == LogEventLevel.Warning).Select(e => e.RenderMessage()).ToList();
+        Assert.That(warnings, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(warnings[0], Does.Contain("2 of 2 object(s)"));
+            Assert.That(warnings[0], Does.Contain("whenChanged: 2"));
+            Assert.That(warnings[0], Does.Contain("isCriticalSystemObject: 2"));
+            Assert.That(warnings[0], Does.Contain("uidNumber: 1"));
+            Assert.That(sink.Events.Select(e => e.RenderMessage()).Where(m => m.Contains("20231215143000Z") || m.Contains("TRUE")), Is.Empty,
                 "No log line carries a value.");
         }
     }

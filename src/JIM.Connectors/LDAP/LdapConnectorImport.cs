@@ -1030,9 +1030,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                     Type = schemaAttribute.Type
                 };
 
-                // assign the right type of value(s), keeping any value that cannot be read as the attribute's type
-                // to report below (#2128)
-                IReadOnlyList<string> unreadableValues = [];
+                // assign the right type of value(s), keeping any value that is not imported to report below: one that
+                // cannot be read as the attribute's type (#2128), or one of several JIM cannot hold (#2153)
+                IReadOnlyList<LdapUnreadableValue> unreadableValues = [];
                 switch (importObjectAttribute.Type)
                 {
                     case AttributeDataType.Text:
@@ -1111,10 +1111,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
                 if (unreadableValues.Count > 0)
                 {
-                    // Report every value that could not be read, and leave the attribute off: what was read of a
+                    // Report every value that is not imported, and leave the attribute off: what was read of a
                     // multi-valued attribute is only part of what the directory holds, and JIM leaves an attribute
-                    // with an unreadable value as it already held it rather than reading it as the whole set (#2066).
-                    // The object is still returned, so every other attribute imports.
+                    // with a value it could not import as it already held it rather than reading it as the whole set
+                    // (#2066). Several values of a Boolean or a date and time arrive here too, every one of them
+                    // reported, because JIM holds one value for those types (#2153). The object is still returned, so
+                    // every other attribute imports.
                     ReportUnreadableValues(importObject, searchResult.DistinguishedName, schemaAttribute, unreadableValues);
                     continue;
                 }
@@ -1146,28 +1148,29 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     }
 
     /// <summary>
-    /// Records the values of one attribute that could not be read as its type on the object, which keeps JIM from
-    /// changing the attribute (#2128), and gives the entry's distinguished name as where the object was read from: an
-    /// administrator can go straight to it, where its External ID (an objectGUID or entryUUID) means nothing to them.
+    /// Records the values of one attribute that are not imported on the object (one that could not be read as its type,
+    /// #2128, or one of several JIM cannot hold, #2153), which keeps JIM from changing the attribute, and gives the
+    /// entry's distinguished name as where the object was read from: an administrator can go straight to it, where its
+    /// External ID (an objectGUID or entryUUID) means nothing to them.
     /// </summary>
-    private void ReportUnreadableValues(ConnectedSystemImportObject importObject, string distinguishedName, ConnectedSystemObjectTypeAttribute schemaAttribute, IReadOnlyList<string> unreadableValues)
+    private void ReportUnreadableValues(ConnectedSystemImportObject importObject, string distinguishedName, ConnectedSystemObjectTypeAttribute schemaAttribute, IReadOnlyList<LdapUnreadableValue> unreadableValues)
     {
         importObject.SourceLocation ??= distinguishedName;
 
         // The schema's name rather than the one on the entry, which the directory client lower-cases: it is the name
         // the administrator knows the attribute by.
-        foreach (var value in unreadableValues)
-            importObject.AddAttributeValueError(schemaAttribute.Name, value, UnreadableValueReasons.For(schemaAttribute.Type, value));
+        foreach (var unreadable in unreadableValues)
+            importObject.AddAttributeValueError(schemaAttribute.Name, unreadable.Value, unreadable.Reason ?? UnreadableValueReasons.For(schemaAttribute.Type, unreadable.Value));
 
         // Per object at Debug only: a schema mapping gap makes this true of every object in the directory, so the
         // Warning is the one summary per batch below. Never the values themselves, which can be personal data; the
         // execution item records them.
-        _logger.Debug("ConvertLdapResults: {Count} value(s) of attribute '{AttributeName}' on '{Dn}' could not be read as {AttributeType}; JIM leaves the attribute as it already held it",
-            unreadableValues.Count, LogSanitiser.Sanitise(schemaAttribute.Name), LogSanitiser.Sanitise(distinguishedName), schemaAttribute.Type);
+        _logger.Debug("ConvertLdapResults: {Count} value(s) of {AttributeType} attribute '{AttributeName}' on '{Dn}' were not imported; JIM leaves the attribute as it already held it",
+            unreadableValues.Count, schemaAttribute.Type, LogSanitiser.Sanitise(schemaAttribute.Name), LogSanitiser.Sanitise(distinguishedName));
     }
 
     /// <summary>
-    /// Logs one Warning for a batch of converted entries that carried values JIM could not read, counting them per
+    /// Logs one Warning for a batch of converted entries that carried values JIM could not import, counting them per
     /// attribute, so a gap that touches every object is one line per batch rather than one per object.
     /// </summary>
     private void LogUnreadableValueSummary(List<ConnectedSystemImportObject> importObjects)
@@ -1181,8 +1184,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             .GroupBy(error => error.AttributeName, StringComparer.OrdinalIgnoreCase)
             .Select(group => $"{group.Key}: {group.Count()}");
 
-        _logger.Warning("ConvertLdapResults: {ObjectCount} of {TotalCount} object(s) carried values that could not be read as their attribute's type, " +
-            "each reported on its execution item and its attribute left as JIM already held it. Values per attribute: {UnreadableValueCounts}",
+        _logger.Warning("ConvertLdapResults: {ObjectCount} of {TotalCount} object(s) carried values JIM could not import (unreadable as their attribute's type, " +
+            "or more than one for a Boolean or DateTime attribute), each reported on its execution item and its attribute left as JIM already held it. " +
+            "Values per attribute: {UnreadableValueCounts}",
             flaggedObjects.Count, importObjects.Count, LogSanitiser.Sanitise(string.Join(", ", countsByAttribute)));
     }
     #endregion

@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors;
 using JIM.Connectors.LDAP;
+using JIM.Models.Core;
 using System.DirectoryServices.Protocols;
 using System.Globalization;
 
@@ -99,7 +101,7 @@ public class LdapImportValueReaderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(read.Values, Is.EqualTo(new[] { 1, int.MinValue }));
-            Assert.That(read.Unreadable, Is.EqualTo(new[] { "1.5", "2147483648" }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "1.5", "2147483648" }));
         }
     }
 
@@ -119,32 +121,73 @@ public class LdapImportValueReaderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(read.Values, Is.EqualTo(new[] { long.MaxValue }));
-            Assert.That(read.Unreadable, Is.EqualTo(new[] { "9223372036854775808" }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "9223372036854775808" }));
         }
     }
 
     [Test]
-    public void ReadBoolean_MoreThanOneValue_ReadsNothingAndReportsNothing()
+    public void ReadBoolean_MoreThanOneValue_ReadsNoneAndReportsEachAsMoreThanJimHolds()
     {
-        // JIM holds one value for a Boolean; what to do with several is a separate decision from reading them.
+        // JIM holds one value for a Boolean. Reading none and reporting none made the import take the attribute as
+        // holding no value, and remove the one JIM held (#2153).
         var read = LdapImportValueReader.ReadBoolean(new DirectoryAttribute("b", "TRUE", "FALSE"));
 
+        var reason = UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(read.Values, Is.Empty);
+            Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[] { ("TRUE", (string?)reason), ("FALSE", (string?)reason) }));
+        }
+    }
+
+    [Test]
+    public void ReadDateTime_MoreThanOneValue_ReadsNoneAndReportsEachAsMoreThanJimHolds()
+    {
+        // Every value is reported for the count, including one that is not a date: the count is why none is imported.
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "nonsense", "20240101000000Z"));
+
+        var reason = UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 3);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.Empty);
+            Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[]
+            {
+                ("20231215143000Z", (string?)reason), ("nonsense", (string?)reason), ("20240101000000Z", (string?)reason)
+            }));
+        }
+    }
+
+    [Test]
+    public void ReadDateTime_OneValueBesideAnEmptyOne_ReadsTheOne()
+    {
+        // An empty value is no value, so it does not make the attribute one of several values.
+        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "", "20231215143000Z"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Values, Is.EqualTo(new[] { new DateTime(2023, 12, 15, 14, 30, 0, DateTimeKind.Utc) }));
             Assert.That(read.Unreadable, Is.Empty);
         }
     }
 
     [Test]
-    public void ReadDateTime_MoreThanOneValue_ReadsNothingAndReportsNothing()
+    public void ReadBoolean_ValueThatIsNotTrueOrFalse_IsUnreadableWithTheReasonItsTypeGives()
     {
-        var read = LdapImportValueReader.ReadDateTime(new DirectoryAttribute("d", "20231215143000Z", "nonsense"));
+        // No reason of the reader's own: the caller words it from the attribute's type, as for every other type.
+        var read = LdapImportValueReader.ReadBoolean(new DirectoryAttribute("b", "yes"));
 
+        Assert.That(read.Unreadable.Select(u => (u.Value, u.Reason)), Is.EqualTo(new[] { ("yes", (string?)null) }));
+    }
+
+    [Test]
+    public void MoreValuesThanJimHolds_ForEachTypeJimHoldsOneValueOf_GivesTheCount()
+    {
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(read.Values, Is.Empty);
-            Assert.That(read.Unreadable, Is.Empty);
+            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 3), Does.Contain("3"));
+            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2), Does.Contain("2"));
+            Assert.That(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.DateTime, 2),
+                Is.Not.EqualTo(UnreadableValueReasons.MoreValuesThanJimHolds(AttributeDataType.Boolean, 2)), "Each names its own type.");
         }
     }
 
@@ -156,7 +199,7 @@ public class LdapImportValueReaderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(read.Values, Is.EqualTo(new[] { 42 }));
-            Assert.That(read.Unreadable, Is.EqualTo(new[] { "x" }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "x" }));
         }
     }
 
@@ -193,7 +236,7 @@ public class LdapImportValueReaderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(read.Values, Is.EqualTo(new[] { guid }));
-            Assert.That(read.Unreadable, Is.EqualTo(new[] { "AB01" }));
+            Assert.That(read.Unreadable.Select(u => u.Value), Is.EqualTo(new[] { "AB01" }));
         }
     }
 }
