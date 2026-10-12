@@ -55,6 +55,100 @@ public class ScimConnectorExportTests
         return handler.Requests.Last(r => r.Method == method).Body ?? string.Empty;
     }
 
+    #region cancellation
+    /// <summary>
+    /// #2083: a run cancelled while a request is under way lets that request finish, so a resource the provider has
+    /// already created comes back with its id, and reports the changes never sent as not attempted. Throwing instead lost
+    /// the id of every resource already created, and the next run posted them again.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RunCancelledDuringDispatch_FinishesTheRequestUnderWayAndReportsTheRestNotAttemptedAsync()
+    {
+        var provider = new MockScimProvider();
+        using var run = new CancellationTokenSource();
+        using var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.Method == HttpMethod.Post)
+                run.Cancel();
+            return provider.Respond(request);
+        });
+        var user = ObjectType("User");
+        var connector = new StubbedTransportScimConnector(handler);
+        connector.OpenExportConnection([], persistedConnectorData: null);
+
+        List<ConnectedSystemExportResult> results;
+        try
+        {
+            results = await connector.ExportAsync(
+                [Create(user, Change("userName", user, "alice")), Create(user, Change("userName", user, "bob"))],
+                run.Token, new RecordingConnectorProgress());
+        }
+        finally
+        {
+            connector.CloseExportConnection();
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, "the request under way finishes");
+            Assert.That(results[0].ExternalId, Is.EqualTo("generated-1"));
+            Assert.That(results[1].IsNotAttempted, Is.True);
+            Assert.That(provider.Resources, Has.Count.EqualTo(1));
+        }
+    }
+    /// <summary>
+    /// #2083: a request still under way once the grace period after a cancellation has run out (a provider throttling
+    /// with long Retry-After waits, say) is abandoned rather than left to hold the cancellation up, and reported as a
+    /// failed attempt whose outcome is unknown, never as written.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_RequestStillUnderWayWhenTheGracePeriodRunsOut_IsAbandonedAndReportedFailedAsync()
+    {
+        var provider = new MockScimProvider();
+        using var run = new CancellationTokenSource();
+        using var handler = new HangingOnWriteHandler(provider, run);
+        var user = ObjectType("User");
+        var connector = new StubbedTransportScimConnector(handler) { ExportInFlightGracePeriod = TimeSpan.Zero };
+        connector.OpenExportConnection([], persistedConnectorData: null);
+
+        List<ConnectedSystemExportResult> results;
+        try
+        {
+            results = await connector.ExportAsync(
+                [Create(user, Change("userName", user, "alice")), Create(user, Change("userName", user, "bob"))],
+                run.Token, new RecordingConnectorProgress());
+        }
+        finally
+        {
+            connector.CloseExportConnection();
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].IsNotAttempted, Is.False, "it was sent, so it is a failed attempt rather than one never made");
+            Assert.That(results[0].ErrorMessage, Does.Contain("stopped waiting"));
+            Assert.That(results[1].IsNotAttempted, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// Answers reads from the provider; a write cancels the run and then waits for as long as its request is allowed to.
+    /// </summary>
+    private sealed class HangingOnWriteHandler(MockScimProvider provider, CancellationTokenSource run) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get)
+                return provider.Respond(request);
+
+            await run.CancelAsync();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return provider.Respond(request);
+        }
+    }
+    #endregion
+
     #region create
     [Test]
     public async Task ExportAsync_Create_PostsTheResourceAndReturnsTheIdTheProviderAssignedAsync()

@@ -81,6 +81,12 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     /// </summary>
     internal Func<SqlDatabaseType, ISqlProvider> ProviderFactory { get; init; } = SqlProviderFactory.Create;
 
+    /// <summary>
+    /// How long an object already being written may run on once the export run is cancelled, before it is abandoned
+    /// (#2083). Settable so a test can make it run out at once.
+    /// </summary>
+    internal TimeSpan ExportInFlightGracePeriod { get; init; } = SqlConnectorExport.DefaultInFlightGracePeriod;
+
     #region IConnector members
     public string Name => ConnectorConstants.SqlConnectorName;
 
@@ -580,7 +586,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
 
         var export = new SqlConnectorExport(_exportProvider, _exportConnection, _exportConfiguration, _exportDatabaseTimeZone,
-            _exportTypeMappingOptions, Log.ForContext<SqlConnector>());
+            _exportTypeMappingOptions, Log.ForContext<SqlConnector>(), ExportInFlightGracePeriod);
         return export.ExecuteAsync(pendingExports, cancellationToken);
     }
 

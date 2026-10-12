@@ -349,6 +349,43 @@ public class SyncRepositoryPendingExportTests
 
     #endregion
 
+    #region ReleaseExecutingPendingExportsAsync (#2083)
+
+    /// <summary>
+    /// The inverse of marking a batch Executing: each state is written onto its Pending Export only while that row is
+    /// still Executing, and only the ids written are returned, so a result already recorded is never overwritten.
+    /// </summary>
+    [Test]
+    public async Task ReleaseExecutingPendingExportsAsync_WritesOnlyRowsStillExecutingAndReturnsThemAsync()
+    {
+        var executing = CreatePe();
+        executing.Status = PendingExportStatus.Executing;
+        _repo.SeedPendingExport(executing);
+
+        var recorded = CreatePe();
+        recorded.Status = PendingExportStatus.Exported;
+        _repo.SeedPendingExport(recorded);
+
+        var lastAttemptedAt = DateTime.UtcNow.AddMinutes(-5);
+        var released = await _repo.ReleaseExecutingPendingExportsAsync(
+        [
+            new PendingExportRetryState(executing.Id, PendingExportStatus.Pending, 2, lastAttemptedAt, null, "an earlier failure", null),
+            new PendingExportRetryState(recorded.Id, PendingExportStatus.Pending, 9, null, null, "must not land", null),
+            new PendingExportRetryState(Guid.NewGuid(), PendingExportStatus.Pending, 0, null, null, null, null)
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(released, Is.EquivalentTo(new[] { executing.Id }));
+            Assert.That(PendingExportRetryState.Of(executing),
+                Is.EqualTo(new PendingExportRetryState(executing.Id, PendingExportStatus.Pending, 2, lastAttemptedAt, null, "an earlier failure", null)));
+            Assert.That(recorded.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(recorded.ErrorCount, Is.Zero);
+        }
+    }
+
+    #endregion
+
     #region GetExecutableExportCountsByChangeTypeAsync (Run Profile Safeguards, #1618)
 
     [Test]
