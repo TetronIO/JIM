@@ -316,6 +316,21 @@ function Get-SchemaTypeName {
     'object'
 }
 
+# A DTO's XML comment, which is written for the code, as a public page may carry it: on one line, without the
+# issue and pull request numbers comments cite (LANG-8), and without the gaps and brackets they leave.
+function ConvertTo-PublicDescription {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+    $text = $Text -replace '\s+', ' '
+    $text = $text -replace '\s*\(\s*#\d+(?:\s*,\s*#\d+)*\s*\)', ''
+    $text = $text -replace ',\s*#\d+\b', ''
+    $text = $text -replace '#\d+\s*,\s*', ''
+    $text = $text -replace '\s*#\d+\b', ''
+    $text = $text -replace '\(\s*\)', '' -replace '\s+([.,;:])', '$1' -replace '\s{2,}', ' '
+    $text.Trim()
+}
+
 # A schema's properties in the order declared, those it takes through allOf first: each one's name in
 # the PascalCase the module returns, its type, and its description.
 function Get-SchemaProperties {
@@ -329,7 +344,7 @@ function Get-SchemaProperties {
         param($bag)
         foreach ($key in $bag.Keys) {
             $property = $bag[$key]
-            $description = if ($property.Contains('description')) { ($property['description'] -replace '\s+', ' ').Trim() } else { '' }
+            $description = if ($property.Contains('description')) { ConvertTo-PublicDescription $property['description'] } else { '' }
             $properties.Add([pscustomobject]@{
                 Name        = $key.Substring(0, 1).ToUpperInvariant() + $key.Substring(1)
                 Type        = Get-SchemaTypeName $property

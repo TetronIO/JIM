@@ -204,7 +204,7 @@ function Get-JIMHealth {
           "isEnabled": { "type": "boolean", "description": "Whether the Widget | is enabled." },
           "status": { "$ref": "#/components/schemas/WidgetStatus" },
           "count": { "pattern": "^-?(?:0|[1-9]\\d*)$", "type": [ "integer", "string" ], "format": "int32" },
-          "tags": { "type": "array", "items": { "type": "string" } }
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "Labels (#12), set by the #789 tagger (Widget tags, #345)." }
         }
       },
       "WidgetStatus": { "enum": [ "Active", "Retired" ] },
@@ -434,6 +434,11 @@ Describe 'Update-PowerShellReference: generating a block' {
         ($table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
         ($table | Where-Object Property -eq 'IsEnabled').Description | Should -Be 'Whether the Widget | is enabled.'
         ($table | Where-Object Property -eq 'Name').Description | Should -BeNullOrEmpty
+    }
+
+    It "leaves out the issue numbers a schema's description cites, since a public page cannot carry them" {
+        $table = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetHeader').Table
+        ($table | Where-Object Property -eq 'Tags').Description | Should -Be 'Labels, set by the tagger (Widget tags).'
     }
 
     It 'includes the properties a schema takes from another through allOf' {
