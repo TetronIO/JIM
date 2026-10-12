@@ -15,12 +15,10 @@ function Get-JIMAuthConfig {
         checks, or omit it to use the URL from an active Connect-JIM session.
 
     .PARAMETER Url
-        Base URL of the JIM instance, e.g. "https://jim.example.com".
-        If omitted, uses the URL from the current Connect-JIM session.
+        The JIM instance's base URL, for example https://jim.example.com; the connected instance's when omitted.
 
     .OUTPUTS
-        PSCustomObject with OIDC configuration properties including authority,
-        clientId, scopes, responseType, usePkce, and codeChallengeMethod.
+        The settings a client needs to start a sign-in.
 
     .EXAMPLE
         Get-JIMAuthConfig -Url "https://jim.example.com"
@@ -29,7 +27,7 @@ function Get-JIMAuthConfig {
         Get-JIMAuthConfig
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.AuthConfigResponse')]
     param(
         [Parameter(Position = 0)]
         [string]$Url

@@ -15,12 +15,18 @@ namespace JIM.Models.Logic.DTOs;
 public class DataFlowHeader
 {
     /// <summary>
-    /// The Synchronisation Rule mapping this flow is. Identifies the flow uniquely.
+    /// The Attribute Flow this row is; identifies the flow.
     /// </summary>
     public int SyncRuleMappingId { get; set; }
 
+    /// <summary>
+    /// The owning Synchronisation Rule.
+    /// </summary>
     public int SyncRuleId { get; set; }
 
+    /// <summary>
+    /// The owning Synchronisation Rule's name.
+    /// </summary>
     public string SyncRuleName { get; set; } = null!;
 
     /// <summary>
@@ -29,18 +35,39 @@ public class DataFlowHeader
     /// </summary>
     public bool SyncRuleEnabled { get; set; }
 
+    /// <summary>
+    /// Import, for a flow into the Metaverse, or Export, for a flow out of it.
+    /// </summary>
     public SyncRuleDirection Direction { get; set; }
 
+    /// <summary>
+    /// The Connected System the owning Synchronisation Rule belongs to.
+    /// </summary>
     public int ConnectedSystemId { get; set; }
 
+    /// <summary>
+    /// The name of the Connected System the owning Synchronisation Rule belongs to.
+    /// </summary>
     public string ConnectedSystemName { get; set; } = null!;
 
+    /// <summary>
+    /// The Connected System Object Type the flow applies to.
+    /// </summary>
     public int ConnectedSystemObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The name of the Connected System Object Type the flow applies to.
+    /// </summary>
     public string ConnectedSystemObjectTypeName { get; set; } = null!;
 
+    /// <summary>
+    /// The Metaverse Object Type the flow applies to.
+    /// </summary>
     public int MetaverseObjectTypeId { get; set; }
 
+    /// <summary>
+    /// The name of the Metaverse Object Type the flow applies to.
+    /// </summary>
     public string MetaverseObjectTypeName { get; set; } = null!;
 
     /// <summary>
@@ -65,16 +92,20 @@ public class DataFlowHeader
     public string? TargetConnectedSystemAttributeName { get; set; }
 
     /// <summary>
-    /// What feeds the target: Connected System attributes on an Import flow, Metaverse Attributes on an Export flow,
-    /// or an expression on either.
+    /// What feeds the target, in evaluation order: Connected System attributes on an Import flow, Metaverse Attributes
+    /// on an Export flow, or an expression on either. Each names its attribute, or carries the expression, with its
+    /// place in the order and a display name.
     /// </summary>
     public List<DataFlowSource> Sources { get; set; } = new();
 
     /// <summary>
-    /// The flow's position in its target Metaverse Attribute's priority order, 1 being highest. Import flows only.
-    /// A flow that has never been ordered carries the safe-addition sentinel (<see cref="int.MaxValue"/>), which the
-    /// portal renders as unranked rather than as a number nobody chose.
+    /// The flow's place in its target Metaverse Attribute's priority order, 1 being highest; Import flows only. A flow
+    /// that has never been ordered carries 2147483647, which the portal shows as Unranked.
     /// </summary>
+    /// <remarks>
+    /// The never-ordered value is the safe-addition sentinel (<see cref="int.MaxValue"/>), which the portal renders as
+    /// unranked rather than as a number nobody chose.
+    /// </remarks>
     public int? Priority { get; set; }
 
     /// <summary>
@@ -90,10 +121,13 @@ public class DataFlowHeader
     public bool? EnforceState { get; set; }
 
     /// <summary>
-    /// How many flows contribute to this flow's target Metaverse Attribute for this Metaverse Object Type. Import
-    /// flows only, and only meaningful there: a count above one is what makes priority matter. Populated by the
-    /// application layer rather than the query, which sees one flow at a time.
+    /// How many flows contribute to this flow's target Metaverse Attribute for this Metaverse Object Type, counted
+    /// across the whole configuration rather than the filtered results; Import flows only. A count above one is what
+    /// makes priority matter.
     /// </summary>
+    /// <remarks>
+    /// Populated by the application layer rather than the query, which sees one flow at a time.
+    /// </remarks>
     public int? ContributorCount { get; set; }
 
     /// <summary>

@@ -26,49 +26,47 @@ function Get-JIMDataFlow {
         removing it returns those results.
 
     .PARAMETER Direction
-        Filter flows by direction: Import for flows into the Metaverse, Export for flows out of it.
+        Only flows in this direction: Import for flows into the Metaverse, Export for flows out of it. Both when
+        omitted.
 
     .PARAMETER ConnectedSystemId
-        Filter flows by Connected System ID.
+        Only flows on this Connected System.
 
     .PARAMETER ConnectedSystemName
-        Filter flows by Connected System name. Must be an exact match.
+        Only flows on the Connected System with exactly this name.
 
     .PARAMETER InputObject
-        A Connected System object from the pipeline (e.g. from Get-JIMConnectedSystem). Its Id is
-        used to filter flows, equivalent to specifying -ConnectedSystemId directly.
+        A Connected System from the pipeline, for example from Get-JIMConnectedSystem. Its Id filters the flows, as
+        -ConnectedSystemId would.
 
     .PARAMETER MetaverseObjectTypeId
-        Filter flows by the Metaverse Object Type they apply to.
+        Only flows on this Metaverse Object Type.
 
     .PARAMETER ConnectedSystemObjectTypeId
-        Filter flows by the Connected System Object Type they apply to.
+        Only flows on this Connected System Object Type.
 
     .PARAMETER MetaverseAttributeId
-        Filter flows that read or write this Metaverse Attribute, whichever side it sits on for the
-        direction in question. A flow whose Metaverse side is an expression cannot match: an
-        expression's attribute references live in its text and are not modelled. Use -Search to find
-        those.
+        Only flows that read or write this Metaverse Attribute, whichever side it sits on. A flow whose Metaverse
+        side is an expression cannot match, because an expression's attribute references live in its text; use
+        -Search for those.
 
     .PARAMETER ConnectedSystemAttributeId
-        Filter flows that read or write this Connected System attribute, whichever side it sits on
-        for the direction in question. Subject to the same expression limitation as
+        Only flows that read or write this Connected System attribute, with the same expression limitation as
         -MetaverseAttributeId.
 
     .PARAMETER MultipleContributorsOnly
-        Return only Import flows whose target Metaverse Attribute has more than one contributor,
-        which are the only flows whose priority order decides anything.
+        Only Import flows whose target Metaverse Attribute has more than one contributor: the flows whose priority
+        order decides anything.
 
     .PARAMETER Search
-        Free-text term matched case-insensitively against the Synchronisation Rule, the Connected
-        System, both object types, every attribute named on either side, and any expression text.
+        Text matched, ignoring case, against the Synchronisation Rule, the Connected System, both object types,
+        every attribute named on either side, and expression text.
 
     .PARAMETER SyncRuleName
-        Filter flows by the name of the owning Synchronisation Rule. Supports wildcards
-        (e.g. "HR*"). Evaluated client-side.
+        Only flows on Synchronisation Rules with this name, applied after the other filters.
 
     .OUTPUTS
-        PSCustomObject representing attribute data flow(s).
+        One object per flow. The cmdlet pages through the whole result set itself.
 
     .EXAMPLE
         Get-JIMDataFlow
@@ -110,7 +108,7 @@ function Get-JIMDataFlow {
         Get-JIMMetaverseAttributePriority
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.DataFlowHeader')]
     param(
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ByConnectedSystemName')]

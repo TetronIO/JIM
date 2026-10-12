@@ -10,26 +10,27 @@ function Set-JIMPredefinedSearchCriteriaGroup {
         Updates the All/Any logic type and/or position of an existing criteria group.
 
     .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+        The ID of the Predefined Search.
 
     .PARAMETER GroupId
-        The unique identifier of the criteria group to update.
+        The ID of the criteria group to update.
 
     .PARAMETER Type
-        The logical operator for this group: 'All' (AND) or 'Any' (OR).
+        How the group combines what it holds: All (AND) or Any (OR).
 
     .PARAMETER Position
-        The position/order for this group.
+        The group's place among its siblings.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
-        Search's configuration change history.
+        Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration
+        Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated group object.
+        Returns the updated group.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated criteria group.
+        With -PassThru, the updated group, with a PredefinedSearchId property added naming its search; otherwise
+        nothing.
 
     .EXAMPLE
         Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -Type Any
@@ -42,7 +43,7 @@ function Set-JIMPredefinedSearchCriteriaGroup {
         Remove-JIMPredefinedSearchCriteriaGroup
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.PredefinedSearchCriteriaGroupDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$PredefinedSearchId,

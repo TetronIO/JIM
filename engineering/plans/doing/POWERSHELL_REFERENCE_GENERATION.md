@@ -50,9 +50,9 @@ Retrieves certificates from the trusted store.            <- hand-written
 
 | Block | Source |
 |-------|--------|
-| **Syntax** | `Get-Command`: one line per parameter set, labelled with the set's name and `(default)`; mandatory parameters bare, optional ones in brackets, types in the site's lower-case form (`<string>`, `<guid>`, `<int>`); common parameters, `-WhatIf` and `-Confirm` left out, as the pages do today. |
+| **Syntax** | `Get-Command`: one line per parameter set, labelled with the set's name and `(default)`; mandatory parameters bare, optional ones in brackets, positional ones the cmdlet declares first in PowerShell's notation, types in the site's lower-case form (`<string>`, `<guid>`, `<int>`); common parameters, `-WhatIf` and `-Confirm` left out, as the pages do today. |
 | **Parameters** | `Get-Command` for name, type, and whether it is required (with the sets it belongs to, where it is not in every set); `Get-Help` for the default and the description, the description taken from the cmdlet's `.PARAMETER` help. Generated suffixes state what the attributes already say: pipeline input, `ValidateSet` values, `ValidateRange` limits, wildcard support. |
-| **Output** | The cmdlet's `.OUTPUTS` help as prose, then each type the cmdlet declares with `[OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]`, with the parameter sets that return it where that is not all of them, and a table of that schema's properties from the OpenAPI document: each one's name in PascalCase (as `ConvertTo-JIMOutputObject` returns it), its type, and its description, which is the DTO's XML comment. A schema is tabled where the page first returns it; a later cmdlet on the page refers back to that one. A declared type that is not an OpenAPI schema (the few cmdlets that build their own objects, and `string`, `bool` and the like) is named, and its properties come from the `.OUTPUTS` prose, in an allow-list that gives the reason. A cmdlet that returns nothing says so with `[OutputType([void])]`. |
+| **Output** | The cmdlet's `.OUTPUTS` help as prose, then each type the cmdlet declares with `[OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]`, with the parameter sets that return it where that is not all of them, and a table of that schema's properties from the OpenAPI document: each one's name in PascalCase (as `ConvertTo-JIMOutputObject` returns it), its type, and its description, which is the DTO's XML comment. A schema is tabled where the page first returns it; a later cmdlet on the page refers back to that one. A declared type that is not an OpenAPI schema (the few cmdlets that build their own objects, and `string`, `bool` and the like) is named, and its properties come from the `.OUTPUTS` prose, in an allow-list that gives the reason; a name the module gives the API's own object is mapped to that schema instead, and tabled with its properties. A cmdlet that returns nothing says so with `[OutputType([void])]`. |
 
 `[OutputType]` per parameter set is PowerShell's own way to say what a cmdlet returns, and `Get-JIMServiceHealth` already uses it with `JIM.`-prefixed names; the script reads it through `Get-Command`, so nothing parses free text. Single source per fact: a parameter's description lives in its `.PARAMETER` help, so `Get-Help` and the site say the same thing.
 
@@ -61,7 +61,7 @@ Retrieves certificates from the trusted store.            <- hand-written
 `scripts/Update-PowerShellReference.ps1`:
 
 - Imports the module from `src/JIM.PowerShell/JIM.psd1` and, for every marked block under `docs/powershell/`, renders the cmdlet's block and writes it back.
-- `-Check` writes nothing and fails, naming the cmdlet and the first differing line, when any block differs from what it would generate, or a block names a cmdlet the module does not export, or a cmdlet with a block has a parameter with no `.PARAMETER` help or declares no output type. During migration it also lists, as warnings, the cmdlet sections that have no block yet.
+- `-Check` writes nothing and fails, naming the cmdlet and the first differing line, when any block differs from what it would generate, or a block names a cmdlet the module does not export, or a cmdlet with a block has a parameter with no `.PARAMETER` help or declares no output type. During migration it also lists, as warnings, the exported cmdlets that have no block yet, counted from the module rather than from the pages' headings, so a cmdlet the pages give no section at all is listed too.
 - `-OpenApiPath` reads the OpenAPI document; without it the script generates one with `Generate-OpenApiDoc.ps1`, which builds.
 
 ### Where it runs
@@ -80,7 +80,7 @@ The script, written test-first in Pester against fixture modules and pages under
 
 **Delivered** as planned, with three choices the pilot and the first migration settled:
 
-- **Positions are not shown.** An advanced function binds every parameter by position in declaration order unless told otherwise, so every JIM parameter has a position nobody chose; showing them would document an accident. The syntax names every parameter, and the pilot's examples now do too.
+- **Only the positions a cmdlet declares are shown.** A cmdlet that declares no `Position` still gets positions from PowerShell, in declaration order (67 of them do), and showing those would document an accident. One that declares any (21 do, such as `Connect-JIM`) gets no others, so every position it has was chosen: the syntax shows them in PowerShell's notation (`[-Url] <string>`), and the parameter's row says which argument it is.
 - **Output tables carry each property's type and description, not just its name.** The first pages to migrate described their properties by hand, and a list of names would have lost that. The description is the DTO's XML comment, so documenting a DTO improves the API reference and these pages at once, and a schema whose properties are all undescribed is tabled without the empty column. Each schema is tabled once per page, where the page first returns it.
 - **A switch that selects a parameter set is optional where the code says so.** `Get-JIMCertificate -EnabledOnly` is how the Enabled set is chosen, but the switch is not mandatory in it, so the syntax shows `[-EnabledOnly]`, as `Get-Command -Syntax` does. The generated page says what the code says; where that reads oddly, the fix is in the cmdlet.
 
@@ -94,7 +94,7 @@ As described under Examples above.
 
 ### Phase 4: Close
 
-A cmdlet section with no generated block fails ACC-5; `src/JIM.PowerShell/CLAUDE.md` and the standard drop the manual-verification guidance generation replaces; this plan moves to `done/`, closing #1083. The `powershell/` folder migration of #1454 (front matter, and splitting the three pages over their size budget) follows.
+An exported cmdlet with no generated block fails ACC-5; `src/JIM.PowerShell/CLAUDE.md` and the standard drop the manual-verification guidance generation replaces; this plan moves to `done/`, closing #1083. The `powershell/` folder migration of #1454 (front matter, and splitting the three pages over their size budget) follows.
 
 ## Success Criteria
 
@@ -121,4 +121,4 @@ None new. The OpenAPI document comes from `Generate-OpenApiDoc.ps1`, already run
 | A declared output type is wrong (the cmdlet returns a different object) | The declaration is one line beside the code that makes the call, reviewed with it; the cmdlet's Pester tests can assert it. A later check could match the declared schema to the endpoint the cmdlet calls, if declarations prove error-prone |
 | Generated tables push pages further over their size budget | The three pages already far over (Connected Systems, Synchronisation Rules, Metaverse) split in #1454's `powershell/` migration regardless |
 | Parameter descriptions lose the links the hand tables carried | Links belong in the hand-written introduction and notes; `.PARAMETER` help is also read in a terminal, where a Markdown link is noise |
-| A long migration leaves the site half generated | Pages without blocks are listed by `-Check` on every run, and Phase 4 makes a missing block a failure |
+| A long migration leaves the site half generated | Cmdlets without blocks are listed by `-Check` on every run, and Phase 4 makes a missing block a failure |

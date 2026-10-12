@@ -11,10 +11,10 @@ function Get-JIMMetaverseObjectRole {
         assigned to. Returns an empty list if the object is not a member of any Role.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the Metaverse Object whose Roles to retrieve.
+        The ID of the Metaverse Object.
 
     .OUTPUTS
-        PSCustomObject representing Role(s) the Metaverse Object is a member of.
+        One object per Role the Metaverse Object is a member of; nothing when it is in none.
 
     .EXAMPLE
         Get-JIMMetaverseObjectRole -Id "12345678-1234-1234-1234-123456789abc"
@@ -32,7 +32,7 @@ function Get-JIMMetaverseObjectRole {
         Get-JIMRoleMember
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.RoleDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Guid]$Id
