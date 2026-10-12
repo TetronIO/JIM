@@ -5,6 +5,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Text;
 namespace JIM.Connectors.LDAP;
 
@@ -331,15 +332,72 @@ internal class LdapConnectorPassword
         if (updatedValue == currentValue.Value)
             return null;
 
-        var modification = new DirectoryAttributeModification
+        return await SwapUserAccountControlAsync(distinguishedName, currentValue.Value, updatedValue, password);
+    }
+
+    /// <summary>
+    /// Writes the account's flags only if they are still the ones read (#2161): the value read is deleted and the new
+    /// one added in a single request, which the directory applies whole or not at all, and refuses with
+    /// noSuchAttribute when the value read is no longer there. The Password Delivery Service runs beside the export
+    /// run, so an export can change the flags between the read and this write (a leaver's disable, say), and a
+    /// Replace computed from the stale read would overwrite it, enabling the leaver.
+    /// <para>
+    /// On that refusal the flags are left as the export left them and the delivery is reported as a transient failure,
+    /// rather than re-read and swapped again here: whether this password should enable the account is the engine's
+    /// decision, taken afresh at the next attempt from what the export recorded, and re-applying this attempt's
+    /// decision over the export's value would undo it all the same. The password itself is already set.
+    /// </para>
+    /// </summary>
+    private async Task<PasswordSetResult?> SwapUserAccountControlAsync(string distinguishedName, int readValue, int newValue, string password)
+    {
+        var expected = new DirectoryAttributeModification
         {
             Name = AttributeUserAccountControl,
-            Operation = DirectoryAttributeOperation.Replace
+            Operation = DirectoryAttributeOperation.Delete
         };
-        modification.Add(updatedValue.ToString());
+        expected.Add(readValue.ToString(CultureInfo.InvariantCulture));
 
-        return await SendAndClassifyAsync(new ModifyRequest(distinguishedName, modification),
-            $"apply the account flags on '{distinguishedName}'", password);
+        var replacement = new DirectoryAttributeModification
+        {
+            Name = AttributeUserAccountControl,
+            Operation = DirectoryAttributeOperation.Add
+        };
+        replacement.Add(newValue.ToString(CultureInfo.InvariantCulture));
+
+        var operationDescription = $"apply the account flags on '{distinguishedName}'";
+        ResultCode resultCode;
+        string? errorMessage;
+        try
+        {
+            var response = await _executor.SendRequestAsync(new ModifyRequest(distinguishedName, expected, replacement));
+            resultCode = response.ResultCode;
+            errorMessage = response.ErrorMessage;
+        }
+        catch (DirectoryOperationException ex)
+        {
+            resultCode = ex.Response?.ResultCode ?? ResultCode.Other;
+            errorMessage = ex.Message;
+        }
+        catch (LdapException ex)
+        {
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"JIM could not {operationDescription}: {Redact(ex.Message, password)}");
+        }
+
+        if (resultCode == ResultCode.Success)
+            return null;
+
+        if (resultCode == ResultCode.NoSuchAttribute)
+        {
+            _logger.Information("LdapConnectorPassword: The account flags on {DistinguishedName} changed between JIM reading them ({ReadValue}) and writing {NewValue}; " +
+                "they are left as they are, and the delivery is tried again",
+                LogSanitiser.Sanitise(distinguishedName), readValue, newValue);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"The password was set, but the account flags on '{distinguishedName}' changed while JIM was applying the expiry and enabled state, " +
+                "most likely because an export wrote them at the same moment. JIM left them as they are and tries again.");
+        }
+
+        return BuildFailure(resultCode, errorMessage, operationDescription, password);
     }
 
     /// <summary>
