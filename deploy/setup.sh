@@ -2629,17 +2629,54 @@ UPGRADE_STAGE=""
 UPGRADE_INSTALL_DIR=""
 UPGRADE_SWAPPED=""
 UPGRADE_STARTED=""
-# On leaving before JIM is restarted, puts the previous compose files and .env back, so that a failed upgrade leaves
-# the installation as it was.
+UPGRADE_ASIDE=""  # where an earlier upgrade's own files are, while this one may put them back
+# The files an upgrade adds beside the installation's own: the previous release's files, for going back, and the new
+# release's template of .env.
+UPGRADE_OWN_FILES=("${SHIPPED_COMPOSE_FILES[@]/%/.previous}" .env.previous .env.example)
+
+# Moves the files an earlier upgrade added out of the way, so that a failure can put them back: its .previous files
+# are what going back to the release before the current one needs, and this upgrade's own would replace them (#2155).
+set_aside_upgrade_files() {
+    local install_dir="$1"
+    local aside="${install_dir}/.before-upgrade"
+    [ ! -e "$aside" ] \
+        || fatal "${aside} holds the files an earlier upgrade set aside, and that upgrade stopped without putting them back. If JIM still runs the version it ran before that upgrade, put the previous files back first, as the stopped upgrade would have (cd ${install_dir} && for f in ${SHIPPED_COMPOSE_FILES[*]} .env; do cp -p \"\$f.previous\" \"\$f\"; done), then move the files in ${aside} back into ${install_dir}, replacing the ones there, and delete ${aside}. If JIM runs the new version, delete ${aside}. Then run this again."
+    (umask 077 && mkdir "$aside")
+    UPGRADE_ASIDE="$aside"
+    local name
+    for name in "${UPGRADE_OWN_FILES[@]}"; do
+        [ ! -e "${install_dir}/${name}" ] || mv "${install_dir}/${name}" "${aside}/${name}"
+    done
+}
+
+# On leaving before JIM is restarted, puts the previous compose files and .env back, removes the files the upgrade
+# added and puts back those an earlier upgrade left, so that a failed upgrade leaves the installation as it was. Once
+# JIM has been restarted on the new release, the earlier upgrade's files are superseded by this one's.
 finish_upgrade() {
-    if [ "$UPGRADE_SWAPPED" = "true" ] && [ "$UPGRADE_STARTED" != "true" ]; then
-        local name
-        for name in "${SHIPPED_COMPOSE_FILES[@]}" .env; do
-            if [ -f "${UPGRADE_INSTALL_DIR}/${name}.previous" ]; then
-                cp -p "${UPGRADE_INSTALL_DIR}/${name}.previous" "${UPGRADE_INSTALL_DIR}/${name}"
-            fi
-        done
-        warn "Put the previous compose files and .env back; JIM is as it was before the upgrade."
+    local name
+    if [ "$UPGRADE_STARTED" != "true" ]; then
+        if [ "$UPGRADE_SWAPPED" = "true" ]; then
+            for name in "${SHIPPED_COMPOSE_FILES[@]}" .env; do
+                if [ -f "${UPGRADE_INSTALL_DIR}/${name}.previous" ]; then
+                    cp -p "${UPGRADE_INSTALL_DIR}/${name}.previous" "${UPGRADE_INSTALL_DIR}/${name}"
+                fi
+            done
+        fi
+        if [ -n "$UPGRADE_ASIDE" ]; then
+            for name in "${UPGRADE_OWN_FILES[@]}"; do
+                rm -f "${UPGRADE_INSTALL_DIR}/${name}"
+                if [ -e "${UPGRADE_ASIDE}/${name}" ]; then
+                    mv "${UPGRADE_ASIDE}/${name}" "${UPGRADE_INSTALL_DIR}/${name}"
+                fi
+            done
+            rmdir "$UPGRADE_ASIDE" \
+                || error "Could not put back the files an earlier upgrade left in ${UPGRADE_INSTALL_DIR}; they are in ${UPGRADE_ASIDE}. Move them back into ${UPGRADE_INSTALL_DIR}, then delete ${UPGRADE_ASIDE}."
+        fi
+        if [ "$UPGRADE_SWAPPED" = "true" ]; then
+            warn "Put the previous compose files and .env back; JIM is as it was before the upgrade."
+        fi
+    elif [ -n "$UPGRADE_ASIDE" ]; then
+        rm -rf "$UPGRADE_ASIDE"
     fi
     if [ -n "$UPGRADE_STAGE" ]; then
         rm -rf "$UPGRADE_STAGE"
@@ -2705,6 +2742,7 @@ upgrade_installation() {
     fi
 
     # The previous files stay beside the new ones, for going back.
+    set_aside_upgrade_files "$install_dir"
     local name
     for name in "${SHIPPED_COMPOSE_FILES[@]}" .env; do
         cp -p "${install_dir}/${name}" "${install_dir}/${name}.previous"
