@@ -292,6 +292,26 @@ public class FileConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_NumberOutsideTheRangeItsTypeHolds_ReportsItAsAWholeNumberJimCannotHoldAsync()
+    {
+        // A well-formed whole number too large for its attribute is not "not a whole number": the value is fine and
+        // the attribute's type is too small, which is what the administrator needs to be told (#2128).
+        var filePath = Path.Join(_testFilesPath, "out_of_range_numbers.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects[0].AttributeValueErrors?.Select(e => (e.Value, e.Reason)),
+                Is.EqualTo(new[] { ((string?)"2147483648", "Not a whole number JIM can hold.") }));
+            Assert.That(result.ImportObjects[1].AttributeValueErrors?.Select(e => (e.Value, e.Reason)),
+                Is.EqualTo(new[] { ((string?)"thirty", "Not a valid whole number.") }));
+        }
+    }
+
+    [Test]
     public async Task ImportAsync_MultiValuedAttributeWithTwoUnreadableValues_ReportsBothAndLeavesTheAttributeOutAsync()
     {
         var filePath = Path.Join(_testFilesPath, "multivalued_decimals_unreadable.csv");

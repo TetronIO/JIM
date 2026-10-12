@@ -17,15 +17,17 @@ public class ImportOutcomeMessageTests
     [Test]
     public void ForImport_LargeCountsWithErrors_GroupsTheDigitsAndNamesTheErrors()
     {
-        var message = ImportOutcomeMessage.ForImport(objects: 1_000_000, created: 999_880, updated: 0, unchanged: 0, errors: 120, throughput: " in 18 min 13 sec (avg 915 obj/s)");
+        var message = ImportOutcomeMessage.ForImport(objects: 1_000_000, created: 999_880, updated: 0, unchanged: 0,
+            connectorReportedDeletions: 0, detectedDeletions: 0, errors: 120, throughput: " in 18 min 13 sec (avg 915 obj/s)");
 
         Assert.That(message, Is.EqualTo("Import complete: 1,000,000 objects (999,880 created, 0 updated, 120 errors) in 18 min 13 sec (avg 915 obj/s)"));
     }
 
     [Test]
-    public void ForImport_NothingUnchangedAndNoErrors_LeavesThoseOut()
+    public void ForImport_NothingUnchangedDeletedOrInError_LeavesThoseOut()
     {
-        var message = ImportOutcomeMessage.ForImport(objects: 2, created: 2, updated: 0, unchanged: 0, errors: 0, throughput: string.Empty);
+        var message = ImportOutcomeMessage.ForImport(objects: 2, created: 2, updated: 0, unchanged: 0,
+            connectorReportedDeletions: 0, detectedDeletions: 0, errors: 0, throughput: string.Empty);
 
         Assert.That(message, Is.EqualTo("Import complete: 2 objects (2 created, 0 updated)"));
     }
@@ -33,9 +35,52 @@ public class ImportOutcomeMessageTests
     [Test]
     public void ForImport_UnchangedObjects_AreCounted()
     {
-        var message = ImportOutcomeMessage.ForImport(objects: 50, created: 0, updated: 3, unchanged: 47, errors: 1, throughput: string.Empty);
+        var message = ImportOutcomeMessage.ForImport(objects: 50, created: 0, updated: 3, unchanged: 47,
+            connectorReportedDeletions: 0, detectedDeletions: 0, errors: 1, throughput: string.Empty);
 
         Assert.That(message, Is.EqualTo("Import complete: 50 objects (0 created, 3 updated, 47 unchanged, 1 error)"));
+    }
+
+    [Test]
+    public void ForImport_DeletionsTheConnectorReported_AreCountedAmongTheObjectsRead()
+    {
+        // The Connector returned these objects, as deletes, so they are among the objects the run read (#2129).
+        var message = ImportOutcomeMessage.ForImport(objects: 10, created: 0, updated: 1, unchanged: 6,
+            connectorReportedDeletions: 2, detectedDeletions: 0, errors: 1, throughput: string.Empty);
+
+        Assert.That(message, Is.EqualTo("Import complete: 10 objects (0 created, 1 updated, 6 unchanged, 2 deleted, 1 error)"));
+    }
+
+    [Test]
+    public void ForImport_DeletionsAFullImportDetected_AreReportedApartFromTheObjectsRead()
+    {
+        // A Full Import marks these deleted because it did not read them, so counting them among the objects it read would
+        // make the figures add up to more than it read (#2129).
+        var message = ImportOutcomeMessage.ForImport(objects: 10, created: 0, updated: 0, unchanged: 10,
+            connectorReportedDeletions: 0, detectedDeletions: 500, errors: 0, throughput: string.Empty);
+
+        Assert.That(message, Is.EqualTo("Import complete: 10 objects (0 created, 0 updated, 10 unchanged); 500 no longer found and marked as deleted"));
+    }
+
+    [Test]
+    public void ForImport_DetectedDeletionsAndThroughput_KeepsTheThroughputWithTheObjectsRead()
+    {
+        // The throughput is the objects read over the run's time, so it follows them rather than the detected deletions,
+        // where it would read as the time the deletions took.
+        var message = ImportOutcomeMessage.ForImport(objects: 60_000, created: 0, updated: 12, unchanged: 59_988,
+            connectorReportedDeletions: 0, detectedDeletions: 1_250, errors: 0, throughput: " in 3 min 12 sec (avg 312 obj/s)");
+
+        Assert.That(message, Is.EqualTo(
+            "Import complete: 60,000 objects (0 created, 12 updated, 59,988 unchanged) in 3 min 12 sec (avg 312 obj/s); 1,250 no longer found and marked as deleted"));
+    }
+
+    [Test]
+    public void ForImport_OneOfEach_UsesSingularWording()
+    {
+        var message = ImportOutcomeMessage.ForImport(objects: 1, created: 0, updated: 0, unchanged: 1,
+            connectorReportedDeletions: 0, detectedDeletions: 1, errors: 1, throughput: string.Empty);
+
+        Assert.That(message, Is.EqualTo("Import complete: 1 object (0 created, 0 updated, 1 unchanged, 1 error); 1 no longer found and marked as deleted"));
     }
 
     // -----------------------------------------------------------------------------------------------------------------

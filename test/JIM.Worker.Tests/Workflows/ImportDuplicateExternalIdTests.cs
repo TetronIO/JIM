@@ -5,12 +5,10 @@ using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
-using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Worker.Processors;
 using NUnit.Framework;
-using Serilog;
 
 namespace JIM.Worker.Tests.Workflows;
 
@@ -134,7 +132,7 @@ public class ImportDuplicateExternalIdTests : WorkflowTestBase
 
         var processor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
-            new PagedConnector(pages), connectedSystem, runProfile, workerTask, new CancellationTokenSource());
+            new PagedImportConnector(pages), connectedSystem, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformImportAsync();
         return activity;
     }
@@ -199,38 +197,6 @@ public class ImportDuplicateExternalIdTests : WorkflowTestBase
         if (displayName != null)
             importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", Type = AttributeDataType.Text, StringValues = [displayName] });
         return importObject;
-    }
-
-    /// <summary>
-    /// Returns caller-supplied pages one call at a time, as a Connector reading a directory by calls does.
-    /// </summary>
-    private sealed class PagedConnector(List<List<ConnectedSystemImportObject>> pages) : IConnector, IConnectorImportUsingCalls
-    {
-        private int _nextPage;
-
-        public string Name => "MockConnector";
-        public string? Description => null;
-        public string? Url => null;
-
-        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
-
-        public string? CloseImportConnection() => null;
-
-        public Task<ConnectedSystemImportResult> ImportAsync(
-            ConnectedSystem connectedSystem,
-            ConnectedSystemRunProfile runProfile,
-            List<ConnectedSystemPaginationToken> paginationTokens,
-            string? persistedConnectorData,
-            ILogger logger,
-            CancellationToken cancellationToken,
-            IConnectorProgress progress)
-        {
-            var page = pages[_nextPage++];
-            var result = new ConnectedSystemImportResult { ImportObjects = page };
-            if (_nextPage < pages.Count)
-                result.PaginationTokens.Add(new ConnectedSystemPaginationToken("page", _nextPage.ToString()));
-            return Task.FromResult(result);
-        }
     }
 
     #endregion

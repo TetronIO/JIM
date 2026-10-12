@@ -346,4 +346,169 @@ public class ImportContentHashSkipTests
 
         Assert.That(cso.ImportStateHash, Is.Null, "a Delta Import that changes the object must null the stored hash (conservative v1).");
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // The Activity message's figures (#2129): an object compared and found unchanged is unchanged, whether the content
+    // hash or the full comparison found it so; only an object that actually changed is updated.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task FullImport_RepeatWithNoStamps_ReportsTheObjectsUnchangedAsync()
+    {
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(firstId, "Jane Smith"));
+        connector.TestImportObjects.Add(CreateImportObject(secondId, "Joe Bloggs"));
+        await RunFullImportAsync(connector);
+
+        // The first Full Import after an upgrade or a reset: no stamp, so every object is compared in full.
+        foreach (var cso in SyncRepo.ConnectedSystemObjects.Values)
+        {
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
+        }
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(firstId, "Jane Smith"));
+        connector2.TestImportObjects.Add(CreateImportObject(secondId, "Joe Bloggs"));
+        var (activity, skipped) = await RunFullImportAsync(connector2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(skipped, Is.Zero, "precondition: both objects were compared, not skipped by their content hash.");
+            Assert.That(activity.Message, Does.Contain("(0 created, 0 updated, 2 unchanged)"));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ChangedSkippedAndComparedObjects_CountsEachOnceAsync()
+    {
+        var changedId = Guid.NewGuid();
+        var comparedId = Guid.NewGuid();
+        var skippedId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(changedId, "Jane Smith"));
+        connector.TestImportObjects.Add(CreateImportObject(comparedId, "Joe Bloggs"));
+        connector.TestImportObjects.Add(CreateImportObject(skippedId, "Sam Okafor"));
+        await RunFullImportAsync(connector);
+
+        var compared = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.AttributeValues.Any(av => av.GuidValue == comparedId));
+        compared.ImportStateHash = null;
+        compared.ImportStateFingerprint = null;
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(changedId, "Jane Smith-Jones"));
+        connector2.TestImportObjects.Add(CreateImportObject(comparedId, "Joe Bloggs"));
+        connector2.TestImportObjects.Add(CreateImportObject(skippedId, "Sam Okafor"));
+        var (activity, skipped) = await RunFullImportAsync(connector2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(skipped, Is.EqualTo(1), "precondition: only the stamped, unchanged object is skipped by its content hash.");
+            Assert.That(activity.Message, Does.Contain("3 objects (0 created, 1 updated, 2 unchanged)"));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ChangedObject_CountsItUpdatedAsync()
+    {
+        // Guard, not a red test: counting only genuine changes must not stop counting them.
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        await RunFullImportAsync(connector);
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith-Jones"));
+        var (activity, _) = await RunFullImportAsync(connector2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Message, Does.Contain("(0 created, 1 updated)"));
+            Assert.That(activity.Message, Does.Not.Contain("unchanged"));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ProvisionedObjectConfirmedWithItsAttributesUnchanged_CountsItUpdatedAsync()
+    {
+        // Guard, not a red test: confirming an object JIM provisioned changes it from awaiting confirmation to present,
+        // and its execution item says Update, so the message counts it as updated even though no attribute changed.
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        await RunFullImportAsync(connector);
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        var (activity, _) = await RunFullImportAsync(connector2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), "precondition: the import confirmed the object.");
+            Assert.That(activity.Message, Does.Contain("(0 created, 1 updated)"));
+            Assert.That(activity.Message, Does.Not.Contain("unchanged"));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_DetectsADeletion_CountsItDeletedOutsideTheObjectsReadAsync()
+    {
+        var keptId = Guid.NewGuid();
+        var removedId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(keptId, "Kept User"));
+        connector.TestImportObjects.Add(CreateImportObject(removedId, "Removed User"));
+        await RunFullImportAsync(connector);
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(keptId, "Kept User"));
+        var (activity, _) = await RunFullImportAsync(connector2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"),
+                "The object the import no longer found was not read, so it is not one of the objects the parentheses describe.");
+            Assert.That(activity.Message, Does.Contain("1 no longer found"));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_ObjectWithNoChange_ReportsItUnchangedAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        await RunFullImportAsync(connector);
+
+        var deltaConnector = new MockFileConnector();
+        deltaConnector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith", ObjectChangeType.Updated));
+        var activity = await RunDeltaImportAsync(deltaConnector);
+
+        Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"),
+            "A Delta Import never skips by content hash, so it compares every object it reads; finding one unchanged is not an update.");
+    }
+
+    private async Task<Activity> RunDeltaImportAsync(MockFileConnector connector)
+    {
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var deltaRunProfile = new ConnectedSystemRunProfile
+        {
+            Id = 999,
+            Name = "Delta Import Test",
+            RunType = ConnectedSystemRunType.DeltaImport,
+            ConnectedSystemId = connectedSystem!.Id
+        };
+        var activity = new Activity { Id = Guid.NewGuid(), RunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>() };
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            connector, connectedSystem, deltaRunProfile,
+            TestUtilities.CreateTestWorkerTask(activity, InitiatedBy),
+            new CancellationTokenSource());
+        await processor.PerformImportAsync();
+        return activity;
+    }
 }

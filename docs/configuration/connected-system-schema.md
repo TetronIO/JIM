@@ -123,3 +123,13 @@ A destructive diff pauses on a three-way decision (an additions-only diff keeps 
 Watch the preview's **discovery warnings** before applying: a Connected System identity without permission to read the full schema produces a partial read, which can make object types or attributes appear removed when they are not. Other warnings appear here too, about what the account can do beyond reading the schema; on Active Directory, for example, that the account is not allowed to list the domain's Deleted Objects container, or that JIM could not confirm it can, in which case a Delta Import would refuse to run or would complete with a warning (see the [LDAP Connector](../connectors/jim-ldap-connector-permissions.md)). Re-running the preview after granting the access confirms the fix.
 
 The same flow is available to automation: `Import-JIMConnectedSystemSchema -Preview` in [PowerShell](../powershell/connected-systems.md#import-jimconnectedsystemschema) returns the preview result (its `HasRemovalsOrDefinitionChanges` property flags the changes that matter, its `Dependents` property names the invalidated configuration and its `RemovalImpact` property counts what a removal would take), and committing with `-DisableDependents` or `-RemoveDependents` takes the matching posture. The REST API offers `POST connected-systems/{id}/import-schema/preview` beside the committing `import-schema` endpoint, whose body accepts `disableDependents` or `removeDependents`; see the [REST API reference](../../api/reference/).
+
+### Moving an attribute to its new type
+
+When a refresh changes an attribute's data type, each Connected System Object keeps the values it holds under the old type until a Full Import reads the attribute again. Until then, a mapping that reads the attribute would flow those old values as the wrong type, so disable those mappings before anything synchronises.
+
+1. Apply the refresh with **Apply &amp; Disable Dependents**. Each mapping that reads the attribute, directly or in an Expression, is disabled.
+2. Run a Full Import. It reads the attribute on every object and replaces each old-type value with the value it reads as the new type. A Delta Import replaces values only on the objects it returns.
+3. Point each disabled mapping at a Metaverse Attribute of the new type, or rework its Expression, and re-enable it.
+
+**Check it worked:** open a Connected System Object that holds the attribute; its value shows the new type, and the object's change history lists the old value as removed.

@@ -22,10 +22,12 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
-    public void GetLdapAttributeDataType_OmSyntax10_ReturnsBoolean()
+    public void GetLdapAttributeDataType_OmSyntax10_ReturnsNumber()
     {
+        // omSyntax 10 = Enumeration (attributeSyntax 2.5.5.9), a 32-bit integer such as sAMAccountType or instanceType.
+        // Read as Boolean, every such value was taken for false.
         var result = LdapConnectorUtilities.GetLdapAttributeDataType(10);
-        Assert.That(result, Is.EqualTo(AttributeDataType.Boolean));
+        Assert.That(result, Is.EqualTo(AttributeDataType.Number));
     }
 
     [Test]
