@@ -33,10 +33,9 @@ public class StartMetaverseObjectTypeDeletionSettingsPreviewRequest
     /// <summary>
     /// The proposed authoritative sources. Omitted or null previews the stored list.
     ///
-    /// Worth stating plainly: this list is read at the moment a Connected System Object disconnects, not by the
-    /// housekeeping sweep that acts on objects already marked, so changing it alone moves no object's deletion date
-    /// and the preview will honestly report no impact from it. What it can do is make the proposal invalid, which
-    /// comes back as a blocking validation finding.
+    /// JIM reads this list when a Connected System Object disconnects, not during housekeeping of objects already
+    /// marked, so changing it alone moves no object's deletion date and the preview reports no impact from it. It can
+    /// still make the proposal invalid, which comes back as a blocking validation finding.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
 

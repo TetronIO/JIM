@@ -26,7 +26,7 @@ public class ExampleDataSetDto
     public string Culture { get; set; } = null!;
 
     /// <summary>
-    /// Whether the Example Data Set ships with JIM (as opposed to being administrator-created).
+    /// Whether the Example Data Set ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 
@@ -110,7 +110,7 @@ public class ExampleDataTemplateDto
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// Whether the template ships with JIM (as opposed to being administrator-created).
+    /// Whether the Data Generation Template ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 

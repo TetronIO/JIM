@@ -41,9 +41,9 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
-| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, as opposed to being created by an administrator. |
+| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created, in UTC. |
-| `Culture` | `string` | The.NET culture code the values are in, for example "en-GB". |
+| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
 | `ValueCount` | `int` | How many values the Example Data Set holds. |
 
 **With `-Id`**:
@@ -52,8 +52,8 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames (Female)". |
-| `Culture` | `string` | The.NET culture code the values are in, for example "en-GB". |
-| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM (as opposed to being administrator-created). |
+| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
+| `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created (UTC). |
 | `CreatedByName` | `string` | The display name of the principal that created the Example Data Set. |
 | `LastUpdated` | `datetime` | When the Example Data Set was last modified (UTC). Empty if never modified after creation. |
@@ -233,7 +233,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Data Generation Template. |
 | `Name` | `string` | The name of the Data Generation Template, for example "Demo Users". |
-| `BuiltIn` | `bool` | Whether the Data Generation Template ships with JIM, as opposed to being created by an administrator. |
+| `BuiltIn` | `bool` | Whether the Data Generation Template ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Data Generation Template was created, in UTC. |
 | `ObjectTypeCount` | `int` | How many Object Types the Data Generation Template generates objects for. |
 
@@ -243,7 +243,7 @@ A list returns each Data Generation Template's header; `-Id` and `-Name` return 
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the template. |
 | `Name` | `string` | The name of the template, for example "Demo Users". |
-| `BuiltIn` | `bool` | Whether the template ships with JIM (as opposed to being administrator-created). |
+| `BuiltIn` | `bool` | Whether the Data Generation Template ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the template was created (UTC). |
 | `CreatedByName` | `string` | The display name of the principal that created the template. |
 | `LastUpdated` | `datetime` | When the template was last modified (UTC). Empty if never modified after creation. |
