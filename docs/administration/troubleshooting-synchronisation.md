@@ -32,7 +32,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Look at what staged them before letting them through: the Connected System's Pending Exports list shows each one and the changes it carries. If they are what you intended, run an Export Run Profile with no limit by hand, as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes. If they are not, correct whatever staged them (usually a Synchronisation Rule's scoping or an Attribute Flow), and synchronise again.
 
-**Check.** The Connected System's Pending Exports list is empty once the export has run.
+**Check.** The export run ends without the warning, and the Connected System's Pending Exports list shows none still **Pending**.
 
 ## `Task was abandoned due to worker crash or restart.`
 
@@ -80,7 +80,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector-troubleshooting.md#active-directory-will-not-enable-an-account-that-has-no-password).
 
-**Check.** The next Export run writes the change, and its Pending Export clears. A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
+**Check.** The next Export run writes the change: its Pending Export shows **Exported**, and clears once an import confirms it (at once, for the File and SQL Connectors). A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
 
 ## **Export Pending**: `We exported a change, but did not get confirmation of it`
 
@@ -89,6 +89,14 @@ The same message names creates or updates when those are what the limit holds ba
 **How to fix.** Compare what JIM exported with what the Connected System holds. Where the system changes the case, see [When a target changes the case of a value](../concepts/case-sensitivity.md#when-a-target-changes-the-case-of-a-value); where the import cannot see the attribute, select it on the Connected System's schema.
 
 **Check.** The next confirming import records no Export Pending items, and the Pending Export clears.
+
+## **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
+
+**What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
+
+**How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)).
+
+**Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 
 ## A run ends **Failed with error** before processing anything
 

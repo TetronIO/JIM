@@ -83,33 +83,11 @@ Polling remains as the safety net throughout. If the notification channel is una
 
 ## Layered Architecture
 
-JIM follows a strict layered architecture. Each layer depends only on the layer directly below it; higher layers never bypass intermediate layers.
+Inside each service, JIM is layered, and no layer bypasses the one below it. The portal and the REST API call the application layer for every operation, never the database; the application layer works on JIM's domain model; and only the data layer reads and writes PostgreSQL. Connectors sit beside the data layer, and are the only code that talks to your systems.
 
 --8<-- "assets/diagrams/layered-architecture.svg"
 
 <p class="jim-diagram-caption">Arrows show dependencies: each layer depends only on the layer directly beneath it. The Integration layer's Connectors sit at the base of the stack alongside data access.</p>
-
-### Presentation Layer
-
-**JIM.Web**: the Blazor Server UI and REST API controllers. This layer handles user interaction, request validation, and response formatting. It calls into the Application layer for all business logic.
-
-### Application Layer
-
-**JIM.Application** contains the core business logic ("Servers") that orchestrate operations. This includes the sync engine, import/export processing, Run Profile execution, and all domain workflows. The UI and API never access the database directly; they always go through the Application layer.
-
-For a component-level breakdown of the Application Layer's domain servers and repositories, see the [Developer Guide's architecture page](../developer/architecture.md).
-
-### Domain Layer
-
-**JIM.Models** defines the domain entities (MetaverseObject, ConnectedSystemObject, SyncRule, etc.), DTOs, and enumerations. This layer has no dependencies on infrastructure or data access.
-
-### Data Layer
-
-**JIM.PostgresData** implements the repository interfaces using Entity Framework Core with PostgreSQL. Handles all database interactions, migrations, and query optimisation.
-
-### Integration Layer
-
-**JIM.Connectors** contains the connector implementations that communicate with external systems (LDAP directories, SQL databases, SCIM 2.0 service providers, delimited files, etc.). Each connector implements standardised interfaces for import and export operations.
 
 ## Deployment
 
