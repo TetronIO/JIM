@@ -99,7 +99,7 @@ if ($List) {
     $cells | ForEach-Object {
         [pscustomobject]@{
             Name = $_.Name; Os = $_.Os; Runtime = "$($_.Runtime)$(if ($_.ContainsKey('Rootless') -and $_.Rootless) { ' rootless' })"
-            Network = $_.Network; Scenario = $_.Scenario; MemoryGiB = $_.MemoryGiB; Tags = $_.Tags -join ', '
+            Network = $_.Network; Scenario = $_.Scenario; MemoryGiB = Get-LabCellMemory -Cell $_; Tags = $_.Tags -join ', '
         }
     } | Format-Table -AutoSize
     return
@@ -200,14 +200,14 @@ try {
             }
         }
 
-        $runningGiB = ($running | ForEach-Object { $_.Cell.MemoryGiB } | Measure-Object -Sum).Sum
+        $runningGiB = ($running | ForEach-Object { Get-LabCellMemory -Cell $_.Cell } | Measure-Object -Sum).Sum
         $toStart = @(Select-LabCellToStart -Pending $pending.ToArray() -RunningGiB ([int]$runningGiB) -RunningCount $running.Count `
                 -BudgetGiB $BudgetGiB -MaxParallel $MaxParallel)
         foreach ($cell in $toStart) {
             $pending.Remove($cell) | Out-Null
             $running.Add((Start-Cell $cell))
-            $runningGiB += $cell.MemoryGiB
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] started $($cell.Name) ($($cell.MemoryGiB) GiB; $runningGiB of $BudgetGiB GiB in use, $($pending.Count) waiting)"
+            $runningGiB += Get-LabCellMemory -Cell $cell
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] started $($cell.Name) ($(Get-LabCellMemory -Cell $cell) GiB; $runningGiB of $BudgetGiB GiB in use, $($pending.Count) waiting)"
         }
         Start-Sleep -Seconds 5
     }

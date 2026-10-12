@@ -16,12 +16,22 @@
     Sql: run -Sql in JIM's bundled database and return its rows, unaligned, one per line.
     Restarts: the total number of times JIM's containers have restarted since they were created.
     Healthy: True when every JIM container passes its own health check, else the first that does not.
+    Fingerprint: every file of the installation with its checksum, then every JIM container running, with its ID and
+    image: what a refused or interrupted installer run must leave as it was (Compare-LabFingerprint).
+    DatabasePassword: the bundled database's password, where the installer keeps it: .env on Docker, the jim-secrets
+    secret on Podman.
 
 .PARAMETER Runtime
     docker or podman.
 
 .PARAMETER Rootless
     Podman only: JIM runs rootless, under the jim account.
+
+.PARAMETER ExternalDatabase
+    JIM uses a PostgreSQL server of its own, so it has no database container.
+
+.PARAMETER InstallPath
+    For -Action Fingerprint and DatabasePassword: where JIM is installed. Default /opt/jim, the installer's.
 
 .PARAMETER Sql
     For -Action Sql.
@@ -31,7 +41,7 @@
 #>
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Sql', 'Restarts', 'Healthy')]
+    [ValidateSet('Sql', 'Restarts', 'Healthy', 'Fingerprint', 'DatabasePassword')]
     [string]$Action,
 
     [Parameter(Mandatory)]
@@ -39,6 +49,10 @@ param(
     [string]$Runtime,
 
     [switch]$Rootless,
+
+    [switch]$ExternalDatabase,
+
+    [string]$InstallPath = '/opt/jim',
 
     [string]$Sql
 )
@@ -51,6 +65,9 @@ $containers = if ($Runtime -eq 'docker') {
 }
 else {
     @('jim-database-postgres', 'jim-web', 'jim-worker', 'jim-scheduler')
+}
+if ($ExternalDatabase) {
+    $containers = $containers[1..3]
 }
 
 function Invoke-ContainerRuntime {
@@ -102,5 +119,29 @@ switch ($Action) {
             }
         }
         $true
+    }
+    'Fingerprint' {
+        if (Test-Path -LiteralPath $InstallPath) {
+            Get-ChildItem -LiteralPath $InstallPath -Recurse -Force -File | Sort-Object FullName | ForEach-Object {
+                "$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.Substring(0, 12).ToLower()) $([System.IO.Path]::GetRelativePath($InstallPath, $_.FullName))"
+            }
+        }
+        else {
+            "no $InstallPath"
+        }
+        Invoke-ContainerRuntime @('ps', '--format', '{{.Names}} {{.ID}} {{.Image}}') |
+            Where-Object { $_ -match '^jim[.-]' } | Sort-Object
+    }
+    'DatabasePassword' {
+        $password = if ($Runtime -eq 'docker') {
+            Get-Content -LiteralPath (Join-Path $InstallPath '.env') |
+                Where-Object { $_ -match '^JIM_DB_PASSWORD=' } | ForEach-Object { $_ -replace '^JIM_DB_PASSWORD=', '' }
+        }
+        else {
+            # The secret holds the Kubernetes Secret document it was stored from.
+            Invoke-ContainerRuntime @('secret', 'inspect', '--showsecret', '--format', '{{.SecretData}}', 'jim-secrets') |
+                Where-Object { $_ -match '^\s+JIM_DB_PASSWORD:' } | ForEach-Object { $_ -replace '^\s+JIM_DB_PASSWORD:\s*', '' }
+        }
+        "$($password | Select-Object -First 1)".Trim('"', "'")
     }
 }
