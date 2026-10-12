@@ -111,12 +111,29 @@ public class PendingPasswordChange
     /// Whether to enable the account as the password is set, or null to leave it as it is.
     /// <para>
     /// Carried only by an <see cref="PendingPasswordChangeOrigin.Explicit"/> change, and read only for one: the
-    /// administrator who named the account made this decision with it. A propagated change never enables an
-    /// account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
-    /// as a side effect of somebody changing their password elsewhere would undo that silently.
+    /// administrator who named the account made this decision with it. A propagated change never decides to enable
+    /// an account, because it reaches accounts an administrator may have disabled on purpose, and re-enabling one
+    /// as a side effect of somebody changing their password elsewhere would undo that silently. The one enable any
+    /// delivery completes is the one JIM itself withheld until a password existed (#2039), because that is what the
+    /// account's Attribute Flow asked for; <c>PasswordEnablementPolicy</c> holds the whole precedence (#2064).
     /// </para>
     /// </summary>
     public bool? EnableAccount { get; set; }
+
+    /// <summary>
+    /// Whether an export to this row's account wrote the attribute through which the Connected System enables or
+    /// disables it (#2064): <c>userAccountControl</c> on Active Directory and Samba AD. Where it did, that Attribute
+    /// Flow decides whether the account is enabled, and delivering the first password leaves it alone rather than
+    /// applying the provisioning Synchronisation Rule's Enable Account.
+    /// <para>
+    /// Meaningful only for a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Set when the row is staged,
+    /// from the Create that provisioned the account, and set again by any later export that writes the enabled state
+    /// while the password is still owed (a leaver disabled, or an account disabled on deprovisioning), so a late
+    /// delivery never re-enables it. Recorded rather than inferred at delivery, because nothing else can tell an
+    /// account the flow created disabled from one the directory created disabled by default.
+    /// </para>
+    /// </summary>
+    public bool EnabledStateSetByAttributeFlow { get; set; }
 
     public PendingPasswordChangeStatus Status { get; set; } = PendingPasswordChangeStatus.Pending;
 
@@ -341,7 +358,8 @@ public class PendingPasswordChange
     /// </para>
     /// <para>
     /// Everything the newer change says about the password it carries comes across: its origin, its enable
-    /// decision and the account it names, as well as the value and the expiry behaviour. Coalescing is by
+    /// decision, whether an export set the account's enabled state, and the account it names, as well as the value
+    /// and the expiry behaviour. Coalescing is by
     /// identity and system whatever the origin (#1635); an administrator's reset replaces a propagated change
     /// that was still waiting, and a later propagated change replaces the reset.
     /// </para>
@@ -363,6 +381,7 @@ public class PendingPasswordChange
         ExpiryBehaviour = newer.ExpiryBehaviour;
         Origin = newer.Origin;
         EnableAccount = newer.EnableAccount;
+        EnabledStateSetByAttributeFlow = newer.EnabledStateSetByAttributeFlow;
         ConnectedSystemObjectId = newer.ConnectedSystemObjectId;
         SyncRuleId = newer.SyncRuleId;
         ActivityId = newer.ActivityId;

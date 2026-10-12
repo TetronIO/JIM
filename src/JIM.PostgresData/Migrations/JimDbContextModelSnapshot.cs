@@ -4629,6 +4629,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool?>("EnableAccount")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EnabledStateSetByAttributeFlow")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("EncryptedPassword")
                         .HasColumnType("text");
 

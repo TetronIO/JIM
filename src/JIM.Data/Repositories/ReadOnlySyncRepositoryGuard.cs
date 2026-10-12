@@ -520,6 +520,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(StageProvisionedPasswordChangesAsync));
 
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(MarkOwedInitialPasswordsAsSetByAttributeFlowAsync));
+
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
         => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));
 

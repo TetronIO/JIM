@@ -735,6 +735,18 @@ public interface ISyncRepository
     Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);
 
     /// <summary>
+    /// Records that an export has written the enabled state of these accounts (#2064), on each account's
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row that is still owed (Pending, Delivering or Parked):
+    /// sets <see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>, so delivering that first password
+    /// leaves the enabled state to the Attribute Flow rather than applying the provisioning Synchronisation Rule's
+    /// Enable Account. Asked after an Update, or a Delete performed as a disable, whose Connector reported writing
+    /// the enabled state: a leaver disabled, or an account disabled on deprovisioning, while its first password is
+    /// still owed is then never re-enabled by a late delivery. A narrow status mark on one column, so exempt from the
+    /// bulk column list rule. Returns how many rows it marked.
+    /// </summary>
+    Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Creates Activities in one batch, for callers recording several at once (#1697: one parent Activity per
     /// provisioned password change staged in a batch). No navigation properties are expected to be set, so this
     /// walks nothing beyond the Activities themselves.

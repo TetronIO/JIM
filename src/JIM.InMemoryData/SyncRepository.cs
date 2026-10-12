@@ -3411,6 +3411,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(outcomes);
     }
 
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        // Mirrors the PostgreSQL status mark (#2064): owed Provisioned rows for these accounts, not already marked.
+        var accounts = connectedSystemObjectIds.ToHashSet();
+        var marking = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && c.ConnectedSystemObjectId.HasValue && accounts.Contains(c.ConnectedSystemObjectId.Value)
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked
+                        && !c.EnabledStateSetByAttributeFlow)
+            .ToList();
+
+        foreach (var change in marking)
+            change.EnabledStateSetByAttributeFlow = true;
+
+        return Task.FromResult(marking.Count);
+    }
+
     /// <summary>
     /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
     /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
@@ -3580,7 +3598,8 @@ public class SyncRepository : ISyncRepository
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
         EnableAccount = source.EnableAccount,
-        SyncRuleId = source.SyncRuleId
+        SyncRuleId = source.SyncRuleId,
+        EnabledStateSetByAttributeFlow = source.EnabledStateSetByAttributeFlow
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
