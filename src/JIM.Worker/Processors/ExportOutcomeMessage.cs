@@ -104,30 +104,33 @@ internal static class ExportOutcomeMessage
               "next export run will send them again. The service log names the cause.";
 
     /// <summary>
-    /// The warning for newly provisioned accounts owed an Initial Password that JIM could not record (#1121). A warning,
-    /// not a failure: the accounts were created, but nothing will deliver a password nobody knows is owed.
+    /// The warning for newly provisioned accounts that may be owed an Initial Password JIM could not record (#1121). A
+    /// warning, not a failure: the accounts were created, but nothing will deliver a password nobody knows is owed, and
+    /// exporting again will not queue one, because only the Create that provisions an account stages its password.
     /// </summary>
     /// <param name="accounts">How many accounts' passwords could not be recorded.</param>
     internal static string ForInitialPasswordsNotStaged(int accounts) =>
         accounts == 1
-            ? "1 newly provisioned account is owed an Initial Password that JIM could not record, so none will be delivered to it. " +
-              "Export it again to queue the password; the service log names the account and the cause."
-            : $"{accounts:N0} newly provisioned accounts are owed an Initial Password that JIM could not record, so none will be " +
-              "delivered to them. Export them again to queue the passwords; the service log names the accounts and the cause.";
+            ? "1 newly provisioned account may be owed an Initial Password that JIM could not record, so none will be delivered to it, " +
+              "and exporting again will not queue one. Set its password with the set-password action on its Connected System Object; " +
+              "the service log names the account and the cause."
+            : $"{accounts:N0} newly provisioned accounts may be owed an Initial Password that JIM could not record, so none will be " +
+              "delivered to them, and exporting again will not queue one. Set each one's password with the set-password action on its " +
+              "Connected System Object; the service log names the accounts and the cause.";
 
     /// <summary>
-    /// The warning for accounts whose enabled state an export wrote while an Initial Password was still owed to them,
-    /// where JIM could not record that against the password (#2064). Delivering it would then follow the Synchronisation
-    /// Rule's setting rather than the Attribute Flow, which is why the export run says so.
+    /// The warning for accounts whose enabled state an export wrote where JIM could not check, and record against, any
+    /// Initial Password still owed to them (#2064). Delivering such a password would then follow the Synchronisation
+    /// Rule's setting rather than the Attribute Flow, which is why the export run says so; most accounts are owed
+    /// nothing, so it says "may".
     /// </summary>
     /// <param name="accounts">How many accounts the record could not be made for.</param>
     internal static string ForInitialPasswordMarkingFailed(int accounts) =>
         accounts == 1
-            ? "1 account had its enabled state written by this export, but JIM could not record that against the Initial Password " +
-              "still owed to it, so delivering that password will follow its Synchronisation Rule rather than the Attribute Flow. " +
-              "The service log names the account; cancel its password under Operations > Passwords if it must stay as the flow left it."
-            : $"{accounts:N0} accounts had their enabled state written by this export, but JIM could not record that against the " +
-              "Initial Passwords still owed to them, so delivering those passwords will follow their Synchronisation Rule rather than " +
-              "the Attribute Flow. The service log names the accounts; cancel their passwords under Operations > Passwords if they " +
-              "must stay as the flow left them.";
+            ? "1 account had its enabled state written by this export, but JIM could not check whether an Initial Password is still " +
+              "owed to it. If one is, delivering it may follow its Synchronisation Rule rather than the Attribute Flow; the service log " +
+              "names the account, and Operations > Passwords shows whether a password is waiting for it."
+            : $"{accounts:N0} accounts had their enabled state written by this export, but JIM could not check whether an Initial " +
+              "Password is still owed to any of them. Where one is, delivering it may follow its Synchronisation Rule rather than the " +
+              "Attribute Flow; the service log names the accounts, and Operations > Passwords shows which have a password waiting.";
 }

@@ -90,7 +90,8 @@ public enum PendingPasswordChangeOrigin
     /// <summary>
     /// The password changed somewhere and JIM is carrying it to every Connected System configured to receive
     /// synchronised passwords. The account is resolved on each attempt from the system's configuration; the
-    /// account is never enabled as a side effect; a paused system holds the change until it is switched back on.
+    /// delivery never chooses to enable the account, and only completes an enable JIM withheld until a new account had a
+    /// password (#2039, #2064); a paused system holds the change until it is switched back on.
     /// </summary>
     Propagated = 0,
 

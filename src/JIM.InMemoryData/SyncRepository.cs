@@ -83,6 +83,12 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailInitialPasswordHoldProbeWith { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="CreateActivitiesAsync"/> throws it, so a test can prove that staging whose rows were written
+    /// but whose Activities were not still counts the passwords as queued.
+    /// </summary>
+    public Exception? FailActivityCreationWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -3468,6 +3474,9 @@ public class SyncRepository : ISyncRepository
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
     {
+        if (FailActivityCreationWith != null)
+            throw FailActivityCreationWith;
+
         foreach (var activity in activities)
             _activities[activity.Id] = activity;
 

@@ -161,8 +161,10 @@ public class ExportExecutionResult
     /// <para>
     /// Contained, but never silent. The accounts were created in the Connected System and their exports
     /// succeeded, so this must not fail the batch; unlike the optimistic apply above, though, nothing
-    /// self-heals a password that nobody knows is owed, so the count is reported on the Activity and an
-    /// administrator can re-stage by exporting again.
+    /// self-heals a password that nobody knows is owed, so the count is reported on the export Activity as a
+    /// warning and the service log names the accounts. Exporting again does not re-stage the passwords, because
+    /// only the Create that provisions an account stages one; an administrator sets them with the set-password
+    /// action instead.
     /// </para>
     /// </summary>
     public int InitialPasswordStagingFailedCount { get; set; }

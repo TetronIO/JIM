@@ -15,6 +15,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Serilog;
 
@@ -2270,10 +2271,12 @@ public class ExportExecutionServer
         if (rulesAskingForAPassword == null)
         {
             result.InitialPasswordStagingFailedCount += provisionedAccounts.Count;
-            Log.Error("StageInitialPasswordsForBatchAsync: Could not record that {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
-                "are owed an initial password, because which Synchronisation Rules ask for one could not be read. " +
-                "The accounts were created successfully; export them again to stage the passwords",
-                provisionedAccounts.Count, provisionedAccounts[0].ConnectedSystemId);
+            Log.Error("StageInitialPasswordsForBatchAsync: Could not record whether {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
+                "are owed an initial password, because which Synchronisation Rules ask for one could not be read. The accounts were created " +
+                "successfully, and exporting again will not queue a password; set one on each that needs it with the set-password action. " +
+                "Connected System Objects: {ConnectedSystemObjectIds}",
+                provisionedAccounts.Count, provisionedAccounts[0].ConnectedSystemId,
+                DescribeConnectedSystemObjectIds(provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id)));
             return;
         }
 
@@ -2281,8 +2284,9 @@ public class ExportExecutionServer
             return;
 
         // Declared out here so the failure count below is the number of accounts genuinely owed a password,
-        // once that is known.
+        // once that is known, and so a failure after the rows were written is not reported as passwords never queued.
         List<PendingPasswordChange>? staging = null;
+        List<ProvisionedPasswordStagingOutcome>? outcomes = null;
         try
         {
             var eligible = provisionedAccounts
@@ -2340,7 +2344,7 @@ public class ExportExecutionServer
             // Id to the row it took over (#1697), so RequestedId is the only key still pointing back here.
             var byRequestedId = staging.ToDictionary(c => c.Id);
 
-            var outcomes = await repository.StageProvisionedPasswordChangesAsync(staging);
+            outcomes = await repository.StageProvisionedPasswordChangesAsync(staging);
 
             var activities = new List<Activity>(outcomes.Count);
             var stagedCount = 0;
@@ -2387,11 +2391,22 @@ public class ExportExecutionServer
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var unrecorded = staging?.Count ?? provisionedAccounts.Count;
-            result.InitialPasswordStagingFailedCount += unrecorded;
+            if (outcomes != null)
+            {
+                // The passwords are queued and will be delivered; only the Activities recording that they were queued
+                // could not be written, so nothing is owed that nobody knows about.
+                Log.Warning(ex, "StageInitialPasswordsForBatchAsync: Queued initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}, " +
+                    "but could not record their Activities", outcomes.Count, provisionedAccounts[0].ConnectedSystemId);
+                return;
+            }
+
+            var unrecordedAccounts = staging?.Select(c => c.ConnectedSystemObjectId!.Value).ToList()
+                                     ?? provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id).ToList();
+            result.InitialPasswordStagingFailedCount += unrecordedAccounts.Count;
             Log.Error(ex, "StageInitialPasswordsForBatchAsync: Could not record that {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
-                "are owed an initial password. The accounts were created successfully; export them again to stage the passwords",
-                unrecorded, provisionedAccounts[0].ConnectedSystemId);
+                "are owed an initial password. The accounts were created successfully, and exporting again will not queue a password; set one on " +
+                "each with the set-password action. Connected System Objects: {ConnectedSystemObjectIds}",
+                unrecordedAccounts.Count, provisionedAccounts[0].ConnectedSystemId, DescribeConnectedSystemObjectIds(unrecordedAccounts));
         }
     }
 
@@ -2426,9 +2441,21 @@ public class ExportExecutionServer
             result.InitialPasswordMarkingFailedCount += connectedSystemObjectIds.Count;
             Log.Error(ex, "MarkOwedInitialPasswordsAsSetByAttributeFlowAsync: Could not record that exports wrote the enabled state of {Count} account(s) " +
                 "on Connected System {ConnectedSystemId}. The exports succeeded; an initial password still owed to any of them will follow its " +
-                "Synchronisation Rule's Enable Account rather than the Attribute Flow until the flow's value is reasserted",
-                connectedSystemObjectIds.Count, connectedSystemId);
+                "Synchronisation Rule's setting rather than the Attribute Flow until the flow's value is reasserted. Connected System Objects: {ConnectedSystemObjectIds}",
+                connectedSystemObjectIds.Count, connectedSystemId, DescribeConnectedSystemObjectIds(connectedSystemObjectIds));
         }
+    }
+
+    /// <summary>
+    /// The Connected System Object ids a failure log names, so an administrator told "the service log names the
+    /// accounts" can find them. Capped, because a batch can hold thousands; Guids carry nothing personal.
+    /// </summary>
+    private static string DescribeConnectedSystemObjectIds(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        const int shown = 100;
+        var ids = connectedSystemObjectIds.ToList();
+        var listed = string.Join(", ", ids.Take(shown));
+        return ids.Count > shown ? $"{listed} and {ids.Count - shown:N0} more" : listed;
     }
 
     /// <summary>

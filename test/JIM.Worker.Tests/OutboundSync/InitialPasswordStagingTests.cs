@@ -332,6 +332,26 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
+    /// The passwords were queued and will be delivered; only the Activities recording that could not be written. That
+    /// is not a password nobody knows is owed, so it is not counted as one, which would tell an administrator to set
+    /// passwords by hand that are already on their way.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenOnlyTheStagingActivitiesFail_ThePasswordIsNotCountedAsUnrecordedAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        SyncRepo.FailActivityCreationWith = new InvalidOperationException("The database rejected the Activity.");
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1), "the password is queued");
+            Assert.That(result.InitialPasswordStagingFailedCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
     /// A Create that came from no Synchronisation Rule (a Pending Export staged before the provisioning rule
     /// was recorded, or by an administrator directly) stages nothing rather than guessing at a rule.
     /// </summary>
