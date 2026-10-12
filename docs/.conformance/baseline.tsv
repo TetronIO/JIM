@@ -4,7 +4,6 @@
 LANG-3	administration/configuration.md	3
 LANG-3	administration/preview-features.md	1
 LANG-3	administration/security-audit-events.md	1
-LANG-3	administration/upgrading.md	1
 LANG-3	concepts/architecture.md	5
 LANG-3	concepts/attribute-priority.md	1
 LANG-3	concepts/expressions.md	2
@@ -51,8 +50,6 @@ LANG-4	powershell/history.md	4
 LANG-4	powershell/synchronisation-rules.md	9
 LANG-7	administration/configuration.md	1
 LANG-7	administration/preview-features.md	2
-LANG-7	administration/troubleshooting.md	1
-LANG-7	administration/upgrading.md	1
 LANG-7	concepts/attribute-priority.md	6
 LANG-7	concepts/expressions.md	2
 LANG-7	configuration/activities.md	2
@@ -81,8 +78,6 @@ STR-2	administration/sso-setup.md	3
 STR-2	administration/sso-setup/ad-fs.md	3
 STR-2	administration/sso-setup/keycloak.md	3
 STR-2	administration/sso-setup/microsoft-entra-id.md	3
-STR-2	administration/troubleshooting.md	3
-STR-2	administration/upgrading.md	3
 STR-2	api/authentication.md	3
 STR-2	api/index.md	3
 STR-2	api/rate-limiting.md	3
