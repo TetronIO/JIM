@@ -132,6 +132,7 @@ Add-JIMCertificate -Name "Root CA" -CertificateData $bytes -PassThru
 
 - Supports `ShouldProcess` (Medium impact). Use `-WhatIf` or `-Confirm` to preview or prompt before adding.
 - The certificate is enabled by default after creation. Use `Set-JIMCertificate` to disable it.
+- Run `Test-JIMCertificate` after adding a certificate to confirm it has not expired and its chain is trusted.
 
 ---
 
@@ -247,7 +248,7 @@ Get-JIMCertificate | Where-Object { -not $_.IsEnabled } | Remove-JIMCertificate 
 ### Notes
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Removing a certificate that is in use by a Connected System may cause authentication failures. Verify usage before deleting.
+- Removing a certificate stops any Connected System whose server JIM trusts only through it from connecting securely. Its settings are kept, and it connects again once the certificate is back in the store. To keep a copy, export it first with `Export-JIMCertificate`; to stop trusting it without losing it, disable it with `Set-JIMCertificate -Disable` instead.
 
 ---
 
@@ -354,7 +355,7 @@ Export-JIMCertificate -Id "a1b2c3d4-..." -Path ./certs/root-ca.der -Force
 
 ```powershell title="Export as byte array for further processing"
 $bytes = Export-JIMCertificate -Id "a1b2c3d4-..." -PassThru
-[System.IO.File]::WriteAllBytes("./certs/root-ca.pem", $bytes)
+[System.IO.File]::WriteAllBytes("./certs/root-ca.der", $bytes)
 ```
 
 ```powershell title="Pipeline: export all enabled certificates"
