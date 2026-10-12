@@ -111,6 +111,11 @@
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
             </MudButton>
 
+            @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
+                       data-testid="jim-cso-explore-causality">Explore causality</MudButton>
+
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
             @* joined to a Metaverse Object: the password goes onto the queue against the person (#1635), and  *@

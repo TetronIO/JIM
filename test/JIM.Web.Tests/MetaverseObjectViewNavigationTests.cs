@@ -218,6 +218,21 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
     private static object? ConnectionsBadge(IRenderedComponent<View> page) =>
         page.FindComponents<MudTabPanel>().Single(p => p.Instance.Text == "Connections").Instance.BadgeData;
 
+    /// <summary>
+    /// The page opens the Causality Explorer on itself (#2100) from whichever tab is showing.
+    /// </summary>
+    [TestCase("details")]
+    [TestCase("changes")]
+    public void ExploreCausality_OpensTheExplorerOnThisObject(string tab)
+    {
+        SetupChangeHistory(AlphaId, "Alpha change");
+
+        var page = RenderObject(AlphaId, tab);
+
+        page.WaitForAssertion(() => Assert.That(page.Find("[data-testid='jim-mvo-explore-causality']").GetAttribute("href"),
+            Is.EqualTo($"/causality/metaverse-objects/{AlphaId}")));
+    }
+
     [Test]
     public void ChangesTab_NavigatingToAnotherObjectOnTheSameTab_ShowsOnlyThatObjectsHistory()
     {

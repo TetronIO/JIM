@@ -73,6 +73,29 @@ public class CausalityPanelTests
     }
 
     /// <summary>
+    /// The item page's panel offers the same Lineage in the Causality Explorer (#2100), where it can be followed in place;
+    /// the explorer itself, already there, does not offer it.
+    /// </summary>
+    [Test]
+    public void Render_ExplorerAddressGiven_OffersToOpenTheLineageInTheExplorer()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+
+        var withAddress = _context.Render<CausalityPanel>(ps => ps
+            .Add(c => c.Item, item)
+            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
+            .Add(c => c.ExplorerHref, $"/causality/items/{item.Id}"));
+        var withoutAddress = RenderPanel(item, CausalityTestData.NewJoinerContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withAddress.Find("a.jim-causality-open-explorer").GetAttribute("href"), Is.EqualTo($"/causality/items/{item.Id}"));
+            Assert.That(withAddress.Find("a.jim-causality-open-explorer").TextContent.Trim(), Is.EqualTo("Open in explorer"));
+            Assert.That(withoutAddress.FindAll("a.jim-causality-open-explorer"), Is.Empty);
+        }
+    }
+
+    /// <summary>
     /// The Causality Explorer shows the Lineage alone (#2100): its own header already says what is in view, and the
     /// Timeline and Table stay on the item page. A stored preference for another view must not pull it away either.
     /// </summary>

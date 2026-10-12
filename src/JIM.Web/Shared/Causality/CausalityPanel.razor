@@ -62,6 +62,12 @@
                                   AfterThisRunPills="_lineageModel?.Consequences?.Pills"
                                   OnAfterThisRunSelected="AfterThisRunSelected">
                 <Actions>
+                    @if (ExplorerHref != null)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                                   StartIcon="@Icons.Material.Filled.Hub" Href="@ExplorerHref"
+                                   Class="jim-causality-open-explorer">Open in explorer</MudButton>
+                    }
                     @if (AvailableViews.Count > 1)
                     {
                         <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
@@ -247,6 +253,13 @@
     /// </summary>
     [Parameter]
     public bool LineageOnly { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for this item (#2100), where the host offers to follow its Lineage there in place;
+    /// null where it does not, as the explorer itself does not.
+    /// </summary>
+    [Parameter]
+    public string? ExplorerHref { get; set; }
 
     private CausalityModel? _model;
     private CausalitySummary? _summary;

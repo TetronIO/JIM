@@ -46,6 +46,7 @@ public class PendingExportDetailTests : JimComponentTestContext
 
     private Mock<IConnectedSystemRepository> _connectedSystems = null!;
     private Mock<IMetaverseRepository> _metaverse = null!;
+    private Mock<IActivityRepository> _activities = null!;
     private NavigationManager _navigation = null!;
 
     protected override void ConfigureAdditionalServices()
@@ -53,8 +54,10 @@ public class PendingExportDetailTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _connectedSystems = new Mock<IConnectedSystemRepository>();
         _metaverse = new Mock<IMetaverseRepository>();
+        _activities = new Mock<IActivityRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
         repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
+        repository.Setup(r => r.Activity).Returns(_activities.Object);
 
         _connectedSystems
             .Setup(r => r.GetConnectedSystemHeaderAsync(ConnectedSystemId))
@@ -175,6 +178,45 @@ public class PendingExportDetailTests : JimComponentTestContext
 
     private static IEnumerable<string> VisibleAttributeNames(IRenderedComponent<PendingExportDetail> cut) =>
         Table(cut).VisibleItems.Select(g => g.AttributeName);
+
+    /// <summary>
+    /// The page names the runs that queued the export (#2100), each with a way into the Causality Explorer on its item.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_QueuedBy_ListsTheRunsThatStagedIt()
+    {
+        var stagerId = Guid.NewGuid();
+        var core = new PendingExport { Id = PendingExportId, ConnectedSystemId = ConnectedSystemId };
+        core.RecordStager(stagerId);
+        _connectedSystems.Setup(r => r.GetPendingExportCoreAsync(PendingExportId)).ReturnsAsync(core);
+        _activities.Setup(r => r.GetCausalTimelineEntriesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, JIM.Models.Activities.DTOs.CausalTimelineEntry>
+            {
+                [stagerId] = new() { RunProfileExecutionItemId = stagerId, ActivityTargetName = "Full Synchronisation", Executed = DateTime.UtcNow }
+            });
+        _activities.Setup(r => r.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync([]);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Find(".jim-causality-queued-row a.jim-causality-explore").GetAttribute("href"),
+            Is.EqualTo($"/causality/items/{stagerId}")));
+    }
+
+    /// <summary>
+    /// An export that names no run says so where Queued by would be, rather than the panel being absent.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_QueuedByNoRun_SaysNoRunIsRecorded()
+    {
+        _connectedSystems.Setup(r => r.GetPendingExportCoreAsync(PendingExportId))
+            .ReturnsAsync(new PendingExport { Id = PendingExportId, ConnectedSystemId = ConnectedSystemId });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Find(".jim-causality-queued-empty").TextContent,
+            Does.Contain("No run is recorded as staging this Pending Export")));
+    }
 
     [Test]
     public void PendingExportDetail_AttributeChanges_AreAPlainAttributeTable()

@@ -49,7 +49,7 @@
             <OutcomeSummaryChips OutcomeSummary="@context.Entry.OutcomeSummary" ErrorType="@context.Entry.ErrorType" />
         </MudTd>
         <MudTd DataLabel="Because">
-            <span class="jim-causality-because">@BecauseContent(context)</span>
+            <CausalityNearestCause NearestCauses="context.NearestCauses" EffectName="@context.Entry.DisplayName" />
         </MudTd>
         <MudTd Class="jim-nowrap">
             <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="jim-causality-explore"
@@ -153,36 +153,4 @@
         _dense = await PreferenceService.GetTableDenseAsync() == true;
         StateHasChanged();
     }
-
-    /// <summary>
-    /// A row's nearest cause, worded and highlighted as the Lineage's own card for it is, or how its story ends where it
-    /// has none: a cut-short story never reads as a complete one.
-    /// </summary>
-    private static RenderFragment BecauseContent(CausalTimelineRow row) => __builder =>
-    {
-        var causes = row.NearestCauses;
-        if (causes.Cohorts.Count == 0)
-        {
-            @(CausalityCauseWording.Ending(causes.Resolution) ?? CausalityCauseWording.Ending(CausalChainResolution.NoFurtherCauses))
-            return;
-        }
-
-        foreach (var part in CausalityCauseWording.Sentence(causes.Cohorts[0], row.Entry.DisplayName))
-        {
-            if (part.IsAttributeName)
-            {
-                <span class="jim-causality-attr">@part.Text</span>
-            }
-            else
-            {
-                @part.Text
-            }
-        }
-
-        var more = causes.TotalCohortCount - 1;
-        if (more > 0)
-        {
-            @($", and {more} more {(more == 1 ? "cause" : "causes")}")
-        }
-    };
 }

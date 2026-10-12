@@ -1,6 +1,6 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phases 3-0, 3a, 3b and 3c complete; Phase 3d next)
+- **Status:** Doing (Phases 3-0 and 3a to 3d complete; Phase 3e next)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
 - **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
 - **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
@@ -158,12 +158,22 @@ Delivery notes:
 - **Open in explorer** moves to Phase 3d with the page it opens, so this phase changes nothing visible.
 - Verified at runtime by comparison: every link and line of the panel's text, in all three views, for 20 items chosen to cover each change type, deleted records, chain hops of each edge type and the items with the most consequences, read from the image before this phase and again after it. The 570 links were identical; the only text that changed was the "Checked at" time.
 
-### Phase 3d: The explorer and its entry points
+### Phase 3d: The explorer and its entry points ✅
 
 - `CausalityTrail` and `CausalityExplorerLinks` (plain unit tests).
 - The explorer page; a trail bar component; an object timeline component; the focus header with its way out (item page, object page, or the deletion record); "Continue from …" on cards the walk stopped at, continuing from the cohort's sole member or, for a larger cohort, from each member's own link.
 - **Explore causality** on the Connected System Object and Metaverse Object pages; the **Queued by** panel on the Pending Export page, including its no-recorded-run state.
 - bUnit covers the trail bar, the timeline, the Queued by panel, and re-centring. Re-centring is only observable at page level (the router re-parameterising one page instance), so the explorer joins the item page as the second sanctioned page-level exception in `test/CLAUDE.md`.
+
+Delivery notes:
+
+- **Lineage only means no summary band either,** as the mock shows: the focus header already says what is in view. The panel's `LineageOnly` mode offers the Lineage alone and neither reads nor writes the stored view preference, so exploring never changes what the item page opens on.
+- **The trail is read from the address,** not supplied as a query parameter, so following a link that changes only the trail is still seen. A read superseded by a later re-centring is discarded rather than landing on the wrong focus.
+- **Continue from shows on both hosts.** Where the walk stops at its bound on a single item, upwards on the depth-limit ending and downwards on the further-than-shown card, a "Continue from <name>" link carries on from it: in the explorer it re-centres, on the item page it opens that item's page. A cohort of several already links each member, so it gets none. This is the one visible change to the item page besides **Open in explorer**.
+- **Queued by shows what each run did,** as the item list's outcome chips, rather than the mock's per-run "Staged" column: the Pending Export holds the merged changes, not each run's share of them, so a per-run staged change is not recorded to show. Its attribute changes stay listed below it.
+- **The Metaverse Object page's button sits in its tab bar,** beside the view switcher, because the page has no action row; it shows on every tab. The Connected System Object page's sits beside Preview Sync, and Open in explorer in the causality panel's band.
+- Two pieces became shared components rather than second copies: the Activity page's outcome chips (`OutcomeSummaryChips`) and a row's nearest cause (`CausalityNearestCause`), used by the object timeline and Queued by.
+- Showing more of an object's timeline skips any row already shown, since an item recorded after the first page was read moves later rows down one.
 
 ### Phase 3e: REST and PowerShell
 

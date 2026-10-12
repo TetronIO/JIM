@@ -1,10 +1,12 @@
 @page "/admin/connected-systems/{ConnectedSystemId:int}/pending-exports/{Id:guid}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
 @using JIM.Utilities
 @using JIM.Web.Models
+@using JIM.Web.Shared.Causality
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -163,6 +165,14 @@
                 </MudCardContent>
             </MudCard>
         </MudItem>
+
+        @* The runs that staged this export, each with why it did and a way into the Causality Explorer (#2100). *@
+        @if (_queuedBy is { } queuedBy)
+        {
+            <MudItem xs="12">
+                <CausalityQueuedByPanel QueuedBy="queuedBy" />
+            </MudItem>
+        }
 
         @if (_pendingExport.ErrorCount > 0 || !string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
         {
@@ -466,6 +476,7 @@ else
     public Guid Id { get; set; }
 
     private PendingExport? _pendingExport;
+    private CausalQueuedBy? _queuedBy;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private Dictionary<string, int> _attributeChangeTotalCounts = new();
     private List<PendingExportUnresolvedReference> _unresolvedReferences = new();
@@ -485,6 +496,7 @@ else
             return;
         }
 
+        _queuedBy = null;
         var detailResult = await jim.ConnectedSystems.GetPendingExportDetailAsync(Id);
         _pendingExport = detailResult?.PendingExport;
         _attributeChangeTotalCounts = detailResult?.AttributeChangeTotalCounts ?? new();
@@ -509,6 +521,9 @@ else
         // Grouped once here rather than per window read: the grid slices its windows from this list, and
         // re-grouping every change on every scroll would do the same work again for no new information.
         _attributeChangeGroups = GetGroupedChanges();
+
+        // The runs that staged it (#2100): a handful of reads however many runs, since the export names at most fifty.
+        _queuedBy = await jim.Activities.GetPendingExportQueuedByAsync(Id);
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
