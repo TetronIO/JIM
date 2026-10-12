@@ -416,11 +416,11 @@ Returns one or more mapping objects representing Attribute Flow Rules. Each mapp
 | `Derived.StepCount` | `int` | How many steps the Metaverse Object Type's evaluation has |
 | `Derived.MetaverseInputs` | `string[]` | The Metaverse attributes the Expression reads, as written |
 
-`Generation` is present on a [generated mapping](../configuration/generated-values.md), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/generated-values.md#checking-availability-in-target-systems):
+`Generation` is present on a [generated mapping](../configuration/generated-values.md), and is `$null` on every other mapping. Besides the uniqueness token settings, it carries where the value is [checked for availability](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems):
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/generated-values.md#when-a-target-rejects-a-value)) |
+| `Generation.CollisionRemediation` | `bool` | Whether JIM corrects the value when a target rejects it as already in use ([Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value)) |
 | `Generation.Exclusions` | `int[]` | The IDs of the Connected Systems excluded from the value's availability checks; empty when none is |
 | `Generation.Participants` | `object[]` | Every Connected System attribute the value is exported to, ordered by Connected System name then attribute name |
 | `Generation.RetiredValueCount` | `int` | How many values the target attribute's retired values register holds |
@@ -568,8 +568,8 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
 | `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit. |
 | `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
-| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/generated-values.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
-| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/generated-values.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
+| `CollisionRemediation` | `bool` | No | `$true` | Whether JIM corrects a value a target rejects as already in use ([Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value)): while no other Connected System holds it, JIM chooses the next free value and exports it again; once another does, the export is held for a decision. Acts only where the Connector reports collisions (`Generation.Participants[].ReportsCollisions`). |
+| `ExcludeConnectedSystemId` | `int[]` | No (ImportGenerated set only) | (none) | The IDs of Connected Systems to leave out of the value's [availability checks](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems): values already in use there do not stop JIM choosing them. Each must be a Connected System the value is exported to unchanged, otherwise the request is refused naming it. Not offered for an export generated mapping, which is checked only in its own Connected System. |
 
 ### Output
 
@@ -695,7 +695,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. A sequence skips a run of numbers already held in one step, so the run's length does not count towards the limit |
 | `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
 | `CollisionRemediation` | `bool` | No | | Whether JIM corrects a value a target rejects as already in use. Changing it releases this Attribute Flow's values [held for a decision](#generated-value-decisions), so the next export tries again under the new setting. Generated mappings only |
-| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/generated-values.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
+| `ExcludeConnectedSystemId` | `int[]` | No | | Replaces the IDs of the Connected Systems left out of the value's [availability checks](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems). Supply `@()` to clear every exclusion; omit to leave them unchanged. Each must be a Connected System the value is exported to unchanged, otherwise the update is refused naming it. Refused for an export generated mapping. Generated mappings only |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
@@ -853,7 +853,7 @@ Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
 
 ## Generated value decisions
 
-When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/generated-values.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
+When a Connected System rejects a generated value as already in use, [Collision Remediation](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) normally corrects it. It holds the export for a decision instead when correcting it would rename an account another Connected System has already accepted, when JIM cannot tell whether one has, or when the value has been corrected as often as JIM allows. These cmdlets list what is held and act on it; each action is recorded as an Activity naming who took it.
 
 ### Get-JIMGeneratedValueDecision
 

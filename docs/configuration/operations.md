@@ -1,5 +1,8 @@
 ---
 title: Operations
+description: "The Operations page: the queue, history, Schedules and Passwords tabs, and the Service Health of the Worker and Scheduler."
+type: object
+audience: operator
 ---
 
 # Operations
@@ -74,7 +77,7 @@ if ($health.Overall -ne 'Healthy') {
 
 The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
-## See also
+## Related
 
 - [Activities](activities.md): the record of every operation, and how to watch one run
 - [Schedules](schedules.md): automated, ordered sequences of operations

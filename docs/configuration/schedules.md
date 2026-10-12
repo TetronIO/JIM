@@ -1,5 +1,8 @@
 ---
 title: Schedules
+description: "Run Run Profiles in order, on a timetable or on demand, with Schedules: their triggers, steps, executions and history."
+type: object
+audience: administrator
 ---
 
 # Schedules
@@ -72,7 +75,7 @@ Upgrading JIM changes nothing about how your existing Schedules behave: every ex
 
 From automation, the Schedule's setting is `-OnStepFailure` on `New-JIMSchedule` and `Set-JIMSchedule`, and a step's is `-OnFailure` on `Add-JIMScheduleStep` and `Set-JIMScheduleStep`; the REST API carries the same settings as `onStepFailure` and `onFailure`. See the [Schedules cmdlets](../powershell/schedules.md) for details.
 
-Nothing is lost when a schedule stops or cannot start: the steps that did not run are simply attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
+Nothing is lost when a schedule stops or cannot start: the steps that did not run are attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
 
 ## Executions
 
@@ -134,7 +137,7 @@ JIM ships with a small number of **built-in schedules** that are part of the pro
 
 - **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work.
 
-- **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
+- **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
 
 What you can and can't do with a built-in schedule:
 
@@ -164,7 +167,7 @@ When changing a schedule from automation you can record a reason alongside the c
 **Setting up an automated nightly sync:**
 
 1. Create a schedule with a cron trigger, a specific-times pattern, and the schedule enabled
-2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential). If this is a new deployment, or a Synchronisation Rule, Object Matching Rule or Attribute Priority change has just gone in, run the schedule's Connected Systems through [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) first, since a delta cycle alone only catches what changes from here. Order the synchronisation steps sources first: where a Synchronisation Rule [derives a Metaverse attribute](derived-attributes.md) from one another Connected System contributes, synchronise that system before the one hosting the derived flow. The other order still converges, one cycle later, because JIM marks the objects whose inputs changed so the hosting system's next delta synchronisation picks them up.
+2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential). If this is a new deployment, or a Synchronisation Rule, Object Matching Rule or Attribute Priority change has just gone in, run the schedule's Connected Systems through [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) first, since a delta cycle alone only catches what changes from here. Order the synchronisation steps sources first: where a Synchronisation Rule [derives a Metaverse attribute](derived-attributes.md) from one another Connected System contributes, synchronise that system before the one hosting the derived flow. The other order still converges, one cycle later, because JIM marks the objects whose inputs changed so the hosting system's next Delta Synchronisation picks them up.
 3. Verify by triggering a manual run before the first scheduled fire
 4. Monitor the resulting execution to confirm each step completes as expected
 
@@ -186,7 +189,7 @@ When changing a schedule from automation you can record a reason alongside the c
 - **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Start-JIMSchedule`, etc.)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
 - [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
 - [Activities](activities.md): each schedule execution produces a parent activity with child activities per step

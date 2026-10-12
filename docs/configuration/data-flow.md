@@ -1,6 +1,13 @@
+---
+title: Data Flow
+description: Every Attribute Flow configured across all Connected Systems, in both directions, in one read-only list, and how to narrow it.
+type: object
+audience: administrator
+---
+
 # Data Flow
 
-Attribute flows are configured one Synchronisation Rule at a time, which is the right place to change them and the wrong place to understand them. Answering "where does this person's job title actually come from?" means opening every inbound rule for that object type and reading its mappings.
+Attribute Flows are configured one Synchronisation Rule at a time, which is the right place to change them and the wrong place to understand them. Answering "where does this person's job title actually come from?" means opening every inbound rule for that object type and reading its mappings.
 
 The **Data Flow** view answers it in one place. It lists every attribute data flow configured across all Connected Systems, in both directions, and is read-only by design: rows link to the surface that owns the change rather than editing in place.
 
@@ -22,7 +29,7 @@ The columns are grouped into two bands, one per side of the Metaverse. The **Con
 | Band | Column | Shows |
 |------|--------|-------|
 | Connected System | **System** | The system the rule belongs to |
-| Connected System | **Object Type** | The Connected System object type, as the system itself names it |
+| Connected System | **Object Type** | The Connected System Object type, as the system itself names it |
 | Connected System | **Attribute** | The system's attribute: the source inbound, the target outbound. A computed value is shown as an **Ex** chip carrying the expression |
 | | **→ / ←** | Which way the value moves. It points right on an inbound flow and left on an outbound one |
 | Metaverse | **Object Type** | The Metaverse Object Type the flow applies to |
@@ -49,7 +56,7 @@ Every filter is optional and they combine, so you can go from "everything" to "t
 - **Connected System**<br /> Everything one system reads or writes.
 - **Metaverse Object Type**<br /> Users, Groups, or any custom type.
 - **Metaverse Attribute**<br /> Every flow that touches the attribute, in either direction. An inbound flow matches when it writes the attribute and an outbound flow when it reads it, so this is the fastest way to see an attribute's full journey: which systems feed it, and where it goes afterwards.
-- **Multiple contributors**<br /> Just the inbound flows whose target Metaverse Attribute is fed by more than one Synchronisation Rule. Several systems contributing one attribute is a normal, expected arrangement; this simply narrows the list to where the priority order decides which value wins, which is what is worth reviewing after adding a Connected System.
+- **Multiple contributors**<br /> Only the inbound flows whose target Metaverse Attribute is fed by more than one Synchronisation Rule. Several systems contributing one attribute is a normal, expected arrangement; this narrows the list to where the priority order decides which value wins, which is what is worth reviewing after adding a Connected System.
 - **Search**<br /> Free text matched against Synchronisation Rules, Connected Systems, object types, attribute names on either side, and expression text.
 
 !!! note "Expressions and the attribute filters"

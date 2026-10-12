@@ -1,5 +1,8 @@
 ---
 title: Sync Preview
+description: See what synchronising one object would do with the configuration already saved, including any destructive cascade, without changing anything.
+type: object
+audience: administrator
 ---
 
 # Sync Preview
@@ -11,7 +14,7 @@ Nothing you configure changes to ask it. JIM evaluates the object against the st
 ## Where to find it
 
 - **Connected System Object page**: a **Preview Sync** button beside **Set Password**, opening the preview inline below the object's header.
-- **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation. Each row also expands to explain why the connection exists, and a **Not connected** section below says why the object has no object in other Connected Systems; see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
+- **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation. Each row also expands to explain why the connection exists, and a **Not connected** section below says why the object has no object in other Connected Systems; see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
 - **Metaverse Object detail page, Connections tab, below the table**: **Preview Exports**, which previews what would export from the Metaverse Object as it stands now, with no inbound chain (see [Export-only preview](#export-only-preview-from-a-metaverse-object) below).
 
 Each panel names the Connected System whose Full Synchronisation is being previewed, so a preview reached from a Connected System Object's Connections row is never mistaken for a preview of a different system.
@@ -27,7 +30,7 @@ The panel offers the same **Timeline** and **Table** views documented for a reco
 The preview shows the exports synchronising this object would stage, which is narrower than every difference between its Metaverse Object and each target:
 
 - **Changes this object brings in**<br /> An export is proposed only for what this object's own Attribute Flow changes on the Metaverse Object (and for a provisioning or deprovisioning its scope causes). A value someone changed directly in another Connected System is not corrected by synchronising this one, so it is not shown.
-- **Drift corrections in this Connected System**<br /> Where an export Synchronisation Rule to this object's own Connected System has [Enforce State](synchronisation-rules.md#export-outbound) on, and the object's values have drifted from what the Metaverse Object says they should be, the preview shows the correction as **Drift would be corrected**, where the synchronisation records **Drift corrected**. This applies to target systems too, where no import rule processes the object.
+- **Drift Corrections in this Connected System**<br /> Where an export Synchronisation Rule to this object's own Connected System has [Enforce State](synchronisation-rules.md#export-outbound) on, and the object's values have drifted from what the Metaverse Object says they should be, the preview shows the correction as **Drift would be corrected**, where the synchronisation records **Drift corrected**. This applies to target systems too, where no import rule processes the object.
 - **Export scope review**<br /> If a change to an export Synchronisation Rule has flagged the object's Metaverse Object for review, the preview shows the provisioning or deprovisioning the review would make.
 - **Values withdrawn when the object leaves**<br /> When the object leaves the scope of its import Synchronisation Rules and its Metaverse Object lives on, the values it contributed are withdrawn or handed to another source, and the preview shows the update that sends to each target holding them.
 - **Values handed to another source**<br /> When the object stops supplying a value it holds, or the Attribute Flow that contributed it has been deleted, the attribute passes to the next source by [Attribute Priority](attribute-mappings.md#attribute-priority) or is cleared where there is none. The preview shows the value the attribute would take, anything [derived](derived-attributes.md) from it, and the update that sends to each target.
@@ -67,7 +70,7 @@ There is no single preview covering every source at once: a Full Synchronisation
 
 ## What the preview cannot know
 
-Sync Preview evaluates the object against data already in the metaverse; it does not run an import first, so a source-system change that has not been imported yet is invisible to it. Nothing here carries a **Pending Export** id, either: because nothing is staged, there is nothing yet to look up on the [Pending Exports](connected-systems.md#pending-exports) list. Both are true of every preview: the panel describes what synchronising **now** would do, not what synchronising **after everything currently pending elsewhere finishes** would do.
+Sync Preview evaluates the object against data already in the Metaverse; it does not run an import first, so a source-system change that has not been imported yet is invisible to it. Nothing here carries a **Pending Export** id, either: because nothing is staged, there is nothing yet to look up on the [Pending Exports](connected-systems.md#pending-exports) list. Both are true of every preview: the panel describes what synchronising **now** would do, not what synchronising **after everything currently pending elsewhere finishes** would do.
 
 A [generated value](generated-values.md) is checked, with the [values built from it](generated-values.md#values-built-from-a-generated-value), against JIM's own records only: the preview never contacts a Connected System. It shows the candidates the run would pass over and any value it would hold back for an input, and names the Connected Systems the run would also probe for the generated value and each value built from it. A target account JIM has not imported can still make the run choose a different value.
 
@@ -82,7 +85,7 @@ Sync Preview is available over every surface:
 
 Both require the Administrator role. Full endpoint detail is in the [interactive API reference](../../api/reference/).
 
-## See also
+## Related
 
 - [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it): previewing a proposed configuration *edit*, rather than what today's stored configuration would do
 - [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): what import, sync and export actually do when they run for real

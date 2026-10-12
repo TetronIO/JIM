@@ -1,5 +1,8 @@
 ---
 title: Certificates
+description: Add the certificate authorities JIM's Connectors trust, uploaded or from a file, and track when each expires, since JIM never disables one.
+type: object
+audience: administrator
 ---
 
 # Certificates
@@ -31,7 +34,7 @@ A separate validation operation lets you check a certificate's chain and validit
 
 ## Change history
 
-Every change to the certificate store is recorded in [configuration change history](activities.md#configuration-change-history): adding, editing, enabling, disabling, or deleting a certificate captures a versioned snapshot of its metadata (name, thumbprint, subject, issuer, validity window, source, enabled state and notes) alongside who made the change, when, and an optional reason. The raw certificate material is never stored in the history; the thumbprint alone identifies the exact certificate, so a swap is always visible.
+Every change to the certificate store is recorded in [Configuration Change History](activities.md#configuration-change-history): adding, editing, enabling, disabling, or deleting a certificate captures a versioned snapshot of its metadata (name, thumbprint, subject, issuer, validity window, source, enabled state and notes) alongside who made the change, when, and an optional reason. The raw certificate material is never stored in the history; the thumbprint alone identifies the exact certificate, so a swap is always visible.
 
 Open a certificate's history from the Change History action on its row, or retrieve it with `Get-JIMConfigurationChangeHistory -Type TrustedCertificate` or the REST API. The optional "Reason for change" prompt appears when uploading, adding, editing, or deleting a certificate in the admin portal; automation can pass the same reason via `-ChangeReason` on the certificate write cmdlets.
 
@@ -56,6 +59,6 @@ Open a certificate's history from the Change History action on its row, or retri
 - **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `Add-JIMCertificate`, `Test-JIMCertificate`, etc.)
 - **REST API**<br /> Certificates endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
 - [Connectors](../connectors/index.md): the connectors that use the certificate trust set
