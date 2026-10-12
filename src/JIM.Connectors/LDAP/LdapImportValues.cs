@@ -5,12 +5,12 @@ namespace JIM.Connectors.LDAP;
 
 /// <summary>
 /// What <see cref="LdapImportValueReader"/> made of one attribute's values: those it read as the attribute's type, and
-/// those it could not, each exactly as the directory returned it (#2128).
+/// those it did not import, each exactly as the directory returned it (#2128).
 /// </summary>
 internal sealed class LdapImportValues<T>
 {
-    // Allocated only for the rare attribute with a value that cannot be read.
-    private List<string>? _unreadable;
+    // Allocated only for the rare attribute with a value that is not imported.
+    private List<LdapUnreadableValue>? _unreadable;
 
     /// <summary>
     /// The values read as the attribute's type, without duplicates.
@@ -18,10 +18,15 @@ internal sealed class LdapImportValues<T>
     internal List<T> Values { get; } = [];
 
     /// <summary>
-    /// Each value that could not be read, as received: the text the directory returned, or hexadecimal for a binary
-    /// value.
+    /// Each value that was not imported, as received: one that could not be read as the attribute's type, or one of
+    /// several where JIM holds one value for the type (#2153).
     /// </summary>
-    internal IReadOnlyList<string> Unreadable => _unreadable ?? [];
+    internal IReadOnlyList<LdapUnreadableValue> Unreadable => _unreadable ?? [];
 
-    internal void AddUnreadable(string value) => (_unreadable ??= []).Add(value);
+    /// <summary>
+    /// Keeps a value that is not imported, to report it.
+    /// </summary>
+    /// <param name="value">The value as received.</param>
+    /// <param name="reason">Why, where the attribute's type does not say; null for a value that did not read as the type.</param>
+    internal void AddUnreadable(string value, string? reason = null) => (_unreadable ??= []).Add(new LdapUnreadableValue(value, reason));
 }

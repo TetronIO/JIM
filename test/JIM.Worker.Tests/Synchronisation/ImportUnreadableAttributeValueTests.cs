@@ -34,6 +34,7 @@ public class ImportUnreadableAttributeValueTests
     private static readonly string StartDate = MockSourceSystemAttributeNames.START_DATE.ToString();
     private static readonly string Qualifications = MockSourceSystemAttributeNames.QUALIFICATIONS.ToString();
     private static readonly string ContractedWeeklyHours = MockSourceSystemAttributeNames.CONTRACTED_WEEKLY_HOURS.ToString();
+    private static readonly string Leaver = MockSourceSystemAttributeNames.LEAVER.ToString();
 
     private static readonly DateTime FirstOfMarch = new(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -86,6 +87,33 @@ public class ImportUnreadableAttributeValueTests
 
         Assert.That(StoredValues(hrId, StartDate).Select(v => v.DateTimeValue).ToList(), Is.EqualTo(new List<DateTime?> { FirstOfMarch }),
             "The source still holds a start date, just one that could not be read; removing it would flow a removal everywhere the attribute goes.");
+    }
+
+    [Test]
+    public async Task FullImport_SeveralValuesReportedForAOneValueAttribute_KeepsTheStoredValueAsync()
+    {
+        // Guard, not a red test: the LDAP Connector reports every value of a date or Boolean attribute holding more
+        // than one (#2153) and leaves the attribute off the object, carrying it only as those reported values. JIM
+        // must read that as "leave it as held", for a Boolean as much as for a date.
+        var hrId = Guid.NewGuid();
+        var held = Person(hrId, "Sam Okafor", startDate: FirstOfMarch);
+        held.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = Leaver, BoolValue = false });
+        await RunFullImportAsync(held);
+
+        var several = Person(hrId, "Sam Okafor");
+        several.AddAttributeValueError(StartDate, "20260301000000Z", "JIM holds one value for a date and time attribute, and the directory returned 2.");
+        several.AddAttributeValueError(StartDate, "20260401000000Z", "JIM holds one value for a date and time attribute, and the directory returned 2.");
+        several.AddAttributeValueError(Leaver, "TRUE", "JIM holds one value for a true or false attribute, and the directory returned 2.");
+        several.AddAttributeValueError(Leaver, "FALSE", "JIM holds one value for a true or false attribute, and the directory returned 2.");
+        var activity = await RunFullImportAsync(several);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(StoredValues(hrId, StartDate).Select(v => v.DateTimeValue).ToList(), Is.EqualTo(new List<DateTime?> { FirstOfMarch }));
+            Assert.That(StoredValues(hrId, Leaver).Select(v => v.BoolValue).ToList(), Is.EqualTo(new List<bool?> { false }));
+            Assert.That(ImportedAttributeValueErrors.FromJson(activity.RunProfileExecutionItems.Single().AttributeValueErrorsJson)?.Total, Is.EqualTo(4),
+                "The item lists every value, not one per attribute.");
+        }
     }
 
     [Test]
