@@ -21,40 +21,33 @@ The connection cmdlets manage authentication and session state with a JIM instan
 
 Establishes a connection to a JIM instance. This must be called before using any other JIM cmdlets.
 
+<!-- BEGIN GENERATED: Connect-JIM -->
 ### Syntax
 
 ```powershell
-# Interactive SSO (default)
-Connect-JIM -Url <string> [-Force] [-NoPersist] [-TimeoutSeconds <int>]
+# Interactive (default)
+Connect-JIM [-Url] <string> [-Force] [-NoPersist] [-TimeoutSeconds <int>]
 
-# API Key
-Connect-JIM -Url <string> -ApiKey <string>
+# ApiKey
+Connect-JIM [-Url] <string> [-ApiKey] <string>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Url` | `string` | Yes (Position 0) | | Base URL of the JIM instance, e.g. `https://jim.example.com` |
-| `ApiKey` | `string` | Yes for ApiKey set (Position 1) | | API key for non-interactive authentication |
-| `Force` | `switch` | No (Interactive only) | `$false` | Forces re-authentication even if a valid session already exists. Ignores and overwrites any persisted refresh token |
-| `NoPersist` | `switch` | No (Interactive only) | `$false` | Authenticates for this session only, without reading from or writing to the OS credential store |
-| `TimeoutSeconds` | `int` | No (Interactive only) | `300` | How long (in seconds) to wait for interactive authentication to complete. Valid range: 30 to 600. |
+| `Url` | `string` | Yes |  | The JIM instance's base URL, for example https://jim.example.com or http://localhost:5200. Can be given by position, as the first argument. |
+| `ApiKey` | `string` | Yes (ApiKey) |  | An API key, for non-interactive authentication; create one in the portal under Admin > API Keys. With a key, Connect-JIM does not open a browser, and never reads or writes the credential store. Connect-JIM checks that JIM accepts the key, and stops if it does not: a key JIM has no record of, or one that is disabled or has expired. An infrastructure key, set in JIM_INFRASTRUCTURE_API_KEY, exists only once JIM has started with it set, and expires 24 hours later. Can be given by position, as the second argument. |
+| `Force` | `switch` | No (Interactive) |  | Signs in again even when a valid session exists, ignoring any persisted refresh token and overwriting it with the new one. |
+| `NoPersist` | `switch` | No (Interactive) |  | Signs in for this session only, without reading from or writing to the operating system's credential store. Useful on shared machines. |
+| `TimeoutSeconds` | `int` | No (Interactive) | `300` | How long to wait, in seconds, for the browser sign-in to complete. From 30 to 600. |
 
 ### Output
 
-Returns a `PSCustomObject` with the following properties:
+The connection: Url, the JIM instance's address; AuthMethod, OAuth or ApiKey; Connected, $true; ServerVersion, the JIM version the instance reported; Authorised, whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM, always $true for an API key; Status, JIM's health status; ExpiresAt, when the access token expires, for OAuth only; and ApiKey, the key's first eight and last four characters, for an API key only.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Url` | `string` | The JIM instance URL |
-| `AuthMethod` | `string` | Authentication method used (`OAuth` or `ApiKey`) |
-| `Connected` | `bool` | Whether the connection was established successfully |
-| `ServerVersion` | `string` | Version of the connected JIM server |
-| `ExpiresAt` | `DateTime?` | Token expiry time (OAuth only; `$null` for API key connections) |
-| `Authorised` | `bool` | Whether the signed-in user has a JIM identity (a Metaverse Object) and can access the system; always `$true` for API key connections |
-| `Status` | `string` | Human-readable connection status message |
-| `ApiKey` | `string?` | Redacted preview of the API key (ApiKey method only; `$null` for OAuth connections) |
+**`Connection`**
+<!-- END GENERATED: Connect-JIM -->
 
 ### Examples
 
@@ -105,10 +98,14 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 
 Disconnects from a JIM instance and forgets its persisted credentials.
 
+<!-- BEGIN GENERATED: Disconnect-JIM -->
 ### Syntax
 
 ```powershell
+# Default (default)
 Disconnect-JIM [-Url <string>]
+
+# All
 Disconnect-JIM -All
 ```
 
@@ -116,12 +113,13 @@ Disconnect-JIM -All
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Url` | `string` | No | currently connected instance | The instance to disconnect and forget. Works even when not connected to it |
-| `All` | `switch` | No | `$false` | Remove every persisted JIM refresh token from this machine, across all instances |
+| `Url` | `string` | No (Default) |  | The JIM instance to disconnect from and forget; the connected one when omitted. Works when not connected to it, since clearing the credential store does not need a session. |
+| `All` | `switch` | Yes (All) |  | Removes every persisted JIM refresh token from this machine, across all instances, and clears any session. |
 
 ### Output
 
-None. Writes informational messages to the host confirming disconnection.
+None. Writes a message to the host saying what was removed.
+<!-- END GENERATED: Disconnect-JIM -->
 
 ### Examples
 

@@ -19,14 +19,14 @@ Retrieves feature flags. Returns every Preview-tier flag by default; specify `-I
 ### Syntax
 
 ```powershell
-Get-JIMFeature [-Name <string>] [-IncludeInDevelopment]
+Get-JIMFeature [[-Name] <string>] [-IncludeInDevelopment]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | No |  | The key of the one flag to return, such as "Features.SomeInDevelopmentFeature". |
+| `Name` | `string` | No |  | The key of the one flag to return, such as "Features.SomeInDevelopmentFeature". Can be given by position, as the first argument. |
 | `IncludeInDevelopment` | `switch` | No |  | Also returns In Development flags. Intended for development and the integration harness; enabling one outside Development still requires -AllowInDevelopment on Enable-JIMFeature. |
 
 ### Output
@@ -75,14 +75,14 @@ Switches a feature flag on. Enabling an In Development flag requires `-AllowInDe
 ### Syntax
 
 ```powershell
-Enable-JIMFeature -Name <string> [-AllowInDevelopment] [-PassThru]
+Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes |  | The key of the flag to enable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes |  | The key of the flag to enable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name. |
 | `AllowInDevelopment` | `switch` | No |  | Required to enable an In Development flag; the integration harness uses it in scenario setup. A Preview-tier flag needs no such acknowledgement. |
 | `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
@@ -122,14 +122,14 @@ Switches a feature flag off. Disabling never requires acknowledgement, whatever 
 ### Syntax
 
 ```powershell
-Disable-JIMFeature -Name <string> [-PassThru]
+Disable-JIMFeature [-Name] <string> [-PassThru]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes |  | The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes |  | The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name. |
 | `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
 ### Output

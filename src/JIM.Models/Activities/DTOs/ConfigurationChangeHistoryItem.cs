@@ -50,7 +50,7 @@ public class ConfigurationChangeHistoryItem
     /// </summary>
     public string? Reason { get; set; }
 
-    /// <summary>A short, human-readable description of what changed in this version, e.g. "Scope, Attribute Flow".</summary>
+    /// <summary>A short description of what the change touched, for example "Scope, Attribute Flow".</summary>
     public string Summary { get; set; } = null!;
 
     /// <summary>

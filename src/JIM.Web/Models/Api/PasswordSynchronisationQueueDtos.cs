@@ -67,7 +67,7 @@ public class PendingPasswordChangeResponse
 
     /// <summary>
     /// Whether a delivery pass would attempt this change right now. Distinguishes a change waiting out a retry
-    /// backoff from one that is due and simply has not been reached, which <see cref="Status"/> alone cannot.
+    /// backoff from one that is due but not yet reached, which <see cref="Status"/> alone cannot.
     /// Never true while <see cref="Held"/> is: a pass steps over a system that is switched off.
     /// </summary>
     public bool Due { get; set; }

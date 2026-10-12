@@ -14,14 +14,14 @@ Tests an expression with sample metaverse and Connected System attribute values.
 ### Syntax
 
 ```powershell
-Test-JIMExpression -Expression <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
+Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttributes <hashtable>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Expression` | `string` | Yes |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. |
+| `Expression` | `string` | Yes |  | The expression to test. Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access. Can be given by position, as the first argument. |
 | `MvAttributes` | `hashtable` | No |  | A hashtable of sample Metaverse attribute values. Keys are attribute names, values are the attribute values. |
 | `CsAttributes` | `hashtable` | No |  | A hashtable of sample Connected System attribute values. Keys are attribute names, values are the attribute values. |
 

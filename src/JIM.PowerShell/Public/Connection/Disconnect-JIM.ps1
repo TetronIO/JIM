@@ -25,17 +25,14 @@ function Disconnect-JIM {
         that it does not sign you out of your identity provider.
 
     .PARAMETER Url
-        The JIM instance to disconnect and forget. Defaults to the currently connected
-        instance. An explicit -Url works even when there is no active connection, since
-        clearing the credential store is a maintenance operation independent of session
-        state.
+        The JIM instance to disconnect from and forget; the connected one when omitted. Works when not connected to
+        it, since clearing the credential store does not need a session.
 
     .PARAMETER All
-        Remove every persisted JIM refresh token from the credential store, across all
-        instances, and clear any in-memory session.
+        Removes every persisted JIM refresh token from this machine, across all instances, and clears any session.
 
     .OUTPUTS
-        None.
+        None. Writes a message to the host saying what was removed.
 
     .EXAMPLE
         Disconnect-JIM
@@ -59,6 +56,7 @@ function Disconnect-JIM {
         Test-JIMConnection
     #>
     [CmdletBinding(DefaultParameterSetName = 'Default')]
+    [OutputType([void])]
     param(
         [Parameter(ParameterSetName = 'Default')]
         [ValidateNotNullOrEmpty()]

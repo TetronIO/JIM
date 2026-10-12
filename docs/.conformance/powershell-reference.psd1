@@ -11,6 +11,7 @@
     # object returns a type the API does not have; list it here with the reason, and describe its
     # properties in the cmdlet's .OUTPUTS help instead. An entry no cmdlet declares fails the check.
     NonApiOutputTypes = @{
+        'JIM.Connection'       = 'Connect-JIM builds it from the connection it made and the health endpoint'
         'JIM.ConnectionStatus' = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
     }
 
@@ -18,5 +19,7 @@
     # map it here to the schema whose properties the object carries, and they are tabled under the name.
     # An entry no cmdlet declares fails the check.
     OutputTypeSchemas = @{
+        'JIM.ServiceHealth'        = 'ServiceHealthEntryResponse'
+        'JIM.ServiceHealthSummary' = 'ServiceHealthResponse'
     }
 }
