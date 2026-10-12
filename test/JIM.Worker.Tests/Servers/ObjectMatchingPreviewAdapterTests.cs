@@ -192,22 +192,38 @@ public class ObjectMatchingPreviewAdapterTests
         var findings = await _adapter.ValidateAsync(Context(proposal));
 
         Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message),
-            Has.Some.Contains("more than one source"));
+            Has.Some.Contains("exactly one source"));
     }
 
     [Test]
-    public async Task ValidateAsync_ExpressionSource_IsBlocking()
+    public async Task ValidateAsync_WorkableExpressionSource_IsNotBlocking()
     {
+        // Expression sources are authorable (#2052), so the preview judges them as the save does rather than
+        // refusing them outright.
         _csoType.ObjectMatchingRules = [StoredRule()];
-        var proposal = ProposalWith(RuleProposal() with
+        var proposal = ProposalWith(MailRuleProposal() with
         {
             Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"])")]
         });
 
         var findings = await _adapter.ValidateAsync(Context(proposal));
 
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
+    [Test]
+    public async Task ValidateAsync_ExpressionTheSaveWouldRefuse_IsBlockingWithTheSameReason()
+    {
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        var proposal = ProposalWith(MailRuleProposal() with
+        {
+            Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"]) + Lower(mv[\"Email\"])")]
+        });
+
+        var findings = await _adapter.ValidateAsync(Context(proposal));
+
         Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message),
-            Has.Some.Contains("expression"));
+            Has.Some.Contains("Object Matching Rule 1 on 'User'").And.Some.Contains("mv[\"Email\"]"));
     }
 
     [Test]
@@ -307,6 +323,30 @@ public class ObjectMatchingPreviewAdapterTests
             Assert.That(deltas[0].MetaverseObjectId, Is.EqualTo(_bob.Id), "the delta names the identity the object would end up on");
             // Each side names the value it matched on (#2052), so the row says why the identity changed.
             Assert.That(deltas[0].OldValue, Is.EqualTo("Alice Smith (on E1)"));
+            Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones (on alice@example.com)"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposedExpressionRule_JoinsOnTheComputedValue()
+    {
+        // The directory holds the address in capitals; Bob's Email is lower case. The expression computes the value
+        // the Metaverse holds, so the proposal joins the object to Bob, and the row names the computed value.
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "ALICE@EXAMPLE.COM")];
+
+        var proposal = ProposalWith(MailRuleProposal() with
+        {
+            CaseSensitive = true,
+            Sources = [new ObjectMatchingRuleSourceProposal(0, null, "Lower(cs[\"mail\"])")]
+        });
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas, Has.Count.EqualTo(1));
+            Assert.That(deltas[0].TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldJoinDifferentMetaverseObject));
             Assert.That(deltas[0].NewValue, Is.EqualTo("Bob Jones (on alice@example.com)"));
         }
     }
