@@ -50,4 +50,4 @@ For a system or database engine none of these connectors reaches, see the [Roadm
 
 ## 🧩 Custom Connectors
 
-JIM's connector framework is extensible. If none of the built-in connectors meet your requirements, you can develop a custom connector that implements JIM's connector interfaces. For guidance on building your own connector, see [Writing Connectors](../developer/connectors.md).
+JIM runs the Connectors built into it, and does not load a Connector from outside its own release, so a Connector for another system is added to JIM itself. The [Roadmap](../reference/roadmap.md) lists the Connectors planned; to ask for another, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas).

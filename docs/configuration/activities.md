@@ -69,11 +69,15 @@ A Run Profile execution records an **execution item** for each object it touched
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, the worker's housekeeping deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](deprovisioning.md) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that does work is recorded as a **Scheduled Metaverse Object Deletion** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per failure. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **Metaverse Object deleted** outcome, as on a synchronisation run. Each deletion's item names the run that scheduled it, so [why it happened](causality.md#why-it-happened) reaches back across the grace period to the change that started it. A pass with nothing to delete records no activity.
 
+Housekeeping runs while the Worker has no other work, at most once a minute, and deletes up to 50 objects a pass, so a large number of expired deletions clears over several passes. A deletion that fails is recorded on the Activity and tried again on the next pass. A Metaverse Object whose deletion fails during a synchronisation run, where no grace period applies, is left for housekeeping to delete instead.
+
 The activity's detail page shows the batch like a Run Profile execution: summary cards (Metaverse Objects Deleted, Recall Pending Exports, Object Types, Errors) above a searchable, filterable table listing each deleted object by name and type, with any per-object errors alongside.
 
 ## Parent and child activities
 
-A Schedule Execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
+Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System. The REST API returns each Activity's `parentActivityId`, lists an Activity's children, and filters the list with `hasChildActivities`.
+
+A Schedule's steps are not grouped this way: each step's Activity carries its [Schedule context](#schedule-context) instead, and the [Schedule Execution view](schedules.md#the-schedule-execution-view) links each step to its Activity.
 
 ## Schedule context
 
@@ -134,7 +138,7 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 
 1. List activities, filtered by name, target type, or initiator as needed
 2. Retrieve the activities you're interested in for full detail
-3. For schedule executions specifically, walk the child activities to see what each step did
+3. For a Schedule, filter the list to that Schedule (Operations > History), or open the Schedule Execution, which links each step to its Activity
 
 ## Manage Activities
 
@@ -145,5 +149,5 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 ## See also
 
 - [Run Profiles](run-profiles.md): the operations that produce most activities
-- [Schedules](schedules.md): the parent-and-child activity model originates here
+- [Schedules](schedules.md): the Activities a Schedule's steps produce, and the Schedule Execution view that links them
 - [Security Audit Events](../administration/security-audit-events.md): interactive sign-in and API key authentication events, aggregation, and their own retention period

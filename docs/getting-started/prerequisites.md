@@ -87,4 +87,4 @@ JIM uses PostgreSQL as its database. You have two options:
 
 ## Building on JIM
 
-Contributing to JIM, or building a Connector of your own, needs none of the above: the development environment brings its own database and identity provider. The [Developer Guide](../developer/index.md) sets it up.
+Contributing to JIM needs none of the above: the development environment brings its own database and identity provider. The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set it up.
