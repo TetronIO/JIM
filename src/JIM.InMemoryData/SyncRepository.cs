@@ -77,6 +77,12 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailInitialPasswordMarkingWith { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> throws it, so a test can prove
+    /// that a delivery which cannot read whether an enable is held keeps the change rather than guessing (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordHoldProbeWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -2456,6 +2462,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
+        if (FailInitialPasswordHoldProbeWith != null)
+            throw FailInitialPasswordHoldProbeWith;
+
         var asked = connectedSystemObjectIds.ToHashSet();
         var held = GetPendingExportsForSystem(connectedSystemId)
             .Where(pe => pe.ConnectedSystemObjectId.HasValue

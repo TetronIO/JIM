@@ -14,10 +14,12 @@ public class PasswordSetOptions
     public PasswordExpiryBehaviour ExpiryBehaviour { get; set; } = PasswordExpiryBehaviour.RequireChangeAtNextSignIn;
 
     /// <summary>
-    /// Whether the Connector should enable the account as part of applying the password.
+    /// Whether the Connector should enable the account (true), disable it (false), or leave its enabled state alone
+    /// (null) as part of applying the password.
     /// <para>
     /// Null leaves the account's enabled state untouched, which is the right choice for a password reset on an
-    /// account that is already in the state the administrator wants.
+    /// account that is already in the state the administrator wants, and for an account whose enabled state an
+    /// Attribute Flow sets (#2064): the engine decides which, and the Connector applies the answer.
     /// </para>
     /// <para>
     /// True is for provisioning. Active Directory will not enable an account that does not already hold a

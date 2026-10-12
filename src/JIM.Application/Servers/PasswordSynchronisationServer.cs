@@ -538,8 +538,10 @@ public class PasswordSynchronisationServer
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information(
-            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Released} released unattempted.",
-            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.ReleasedCount);
+            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered ({LeftToFlow} leaving the enabled state to an Attribute Flow, " +
+            "{WithheldEnables} completing an enable withheld until the password), {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Released} released unattempted.",
+            connectedSystem.Id, result.DeliveredCount, result.EnabledStateLeftToAttributeFlowCount, result.WithheldEnablesCompletedCount,
+            result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.ReleasedCount);
 
         return result;
     }
@@ -603,7 +605,7 @@ public class PasswordSynchronisationServer
                     continue;
                 }
 
-                var disposition = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
+                var (disposition, enablement) = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
                     initialPasswordConfigurations, discoveredPolicy, initialPasswordResolver, asOf, cancellationToken);
 
                 switch (disposition)
@@ -611,6 +613,10 @@ public class PasswordSynchronisationServer
                     case PasswordDeliveryDisposition.Delivered:
                         delivered.Add(change.Id);
                         result.DeliveredCount++;
+                        if (enablement == AccountEnablementBasis.LeftToAttributeFlow)
+                            result.EnabledStateLeftToAttributeFlowCount++;
+                        else if (enablement == AccountEnablementBasis.CompletesWithheldEnable)
+                            result.WithheldEnablesCompletedCount++;
                         break;
 
                     case PasswordDeliveryDisposition.Withdrawn:
@@ -669,9 +675,9 @@ public class PasswordSynchronisationServer
     /// <summary>
     /// Delivers one queued change, recording its outcome on the change. Returns what happened to the row: whether
     /// it was delivered, kept for another attempt or for a person to look at, or withdrawn because there is
-    /// nothing left to deliver.
+    /// nothing left to deliver; and, for a delivery, which rule decided the account's enabled state (#2064).
     /// </summary>
-    private async Task<PasswordDeliveryDisposition> DeliverOneAsync(
+    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> DeliverOneAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -716,7 +722,7 @@ public class PasswordSynchronisationServer
                 change.Status = PendingPasswordChangeStatus.Parked;
                 change.NextRetryAt = null;
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return PasswordDeliveryDisposition.Kept;
+                return (PasswordDeliveryDisposition.Kept, null);
             }
         }
         else
@@ -731,7 +737,7 @@ public class PasswordSynchronisationServer
                 change.RecordAttempt(PasswordSetFailureReason.TargetObjectNotFound,
                     "The identity has no account in this Connected System yet.", configuration, asOf);
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return PasswordDeliveryDisposition.Kept;
+                return (PasswordDeliveryDisposition.Kept, null);
             }
 
             change.ConnectedSystemObjectId = account.Id;
@@ -751,7 +757,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return (PasswordDeliveryDisposition.Kept, null);
         }
 
         string password;
@@ -774,30 +780,34 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return (PasswordDeliveryDisposition.Kept, null);
         }
+
+        // Only an administrator who named the account decides to enable or disable it. A propagated password reaches
+        // accounts an administrator may have disabled on purpose, and re-enabling one would undo that silently, as a
+        // side effect of somebody changing their password elsewhere. The one enable any delivery completes is the
+        // one JIM withheld until a password existed (#2039), because the Attribute Flow asked for it (#2064).
+        var enablement = await DecideAccountEnablementAsync(connectedSystem, change, account, ruleEnableAccount: false);
+        if (enablement == null)
+            return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
         var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, password, new PasswordSetOptions
         {
             ExpiryBehaviour = change.ExpiryBehaviour,
-            // Only an administrator who named the account may enable it. A propagated password reaches accounts
-            // an administrator may have disabled on purpose, and re-enabling one would undo that silently, as a
-            // side effect of somebody changing their password elsewhere; enabling on provisioning belongs to the
-            // initial password.
-            EnableAccount = change.IsExplicit ? change.EnableAccount : null
+            EnableAccount = enablement.EnableAccount
         }, cancellationToken);
 
         if (!setResult.Success)
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return (PasswordDeliveryDisposition.Kept, null);
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
-        return PasswordDeliveryDisposition.Delivered;
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, enablement.Basis);
+        return (PasswordDeliveryDisposition.Delivered, enablement.Basis);
     }
 
     /// <summary>
@@ -806,7 +816,7 @@ public class PasswordSynchronisationServer
     /// settings, and sends it. Withdraws the row rather than delivering or retrying wherever there is nothing
     /// left to deliver, so a stale row never sits parked or retrying against work nobody needs done any more.
     /// </summary>
-    private async Task<PasswordDeliveryDisposition> DeliverProvisionedAsync(
+    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> DeliverProvisionedAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
@@ -829,7 +839,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 $"Initial password no longer needed: the account it was for no longer exists in {connectedSystem.Name}, or is no longer joined to this person.");
-            return PasswordDeliveryDisposition.Withdrawn;
+            return (PasswordDeliveryDisposition.Withdrawn, null);
         }
 
         // Read fresh rather than trusted from when the row was staged, so a Synchronisation Rule switched off or
@@ -843,7 +853,7 @@ public class PasswordSynchronisationServer
         {
             await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
                 "Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.");
-            return PasswordDeliveryDisposition.Withdrawn;
+            return (PasswordDeliveryDisposition.Withdrawn, null);
         }
 
         var resolution = initialPasswordResolver.Resolve(initialPasswordConfiguration, discoveredPolicy);
@@ -856,8 +866,14 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return (PasswordDeliveryDisposition.Kept, null);
         }
+
+        // Where an export wrote the account's enabled state, the Attribute Flow decides it and the rule's Enable
+        // Account does not apply (#2064); an enable JIM withheld until a password existed is completed (#2039).
+        var enablement = await DecideAccountEnablementAsync(connectedSystem, change, account, initialPasswordConfiguration.EnableAccount);
+        if (enablement == null)
+            return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
@@ -867,18 +883,68 @@ public class PasswordSynchronisationServer
             // behaviour or enable decision of its own, because both belong to the Synchronisation Rule that
             // provisioned the account and can change independently of the queued row.
             ExpiryBehaviour = initialPasswordConfiguration.ExpiryBehaviour,
-            EnableAccount = initialPasswordConfiguration.EnableAccount
+            EnableAccount = enablement.EnableAccount
         }, cancellationToken);
 
         if (!setResult.Success)
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return PasswordDeliveryDisposition.Kept;
+            return (PasswordDeliveryDisposition.Kept, null);
         }
 
-        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
-        return PasswordDeliveryDisposition.Delivered;
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true, enablement.Basis);
+        return (PasswordDeliveryDisposition.Delivered, enablement.Basis);
+    }
+
+    /// <summary>
+    /// Decides what delivering this change does to the account's enabled state (#2064), probing live whether the
+    /// account holds an enable JIM withheld until a password existed (#2039) wherever the answer can depend on it.
+    /// Returns null when that cannot be read: the caller keeps the change rather than guess, because guessing "not
+    /// held" could leave an account disabled the flow asks to be enabled, and guessing "held" could enable one it asks
+    /// to be disabled.
+    /// </summary>
+    private async Task<AccountEnablementDecision?> DecideAccountEnablementAsync(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemObject account,
+        bool ruleEnableAccount)
+    {
+        var holdsWithheldEnable = false;
+        if (PasswordEnablementPolicy.DependsOnWithheldEnable(change.Origin, change.EnableAccount))
+        {
+            try
+            {
+                holdsWithheldEnable = (await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystem.Id, [account.Id]))
+                    .Contains(account.Id);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "DeliverDuePasswordChangesAsync: Could not read whether account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
+                    "holds an enable awaiting its password; the change is kept and tried again", account.Id, connectedSystem.Id);
+                return null;
+            }
+        }
+
+        return PasswordEnablementPolicy.Decide(change.Origin, change.EnableAccount, change.EnabledStateSetByAttributeFlow,
+            ruleEnableAccount, holdsWithheldEnable);
+    }
+
+    /// <summary>
+    /// Keeps a change whose effect on the account's enabled state could not be decided, as a transient failure:
+    /// nothing was sent, and the next attempt decides afresh.
+    /// </summary>
+    private async Task<(PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement)> KeepUndecidedAsync(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemPasswordSynchronisation configuration,
+        DateTime asOf)
+    {
+        change.RecordAttempt(PasswordSetFailureReason.Transient,
+            "JIM could not read whether this account is waiting for its password to be enabled, so nothing was sent.",
+            configuration, asOf);
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+        return (PasswordDeliveryDisposition.Kept, null);
     }
 
     /// <summary>
@@ -889,7 +955,8 @@ public class PasswordSynchronisationServer
     /// row is deleted on success, so this Activity is all that survives to say the password reached this system.
     /// </para>
     /// </summary>
-    private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success)
+    private async Task RecordDeliveryOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, bool success,
+        AccountEnablementBasis? enablement = null)
     {
         var failure = success ? null : DescribeFailure(connectedSystem, change);
 
@@ -905,9 +972,7 @@ public class PasswordSynchronisationServer
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
-            Message = success
-                ? change.IsProvisioned ? $"Initial password set on {connectedSystem.Name}." : $"Password set on {connectedSystem.Name}."
-                : failure
+            Message = success ? DescribeDelivery(connectedSystem, change, enablement) : failure
         };
 
         // System-attributed, not "attributed to nobody". Every Activity must name a principal, and passing no
@@ -950,6 +1015,25 @@ public class PasswordSynchronisationServer
 
         await _createSystemActivity(activity);
         await _completeActivity(activity);
+    }
+
+    /// <summary>
+    /// What a delivery did, saying why the account's enabled state is what it is wherever the precedence (#2064) did
+    /// something other than what the setting alone would suggest: an administrator reading why a new starter's account
+    /// is still disabled, or was enabled despite Enable Account being off, finds the answer here.
+    /// </summary>
+    private static string DescribeDelivery(ConnectedSystem connectedSystem, PendingPasswordChange change, AccountEnablementBasis? enablement)
+    {
+        var set = change.IsProvisioned ? $"Initial password set on {connectedSystem.Name}" : $"Password set on {connectedSystem.Name}";
+
+        return enablement switch
+        {
+            AccountEnablementBasis.LeftToAttributeFlow =>
+                $"{set}. The account's enabled state was left to its Attribute Flow, which sets it, so the Synchronisation Rule's Enable Account did not apply.",
+            AccountEnablementBasis.CompletesWithheldEnable =>
+                $"{set}, and the account enabled as its Attribute Flow asks: it was created disabled only until it had a password.",
+            _ => $"{set}."
+        };
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
