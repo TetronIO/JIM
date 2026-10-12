@@ -1817,9 +1817,30 @@ public class ExportExecutionServer
         var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
         // The accounts whose enabled state an export in this batch wrote (#2064), as the Connector reported it: a
-        // Create's staged first password is marked from it, and any other export's owed first password is marked
-        // after the loop, so delivering it leaves the enabled state to the Attribute Flow.
-        var accountsWithEnabledStateWritten = new HashSet<Guid>();
+        // Create's staged first password is marked from it below, so delivering it leaves the enabled state to the
+        // Attribute Flow.
+        var reportedWritingTheEnabledState = batch.Zip(exportResults)
+            .Where(sent => sent.Second.Success && sent.Second.SetsAccountEnabledState && sent.First.ConnectedSystemObject != null)
+            .Select(sent => sent.First)
+            .ToList();
+        var accountsWithEnabledStateWritten = reportedWritingTheEnabledState
+            .Select(pe => pe.ConnectedSystemObject!.Id)
+            .ToHashSet();
+
+        // Any other export's owed first password (a leaver disabled, or an account disabled on deprovisioning, before
+        // the password landed) is marked here, first, straight from what the Connector reported (#2173). A delivery
+        // waits while an export to its account is in flight, so the mark has to be in place before the batch leaves
+        // Executing; and the directory has already changed, so nothing in processing the results, which can throw, may
+        // stand between the write and the mark. A Delete against an account whose provisioning is unconfirmed is
+        // covered too, though its object is removed below rather than left awaiting confirmation.
+        var owedAccountsWithEnabledStateWritten = reportedWritingTheEnabledState
+            .Where(pe => pe.ChangeType != PendingExportChangeType.Create)
+            .Select(pe => pe.ConnectedSystemObject!.Id)
+            .ToHashSet();
+        if (owedAccountsWithEnabledStateWritten.Count > 0)
+        {
+            await MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(batch[0].ConnectedSystemId, owedAccountsWithEnabledStateWritten, result, repository);
+        }
 
         // Collision Remediation's derived-input marks for this batch, made on the first import-mode revision and flushed
         // once below, after the batch's writes (#1750 Phase 4).
@@ -1983,9 +2004,6 @@ public class ExportExecutionServer
             else
                 successfulNonDeleteExports.Add(export);
 
-            if (exportResult.SetsAccountEnabledState && export.ConnectedSystemObject != null)
-                accountsWithEnabledStateWritten.Add(export.ConnectedSystemObject.Id);
-
             // #1121: an account that has just come into existence may be owed an initial password. Only a
             // Create can be: an Update changes an account that already has one, and resetting that would be a
             // password reset nobody asked for.
@@ -2026,15 +2044,6 @@ public class ExportExecutionServer
         {
             await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, accountsWithEnabledStateWritten,
                 result, repository, initialPasswordTimeToLive, connectedSystemName);
-        }
-
-        // #2064: an export other than the Create that wrote an account's enabled state (a leaver disabled, or an
-        // account disabled on deprovisioning) while its first password is still owed. The Creates' own rows were
-        // marked as they were staged just above.
-        accountsWithEnabledStateWritten.ExceptWith(provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id));
-        if (accountsWithEnabledStateWritten.Count > 0)
-        {
-            await MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(batch[0].ConnectedSystemId, accountsWithEnabledStateWritten, result, repository);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,

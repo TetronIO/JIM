@@ -76,6 +76,16 @@ public static class PasswordEnablementPolicy
     }
 
     /// <summary>
+    /// Whether the delivery has to wait while an export to the account is in flight (#2173). An export records that it
+    /// wrote the enabled state only once its batch has come back from the Connector, so one still being sent may be
+    /// disabling the very account this decision would enable: a leaver, say. JIM's own decision to enable waits for it,
+    /// whether it follows the Synchronisation Rule or completes a withheld enable. An administrator's choice does not
+    /// wait, and a decision that enables nothing cannot undo what the export writes.
+    /// </summary>
+    public static bool WaitsForAnExportInFlight(AccountEnablementDecision decision) =>
+        decision.EnableAccount == true && decision.Basis != AccountEnablementBasis.AdministratorChoice;
+
+    /// <summary>
     /// Whether <see cref="Decide"/>'s answer can depend on a withheld enable, so the delivery needs to probe for one.
     /// False only where an administrator has already decided, which nothing else overrides.
     /// </summary>
