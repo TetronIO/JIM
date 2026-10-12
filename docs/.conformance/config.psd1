@@ -102,6 +102,7 @@
         'configuration/activities.md'
         'administration/troubleshooting.md'
         'administration/troubleshooting-synchronisation.md'
+        'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
         'administration/backup-recovery.md'
     )
@@ -120,6 +121,9 @@
         'administration/backup-recovery.md'
         'concepts/synchronisation-pipeline.md'
         'concepts/jml-lifecycle.md'
+        'administration/troubleshooting.md'
+        'administration/troubleshooting-podman.md'
+        'administration/upgrading.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
