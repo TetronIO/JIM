@@ -320,12 +320,18 @@ function Get-SchemaTypeName {
 }
 
 # A DTO's XML comment, which is written for the code, as a public page may carry it: on one line, without the
-# issue and pull request numbers comments cite (LANG-8), and without the gaps and brackets they leave.
+# issue and pull request numbers comments cite (LANG-8), and without the gaps and brackets they leave. A
+# <see cref> to a member reaches the document as its type, owner and name ("int Summary.Total", with a
+# generic's brackets as HTML entities); only the name is kept. The type is a C# keyword, a generic, or a
+# PascalCase name of two or more words, so the capitalised first word of a sentence ("The Summary.Total") is
+# never taken for one.
 function ConvertTo-PublicDescription {
     param([AllowNull()][string]$Text)
 
     if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
     $text = $Text -replace '\s+', ' '
+    $type = '(?:(?:string|int|long|short|byte|bool|decimal|double|float|object|Guid|DateTime|DateTimeOffset|TimeSpan)\??|[A-Za-z_]\w*(?:<[^<>]*>|&lt;(?:(?!&gt;).)*&gt;)\??|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+\??)(?:\[\])?'
+    $text = $text -creplace "(?<![\w.])$type (?:[A-Za-z_]\w*\.)+(?<member>[A-Za-z_]\w*)\b", '${member}'
     $text = $text -replace '\s*\(\s*#\d+(?:\s*,\s*#\d+)*\s*\)', ''
     $text = $text -replace ',\s*#\d+\b', ''
     $text = $text -replace '#\d+\s*,\s*', ''

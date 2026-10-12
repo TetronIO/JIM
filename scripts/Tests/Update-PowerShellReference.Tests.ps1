@@ -204,6 +204,19 @@ function Get-JIMGadget {
 }
 '@
 
+    # Returns a schema whose descriptions carry the text .NET renders for a <see cref> to a member.
+    $script:GetReport = @'
+function Get-JIMWidgetReport {
+    <#
+    .SYNOPSIS
+        Reports on Widgets.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetReport')]
+    param()
+}
+'@
+
     $script:OpenApi = @'
 {
   "openapi": "3.1.1",
@@ -226,6 +239,13 @@ function Get-JIMGadget {
         "properties": {
           "total": { "type": "integer", "format": "int32" },
           "enabled": { "type": "integer", "format": "int32" }
+        }
+      },
+      "WidgetReport": {
+        "type": "object",
+        "properties": {
+          "worst": { "type": "string", "description": "The worst status among List&lt;WidgetHeader&gt; WidgetReport.Widgets; The WidgetReport.Widgets list stays." },
+          "limit": { "type": "integer", "format": "int32", "description": "Never ordered: the sentinel (int int.MaxValue), unlike ServiceHealthStatus WidgetReport.Worst." }
         }
       },
       "WidgetDetail": {
@@ -475,6 +495,14 @@ Describe 'Update-PowerShellReference: generating a block' {
         $detail[0].Type | Should -Be 'WidgetDetail'
         $detail[0].Table.Count | Should -Be 0
         $detail[0].Rest | Should -Match ([regex]::Escape('[Get-JIMWidget](#get-jimwidget)'))
+    }
+
+    It "names a member a description cross-references, without the type and owner .NET renders with it" {
+        $fixture = New-Fixture -Functions @($script:GetReport) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetReport') }
+        Invoke-Generator $fixture | Out-Null
+        $table = (Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
+        ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst status among Widgets; The WidgetReport.Widgets list stays.'
+        ($table | Where-Object Property -eq 'Limit').Description | Should -Be 'Never ordered: the sentinel (MaxValue), unlike Worst.'
     }
 
     It 'tables a type without a Description column when its schema describes none of its properties' {
