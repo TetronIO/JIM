@@ -1313,8 +1313,10 @@ public class ExportEvaluationNoChangeTests
         // Use the Member MV attribute (multi-valued reference, defined on Group type)
         var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
 
-        // Use Manager target attribute as a stand-in for member export
+        // Use Manager target attribute as a stand-in for member export. Per-value Add and Remove are staged only where
+        // the target is multi-valued too (#2182).
         var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        targetManagerAttr.AttributePlurality = AttributePlurality.MultiValued;
 
         // Set up export Synchronisation Rule with multi-valued reference mapping
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
@@ -1417,7 +1419,10 @@ public class ExportEvaluationNoChangeTests
             Type = AttributeDataType.Text,
             AttributePlurality = AttributePlurality.MultiValued
         };
+
+        // Per-value Add and Remove are staged only where the target is multi-valued too (#2182).
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        targetDisplayNameAttr.AttributePlurality = AttributePlurality.MultiValued;
 
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
@@ -1497,6 +1502,9 @@ public class ExportEvaluationNoChangeTests
         var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
         var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
 
+        // Per-value Add and Remove are staged only where the target is multi-valued too (#2182).
+        targetManagerAttr.AttributePlurality = AttributePlurality.MultiValued;
+
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
@@ -1575,7 +1583,9 @@ public class ExportEvaluationNoChangeTests
         };
         mvGroupType.Attributes.Add(multiValuedTextAttr);
 
+        // Per-value Add and Remove are staged only where the target is multi-valued too (#2182).
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        targetDisplayNameAttr.AttributePlurality = AttributePlurality.MultiValued;
 
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;

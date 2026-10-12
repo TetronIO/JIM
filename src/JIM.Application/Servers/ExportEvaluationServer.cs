@@ -1626,9 +1626,10 @@ public class ExportEvaluationServer
                     resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
                     removalValue = resolvedValueForSystem;
 
-                // The removal-change verdict comes from the pure engine (#288 extraction): a value-carrying
-                // Remove for a multi-valued source, a null-clearing Update for a single-valued one, or null
-                // when a multi-valued removal has no resolvable value and cannot be staged.
+                // The removal-change verdict comes from the pure engine (#288 extraction), and follows the target
+                // attribute's plurality (#2182): a value-carrying Remove where source and target are both
+                // multi-valued (or null when that value cannot be resolved, so nothing can be staged), and a
+                // null-clearing Update everywhere else.
                 var change = _syncEngine.DecideRecallRemovalChange(flow, removalValue);
                 if (change == null)
                 {
@@ -3308,13 +3309,12 @@ public class ExportEvaluationServer
     /// </summary>
     /// <remarks>
     /// The merge key alone is not enough to catch this. It keys multi-valued attributes by value, which is right for
-    /// genuine per-value adds and removals, but a change's type follows the Metaverse attribute's plurality while the
-    /// key follows the Connected System attribute's: a single-valued Metaverse attribute flowing to a multi-valued
-    /// Connected System attribute (a Metaverse "Job Title" flowing to LDAP's multi-valued <c>title</c>) therefore
-    /// produces an Update whose key still carries a value. A stale per-value Remove for the same attribute then
-    /// survives the merge, and the connector emits the replace followed by a delete of a value the replace has already
-    /// removed. LDAP rejects that modify atomically ("modify/delete: title: no such value"), so the export never
-    /// applies and retries until it exhausts its attempts.
+    /// genuine per-value adds and removals, but a single-valued Metaverse attribute flowing to a multi-valued Connected
+    /// System attribute (a Metaverse "Job Title" flowing to LDAP's multi-valued <c>title</c>) is staged as an Update
+    /// (#2182), which replaces the whole set while its key still carries a value. A stale per-value Remove for the same
+    /// attribute would then survive the merge, and the connector would emit the replace followed by a delete of a value
+    /// the replace has already removed. LDAP rejects that modify atomically ("modify/delete: title: no such value"), so
+    /// the export would never apply and would retry until it exhausted its attempts.
     /// </remarks>
     internal static HashSet<int> GetWholeAttributeReplacementAttributeIds(IEnumerable<PendingExportAttributeValueChange> changes)
         => SyncEngine.GetWholeAttributeReplacementAttributeIds(changes);

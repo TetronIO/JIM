@@ -272,6 +272,16 @@ public class ExportExecutionServer
                 connectedSystem.Name, result.ClassMembershipRefusedCount);
         }
 
+        // Only when it happened, which should be never: export staging gives a single-valued attribute exactly one
+        // change (#2182), so an export carrying two is a fault in JIM rather than a configuration gap, and is said so.
+        if (result.SingleValuedContradictionRefusedCount > 0)
+        {
+            Log.Error("ExecuteExportsAsync: Single-valued attribute summary for {SystemName}: {RefusedCount} export(s) refused because each carries more " +
+                "than one change for a single-valued attribute, which is a fault in JIM rather than in its configuration. Each names the attributes on its " +
+                "own Pending Export, and none was sent, so no Connected System Object was changed by it.",
+                connectedSystem.Name, result.SingleValuedContradictionRefusedCount);
+        }
+
         // Report completion
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -774,8 +784,9 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                (exportResults, var immediateRefused) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
-                                result.ClassMembershipRefusedCount += immediateRefused;
+                                (exportResults, var immediateClassRefused, var immediateContradictions) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                result.ClassMembershipRefusedCount += immediateClassRefused;
+                                result.SingleValuedContradictionRefusedCount += immediateContradictions;
                             }
 
                             // Process results
@@ -1358,8 +1369,9 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                (exportResults, var deferredRefused) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
-                result.ClassMembershipRefusedCount += deferredRefused;
+                (exportResults, var deferredClassRefused, var deferredContradictions) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                result.ClassMembershipRefusedCount += deferredClassRefused;
+                result.SingleValuedContradictionRefusedCount += deferredContradictions;
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1494,10 +1506,14 @@ public class ExportExecutionServer
                     // Execute batch via connector. The batch was re-loaded from persisted state above,
                     // which is why the reference resolutions and the writable/unresolved split (issue
                     // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var (exportResults, batchRefused) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    var (exportResults, batchClassRefused, batchContradictions) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
-                    var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
+                    var batchResult = new ExportExecutionResult
+                    {
+                        ClassMembershipRefusedCount = batchClassRefused,
+                        SingleValuedContradictionRefusedCount = batchContradictions
+                    };
                     await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
@@ -1524,6 +1540,7 @@ public class ExportExecutionServer
                         result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
                         result.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
                         result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
+                        result.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
                         result.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
                         result.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
                         if (batchCompletedCallback == null)
@@ -1653,14 +1670,18 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
-    /// System and failing it with the attributes named. Results come back in the batch's own order either way.
+    /// System, or that carries more than one change for a single-valued attribute, and failing it with the attributes
+    /// named. Results come back in the batch's own order either way, with the two kinds of refusal counted apart.
     /// </summary>
     /// <remarks>
     /// Refusing here rather than letting the Connected System reject the change gives an administrator something
     /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
-    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
+    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector. An export contradicting
+    /// itself over a single-valued attribute (#2182) is refused for a different reason: it is a fault in JIM, and a
+    /// Connector could apply it in an order that clears the value and report success. The two are counted apart
+    /// because they point at different remedies: a class membership refusal at configuration, a contradiction at JIM.
     /// </remarks>
-    internal static async Task<(List<ConnectedSystemExportResult> Results, int Refused)> ExportBatchAsync(
+    internal static async Task<(List<ConnectedSystemExportResult> Results, int ClassMembershipRefused, int ContradictionsRefused)> ExportBatchAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
         List<PendingExport> batch,
@@ -1669,30 +1690,69 @@ public class ExportExecutionServer
     {
         var refusals = new Dictionary<int, ConnectedSystemExportResult>();
         var sendable = new List<PendingExport>();
+        var contradictions = 0;
 
         for (var i = 0; i < batch.Count; i++)
         {
-            var refusal = ClassMembershipValidator.Check(batch[i], connectedSystem);
+            // An export that contradicts itself over a single-valued attribute is refused first (#2182): it is a fault
+            // in JIM rather than configuration, and no class check is meaningful over changes that cannot all apply.
+            var contradiction = SingleValuedAttributeChangeValidator.Check(ForConnector(batch[i]));
+            var refusal = contradiction ?? ClassMembershipValidator.Check(batch[i], connectedSystem);
             if (refusal == null)
+            {
                 sendable.Add(batch[i]);
-            else
-                refusals[i] = refusal;
+                continue;
+            }
+
+            refusals[i] = refusal;
+            if (contradiction != null)
+                contradictions++;
         }
 
         if (refusals.Count == 0)
-            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0);
+            return (await connector.ExportAsync(batch.Select(ForConnector).ToList(), cancellationToken, connectorProgress), 0, 0);
 
-        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
-            refusals.Count, batch.Count, connectedSystem.Name);
+        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' before sending them: " +
+            "{ContradictionCount} carrying more than one change for a single-valued attribute, {ClassMembershipCount} adding a class whose required " +
+            "attributes have no value. The reason is recorded against each object.",
+            refusals.Count, batch.Count, connectedSystem.Name, contradictions, refusals.Count - contradictions);
 
         var sentResults = sendable.Count > 0
             ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
             : [];
 
-        // Rebuild in the batch's order, because the caller pairs results with exports by index.
-        var results = new List<ConnectedSystemExportResult>(batch.Count);
+        return (InBatchOrder(batch.Count, refusals, sentResults), refusals.Count - contradictions, contradictions);
+    }
+
+    /// <summary>
+    /// The refusals that keep each export carrying more than one change for a single-valued attribute (#2182) back from
+    /// the Connector, keyed by the export's position in <paramref name="exports"/>.
+    /// </summary>
+    private static Dictionary<int, ConnectedSystemExportResult> RefuseSelfContradictingExports(IList<PendingExport> exports)
+    {
+        var refusals = new Dictionary<int, ConnectedSystemExportResult>();
+        for (var i = 0; i < exports.Count; i++)
+        {
+            var refusal = SingleValuedAttributeChangeValidator.Check(exports[i]);
+            if (refusal != null)
+                refusals[i] = refusal;
+        }
+
+        return refusals;
+    }
+
+    /// <summary>
+    /// One result per export of a batch, in the batch's own order, from the refusals held back and the results of the
+    /// exports that were sent. The caller pairs results with exports by index.
+    /// </summary>
+    private static List<ConnectedSystemExportResult> InBatchOrder(
+        int batchCount,
+        Dictionary<int, ConnectedSystemExportResult> refusals,
+        IList<ConnectedSystemExportResult> sentResults)
+    {
+        var results = new List<ConnectedSystemExportResult>(batchCount);
         var sentIndex = 0;
-        for (var i = 0; i < batch.Count; i++)
+        for (var i = 0; i < batchCount; i++)
         {
             if (refusals.TryGetValue(i, out var refusal))
                 results.Add(refusal);
@@ -1700,7 +1760,7 @@ public class ExportExecutionServer
                 results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
         }
 
-        return (results, refusals.Count);
+        return results;
     }
 
     /// <summary>
@@ -3016,7 +3076,28 @@ public class ExportExecutionServer
                 Message = subPhase
             });
 
-            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            // An export contradicting itself over a single-valued attribute is refused before the file is written, as
+            // ExportBatchAsync refuses one on the call-based path (#2182): the File Connector applies changes in turn, so
+            // an add followed by a removal would leave the column empty and be reported as a success.
+            var refusals = RefuseSelfContradictingExports(pendingExports);
+            List<ConnectedSystemExportResult> exportResults;
+            if (refusals.Count == 0)
+            {
+                exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
+            }
+            else
+            {
+                Log.Warning("ExecuteUsingFilesWithBatchingAsync: Refused {RefusedCount} of {ExportCount} export(s) on '{ConnectedSystem}' before writing them: " +
+                    "each carries more than one change for a single-valued attribute. The reason is recorded against each object.",
+                    refusals.Count, pendingExports.Count, connectedSystem.Name);
+                result.SingleValuedContradictionRefusedCount += refusals.Count;
+
+                List<PendingExport> sendable = [.. pendingExports.Where((_, index) => !refusals.ContainsKey(index))];
+                var sentResults = sendable.Count > 0
+                    ? await connector.ExportAsync(connectedSystem.SettingValues, sendable, cancellationToken, connectorProgress)
+                    : [];
+                exportResults = InBatchOrder(pendingExports.Count, refusals, sentResults);
+            }
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;

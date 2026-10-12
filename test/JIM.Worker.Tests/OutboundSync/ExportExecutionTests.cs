@@ -4491,5 +4491,98 @@ public class ExportExecutionTests
         }
     }
 
+    /// <summary>
+    /// File-connector path (#2182): an export carrying two changes for one single-valued attribute contradicts itself,
+    /// and the File Connector applies changes in turn, so an add followed by a removal would leave the column empty.
+    /// It is refused against its own object before the file is written, as on the call-based path, and the rest of
+    /// the batch is still sent.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileConnector_AnExportCarryingTwoChangesForOneSingleValuedAttributeIsRefusedAndNeverSentAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        Assert.That(displayNameAttr.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
+
+        PendingExport UpdateOf(params (PendingExportAttributeChangeType ChangeType, string Value)[] changes)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                Status = ConnectedSystemObjectStatus.Normal,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                CreatedAt = DateTime.UtcNow,
+                MaxRetries = 3,
+                AttributeValueChanges = [.. changes.Select(change => new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = change.ChangeType,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = change.Value
+                })]
+            };
+            PendingExportsData.Add(pendingExport);
+            SyncRepo.SeedPendingExport(pendingExport);
+            return pendingExport;
+        }
+
+        var contradictory = UpdateOf((PendingExportAttributeChangeType.Add, "Ada Lovelace"), (PendingExportAttributeChangeType.Remove, "Ada"));
+        var sound = UpdateOf((PendingExportAttributeChangeType.Update, "Grace Hopper"));
+
+        var sent = new List<PendingExport>();
+        var mockConnector = new Mock<IConnector>();
+        var mockFileConnector = mockConnector.As<IConnectorExportUsingFiles>();
+        mockConnector.Setup(c => c.Name).Returns("Test File Connector");
+        mockFileConnector.Setup(c => c.ExportAsync(
+                It.IsAny<IList<ConnectedSystemSettingValue>>(),
+                It.IsAny<IList<PendingExport>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                sent.AddRange(exports);
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        var refusedItem = result.ProcessedExportItems.SingleOrDefault(item => !item.Succeeded);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sent.Select(export => export.Id), Is.EqualTo(new[] { sound.Id }),
+                "only the export that does not contradict itself reaches the Connector");
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.FailedCount, Is.EqualTo(1));
+            Assert.That(result.SingleValuedContradictionRefusedCount, Is.EqualTo(1));
+            Assert.That(refusedItem?.ConnectedSystemObject?.Id, Is.EqualTo(contradictory.ConnectedSystemObjectId));
+            Assert.That(refusedItem?.ErrorMessage, Does.Contain($"'{displayNameAttr.Name}'"));
+        }
+    }
+
     #endregion
 }

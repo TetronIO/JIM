@@ -7017,10 +7017,11 @@ public abstract class SyncTaskProcessorBase
                         // Queue for export evaluation so target systems receive Pending Exports for the recalled
                         // (and any re-elected) attribute values; without this, downstream Connected Systems keep
                         // the departed source's stale values forever. Same construction as the obsoletion path
-                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
-                        // its first matching changed value, so the re-elected survivor's value must precede the
-                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
-                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        // and the normal Attribute Flow path: additions FIRST, with every removal in
+                        // removedAttributes. Where the source or target is single-valued, export evaluation exports
+                        // the first changed value that was not removed (#2182), so the re-elected survivor's value
+                        // is exported rather than the leaver's, and a genuine clear, with no such value,
+                        // null-clears the target.
                         var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
                         var removedAttributes = recalledAttributeValues.ToHashSet();
                         MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);

@@ -74,12 +74,14 @@ Mappings support both single-valued and multi-valued attributes. A **Multi-Value
 |--------|--------|-----------|
 | Single-Valued | Single-Valued | ✅ The value flows normally. |
 | Multi-Valued | Multi-Valued | ✅ Every value flows. |
-| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. |
+| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. On export it replaces any other values the target holds (see below). |
 | Multi-Valued | Single-Valued | ⚠️ See below. |
+
+**One value written to a Multi-Valued attribute.** An export mapping that writes one value to a Multi-Valued attribute, whether from a Single-Valued source or from an [expression](#expression-mappings), owns that attribute's whole value set. Each export replaces every value the attribute holds with that one, so a value added outside JIM (an extra email alias, say) is removed the next time JIM exports the attribute, and JIM confirms the export only once the attribute holds exactly that value. If the Connected System puts values of its own back, the export is retried and in time reported as failed. To manage some of an attribute's values and leave the rest alone, map a Multi-Valued source to it instead: JIM then adds and removes only the values that source gains and loses.
 
 **Multi-Valued to Single-Valued.** A Single-Valued target can hold only one value, so this mapping is only meaningful when the object actually has one value:
 
-- If the object has **one** value, it flows (import) or is exported normally.
+- If the object has **one** value, it flows (import) or is exported normally: on export the target is set to that value, and cleared when the object has none.
 - If the object has **more than one** value, JIM does **not** pick one arbitrarily. An arbitrary choice would be non-deterministic (a Connected System does not guarantee value order) and, on export, could never be reconciled on the next import. Instead, JIM flows nothing for that attribute and records an error against the object; the object's other attributes still synchronise. The error appears as a `Multi-Valued to Single-Valued` item in the run's [Activity](activities.md).
 
 The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.

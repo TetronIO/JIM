@@ -62,6 +62,25 @@ public class LdapConnectorExportConsolidationTests
     }
 
     [Test]
+    public void ConsolidateModifications_AMultiValuedSourceWithOneValueChangedIntoASingleValuedAttribute_ReplacesTheValue()
+    {
+        // What export staging produces for a single-valued attribute is what the directory is sent: the value it now
+        // holds, as a Replace, whatever the plurality of the Metaverse Attribute it flows from (#2182).
+        var mail = new ConnectedSystemObjectTypeAttribute { Id = 30, Name = "mail", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = StagedEmailChange.StageFor(mail)
+        };
+
+        var result = LdapConnectorExport.ConsolidateModifications(pendingExport, "CN=Ada,OU=Staff,DC=test,DC=local");
+
+        Assert.That(result.Select(m => (m.AttributeName, m.Operation)), Is.EqualTo(new[] { ("mail", DirectoryAttributeOperation.Replace) }));
+        Assert.That(result[0].AttributeChanges.Select(c => c.StringValue), Is.EqualTo(new[] { StagedEmailChange.NewValue }));
+    }
+
+    [Test]
     public void ConsolidateModifications_MixedAddAndRemove_CreatesSeparateConsolidationsAsync()
     {
         var pendingExport = CreateMemberMixedPendingExport("CN=Group,DC=test,DC=local", addCount: 3, removeCount: 2);
