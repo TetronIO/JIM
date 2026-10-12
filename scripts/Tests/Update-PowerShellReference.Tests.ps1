@@ -183,6 +183,27 @@ function Get-JIMHealth {
         Gets JIM's health.
 
     .OUTPUTS
+        A summary of JIM's health.
+
+        JIM.HealthSummary
+        Status (string): Healthy or Unhealthy.
+        CheckedAt (datetime): When the check ran, which
+            is UTC.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.HealthSummary')]
+    param()
+}
+'@
+
+    # Builds its own object but lists none of its properties.
+    $script:GetHealthUnlisted = @'
+function Get-JIMHealth {
+    <#
+    .SYNOPSIS
+        Gets JIM's health.
+
+    .OUTPUTS
         A summary with Status and CheckedAt.
     #>
     [CmdletBinding()]
@@ -771,14 +792,26 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'JIM\.HealthSummary'
     }
 
-    It 'accepts an allowed output type that is not an OpenAPI schema, and lists it by name' {
+    It 'tables a type the module builds from the properties its .OUTPUTS help lists, and keeps the list out of the prose' {
         $fixture = New-Fixture -Functions @($script:GetHealth) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet from several API calls' }
         Invoke-Generator $fixture | Out-Null
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMHealth'))
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMHealth'
+        $types = @(Get-OutputTypes $block)
         $types[0].Type | Should -Be 'HealthSummary'
-        $types[0].Table.Count | Should -Be 0
+        @($types[0].Table | ForEach-Object Property) | Should -Be @('Status', 'CheckedAt')
+        ($types[0].Table | Where-Object Property -eq 'CheckedAt').Type | Should -Be 'datetime'
+        ($types[0].Table | Where-Object Property -eq 'CheckedAt').Description | Should -Be 'When the check ran, which is UTC.'
+        Get-Subsection $block 'Output' | Should -Match "A summary of JIM's health\."
+        Get-Subsection $block 'Output' | Should -Not -Match 'JIM\.HealthSummary|Status \(string\)'
+    }
+
+    It 'fails when a type the module builds lists none of its properties' {
+        $fixture = New-Fixture -Functions @($script:GetHealthUnlisted) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMHealth') } -NonApiOutputTypes @{ 'JIM.HealthSummary' = 'Built by the cmdlet from several API calls' }
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'JIM\.HealthSummary'
     }
 
     It 'fails on an allowed output type that no cmdlet declares' {

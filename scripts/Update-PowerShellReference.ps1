@@ -75,6 +75,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:Culture = [System.Globalization.CultureInfo]::GetCultureInfo('en-GB')
 $script:AllSets = '__AllParameterSets'
+# One property of a type the module builds, as its .OUTPUTS help lists it.
+$script:PropertyLinePattern = '^(?<name>[A-Za-z_]\w*) \((?<type>[^)]+)\): (?<description>.+)$'
 $script:BeginPattern = '<!-- BEGIN GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 $script:EndPattern = '<!-- END GENERATED: (?<name>[A-Za-z0-9-]+) -->'
 
@@ -118,6 +120,35 @@ function ConvertTo-Paragraphs {
     $normalised = $Text -replace "`r", ''
     @(($normalised.Trim() -split "\n\s*\n") | ForEach-Object { ($_ -split '\s*\n\s*' | ForEach-Object Trim) -join ' ' } |
         Where-Object { $_ })
+}
+
+# A cmdlet's .OUTPUTS help, split into its prose and the property lists of the types the module builds itself:
+# a paragraph whose first line names a JIM type and whose other lines read "Name (type): description", a line
+# that does not starting another being the previous description running on.
+function Split-OutputsHelp {
+    param([string[]]$Sections)
+
+    $prose = [System.Collections.Generic.List[string]]::new()
+    $lists = @{}
+    foreach ($section in @($Sections | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        foreach ($paragraph in (($section -replace "`r", '').Trim() -split "\n\s*\n")) {
+            $lines = @($paragraph -split '\n' | ForEach-Object Trim | Where-Object { $_ })
+            if ($lines.Count -eq 0) { continue }
+            if ($lines.Count -ge 2 -and $lines[0] -cmatch '^JIM\.\w+$' -and $lines[1] -cmatch $script:PropertyLinePattern) {
+                $properties = [System.Collections.Generic.List[object]]::new()
+                foreach ($line in $lines[1..($lines.Count - 1)]) {
+                    $match = [regex]::Match($line, $script:PropertyLinePattern)
+                    if ($match.Success) {
+                        $properties.Add([pscustomobject]@{ Name = $match.Groups['name'].Value; Type = $match.Groups['type'].Value; Description = $match.Groups['description'].Value })
+                    }
+                    else { $properties[$properties.Count - 1].Description += " $line" }
+                }
+                $lists[$lines[0]] = $properties
+            }
+            else { $prose.Add($lines -join ' ') }
+        }
+    }
+    [pscustomobject]@{ Prose = @($prose); Lists = $lists }
 }
 
 function ConvertTo-TableCell {
@@ -223,6 +254,8 @@ function Get-CmdletReference {
                 $node.Parent.TypeName.Name -in 'Parameter', 'System.Management.Automation.Parameter', 'ParameterAttribute'
         }, $true)
 
+    $outputsHelp = Split-OutputsHelp -Sections @(if ($help) { $help.Outputs })
+
     $outputTypes = [ordered]@{}
     foreach ($attribute in @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
         foreach ($type in $attribute.Type) {
@@ -241,7 +274,8 @@ function Get-CmdletReference {
         DeclaresPositions = $declaresPositions
         SupportsShouldProcess = $Command.Parameters.ContainsKey('WhatIf')
         ConfirmImpact = @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } | ForEach-Object ConfirmImpact | Select-Object -First 1)
-        Outputs     = @(if ($help) { $help.Outputs | ForEach-Object { ConvertTo-Paragraphs $_ } })
+        Outputs     = $outputsHelp.Prose
+        OutputProperties = $outputsHelp.Lists
         OutputTypes = $outputTypes
     }
 }
@@ -487,7 +521,23 @@ function Format-Output {
             $label += ' (' + (@($everySet | Where-Object { $sets -contains $_ }) -join ', ') + ')'
         }
 
-        if (-not $schemaName) {
+        if (-not $schemaName -and $NonApiOutputTypes.ContainsKey($typeName)) {
+            # A type the module builds: its properties come from its .OUTPUTS help.
+            $key = "module:$typeName"
+            if ($TabledOnPage.ContainsKey($key)) {
+                $first = $TabledOnPage[$key]
+                $sections.Add("${label}: as under [$first](#$(Get-HeadingAnchor $first)).")
+            }
+            elseif ($Reference.OutputProperties.ContainsKey($typeName)) {
+                $TabledOnPage[$key] = $Reference.Name
+                $sections.Add((Format-PropertyTable -Label $label -Properties $Reference.OutputProperties[$typeName]))
+            }
+            else {
+                $Problems.Add("$($Reference.Name) declares $typeName, a type the module builds, but its .OUTPUTS help lists none of its properties; add a paragraph whose first line is $typeName and whose others read 'Name (type): description'")
+                $sections.Add($label)
+            }
+        }
+        elseif (-not $schemaName) {
             $sections.Add($label)
         }
         elseif ($TabledOnPage.ContainsKey($schemaName)) {
@@ -496,17 +546,7 @@ function Format-Output {
         }
         else {
             $TabledOnPage[$schemaName] = $Reference.Name
-            $properties = @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)
-            # A Description column the schema leaves wholly empty says nothing; its descriptions come from
-            # the DTO's XML comments, so documenting the DTO is what fills it.
-            if (@($properties | Where-Object Description).Count -gt 0) {
-                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell $property.Description) }
-                $sections.Add("${label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n"))
-            }
-            else {
-                $rows = foreach ($property in $properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
-                $sections.Add("${label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n"))
-            }
+            $sections.Add((Format-PropertyTable -Label $label -Properties @(Get-SchemaProperties -Schemas $Schemas -Name $schemaName)))
         }
     }
 
@@ -517,6 +557,19 @@ function Format-Output {
         return $text
     }
     $text + "`n`n" + ($sections -join "`n`n")
+}
+
+# A type's label and its properties' table. A Description column wholly empty says nothing, so it is left out;
+# a schema's descriptions come from the DTO's XML comments, so documenting the DTO is what fills it.
+function Format-PropertyTable {
+    param([string]$Label, [object[]]$Properties)
+
+    if (@($Properties | Where-Object Description).Count -gt 0) {
+        $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` | {2} |' -f $property.Name, $property.Type, (ConvertTo-TableCell $property.Description) }
+        return "${Label}:`n`n| Property | Type | Description |`n|----------|------|-------------|`n" + (@($rows) -join "`n")
+    }
+    $rows = foreach ($property in $Properties) { '| `{0}` | `{1}` |' -f $property.Name, $property.Type }
+    "${Label}:`n`n| Property | Type |`n|----------|------|`n" + (@($rows) -join "`n")
 }
 
 function Format-Block {

@@ -44,9 +44,20 @@ Connect-JIM [-Url] <string> [-ApiKey] <string>
 
 ### Output
 
-The connection: Url, the JIM instance's address; AuthMethod, OAuth or ApiKey; Connected, $true; ServerVersion, the JIM version the instance reported; Authorised, whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM, always $true for an API key; Status, JIM's health status; ExpiresAt, when the access token expires, for OAuth only; and ApiKey, the key's first eight and last four characters, for an API key only.
+The connection made.
 
-**`Connection`**
+**`Connection`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Url` | `string` | The JIM instance's address. |
+| `AuthMethod` | `string` | How the connection authenticated: OAuth or ApiKey. |
+| `Connected` | `bool` | Always $true; a connection that fails throws instead. |
+| `ServerVersion` | `string` | The JIM version the instance reported. |
+| `Authorised` | `bool` | Whether the signed-in user has a JIM identity (a Metaverse Object) and so can use JIM; always $true for an API key. |
+| `Status` | `string` | JIM's health status. |
+| `ExpiresAt` | `datetime` | When the access token expires; OAuth only. |
+| `ApiKey` | `string` | The key's first eight and last four characters; API key only. |
 <!-- END GENERATED: Connect-JIM -->
 
 ### Examples
@@ -164,9 +175,19 @@ Test-JIMConnection [-Quiet]
 
 ### Output
 
-The connection's status: Connected, whether a connection exists and JIM answered; Url, the JIM instance's address; AuthMethod, ApiKey or OAuth; ServerVersion, the JIM version it reported; Status, JIM's health status; Message, a sentence describing the result; and TokenExpiresAt, when the access token expires, for OAuth only. With -Quiet, $true if connected; otherwise $false.
+The connection's status; with -Quiet, $true if connected and otherwise $false.
 
-**`ConnectionStatus`**
+**`ConnectionStatus`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Connected` | `bool` | Whether a connection exists and JIM answered. |
+| `Url` | `string` | The JIM instance's address. |
+| `AuthMethod` | `string` | How the connection authenticated: ApiKey or OAuth. |
+| `ServerVersion` | `string` | The JIM version the instance reported. |
+| `Status` | `string` | JIM's health status. |
+| `Message` | `string` | A sentence describing the result. |
+| `TokenExpiresAt` | `datetime` | When the access token expires; OAuth only. |
 
 **`bool`**
 <!-- END GENERATED: Test-JIMConnection -->
