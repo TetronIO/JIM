@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
 using JIM.Web;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
@@ -123,6 +126,40 @@ public class ApiJsonConfigurationTests
     }
 
     private sealed record DuplicateProbe(string Name);
+
+    [Test]
+    public void ConfigureHttp_DescribesEnumsByTheirNames()
+    {
+        // The OpenAPI document generator describes the API's types from the HTTP JSON options, not MVC's. Without
+        // the policy there, the document declared every enum an integer while the API sends and accepts only names.
+        var options = new Microsoft.AspNetCore.Http.Json.JsonOptions();
+
+        ApiJsonConfiguration.ConfigureHttp(options);
+
+        var schema = JsonSchemaExporter.GetJsonSchemaAsNode(options.SerializerOptions, typeof(ProbeEnum));
+        Assert.That(schema["type"]?.GetValue<string>(), Is.Not.EqualTo("integer"));
+        Assert.That(schema["enum"]?.AsArray().Select(value => value!.GetValue<string>()), Is.EqualTo(new[] { "First", "Second" }));
+    }
+
+    [Test]
+    public void ConfigureHttp_DisallowsDuplicateJsonProperties()
+    {
+        var options = new Microsoft.AspNetCore.Http.Json.JsonOptions();
+
+        ApiJsonConfiguration.ConfigureHttp(options);
+
+        Assert.That(options.SerializerOptions.AllowDuplicateProperties, Is.False);
+    }
+
+    [Test]
+    public void ConfigureHttp_RaisesMaxDepthForTheSchemaGenerator()
+    {
+        var options = new Microsoft.AspNetCore.Http.Json.JsonOptions();
+
+        ApiJsonConfiguration.ConfigureHttp(options);
+
+        Assert.That(options.SerializerOptions.MaxDepth, Is.EqualTo(256));
+    }
 
     private enum ProbeEnum
     {
