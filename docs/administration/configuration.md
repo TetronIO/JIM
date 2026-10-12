@@ -1,10 +1,13 @@
 ---
 title: Configuration Reference
+description: Every environment variable and Service Setting that configures JIM, by category, with its default and what it changes.
+type: reference
+audience: administrator
 ---
 
 # Configuration Reference
 
-JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The automated setup script configures these automatically; for manual setup, edit the file directly. The settings and their names are the same on both runtimes.
+JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The installer sets them for you; to change one later, edit the file. The settings and their names are the same on both runtimes.
 
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
@@ -26,7 +29,7 @@ Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootl
 
 These settings differ on Podman:
 
-- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing by Hand](podman.md#installing-by-hand) to store or change it.
+- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing on Podman by Hand](podman-by-hand.md) to store or change it.
 - **`DOCKER_REGISTRY`, `JIM_VERSION`, `JIM_WEB_PORT`**<br /> Not used: the pod file, `jim.yaml`, names JIM's images with their registry and version, and the HTTPS port is `PublishPort=` in the `jim.kube` unit.
 - **`JIM_DB_SHM_SIZE`**<br /> Not used: Podman cannot size a pod's `/dev/shm`, so the bundled database pod keeps its parallel query memory in its data folder instead.
 - **`JIM_DB_HOSTNAME`**<br /> `jim-database` for the bundled PostgreSQL, rather than Docker's `jim.database`.
@@ -154,7 +157,7 @@ These variables control how JIM maps authenticated users to Metaverse Objects, e
 | Variable                | Description                                                                                                                                  | Default               | Example                   |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|---------------------------|
 | `JIM_SSO_CLAIM_TYPE`    | The JWT claim type containing the user's unique identifier. Use `sub` (standard OIDC subject identifier) for most providers.                | `sub`                 | `sub`                     |
-| `JIM_SSO_MV_ATTRIBUTE`  | The metaverse attribute name to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
+| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
 | `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
 
 !!! tip "Finding your admin's claim value"
@@ -189,11 +192,11 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 | `Preview.WorkerThreshold` | Preview worker threshold | Synchronisation | The estimated number of affected objects above which a [Configuration Change Preview](../configuration/configuration-changes.md) is evaluated by the Worker rather than in the portal's own process. Smaller previews run in-process, so they return without waiting for the Worker to pick them up. Both give identical results. | `2500` |
 | `Preview.FullDataSetPromptThreshold` | Preview full data set prompt threshold | Synchronisation | The estimated number of object-level rows above which a Configuration Change Preview asks whether to keep the full data set or only a sample of each summary group. Below it, the preview keeps a sample without asking. Summary counts are exact either way; the choice decides how much you can drill into, and how much storage the preview uses. | `100000` |
 | `Worker.StaleTaskTimeout` | Stale task timeout | Maintenance | How long a running Worker task may go without a heartbeat before JIM treats its Worker as crashed: the Scheduler then fails the task's Activity and removes the task, so the work can be run again. A zero or negative value is ignored in favour of the default. Format: `d.hh:mm:ss`. | `00:05:00` (5 minutes) |
-| `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration change history is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
-| `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
+| `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration Change History is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
+| `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which Configuration Change History (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
 | `History.SecurityEventRetentionPeriod` | Security event retention period | History | The duration for which [security audit events](../administration/security-audit-events.md) (interactive sign-in success/failure, API key authentication failure) are retained. Kept separately from the general history and configuration change retention periods. Format: `d.hh:mm:ss`. | `365.00:00:00` (~1 year) |
 | `History.PasswordEventRetentionPeriod` | Password Synchronisation retention period | History | The duration for which [Password Synchronisation](../concepts/passwords.md) history is kept: the Activities recording what happened to each password change, and the queued changes that reached a terminal state (parked, expired, or cancelled). Changes still owed to a Connected System are never removed, however old. Shorten this to bound how long JIM holds an encrypted password it can no longer deliver. Format: `d.hh:mm:ss`. | `365.00:00:00` (~1 year) |
-| `History.CleanupBatchSize` | History cleanup batch size | History | The most records of any one kind a single retention pass removes. Lower values reduce database load per pass but take longer to work through a backlog; a pass that hits the cap simply continues on the next run. | `100` |
+| `History.CleanupBatchSize` | History cleanup batch size | History | The most records of any one kind a single retention pass removes. Lower values reduce database load per pass but take longer to work through a backlog; a pass that hits the cap continues on the next run. | `100` |
 | `ChangeTracking.CsoChanges.Enabled` | Track CSO changes <!-- conformance: allow LANG-4 "the label the portal shows" --> | History | Whether change history is recorded for every Connected System Object create, update and delete. Turning it off saves database writes at the cost of those objects' audit trail. | `true` |
 | `ChangeTracking.MvoChanges.Enabled` | Track MVO changes <!-- conformance: allow LANG-4 "the label the portal shows" --> | History | Whether change history is recorded for every Metaverse Object create, update and delete. Turning it off saves database writes at the cost of those objects' audit trail. | `true` |
 | `ChangeTracking.ConfigurationChanges.Enabled` | Track configuration changes | History | Enables or disables capture of Configuration Change History. When `true`, a redacted, versioned snapshot is recorded on the Activity for every configuration create, update, and delete. Set to `false` to stop capturing new history; existing history is not deleted. | `true`        |

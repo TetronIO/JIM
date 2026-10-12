@@ -26,7 +26,7 @@ The certificate must name, as subject alternative names, every DNS name and IP a
 
 Docker mounts both files into `jim.web` read-only, keeping their owner and mode, and JIM runs with every capability dropped: if the key does not belong to UID `1654`, `jim.web` cannot read it and fails to start. Until both files exist, `docker compose up` stops with an error naming the missing file.
 
-Podman reads the pair from the Podman secret `jim-tls` instead, which the installer stores from these files, so on Podman the key stays readable by root only and needs no change of owner. Installing by hand, store it as [Installing by Hand](podman.md#installing-by-hand) describes.
+Podman reads the pair from the Podman secret `jim-tls` instead, which the installer stores from these files, so on Podman the key stays readable by root only and needs no change of owner. Installing by hand, store it as [Installing on Podman by Hand](podman-by-hand.md) describes.
 
 The installer asks which of these two ways to provide them, and puts them in place:
 
@@ -113,7 +113,7 @@ mv -f tls/tls.key.new tls/tls.key
 docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
 ```
 
-On Podman, put the new files in `tls/` the same way (no `chown` needed), store them as the `jim-tls` secret again as in [Installing by Hand](podman.md#installing-by-hand), and restart `jim.service`.
+On Podman, put the new files in `tls/` the same way (no `chown` needed), store them as the `jim-tls` secret again as in [Installing on Podman by Hand](podman-by-hand.md), and restart `jim.service`.
 
 When you move away from a certificate the installer created, delete `tls/ca.key`, and remove the JIM certificate authority from the machines that trusted it.
 
