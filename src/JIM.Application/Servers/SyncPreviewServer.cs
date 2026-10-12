@@ -1104,8 +1104,10 @@ public class SyncPreviewServer
 
         // The speculative outcome tree, in the real tree's shape: a Projected/Joined/AttributeFlow root
         // when attributes would flow, an Attribute Flow child under Projected/Joined, and the outbound
-        // outcomes beneath (mirroring the real processor's exportParent selection).
-        if (flowCount > 0)
+        // outcomes beneath (mirroring the real processor's exportParent selection). A projection or join is a
+        // change in its own right, so the run records its root even when nothing flows (the processor's lone
+        // Projected or Joined outcome for an object with no attribute changes), and so must the preview.
+        if (flowCount > 0 || inbound.WouldProject || inbound.WouldJoinMetaverseObjectId.HasValue)
         {
             var rootType = inbound.WouldProject ? ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 : inbound.WouldJoinMetaverseObjectId.HasValue ? ActivityRunProfileExecutionItemSyncOutcomeType.Joined
@@ -1140,8 +1142,9 @@ public class SyncPreviewServer
             }
 
             SyncOutcomeNode? attributeFlowChild = null;
-            if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
+            if (flowCount > 0
+                && rootType is (ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                    or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
             {
                 attributeFlowChild = new SyncOutcomeNode
                 {
