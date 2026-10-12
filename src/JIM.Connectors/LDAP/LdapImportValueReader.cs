@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Utilities;
 using Serilog;
+using System.Diagnostics.CodeAnalysis;
 using System.DirectoryServices.Protocols;
 using System.Globalization;
 namespace JIM.Connectors.LDAP;
@@ -77,13 +79,12 @@ internal static class LdapImportValueReader
 
     /// <summary>
     /// Reads a Boolean: <c>TRUE</c> or <c>FALSE</c> (RFC 4517 3.3.3), in any case. Anything else is unreadable rather
-    /// than false.
+    /// than false, and an attribute with more than one value reports each (<see cref="TryGetSingleValue{T}"/>).
     /// </summary>
     internal static LdapImportValues<bool> ReadBoolean(DirectoryAttribute attribute)
     {
         var read = new LdapImportValues<bool>();
-        var value = SingleTextValue(attribute);
-        if (string.IsNullOrWhiteSpace(value))
+        if (!TryGetSingleValue(attribute, AttributeDataType.Boolean, read, out var value))
             return read;
 
         if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
@@ -97,13 +98,13 @@ internal static class LdapImportValueReader
     }
 
     /// <summary>
-    /// Reads a date and time as UTC, from any form <see cref="TryParseDirectoryTime"/> reads.
+    /// Reads a date and time as UTC, from any form <see cref="TryParseDirectoryTime"/> reads. An attribute with more
+    /// than one value reports each (<see cref="TryGetSingleValue{T}"/>).
     /// </summary>
     internal static LdapImportValues<DateTime> ReadDateTime(DirectoryAttribute attribute)
     {
         var read = new LdapImportValues<DateTime>();
-        var value = SingleTextValue(attribute);
-        if (string.IsNullOrWhiteSpace(value))
+        if (!TryGetSingleValue(attribute, AttributeDataType.DateTime, read, out var value))
             return read;
 
         if (TryParseDirectoryTime(value, out var utc))
@@ -355,12 +356,30 @@ internal static class LdapImportValueReader
         attribute.GetValues(typeof(string)).Cast<string>().Where(value => !string.IsNullOrWhiteSpace(value));
 
     /// <summary>
-    /// The attribute's one value, or null when it has none or several: JIM holds one value for a Boolean or a date
-    /// and time, and an attribute with several is left with none, as it always has been; that is a decision about the
-    /// attribute rather than about reading its values.
+    /// Gets the one value of an attribute whose <paramref name="type"/> JIM holds one value of (a Boolean or a date and
+    /// time). False when the attribute has no value, or when it has several: JIM cannot hold them, so each is kept on
+    /// <paramref name="read"/> to report, and the import leaves the attribute as JIM already holds it rather than
+    /// choosing one of them.
     /// </summary>
-    private static string? SingleTextValue(DirectoryAttribute attribute) =>
-        attribute.Count == 1 ? (string)attribute.GetValues(typeof(string))[0] : null;
+    /// <remarks>
+    /// Reading none of several values without reporting them left the attribute with no value, which the import took
+    /// as the directory holding none, removing the value JIM held. Reporting them is a stop-gap: #2153 slice S5 reads
+    /// every value, importing several dates as they are and having JIM itself report a second Boolean value, and
+    /// replaces this.
+    /// </remarks>
+    private static bool TryGetSingleValue<T>(DirectoryAttribute attribute, AttributeDataType type, LdapImportValues<T> read, [NotNullWhen(true)] out string? value)
+    {
+        var values = TextValues(attribute).ToList();
+        value = values.Count == 1 ? values[0] : null;
+        if (values.Count > 1)
+        {
+            var reason = UnreadableValueReasons.MoreValuesThanJimHolds(type, values.Count);
+            foreach (var surplusValue in values)
+                read.AddUnreadable(surplusValue, reason);
+        }
+
+        return value != null;
+    }
 
     /// <summary>
     /// Removes duplicate values defensively: a directory should not return any, but corrupt data or a fault in the
