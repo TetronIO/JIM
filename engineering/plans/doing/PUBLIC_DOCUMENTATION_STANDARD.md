@@ -112,6 +112,8 @@ Decided by the product owner on 2026-10-11, from a census of the current pages a
 
 One pull request per folder, each ending with every page declaring its type, an empty baseline and no page over its size budget, then marked conformant: `getting-started/`, `administration/`, `configuration/`, `concepts/`, `connectors/`, `api/`, then `powershell/` once [#1083](https://github.com/TetronIO/JIM/issues/1083) has decided generation (native blocked-by link recorded on #1454).
 
+`reference/` (the glossary and roadmap) joins the list: it was left off, and holds debt like the rest. **4a migrated `getting-started/`:** Quick Start became a how-to for evaluators (install, **Check it worked**, the PowerShell module, next steps), its developer environment a pointer to the Developer Guide, which already covers it (AUD-1); Getting Started became a landing page, a purpose paragraph and its cards. **4b migrated `api/` and `reference/`:** their findings were front matter alone (each page is a reference page; the API pages for automation authors, the glossary for implementers, the roadmap for evaluators), plus the roadmap's dashed headings, now colons, and two wording findings in the glossary.
+
 ### Phase 5: Contributor content, promotion, close
 
 - Customer-relevant behaviour in `docs/developer/diagrams/` (Pending Export states, deletion grace periods, Schedule step failure) rewritten into `concepts/`; the 16 contributor pages moved to `engineering/`; a small "Extending JIM" section kept for connector authors.

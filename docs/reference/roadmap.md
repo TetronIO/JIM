@@ -1,12 +1,19 @@
+---
+title: Product Roadmap
+description: "The milestones ahead for JIM, from v1.0, Identity Lifecycle Complete, onwards, and where to follow their progress."
+type: reference
+audience: evaluator
+---
+
 # Product Roadmap
 
-JIM has completed **pre-release stabilisation**. The core identity lifecycle - Import, Sync, Export, and Schedule - is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all sync scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
+JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
 For the latest status and issue tracking, see the public [JIM Roadmap project board](https://github.com/orgs/TetronIO/projects/1).
 
 ---
 
-## 🎯 v1.0 - Identity Lifecycle Complete
+## 🎯 v1.0: Identity Lifecycle Complete
 
 The first stable release, delivering a production-ready identity lifecycle platform.
 
@@ -17,7 +24,7 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ---
 
-## 🌳 v1.x - Connector Ecosystem
+## 🌳 v1.x: Connector Ecosystem
 
 Expanding the range of systems JIM can connect to out of the box. The JIM SCIM 2.0 Client Connector and the JIM SQL Connector (Microsoft SQL Server and Oracle Database) have already shipped and are listed here for continuity.
 
@@ -33,7 +40,7 @@ Each connector follows JIM's established connector architecture, supporting sche
 
 ---
 
-## 🏛️ v2.0 - IGA Foundation
+## 🏛️ v2.0: IGA Foundation
 
 Evolves JIM's core IDAM capabilities so identities can be managed directly in JIM, without depending on Source-of-Record systems for everyday changes. The focus is depth in the existing identity surface (Users, Groups, custom types) rather than branching into adjacent domains.
 
