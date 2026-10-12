@@ -393,6 +393,14 @@ public class PasswordSynchronisationServer
     public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
 
     /// <summary>
+    /// How long an export may be Executing before a delivery stops waiting for it (#2173). A run that fails or is
+    /// cancelled can leave its batch Executing until the Worker restarts, and a delivery waiting on that would wait
+    /// until the change expired. An hour is far longer than an export batch takes, so an export still Executing after
+    /// it is treated as stranded: the delivery logs it as a warning, naming the Pending Export, and goes ahead.
+    /// </summary>
+    public static readonly TimeSpan ExportInFlightCeiling = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Delivers the password changes due on a Connected System, expiring anything that has outlived its window
     /// first: one lane of the Password Delivery Service (#1635).
     /// <para>
@@ -802,7 +810,7 @@ public class PasswordSynchronisationServer
         // accounts an administrator may have disabled on purpose, and re-enabling one would undo that silently, as a
         // side effect of somebody changing their password elsewhere. The one enable any delivery completes is the
         // one JIM withheld until a password existed (#2039), because the Attribute Flow asked for it (#2064).
-        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, ruleEnableAccount: false);
+        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, ruleEnableAccount: false, asOf);
         if (enablement == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
         if (exportInFlight && PasswordEnablementPolicy.WaitsForAnExportInFlight(enablement))
@@ -888,7 +896,7 @@ public class PasswordSynchronisationServer
 
         // Where an export wrote the account's enabled state, the Attribute Flow decides it and the rule's Enable
         // Account does not apply (#2064); an enable JIM withheld until a password existed is completed (#2039).
-        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, initialPasswordConfiguration.EnableAccount);
+        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, initialPasswordConfiguration.EnableAccount, asOf);
         if (enablement == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
         if (exportInFlight && PasswordEnablementPolicy.WaitsForAnExportInFlight(enablement))
@@ -930,7 +938,8 @@ public class PasswordSynchronisationServer
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemObject account,
-        bool ruleEnableAccount)
+        bool ruleEnableAccount,
+        DateTime asOf)
     {
         // Nothing to read where an administrator has already decided; the mark only ever moves from false to true, so
         // a claimed row already carrying it needs no second look at it.
@@ -946,10 +955,15 @@ public class PasswordSynchronisationServer
         {
             try
             {
-                var facts = await _syncRepo.GetAccountEnablementFactsAsync(connectedSystem.Id, change.Id, account.Id);
+                var facts = await _syncRepo.GetAccountEnablementFactsAsync(connectedSystem.Id, change.Id, account.Id, asOf - ExportInFlightCeiling);
                 holdsWithheldEnable = dependsOnHold && facts.HoldsWithheldEnable;
                 enabledStateSetByAttributeFlow |= facts.EnabledStateSetByAttributeFlow;
                 exportInFlight = facts.ExportInFlight;
+                if (facts.StrandedExportId is { } strandedExportId)
+                    Log.Warning("DeliverDuePasswordChangesAsync: Pending Export {PendingExportId} to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
+                        "has been Executing for more than {Ceiling}, far longer than an export batch takes, so it was most likely left there by a run that failed or was cancelled. " +
+                        "Password change {PendingPasswordChangeId} no longer waits for it. The Worker recovers stranded exports when it restarts",
+                        strandedExportId, account.Id, connectedSystem.Id, ExportInFlightCeiling, change.Id);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -1208,9 +1222,10 @@ public class PasswordSynchronisationServer
         }
 
         Log.Information(
-            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Problems} problem(s).",
+            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, " +
+            "{Postponed} waiting for an export to the account to finish, {Problems} problem(s).",
             result.ConnectedSystemsVisited, result.DeliveredCount, result.RetryingCount, result.ParkedCount,
-            result.ExpiredCount, result.WithdrawnCount, result.Problems.Count);
+            result.ExpiredCount, result.WithdrawnCount, result.PostponedCount, result.Problems.Count);
 
         return result;
     }

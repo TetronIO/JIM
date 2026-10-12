@@ -90,12 +90,6 @@ public class SyncRepository : ISyncRepository
     public Exception? FailActivityCreationWith { get; set; }
 
     /// <summary>
-    /// Called as <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> starts, so a test can see when the mark
-    /// is written relative to the batch's other writes (#2173).
-    /// </summary>
-    public Action? OnMarkingOwedInitialPasswords { get; set; }
-
-    /// <summary>
     /// Called with the ids <see cref="UpdatePendingExportsAsync"/> writes, so a test can see when an export's status is
     /// written relative to the batch's other writes (#2173).
     /// </summary>
@@ -2468,14 +2462,19 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(held);
     }
 
-    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
     {
         // The stored row, not a claimed copy: that is the point of reading afresh.
         var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
         var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
-        var inFlight = GetPendingExportsForSystem(connectedSystemId)
-            .Any(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
-        return new AccountEnablementFacts(holds, marked, inFlight);
+        // Read from the stored instances, which the engine mutates in memory before it persists them: closer to "now"
+        // than PostgreSQL's persisted status, so a test interleaving a delivery with an export should assert on the
+        // mark rather than on this fact.
+        var executing = GetPendingExportsForSystem(connectedSystemId)
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
+        var stranded = executing?.LastAttemptedAt < exportsInFlightSince;
+        return new AccountEnablementFacts(holds, marked, executing != null && !stranded, stranded ? executing!.Id : null);
     }
 
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
@@ -3431,7 +3430,6 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
-        OnMarkingOwedInitialPasswords?.Invoke();
         if (FailInitialPasswordMarkingWith != null)
             throw FailInitialPasswordMarkingWith;
 

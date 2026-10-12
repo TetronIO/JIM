@@ -1222,6 +1222,119 @@ public class PasswordDeliveryTests
     }
 
     /// <summary>
+    /// The whole of the issue's scenario: the delivery waits while the leaver's export is being sent; the export
+    /// finishes, marking the first password and leaving Executing; the next attempt leaves the enabled state to the
+    /// flow rather than enabling the leaver.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PostponedRow_OnceTheExportHasFinished_LeavesTheEnabledStateToTheFlowAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        var accountId = change.ConnectedSystemObjectId!.Value;
+        var export = SeedExportInFlight(accountId);
+
+        var whileInFlight = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+        await _syncRepository.MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(ConnectedSystemId, [accountId]);
+        export.Status = PendingExportStatus.Exported;
+        var afterwards = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now + PasswordSynchronisationServer.ExportInFlightWait, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(whileInFlight.PostponedCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.Null, "the leaver is not enabled");
+            Assert.That(afterwards.EnabledStateLeftToAttributeFlowCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ExplicitRowWithNoChoice_HeldEnableWithAnExportInFlight_WaitsAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        SeedHeldEnable(change.ConnectedSystemObjectId!.Value, pendingExportStatus: PendingExportStatus.Executing);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(result.PostponedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A wait is written back through the attempt write, which is guarded on the row still being the lane's: an
+    /// administrator who cancels it meanwhile finds it cancelled, not rescheduled.
+    /// </summary>
+    [Test]
+    public async Task Deliver_PostponedRowCancelledMidLane_KeepsTheCancellationAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (first, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-2));
+        var (second, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddMinutes(-1));
+        SeedExportInFlight(second.ConnectedSystemObjectId!.Value);
+        _connector.WithPasswordSetResult(account =>
+        {
+            // Cancelled while the lane is busy with the account ahead of it.
+            if (account.Id == first.ConnectedSystemObjectId)
+                _syncRepository.PendingPasswordChanges[second.Id].Cancel(Guid.NewGuid(), "Ada Lovelace", DateTime.UtcNow);
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges[second.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(stored.NextRetryAt, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// An export left in Executing by a run that failed or was cancelled stays there until the Worker restarts. A
+    /// delivery that waited on it would wait until the change expired, so an export Executing for longer than any
+    /// batch takes is treated as stranded rather than in flight, and the delivery goes ahead.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_ExportStrandedInExecuting_StopsWaitingForItAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value,
+            executingSince: now - PasswordSynchronisationServer.ExportInFlightCeiling - TimeSpan.FromMinutes(1));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().Options.EnableAccount, Is.True);
+            Assert.That(result.PostponedCount, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_ExportExecutingForLessThanTheCeiling_StillWaitsAsync()
+    {
+        var now = DateTime.UtcNow;
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        SeedExportInFlight(change.ConnectedSystemObjectId!.Value,
+            executingSince: now - PasswordSynchronisationServer.ExportInFlightCeiling + TimeSpan.FromMinutes(1));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        Assert.That(result.PostponedCount, Is.EqualTo(1));
+    }
+
+    /// <summary>
     /// However long the export runs, the wait never outlasts the change: it comes round again at its expiry at the
     /// latest, and is retired there rather than waiting on.
     /// </summary>
@@ -1242,16 +1355,19 @@ public class PasswordDeliveryTests
 
     /// <summary>
     /// Seeds a Pending Export for the account in the given status: being sent to the Connected System right now
-    /// unless told otherwise.
+    /// unless told otherwise, marked Executing at <paramref name="executingSince"/> (now unless told otherwise).
     /// </summary>
-    private void SeedExportInFlight(Guid accountId, PendingExportStatus status = PendingExportStatus.Executing) =>
-        _syncRepository.SeedPendingExport(new PendingExport
+    private PendingExport SeedExportInFlight(Guid accountId, PendingExportStatus status = PendingExportStatus.Executing,
+        DateTime? executingSince = null)
+    {
+        var export = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = ConnectedSystemId,
             ConnectedSystemObjectId = accountId,
             ChangeType = PendingExportChangeType.Update,
             Status = status,
+            LastAttemptedAt = executingSince ?? DateTime.UtcNow,
             AttributeValueChanges =
             [
                 new PendingExportAttributeValueChange
@@ -1262,7 +1378,10 @@ public class PasswordDeliveryTests
                     Status = PendingExportAttributeChangeStatus.Pending
                 }
             ]
-        });
+        };
+        _syncRepository.SeedPendingExport(export);
+        return export;
+    }
 
     #endregion
 
@@ -1279,6 +1398,7 @@ public class PasswordDeliveryTests
             ConnectedSystemObjectId = accountId,
             ChangeType = PendingExportChangeType.Create,
             Status = pendingExportStatus,
+            LastAttemptedAt = DateTime.UtcNow,
             AttributeValueChanges =
             [
                 new PendingExportAttributeValueChange

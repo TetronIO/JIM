@@ -21,4 +21,9 @@ namespace JIM.Models.Transactional.DTOs;
 /// <see cref="PendingExportStatus.Executing"/> (#2173). Such an export may be writing the enabled state, and records
 /// that it did only once its batch has come back, so JIM's own decision to enable the account waits for it.
 /// </param>
-public sealed record AccountEnablementFacts(bool HoldsWithheldEnable, bool EnabledStateSetByAttributeFlow, bool ExportInFlight);
+/// <param name="StrandedExportId">
+/// The account's Pending Export where it has been Executing for longer than any batch takes, or null. A run that
+/// failed or was cancelled can leave one there until the Worker restarts; it is reported rather than waited on.
+/// </param>
+public sealed record AccountEnablementFacts(bool HoldsWithheldEnable, bool EnabledStateSetByAttributeFlow, bool ExportInFlight,
+    Guid? StrandedExportId);
