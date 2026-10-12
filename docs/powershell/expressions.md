@@ -33,7 +33,7 @@ The result of evaluating the expression against the sample values. ResultLines g
 |----------|------|-------------|
 | `IsValid` | `bool` | Indicates whether the expression is valid and evaluated successfully. |
 | `Result` | `object` | The result of evaluating the expression (if successful). |
-| `ResultLines` | `string[]` | The result as the portal's expression tester shows it: one line per value, each written as JIM writes the value as text (a date as 2026-03-15 10:30:00Z, a Binary value described by its size). Empty when the expression produced no value, and not set when it failed, when ErrorMessage says why. |
+| `ResultLines` | `string[]` | The result as the portal's expression tester shows it: one line per value, each written as JIM writes the value as text (a date as 2026-03-15 10:30:00Z, a Binary value described by its size). Empty when the expression produced no value. Not set when it failed; `ErrorMessage` says why. |
 | `ResultType` | `string` | The type of the result (e.g., "String", "Int32", "Boolean"). |
 | `ErrorMessage` | `string` | Error message if the expression is invalid or evaluation failed. |
 | `ErrorPosition` | `int` | Position in the expression where an error occurred (if applicable). |
