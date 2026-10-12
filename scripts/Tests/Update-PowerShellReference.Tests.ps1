@@ -233,7 +233,8 @@ function Get-JIMGadget {
         "type": "object",
         "properties": {
           "notes": { "type": [ "null", "string" ] },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "createdAt": { "type": "string", "format": "date-time" },
+          "replacedBy": { "oneOf": [ { "type": "null" }, { "description": "The Widget that replaced this one.", "$ref": "#/components/schemas/WidgetHeader" } ] }
         }
       }
     }
@@ -459,7 +460,13 @@ Describe 'Update-PowerShellReference: generating a block' {
     It 'includes the properties a schema takes from another through allOf' {
         $detail = Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail'
         $detail.Sets | Should -Be 'ById'
-        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt')
+        $detail.Table.Property | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags', 'Notes', 'CreatedAt', 'ReplacedBy')
+    }
+
+    It 'gives a nullable reference the description the document puts beside the reference, not on the property' {
+        $replacedBy = (Get-OutputTypes $script:GetBlock | Where-Object Type -eq 'WidgetDetail').Table | Where-Object Property -eq 'ReplacedBy'
+        $replacedBy.Type | Should -Be 'WidgetHeader'
+        $replacedBy.Description | Should -Be 'The Widget that replaced this one.'
     }
 
     It 'refers back to the cmdlet above that already tables a type, instead of repeating it' {

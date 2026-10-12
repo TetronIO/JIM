@@ -336,6 +336,22 @@ function ConvertTo-PublicDescription {
 
 # A schema's properties in the order declared, those it takes through allOf first: each one's name in
 # the PascalCase the module returns, its type, and its description.
+# A property's description. For a nullable reference (an enum or object that may be null), the OpenAPI
+# document puts it beside the reference, inside the oneOf, rather than on the property.
+function Get-SchemaDescription {
+    param($Property)
+
+    if ($Property.Contains('description')) { return $Property['description'] }
+    foreach ($composite in 'oneOf', 'anyOf', 'allOf') {
+        if ($Property.Contains($composite)) {
+            foreach ($part in $Property[$composite]) {
+                if ($part.Contains('description')) { return $part['description'] }
+            }
+        }
+    }
+    ''
+}
+
 function Get-SchemaProperties {
     param($Schemas, [string]$Name, [System.Collections.Generic.HashSet[string]]$Seen)
 
@@ -347,7 +363,7 @@ function Get-SchemaProperties {
         param($bag)
         foreach ($key in $bag.Keys) {
             $property = $bag[$key]
-            $description = if ($property.Contains('description')) { ConvertTo-PublicDescription $property['description'] } else { '' }
+            $description = ConvertTo-PublicDescription (Get-SchemaDescription $property)
             $properties.Add([pscustomobject]@{
                 Name        = $key.Substring(0, 1).ToUpperInvariant() + $key.Substring(1)
                 Type        = Get-SchemaTypeName $property
