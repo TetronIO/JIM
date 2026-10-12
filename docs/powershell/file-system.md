@@ -32,7 +32,7 @@ Get-JIMFileSystemItem -Roots
 
 ### Output
 
-Listing returns the directory's contents; -Roots returns each allowed root directory's path.
+Listing returns the directory's contents; `-Roots` returns each allowed root directory's path.
 
 **`FileSystemListResult`** (List):
 
@@ -84,7 +84,7 @@ Test-JIMFileSystemPath [-Path] <string>
 
 ### Output
 
-$true if the path is within an allowed root directory; otherwise $false.
+`$true` if the path is within an allowed root directory; otherwise `$false`.
 
 **`bool`**
 <!-- END GENERATED: Test-JIMFileSystemPath -->

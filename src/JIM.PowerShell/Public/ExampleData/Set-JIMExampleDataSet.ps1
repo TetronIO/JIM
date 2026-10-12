@@ -11,26 +11,26 @@ function Set-JIMExampleDataSet {
         Built-in Example Data Sets cannot be updated.
 
     .PARAMETER Id
-        The unique identifier of the Example Data Set to update.
+        The Example Data Set to update.
 
     .PARAMETER Name
-        The new name for the Example Data Set.
+        The new name.
 
     .PARAMETER Culture
-        The new .NET culture the values are in, e.g. "en-GB".
+        The .NET culture the values are in, for example "en-GB".
 
     .PARAMETER Values
-        When specified, replaces the entire set of values.
+        The values, replacing all of the Example Data Set's current ones.
 
     .PARAMETER ChangeReason
-        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
-        configuration change history.
+        A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change
+        History.
 
     .PARAMETER PassThru
-        If specified, returns the updated Example Data Set object.
+        Returns the updated Example Data Set.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Example Data Set object.
+        With -PassThru, the updated Example Data Set; otherwise nothing.
 
     .EXAMPLE
         Set-JIMExampleDataSet -Id 5 -Name "UK Cities (Extended)"
@@ -53,7 +53,7 @@ function Set-JIMExampleDataSet {
         Remove-JIMExampleDataSet
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataSetDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$Id,

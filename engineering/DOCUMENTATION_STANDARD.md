@@ -50,7 +50,7 @@ Every rule has one of four tiers. The [Rule index](#rule-index) gives each rule'
 | **Block** | Every finding fails the pull request. Used only where the defect class is proven and false positives are near zero. |
 | **Ratchet** | Findings are compared with the baseline, per rule and page. Exceeding the baseline fails. A new page has no allowance, so it is conformant from its first commit. |
 | **Warn** | Reported as an annotation on the pull request diff (for the pages it changes), never fails. |
-| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by the advisory rubric review (`.github/workflows/docs-review.yml`): one summary comment, citing rule IDs, on a pull request that changes customer pages, when it opens or is marked ready and again whenever the `docs-review` label is added. Never a merge gate. |
+| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by the rubric review (`.github/workflows/docs-review.yml`) on a pull request that changes customer pages, when it opens or is marked ready and again whenever the `docs-review` label is added. Each finding is a review thread citing its rule ID, and the merge waits until every thread is resolved: fix the text, or reply with why it stays, then resolve. That is as far as it holds a merge: answering clears it, and it is never a required check, so a review that fails to run holds nothing. |
 
 ### The baseline only shrinks
 
@@ -227,7 +227,7 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | ID | Tier | Rule |
 |----|------|------|
 | **PRI-1** | Block | Each conformant priority page records the release it was last checked against (`validated: vX.Y.Z`, no later than `VERSION`), and no other page records one. `/release` lists every priority page due for re-validation (`scripts/Get-DocsDueForValidation.ps1`); the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. Validating means reading the page against the product as the release ships it (ACC-4), not re-running the scripts, which run on every pull request anyway. |
-| **PRI-2** | Planned (Phase 3) | On a priority page, the advisory review's findings arrive as review threads, each answered by a fix or a reply; the review still never blocks a merge the author has answered. |
+| **PRI-2** | Retired | Folded into the Review tier, which now posts every page's findings as review threads, each answered by a fix or a reply. It began as a priority-page rule. |
 | **TUT-1** | Block | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
 | **TUT-2** | Block | Every label a tutorial's Portal tab names in bold is one the portal shows: the check finds it in the portal's source (`PortalLabelSources` in `docs/.conformance/config.psd1`), ignoring case. A label the portal builds from data ("Project Users to the Metaverse?") is excused in place with a marker saying so. This proves the labels exist, not that the clicks work. |
 
@@ -301,7 +301,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
 | PRI-1 | Priority pages record their last validation | Block | `Test-DocsConformance.ps1`; listed for each release by `Get-DocsDueForValidation.ps1` |
-| PRI-2 | Advisory review findings on priority pages arrive as review threads | Planned (Phase 3) | |
+| PRI-2 | Review findings arrive as review threads (every page's, under the Review tier) | Retired | |
 | TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |
 | TUT-2 | A tutorial names only labels the portal shows | Block | `Test-DocsConformance.ps1` |
 | COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |

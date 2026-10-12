@@ -19,26 +19,25 @@ function Get-JIMCausalCohortMember {
         The execution item whose consequences the cohort belongs to.
 
     .PARAMETER CohortKey
-        The cohort's key, from Get-JIMActivityExecutionItem -Consequences.
+        The cohort's key, from Get-JIMActivityExecutionItem -Consequences, whose rows can be piped straight in.
 
     .PARAMETER Search
         Text a member's name must contain, case-insensitively.
 
     .PARAMETER Page
-        The page to return, from 1.
+        The page to return.
 
     .PARAMETER PageSize
-        How many members per page (1 to 100). Defaults to 50.
+        How many members per page. With -All, 100 unless it is given.
 
     .PARAMETER All
         Return every member, fetching page after page.
 
     .PARAMETER Force
-        Overrides the -All page ceiling. Only valid with -All.
+        With -All, fetches every page however many there are.
 
     .OUTPUTS
-        PSCustomObject with RunProfileExecutionItemId, PendingExportId, MetaverseObjectId, DisplayName, Occurred and
-        DueAt.
+        Each member of the cohort, earliest first and then by name.
 
     .EXAMPLE
         Get-JIMCausalCohortMember -ExecutionItemId "b2c3d4e5-f6a7-8901-bcde-f12345678901" -CohortKey $key -All
@@ -57,7 +56,7 @@ function Get-JIMCausalCohortMember {
         Get-JIMActivityExecutionItem
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.CausalConsequenceMemberDto')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$ExecutionItemId,

@@ -27,7 +27,7 @@ Get-JIMFeature [[-Name] <string>] [-IncludeInDevelopment]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | No |  | The key of the one flag to return, such as "Features.SomeInDevelopmentFeature". Can be given by position, as the first argument. |
-| `IncludeInDevelopment` | `switch` | No |  | Also returns In Development flags. Intended for development and the integration harness; enabling one outside Development still requires -AllowInDevelopment on Enable-JIMFeature. |
+| `IncludeInDevelopment` | `switch` | No |  | Also returns In Development flags. Intended for development and the integration harness; enabling one outside Development still requires `-AllowInDevelopment` on `Enable-JIMFeature`. |
 
 ### Output
 
@@ -43,8 +43,8 @@ Each feature flag.
 | `Tier` | `string` | The flag's tier: "Preview" (visible to administrators) or "InDevelopment" (developers only). |
 | `TrackingIssueNumber` | `int` | The GitHub issue tracking removal of this flag once the feature it gates ships. |
 | `Enabled` | `bool` | Whether the flag is currently enabled. |
-| `LastUpdated` | `datetime` | When the flag was last changed, or null if never changed from its seeded default. |
-| `LastUpdatedByName` | `string` | The display name of the principal that last changed the flag, or null if never changed. |
+| `LastUpdated` | `datetime` | When the flag was last changed, or empty if never changed from its seeded default. |
+| `LastUpdatedByName` | `string` | The display name of the principal that last changed the flag, or empty if never changed. |
 <!-- END GENERATED: Get-JIMFeature -->
 
 ### Examples
@@ -82,13 +82,13 @@ Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru] [-WhatIf] [
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes |  | The key of the flag to enable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes |  | The key of the flag to enable, such as "Features.SomeInDevelopmentFeature". A flag piped from `Get-JIMFeature` binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name, `Name` or `Key`. |
 | `AllowInDevelopment` | `switch` | No |  | Required to enable an In Development flag; the integration harness uses it in scenario setup. A Preview-tier flag needs no such acknowledgement. |
 | `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
 ### Output
 
-With -PassThru, the feature flag as updated; otherwise nothing.
+With `-PassThru`, the feature flag as updated; otherwise nothing.
 
 **`FeatureFlagDto`**: as under [Get-JIMFeature](#get-jimfeature).
 <!-- END GENERATED: Enable-JIMFeature -->
@@ -129,12 +129,12 @@ Disable-JIMFeature [-Name] <string> [-PassThru] [-WhatIf] [-Confirm]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes |  | The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from Get-JIMFeature binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes |  | The key of the flag to disable, such as "Features.SomeInDevelopmentFeature". A flag piped from `Get-JIMFeature` binds by its Key. Can be given by position, as the first argument. Accepts pipeline input by property name, `Name` or `Key`. |
 | `PassThru` | `switch` | No |  | Returns the feature flag as updated. |
 
 ### Output
 
-With -PassThru, the feature flag as updated; otherwise nothing.
+With `-PassThru`, the feature flag as updated; otherwise nothing.
 
 **`FeatureFlagDto`**: as under [Get-JIMFeature](#get-jimfeature).
 <!-- END GENERATED: Disable-JIMFeature -->

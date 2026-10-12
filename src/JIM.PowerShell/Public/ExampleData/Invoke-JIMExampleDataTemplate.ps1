@@ -14,28 +14,29 @@ function Invoke-JIMExampleDataTemplate {
         parameter to block until generation completes.
 
     .PARAMETER Id
-        The unique identifier of the template to execute.
+        The Data Generation Template to run.
 
     .PARAMETER Name
-        The name of the template to execute.
+        The name of the Data Generation Template to run.
 
     .PARAMETER Wait
-        If specified, waits for the data generation to complete before returning.
-        Shows live progress while waiting (object counts, throughput and estimated
-        time remaining), polling the lightweight Activity progress endpoint every
-        2 seconds.
+        Waits for generation to finish, showing its progress: object counts, throughput and the estimated time
+        remaining.
 
     .PARAMETER Timeout
-        Maximum time in seconds to wait for completion when using -Wait.
-        If not specified, waits indefinitely until completion.
+        How many seconds -Wait waits before it throws an error naming the Activity, which may still be running. Omit
+        it to wait until generation finishes.
 
     .PARAMETER PassThru
-        If specified, returns information about the queued execution, including the
-        ActivityId to follow via Get-JIMActivity.
+        Returns the response to queuing the run.
 
     .OUTPUTS
-        If -PassThru is specified, returns the execution information with TemplateId,
-        ActivityId, TaskId, Status and Message properties.
+        With -PassThru, the response to queuing the run, with the template and where the run got to; otherwise
+        nothing. Get-JIMActivity -Follow follows its ActivityId.
+
+        JIM.ExampleDataTemplateExecution
+        TemplateId (int): The Data Generation Template that was run.
+        Status (string): Queued, or with -Wait the Activity's final status, for example Complete or FailedWithError.
 
     .EXAMPLE
         Invoke-JIMExampleDataTemplate -Id 1
@@ -75,7 +76,7 @@ function Invoke-JIMExampleDataTemplate {
         Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ById')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateExecution')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,
@@ -120,6 +121,7 @@ function Invoke-JIMExampleDataTemplate {
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates/$Id/execute" -Method 'POST'
 
                 Write-Verbose "Data generation queued. ActivityId: $($response.activityId), TaskId: $($response.taskId)"
+                $status = 'Queued'
 
                 if ($Wait) {
                     $hasTimeout = $PSBoundParameters.ContainsKey('Timeout')
@@ -142,16 +144,13 @@ function Invoke-JIMExampleDataTemplate {
                     if (-not $finalStatus -and $hasTimeout) {
                         throw "Timeout waiting for data generation after $Timeout seconds. Activity ID: $activityId. The operation may still be running in the background."
                     }
+                    if ($finalStatus) { $status = $finalStatus }
                 }
 
                 if ($PassThru) {
-                    [PSCustomObject]@{
-                        TemplateId = $Id
-                        ActivityId = $response.activityId
-                        TaskId = $response.taskId
-                        Status = 'Queued'
-                        Message = $response.message
-                    }
+                    # The API's response, so nothing it reports is dropped, with the template and where the run got to.
+                    $response | Add-Member -NotePropertyName 'TemplateId' -NotePropertyValue $Id -Force -PassThru |
+                        Add-Member -NotePropertyName 'Status' -NotePropertyValue $status -Force -PassThru
                 }
             }
             catch {

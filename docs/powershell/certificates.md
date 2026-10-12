@@ -38,7 +38,7 @@ Get-JIMCertificate [-Name <string>] [-EnabledOnly]
 
 ### Output
 
-Listing returns each certificate's summary; -Id returns the certificate in full.
+Listing returns each certificate's summary; `-Id` returns the certificate in full.
 
 **`TrustedCertificateHeader`** (List, Enabled):
 
@@ -136,7 +136,7 @@ Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] 
 
 ### Output
 
-With -PassThru, the certificate added; otherwise nothing.
+With `-PassThru`, the certificate added; otherwise nothing.
 
 **`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Add-JIMCertificate -->
@@ -192,7 +192,7 @@ Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Dis
 
 ### Output
 
-With -PassThru, the certificate as updated; otherwise nothing.
+With `-PassThru`, the certificate as updated; otherwise nothing.
 
 **`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Set-JIMCertificate -->
@@ -243,14 +243,14 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of the certificate to delete. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The certificate to remove, as Get-JIMCertificate returns it. Accepts pipeline input. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The certificate to remove, as `Get-JIMCertificate` returns it. Accepts pipeline input. |
 | `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 | `PassThru` | `switch` | No |  | Returns the certificate as it was before it was removed. |
 
 ### Output
 
-With -PassThru, the certificate as it was before it was removed; otherwise nothing.
+With `-PassThru`, the certificate as it was before it was removed; otherwise nothing.
 
 **`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Remove-JIMCertificate -->
@@ -367,7 +367,7 @@ Export-JIMCertificate -Id <guid> -PassThru
 
 ### Output
 
-With -PassThru, the certificate's bytes, DER-encoded; otherwise nothing, the certificate being written to -Path.
+With `-PassThru`, the certificate's bytes, DER-encoded; otherwise nothing, the certificate being written to `-Path`.
 
 **`byte[]`** (PassThru)
 <!-- END GENERATED: Export-JIMCertificate -->

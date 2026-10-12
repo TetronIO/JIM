@@ -33,11 +33,11 @@ Get-JIMDataFlow -ConnectedSystemName <string> [-Direction <string>] [-MetaverseO
 | `Direction` | `string` | No |  | Only flows in this direction: Import for flows into the Metaverse, Export for flows out of it. Both when omitted. One of `Import` or `Export`. |
 | `ConnectedSystemId` | `int` | No (List) |  | Only flows on this Connected System. Accepts pipeline input by property name. |
 | `ConnectedSystemName` | `string` | Yes (ByConnectedSystemName) |  | Only flows on the Connected System with exactly this name. |
-| `InputObject` | `PSCustomObject` | No (List) |  | A Connected System from the pipeline, for example from Get-JIMConnectedSystem. Its Id filters the flows, as -ConnectedSystemId would. Accepts pipeline input. |
+| `InputObject` | `PSCustomObject` | No (List) |  | A Connected System from the pipeline, for example from `Get-JIMConnectedSystem`. Its Id filters the flows, as `-ConnectedSystemId` would. Accepts pipeline input. |
 | `MetaverseObjectTypeId` | `int` | No |  | Only flows on this Metaverse Object Type. |
 | `ConnectedSystemObjectTypeId` | `int` | No |  | Only flows on this Connected System Object Type. |
-| `MetaverseAttributeId` | `int` | No |  | Only flows that read or write this Metaverse Attribute, whichever side it sits on. A flow whose Metaverse side is an expression cannot match, because an expression's attribute references live in its text; use -Search for those. |
-| `ConnectedSystemAttributeId` | `int` | No |  | Only flows that read or write this Connected System attribute, with the same expression limitation as -MetaverseAttributeId. |
+| `MetaverseAttributeId` | `int` | No |  | Only flows that read or write this Metaverse Attribute, whichever side it sits on. A flow whose Metaverse side is an expression cannot match, because an expression's attribute references live in its text; use `-Search` for those. |
+| `ConnectedSystemAttributeId` | `int` | No |  | Only flows that read or write this Connected System attribute, with the same expression limitation as `-MetaverseAttributeId`. |
 | `MultipleContributorsOnly` | `switch` | No |  | Only Import flows whose target Metaverse Attribute has more than one contributor: the flows whose priority order decides anything. |
 | `Search` | `string` | No |  | Text matched, ignoring case, against the Synchronisation Rule, the Connected System, both object types, every attribute named on either side, and expression text. |
 | `SyncRuleName` | `string` | No |  | Only flows on Synchronisation Rules with this name, applied after the other filters. Supports wildcards. |
@@ -61,10 +61,10 @@ One object per flow. The cmdlet pages through the whole result set itself.
 | `ConnectedSystemObjectTypeName` | `string` | The name of the Connected System Object Type the flow applies to. |
 | `MetaverseObjectTypeId` | `int` | The Metaverse Object Type the flow applies to. |
 | `MetaverseObjectTypeName` | `string` | The name of the Metaverse Object Type the flow applies to. |
-| `TargetMetaverseAttributeId` | `int` | The Metaverse Attribute an Import flow writes. Null on an Export flow, where the Metaverse side is the source. |
-| `TargetMetaverseAttributeName` | `string` | The Metaverse Attribute an Import flow writes. Null on an Export flow. |
-| `TargetConnectedSystemAttributeId` | `int` | The Connected System attribute an Export flow writes. Null on an Import flow, where the Connected System side is the source. |
-| `TargetConnectedSystemAttributeName` | `string` | The Connected System attribute an Export flow writes. Null on an Import flow. |
+| `TargetMetaverseAttributeId` | `int` | The Metaverse Attribute an Import flow writes. Empty on an Export flow, where the Metaverse side is the source. |
+| `TargetMetaverseAttributeName` | `string` | The Metaverse Attribute an Import flow writes. Empty on an Export flow. |
+| `TargetConnectedSystemAttributeId` | `int` | The Connected System attribute an Export flow writes. Empty on an Import flow, where the Connected System side is the source. |
+| `TargetConnectedSystemAttributeName` | `string` | The Connected System attribute an Export flow writes. Empty on an Import flow. |
 | `Sources` | `DataFlowSource[]` | What feeds the target, in evaluation order: Connected System attributes on an Import flow, Metaverse Attributes on an Export flow, or an expression on either. Each names its attribute, or carries the expression, with its place in the order and a display name. |
 | `Priority` | `int` | The flow's place in its target Metaverse Attribute's priority order, 1 being highest; Import flows only. A flow that has never been ordered carries 2147483647, which the portal shows as Unranked. |
 | `NullIsValue` | `bool` | Whether this contribution asserts "no value" authoritatively rather than falling through to the next contributor. Import flows only. |

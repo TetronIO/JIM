@@ -78,5 +78,5 @@ The summary band adds an **After this run** strip of what followed, separate fro
 ## Related
 
 - [Activities](activities.md): execution items and the causality panel's views.
-- [PowerShell: Activities](../powershell/activities.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort.
+- [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort.
 - [Deprovisioning Action](deprovisioning.md) and [grace period](metaverse.md#grace-period): the settings the deletion cards name.
