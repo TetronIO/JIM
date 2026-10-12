@@ -363,6 +363,24 @@ public class MetaverseControllerSetPasswordTests
         }
     }
 
+    /// <summary>
+    /// Setting a password enables an account or leaves it as it is; it never disables one (#2162).
+    /// </summary>
+    [Test]
+    public async Task SetPassword_AccountsNamed_WithEnableAccountFalse_IsRefusedBeforeAnythingIsQueuedAsync()
+    {
+        var accounts = ArrangeAccounts((CorporateAdId, "Corporate AD"));
+
+        var result = await SetPasswordAsync(connectedSystemObjectIds: accounts, enableAccount: false, wait: 0);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("enableAccount"));
+            Assert.That(_syncRepo.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------
     // Named accounts
     // ---------------------------------------------------------------------------------------------------------
