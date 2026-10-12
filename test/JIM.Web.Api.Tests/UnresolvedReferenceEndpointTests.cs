@@ -146,4 +146,51 @@ public class UnresolvedReferenceEndpointTests
             Assert.That(summary.LargestFix, Is.Null, "Nothing in JIM's configuration would address a value that is simply not found.");
         }
     }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_UnknownConnectedSystem_ReturnsNotFoundAsync()
+    {
+        var result = await _controller.GetConnectedSystemUnresolvedReferenceSummaryAsync(ConnectedSystemId + 1);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetConnectedSystemUnresolvedReferenceSummaryAsync_ConnectedSystem_ReturnsTheStepsWithTheObjectsBehindEachAsync()
+    {
+        _connectedSystems.Setup(r => r.GetUnresolvedReferenceTotalsAsync(ConnectedSystemId))
+            .ReturnsAsync(new ConnectedSystemUnresolvedReferenceTotals { ReferenceCount = 4, ObjectCount = 3 });
+
+        var result = await _controller.GetConnectedSystemUnresolvedReferenceSummaryAsync(ConnectedSystemId);
+
+        var summary = (ConnectedSystemUnresolvedReferenceSummary)((OkObjectResult)result).Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.ConnectedSystemId, Is.EqualTo(ConnectedSystemId));
+            Assert.That(summary.TotalCount, Is.EqualTo(4));
+            Assert.That(summary.ObjectCount, Is.EqualTo(3));
+            Assert.That(summary.Fixes.Select(f => (f.Cause, f.Count, f.ObjectCount)), Is.EqualTo(new[] { (UnresolvedReferenceCause.NotFound, 4, (int?)3) }));
+        }
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task GetConnectedSystemObjectsAsync_HasUnresolvedReferences_FiltersTheConnectorSpaceAsync(bool hasUnresolvedReferences)
+    {
+        _connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>())).ReturnsAsync(new ConnectedSystem { Id = ConnectedSystemId, Name = "HR Database" });
+        _connectedSystems.Setup(r => r.GetConnectedSystemObjectHeadersAsync(ConnectedSystemId, 1, 50, null, null, true, null, null, null, hasUnresolvedReferences))
+            .ReturnsAsync(new PagedResultSet<ConnectedSystemObjectHeader>
+            {
+                Results = [new ConnectedSystemObjectHeader { Id = ObjectId, UnresolvedReferenceCount = hasUnresolvedReferences ? 2 : 0 }],
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 50
+            });
+
+        var result = await _controller.GetConnectedSystemObjectsAsync(ConnectedSystemId, hasUnresolvedReferences: hasUnresolvedReferences);
+
+        var page = (PaginatedResponse<ConnectedSystemObjectHeader>)((OkObjectResult)result).Value!;
+        Assert.That(page.Items.Single().UnresolvedReferenceCount, Is.EqualTo(hasUnresolvedReferences ? 2 : 0),
+            "The filter reaches the repository, and each header carries its object's count.");
+    }
 }

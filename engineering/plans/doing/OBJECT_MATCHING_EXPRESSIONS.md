@@ -107,7 +107,7 @@ The same work fixes three ways matching hides failure or picks arbitrarily today
 - `Helpers.ErrorPhaseTitles`, which `ErrorPhaseTitleTests` enforces;
 - `CAUSALITY_REFERENCE.md` (a hand-maintained table and its member count);
 - `SyncPreviewMessageCode` and `FullSynchronisationPreviewDeltas`;
-- `docs/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md` and `ACTIVITY_AND_RPEI_FLOW.md`.
+- `engineering/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md` and `ACTIVITY_AND_RPEI_FLOW.md`.
 
 **6. Join provenance.**
 

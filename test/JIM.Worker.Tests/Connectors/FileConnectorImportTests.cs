@@ -211,7 +211,7 @@ public class FileConnectorImportTests
         // First object should have an error due to "thirty" not being a valid number
         var firstObject = result.ImportObjects[0];
         Assert.That(firstObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(firstObject.ErrorMessage, Does.Contain("Age"));
+        Assert.That(firstObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Age" }));
 
         // Second object should be valid
         var secondObject = result.ImportObjects[1];
@@ -266,6 +266,51 @@ public class FileConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_RowWithTwoUnreadableValues_ReportsEachWithItsValueAndReadsTheRestAsync()
+    {
+        // Before #2066 a row with two unreadable values reported only the second, and never the value itself.
+        var filePath = Path.Join(_testFilesPath, "unreadable_values.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+            Assert.That(first.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Age", "thirty"), ("StartDate", "not-a-date") }));
+            Assert.That(first.AttributeValueErrors?.Select(e => e.Reason), Has.All.Not.Empty);
+            Assert.That(first.Attributes.Select(a => a.Name), Is.EquivalentTo(new[] { "Id", "Name", "IsActive" }),
+                "Every value that could be read is still imported.");
+            Assert.That(result.ImportObjects[1].AttributeValueErrors, Is.Null);
+            Assert.That(first.SourceLocation, Is.EqualTo("unreadable_values.csv, row 2"),
+                "The row as a spreadsheet numbers it, header included, so the administrator can go straight to it.");
+            Assert.That(result.ImportObjects[1].SourceLocation, Is.Null, "A row that read cleanly needs no location.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_MultiValuedAttributeWithTwoUnreadableValues_ReportsBothAndLeavesTheAttributeOutAsync()
+    {
+        var filePath = Path.Join(_testFilesPath, "multivalued_decimals_unreadable.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile { FilePath = filePath, RunType = ConnectedSystemRunType.FullImport };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        var first = result.ImportObjects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.AttributeValueErrors?.Select(e => (e.AttributeName, e.Value)),
+                Is.EqualTo(new[] { ("Rates", "lots"), ("Rates", "heaps") }));
+            Assert.That(first.Attributes.Select(a => a.Name), Does.Not.Contain("Rates"),
+                "Two of the four values is not the attribute; reading it as the whole set would remove the other two.");
+        }
+    }
+
+    [Test]
     public async Task ImportAsync_WithInvalidDecimal_RecordsErrorAsync()
     {
         // Arrange - first row's Salary is "lots", which is not a valid decimal
@@ -287,7 +332,7 @@ public class FileConnectorImportTests
         // First object should have an error due to "lots" not being a valid decimal
         var firstObject = result.ImportObjects[0];
         Assert.That(firstObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(firstObject.ErrorMessage, Does.Contain("Salary"));
+        Assert.That(firstObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Salary" }));
 
         // Third object should be valid
         var thirdObject = result.ImportObjects[2];
@@ -319,7 +364,7 @@ public class FileConnectorImportTests
 
         var secondObject = result.ImportObjects[1];
         Assert.That(secondObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
-        Assert.That(secondObject.ErrorMessage, Does.Contain("Salary"));
+        Assert.That(secondObject.AttributeValueErrors?.Select(e => e.AttributeName), Is.EqualTo(new[] { "Salary" }));
         var salary = secondObject.Attributes.SingleOrDefault(a => a.Name == "Salary");
         Assert.That(salary, Is.Null, "The out-of-range Salary attribute should not be imported");
     }

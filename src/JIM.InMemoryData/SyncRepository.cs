@@ -1874,7 +1874,7 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
     {
         foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
-            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
+            _pendingExports[stamp.PendingExportId].RecordStager(stamp.QueuedByRunProfileExecutionItemId);
         return Task.CompletedTask;
     }
 
@@ -2306,7 +2306,7 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
-    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(
+    public Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(
         Guid activityId)
     {
         var activityRpeis = _rpeis.Values.Where(r => r.ActivityId == activityId).ToList();
@@ -2315,7 +2315,9 @@ public class SyncRepository : ISyncRepository
             r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
         var totalUnhandledErrors = activityRpeis.Count(r =>
             r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError);
-        return Task.FromResult((totalWithErrors, totalRpeis, totalUnhandledErrors));
+        var totalObjectTypeChangeRefusals = activityRpeis.Count(r =>
+            r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged);
+        return Task.FromResult(new ActivityRpeiErrorCounts(totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals));
     }
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
@@ -2383,8 +2385,75 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(watermarks);
     }
 
+    /// <summary>
+    /// How many times <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> has been called, so a test can prove
+    /// the export run reads which rules ask for an Initial Password once per batch (#2039).
+    /// </summary>
+    public int GetSyncRuleIdsWithInitialPasswordEnabledCallCount { get; private set; }
+
+    /// <summary>
+    /// When set, <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> throws it, so a test can prove a failed
+    /// lookup is contained rather than failing the export batch.
+    /// </summary>
+    public Exception? FailInitialPasswordRuleLookupWith { get; set; }
+
+    /// <summary>
+    /// How many times <see cref="GetMetaverseObjectIdsOwedPasswordAsync"/> has been called, so a test can prove the
+    /// confirming import asks only when a page holds a change awaiting an Initial Password (#2039).
+    /// </summary>
+    public int GetMetaverseObjectIdsOwedPasswordCallCount { get; private set; }
+
+    public Task<HashSet<Guid>> GetMetaverseObjectIdsOwedPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        GetMetaverseObjectIdsOwedPasswordCallCount++;
+
+        var asked = metaverseObjectIds.ToHashSet();
+        var owed = _pendingPasswordChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId
+                        && asked.Contains(c.MetaverseObjectId)
+                        && c.Status is PendingPasswordChangeStatus.Pending or PendingPasswordChangeStatus.Delivering or PendingPasswordChangeStatus.Parked)
+            .Select(c => c.MetaverseObjectId)
+            .ToHashSet();
+        return Task.FromResult(owed);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && asked.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
+    public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
+    {
+        // Joined to the Connected System Object, as the PostgreSQL query is: a Pending Export whose object is gone has
+        // no account for a password to be owed to.
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue && _csos.ContainsKey(pe.ConnectedSystemObjectId.Value))
+            .SelectMany(pe => pe.AttributeValueChanges
+                .Where(c => c.AwaitsInitialPassword && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+                .Select(c => new InitialPasswordHoldSummary
+                {
+                    AttributeValueChangeId = c.Id,
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = pe.ConnectedSystemObjectId!.Value,
+                    MetaverseObjectId = _csos[pe.ConnectedSystemObjectId!.Value].MetaverseObjectId
+                }))
+            .ToList();
+        return Task.FromResult(held);
+    }
+
     public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
     {
+        GetSyncRuleIdsWithInitialPasswordEnabledCallCount++;
+        if (FailInitialPasswordRuleLookupWith != null)
+            throw FailInitialPasswordRuleLookupWith;
+
         var enabled = _syncRules.Values
             .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
             .Select(r => r.Id)

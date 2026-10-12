@@ -1,5 +1,8 @@
 ---
 title: "SSO Setup: AD FS"
+description: Register JIM with AD FS so administrators sign in to the portal, and the PowerShell module, with their Active Directory accounts.
+type: how-to
+audience: implementer
 ---
 
 # SSO Setup: AD FS
@@ -124,6 +127,14 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
  => issue(Type = "email", Value = c.Value);
 ```
 
+## Check it worked
+
+1. Open JIM in a browser. JIM sends you to AD FS to sign in, then returns you to JIM, signed in.
+2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
+3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+
+To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
 ## AD FS Troubleshooting
 
 - **Token signing certificate**: Ensure your AD FS token signing certificate is trusted by the JIM server
@@ -133,4 +144,4 @@ c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
 
 ## Next steps
 
-With the configuration in place, [test your configuration](../sso-setup.md#testing-your-configuration) to verify sign-in, claims, sign-out, and API access. If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).
+If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

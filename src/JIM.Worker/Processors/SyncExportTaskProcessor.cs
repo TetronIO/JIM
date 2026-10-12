@@ -626,6 +626,9 @@ public class SyncExportTaskProcessor
             // The Connected System holds the value already: a data conflict for an administrator (or, release 4,
             // Collision Remediation) to resolve, which the Connector told apart from other failures.
             ConnectedSystemExportErrorType.UniqueValueAlreadyInUse => ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse,
+            // Active Directory will not enable an account with no password (#2039): the message names the
+            // configuration to change, so it is not a JIM defect and must not fail the Activity as one.
+            ConnectedSystemExportErrorType.PasswordRequiredToEnableAccount => ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount,
             _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
         };
 }

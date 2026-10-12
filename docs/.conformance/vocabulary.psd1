@@ -30,18 +30,18 @@
 
     Terms         = @(
         @{ Anchor = 'activity'; Home = 'configuration/activities.md'; TitleCase = $false }
-        @{ Anchor = 'attribute-flow'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
+        @{ Anchor = 'attribute-flow'; Home = 'configuration/attribute-mappings.md'; TitleCase = $true }
         @{ Anchor = 'attribute-priority'; Home = 'concepts/attribute-priority.md'; TitleCase = $true }
         @{ Anchor = 'configuration-change-history'; Home = 'configuration/activities.md'; TitleCase = $true }
         @{ Anchor = 'configuration-change-preview'; Home = 'configuration/configuration-changes.md'; TitleCase = $true }
         @{ Anchor = 'connected-system'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
-        @{ Anchor = 'connected-system-object'; Home = 'configuration/connected-systems.md'; TitleCase = $true; Rejected = @('Connector Space Object') }
+        @{ Anchor = 'connected-system-object'; Home = 'configuration/connector-space.md'; TitleCase = $true; Rejected = @('Connector Space Object') }
         @{ Anchor = 'connector'; Home = 'connectors/index.md'; TitleCase = $false }
-        @{ Anchor = 'connector-space'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
-        @{ Anchor = 'container-scope'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
+        @{ Anchor = 'connector-space'; Home = 'configuration/connector-space.md'; TitleCase = $true }
+        @{ Anchor = 'container-scope'; Home = 'configuration/partitions-and-containers.md'; TitleCase = $true }
         @{ Anchor = 'delta-synchronisation'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $true }
         @{ Anchor = 'deprovisioning'; Home = 'concepts/jml-lifecycle.md'; TitleCase = $false }
-        @{ Anchor = 'deprovisioning-action'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
+        @{ Anchor = 'deprovisioning-action'; Home = 'configuration/deprovisioning.md'; TitleCase = $true }
         @{ Anchor = 'drift-correction'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
         @{ Anchor = 'export'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $false }
         @{ Anchor = 'expression'; Home = 'concepts/expressions.md'; TitleCase = $false }
@@ -49,14 +49,14 @@
         @{ Anchor = 'grace-period'; Home = 'concepts/jml-lifecycle.md'; TitleCase = $false }
         @{ Anchor = 'identity'; Home = 'concepts/architecture.md'; TitleCase = $false }
         @{ Anchor = 'import'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $false }
-        @{ Anchor = 'initial-export-only'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
+        @{ Anchor = 'initial-export-only'; Home = 'configuration/attribute-mappings.md'; TitleCase = $true }
         @{ Anchor = 'join'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $false }
         @{ Anchor = 'metaverse'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'metaverse-object'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'null-is-a-value'; Home = 'concepts/attribute-priority.md'; TitleCase = $false }
-        @{ Anchor = 'object-matching-rule'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
-        @{ Anchor = 'obsoletion'; Home = 'configuration/connected-systems.md'; TitleCase = $false }
-        @{ Anchor = 'partition'; Home = 'configuration/connected-systems.md'; TitleCase = $false }
+        @{ Anchor = 'object-matching-rule'; Home = 'configuration/object-matching-rules.md'; TitleCase = $true }
+        @{ Anchor = 'obsoletion'; Home = 'configuration/connector-space.md'; TitleCase = $false }
+        @{ Anchor = 'partition'; Home = 'configuration/partitions-and-containers.md'; TitleCase = $false }
         @{ Anchor = 'password-synchronisation'; Home = 'concepts/passwords.md'; TitleCase = $true }
         @{ Anchor = 'pending-export'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
         @{ Anchor = 'projection'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $false }
@@ -64,7 +64,7 @@
         @{ Anchor = 'run-profile'; Home = 'configuration/run-profiles.md'; TitleCase = $true }
         @{ Anchor = 'safeguards'; Home = 'configuration/run-profiles.md'; TitleCase = $false }
         @{ Anchor = 'schedule'; Home = 'configuration/schedules.md'; TitleCase = $false }
-        @{ Anchor = 'scoping'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $false }
+        @{ Anchor = 'scoping'; Home = 'configuration/scoping-criteria.md'; TitleCase = $false }
         @{ Anchor = 'service-health'; Home = 'configuration/operations.md'; TitleCase = $true }
         @{ Anchor = 'standard-mappings'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'sync-preview'; Home = 'configuration/sync-preview.md'; TitleCase = $true }

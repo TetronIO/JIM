@@ -377,26 +377,12 @@
                 <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (activity.InitiatedByType == ActivityInitiatorType.User && activity.InitiatedById != null)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@activity.InitiatedByName</span>
-                }
-                else if (activity.InitiatedByType == ActivityInitiatorType.ApiKey)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@activity.InitiatedByName</span>
-                }
-                else if (activity.InitiatedByType == ActivityInitiatorType.System)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@(activity.InitiatedByName ?? "Scheduler")</span>
-                }
-                else if (!string.IsNullOrEmpty(activity.InitiatedByName))
-                {
-                    <span>@activity.InitiatedByName</span>
-                }
+                <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                                   InitiatedById="@context.Item.InitiatedById"
+                                   InitiatedByName="@context.Item.InitiatedByName"
+                                   ScheduleName="@context.Item.ScheduledByScheduleName"
+                                   ScheduleExecutionId="@context.Item.ScheduleExecutionId"
+                                   Dense="true" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Status" Sortable="false">
@@ -753,23 +739,10 @@
             @* Initiator *@
             <MudPaper Elevation="0" Class="pa-3" Outlined="true">
                 <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Initiated By</MudText>
-                <div class="d-flex align-center gap-2">
-                    @if (_selectedActivity.InitiatedByType == ActivityInitiatorType.User)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Person" />
-                    }
-                    else if (_selectedActivity.InitiatedByType == ActivityInitiatorType.ApiKey)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Key" />
-                    }
-                    else if (_selectedActivity.InitiatedByType == ActivityInitiatorType.System)
-                    {
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" />
-                    }
-                    <MudText Typo="Typo.body1">
-                        <AuditPrincipalLink PrincipalType="_selectedActivity.InitiatedByType" PrincipalId="_selectedActivity.InitiatedById" PrincipalName="@_selectedActivity.InitiatedByName" />
-                    </MudText>
-                </div>
+                <MudText Typo="Typo.body1">
+                    <AuditPrincipalLink PrincipalType="_selectedActivity.InitiatedByType" PrincipalId="_selectedActivity.InitiatedById" PrincipalName="@_selectedActivity.InitiatedByName"
+                                        ScheduleName="@_selectedActivity.ScheduledByScheduleName" ScheduleExecutionId="@_selectedActivity.ScheduleExecutionId" />
+                </MudText>
             </MudPaper>
 
             @* Error Details *@

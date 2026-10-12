@@ -95,6 +95,20 @@ public class OutboundPreviewEntry
     public List<PendingExportAttributeValueChange> NoNetChangeSkippedChanges { get; init; } = [];
 
     /// <summary>
+    /// The evaluated changes that merely restate a change the target object's queued Pending Export holds until an
+    /// Initial Password is delivered (#2039), unpersisted. A real evaluation drops these rather than stages them, so they
+    /// are in neither <see cref="AttributeChanges"/> nor <see cref="NoNetChangeSkippedChanges"/>, and play no part in what
+    /// the preview proposes or withdraws.
+    /// </summary>
+    /// <remarks>
+    /// The value a restatement asserts is still what this configuration wants the target to hold, even though the
+    /// target holds only an interim value until the password arrives. A configuration change preview needs it for the
+    /// same reason it needs <see cref="NoNetChangeSkippedChanges"/>: without it, a proposal changing the held attribute's
+    /// value would have nothing on the stored configuration's side to compare against.
+    /// </remarks>
+    public List<PendingExportAttributeValueChange> HeldChangeRestatements { get; init; } = [];
+
+    /// <summary>
     /// The changes queued on the target object's Pending Export that a real evaluation would withdraw, because the
     /// target already holds the values the Metaverse now wants (#2001), unpersisted and read-only: the preview withdraws
     /// nothing. A queued change replaced by one in <see cref="AttributeChanges"/> is not listed. Empty when nothing is

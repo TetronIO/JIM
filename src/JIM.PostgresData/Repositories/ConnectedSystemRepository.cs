@@ -1064,7 +1064,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
-        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool? hasUnresolvedReferences = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1079,7 +1080,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var offset = (page - 1) * pageSize;
         var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
             connectedSystemId, offset, pageSize, searchQuery, sortBy, sortDescending,
-            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount: true);
+            statusFilter, objectTypeFilter, joinTypeFilter, hasUnresolvedReferences, includeTotalCount: true);
 
         // Build paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
@@ -1132,7 +1133,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        bool? hasUnresolvedReferences = null)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -1145,7 +1147,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending,
-            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount);
+            statusFilter, objectTypeFilter, joinTypeFilter, hasUnresolvedReferences, includeTotalCount);
 
         return new RangeResultSet<ConnectedSystemObjectHeader>
         {
@@ -1170,6 +1172,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter,
         IEnumerable<int>? objectTypeFilter,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter,
+        bool? hasUnresolvedReferences,
         bool includeTotalCount)
     {
         // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
@@ -1225,6 +1228,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 query = query.Where(cso => joinTypes.Contains(cso.JoinType));
             }
+        }
+
+        // Apply the unresolved references filter if specified (#959). The predicate is the partial index's own, so the
+        // planner can answer it from IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved.
+        if (hasUnresolvedReferences is { } wantsUnresolved)
+        {
+            query = wantsUnresolved
+                ? query.Where(cso => cso.AttributeValues.Any(av => av.UnresolvedReferenceValue != null && av.ReferenceValueId == null))
+                : query.Where(cso => !cso.AttributeValues.Any(av => av.UnresolvedReferenceValue != null && av.ReferenceValueId == null));
         }
 
         // Apply search filter - search on display name, external ID, or secondary external ID
@@ -1404,6 +1416,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
                     .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                     .FirstOrDefault(),
+                // Read through the same partial index as the filter above, so counting a large group's members
+                // reads only those still unresolved.
+                UnresolvedReferenceCount = cso.AttributeValues.Count(av => av.UnresolvedReferenceValue != null && av.ReferenceValueId == null),
                 PendingSecondaryExternalId = cso.SecondaryExternalIdAttributeId == null ||
                                               cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
                     ? null
@@ -3525,23 +3540,137 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <inheritdoc />
     public async Task<List<ConnectedSystemObjectUnresolvedReferenceValueGroup>> GetUnresolvedReferenceValueGroupsAsync(Guid connectedSystemObjectId)
     {
-        // The parent is everything after the first comma not escaped by a backslash: the pattern consumes the first
-        // component, skipping escaped characters (\, or \2C), and the comma that ends it. A value with no such comma
-        // is its own group. Grouping happens in the database so that an object with tens of thousands of unresolved
-        // members comes back as the handful of parents they sit under.
+        // Grouped by parent (see UnresolvedReferenceParentKeySql) in the database, so that an object with tens of
+        // thousands of unresolved members comes back as the handful of parents they sit under.
         return await Repository.Database.Database
             .SqlQueryRaw<ConnectedSystemObjectUnresolvedReferenceValueGroup>(
-                """
+                $$"""
                 SELECT MIN(av."UnresolvedReferenceValue") AS "SampleValue", COUNT(*)::int AS "Count"
                 FROM "ConnectedSystemObjectAttributeValues" av
                 WHERE av."ConnectedSystemObjectId" = {0}
                   AND av."UnresolvedReferenceValue" IS NOT NULL
                   AND av."ReferenceValueId" IS NULL
-                GROUP BY lower(regexp_replace(av."UnresolvedReferenceValue", '^(?:[^,\\]|\\.)*,', ''))
+                GROUP BY {{UnresolvedReferenceParentKeySql}}
                 ORDER BY COUNT(*) DESC, MIN(av."UnresolvedReferenceValue")
                 """,
                 connectedSystemObjectId)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The parent of an unresolved reference value as the database compares it (#959): everything after the first comma
+    /// not escaped by a backslash, lower-cased. The pattern consumes the first component, skipping escaped characters
+    /// (\, or \2C), and the comma that ends it; a value with no such comma is its own parent. Shared by every read that
+    /// groups values by parent, so the per-object and Connected System-wide groupings cannot disagree.
+    /// </summary>
+    private const string UnresolvedReferenceParentKeySql = """lower(regexp_replace(av."UnresolvedReferenceValue", '^(?:[^,\\]|\\.)*,', ''))""";
+
+    /// <summary>
+    /// The FROM and WHERE that select a Connected System's unresolved reference values, its id in parameter {0}. The
+    /// predicate matches IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved's filter exactly, so the reads built
+    /// on it walk that small index rather than every reference value ever imported.
+    /// </summary>
+    private const string ConnectedSystemUnresolvedReferenceValuesSql = """
+        FROM "ConnectedSystemObjectAttributeValues" av
+        JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+        WHERE cso."ConnectedSystemId" = {0}
+          AND av."UnresolvedReferenceValue" IS NOT NULL
+          AND av."ReferenceValueId" IS NULL
+        """;
+
+    /// <inheritdoc />
+    public async Task<ConnectedSystemUnresolvedReferenceTotals> GetUnresolvedReferenceTotalsAsync(int connectedSystemId)
+    {
+        return await Repository.Database.Database
+            .SqlQueryRaw<ConnectedSystemUnresolvedReferenceTotals>(
+                $$"""
+                SELECT COUNT(*)::int AS "ReferenceCount", COUNT(DISTINCT av."ConnectedSystemObjectId")::int AS "ObjectCount"
+                {{ConnectedSystemUnresolvedReferenceValuesSql}}
+                """,
+                connectedSystemId)
+            .SingleAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemUnresolvedReferenceValueGroup>> GetConnectedSystemUnresolvedReferenceValueGroupsAsync(int connectedSystemId)
+    {
+        // Grouped in the database, as the per-object grouping is: a Connected System with a hundred thousand values out
+        // of scope comes back as the few dozen parents they sit under.
+        return await Repository.Database.Database
+            .SqlQueryRaw<ConnectedSystemUnresolvedReferenceValueGroup>(
+                $$"""
+                SELECT {{UnresolvedReferenceParentKeySql}} AS "ParentKey",
+                       MIN(av."UnresolvedReferenceValue") AS "SampleValue",
+                       COUNT(*)::int AS "Count",
+                       COUNT(DISTINCT av."ConnectedSystemObjectId")::int AS "ObjectCount"
+                {{ConnectedSystemUnresolvedReferenceValuesSql}}
+                GROUP BY 1
+                ORDER BY COUNT(*) DESC, MIN(av."UnresolvedReferenceValue")
+                """,
+                connectedSystemId)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetUnresolvedReferenceObjectCountAsync(int connectedSystemId, IReadOnlyCollection<string> parentKeys)
+    {
+        if (parentKeys.Count == 0)
+            return 0;
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<int>(
+                $$"""
+                SELECT COUNT(DISTINCT av."ConnectedSystemObjectId")::int AS "Value"
+                {{ConnectedSystemUnresolvedReferenceValuesSql}}
+                  AND {{UnresolvedReferenceParentKeySql}} = ANY({1})
+                """,
+                connectedSystemId,
+                parentKeys.ToArray())
+            .SingleAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<string>> GetDistinctUnresolvedReferenceValuesAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds)
+    {
+        if (attributeIds.Count == 0)
+            return [];
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<string>(
+                $$"""
+                SELECT DISTINCT av."UnresolvedReferenceValue" AS "Value"
+                {{ConnectedSystemUnresolvedReferenceValuesSql}}
+                  AND av."AttributeId" = ANY({1})
+                ORDER BY 1
+                """,
+                connectedSystemId,
+                attributeIds.ToArray())
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<UnresolvedReferenceValueSplit> GetUnresolvedReferenceValueSplitAsync(
+        int connectedSystemId,
+        IReadOnlyCollection<int> attributeIds,
+        IReadOnlyCollection<string> values)
+    {
+        return await Repository.Database.Database
+            .SqlQueryRaw<UnresolvedReferenceValueSplit>(
+                $$"""
+                SELECT COUNT(*) FILTER (WHERE singled.matches)::int AS "MatchingReferenceCount",
+                       COUNT(DISTINCT singled."ConnectedSystemObjectId") FILTER (WHERE singled.matches)::int AS "MatchingObjectCount",
+                       COUNT(*) FILTER (WHERE NOT singled.matches)::int AS "OtherReferenceCount",
+                       COUNT(DISTINCT singled."ConnectedSystemObjectId") FILTER (WHERE NOT singled.matches)::int AS "OtherObjectCount"
+                FROM (
+                    SELECT av."ConnectedSystemObjectId",
+                           (av."AttributeId" = ANY({1}) AND av."UnresolvedReferenceValue" = ANY({2})) AS matches
+                    {{ConnectedSystemUnresolvedReferenceValuesSql}}
+                ) singled
+                """,
+                connectedSystemId,
+                attributeIds.ToArray(),
+                values.ToArray())
+            .SingleAsync();
     }
 
     /// <summary>
@@ -4433,6 +4562,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
         tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
+        // #2049: copied by hand like every other property here; one left out is accepted and never written.
+        tracked.AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges;
         // Run Profile Safeguards (#1618). Every property the entity carries has to be copied here by
         // hand; one left out is accepted by the API, reported as saved, and never written, which is
         // exactly how the first Scenario 021 run found these three missing.
@@ -8495,7 +8626,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
 
-        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue).
+        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue,
+        // AwaitsInitialPassword).
         // Without this, reconciliation during confirming import cannot find ExportedPendingConfirmation changes
         // and the PE is never confirmed/deleted, causing stale Create exports on re-evaluation.
         await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
@@ -8504,8 +8636,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
     /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
-    /// and to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
-    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup.
+    /// to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
+    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup, and the
+    /// AwaitsInitialPassword mark the export run sets from the Connector's report (#2039).
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -8516,7 +8649,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 8; // Id + 7 mutable columns
+        const int columnsPerRow = 9; // Id + 8 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
@@ -8532,7 +8665,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid, {{{offset + 8}}}::boolean)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -8543,6 +8676,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(avc.AwaitsInitialPassword);
             }
 
             sql.Append(@") AS v(""Id"", ");

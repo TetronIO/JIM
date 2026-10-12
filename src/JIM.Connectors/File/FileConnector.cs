@@ -624,7 +624,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         logger.Debug($"GetCsvReader: Attempting to read '{filePath}'.");
         var reader = new StreamReader(filePath);
         var csv = new CsvReader(reader, config);
-        return new FileConnectorReader(reader, csv);
+        return new FileConnectorReader(reader, csv, Path.GetFileName(filePath));
     }
 
     /// <summary>

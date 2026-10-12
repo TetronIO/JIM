@@ -429,11 +429,13 @@ public class MetaverseObjectConnectionExplanationsTests
         var cso = Joined(FinanceAppId, "Finance App", AccountTypeId, "account", ConnectedSystemObjectJoinType.Provisioned,
             ConnectedSystemObjectStatus.PendingProvisioning);
         var queuedBy = Guid.NewGuid();
-        _pendingExports[cso.Id] = new PendingExport
+        var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(), ConnectedSystemObjectId = cso.Id, ChangeType = PendingExportChangeType.Create,
-            ProvisioningSyncRuleId = rule.Id, QueuedByRunProfileExecutionItemId = queuedBy
+            ProvisioningSyncRuleId = rule.Id
         };
+        pendingExport.RecordStager(queuedBy);
+        _pendingExports[cso.Id] = pendingExport;
 
         var result = (await ExplainAsync())!;
 

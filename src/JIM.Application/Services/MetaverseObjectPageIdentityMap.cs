@@ -19,7 +19,7 @@ namespace JIM.Application.Services;
 /// works correctly today: JIM's single tracking <c>DbContext</c> resolves both loads to one instance via
 /// EF's own identity map, so the split this class guards against is latent, not observed live. This map is
 /// defence in depth against a future change to how Metaverse Objects are loaded reintroducing a genuine
-/// split (see <c>docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page
+/// split (see <c>engineering/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md</c> > Same-Page
 /// Disconnect-Then-Rejoin Hardening), and it protects every other reference-equality-sensitive accumulator
 /// in <c>SyncTaskProcessorBase</c> the same way. Without it, code evaluating state on a load that missed
 /// the map (for example <c>EstablishJoinAsync</c> reading <c>LastConnectorDisconnectedDate</c> to decide

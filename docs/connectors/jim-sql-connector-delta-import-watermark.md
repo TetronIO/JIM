@@ -1,4 +1,11 @@
-# Delta Import with a watermark column
+---
+title: "SQL Connector Delta Import: Watermark Column"
+description: Set up a SQL Connector Delta Import that reads a last-modified or version column, with nothing extra in the database.
+type: how-to
+audience: administrator
+---
+
+# SQL Connector Delta Import: Watermark Column
 
 This guide sets up a Delta Import for the [JIM SQL Connector](jim-sql-connector.md) in **Watermark Column** mode. It needs nothing extra in the database beyond a column that moves when a row changes, which many application tables already carry, and it detects creates and updates only. Read [What it cannot see](#what-it-cannot-see) before choosing it.
 
@@ -14,7 +21,7 @@ Each Object Type's source, and each of its related tables, names a **watermark c
 
 **Deleted rows.** A deleted row has no last-modified value left to compare, so this mode cannot see that it has gone; the same is true of a row that has dropped out of a view. Deletions are found by a **Full Import**, which reads everything and notices what is missing. Schedule a Full Import at whatever interval your deprovisioning can tolerate; in this mode it is part of the design, not a fallback.
 
-The same applies to related tables. A row **removed** from a related table (a revoked group membership, a deleted phone number) is a change to the parent object, and is detected only if the table records the removal somewhere a watermark can see: a soft-delete flag or a tombstone row that updates the row's own last-modified value, or an application that touches the parent's last-modified value as well. If the related table simply deletes its rows, the removal is invisible until the next Full Import.
+The same applies to related tables. A row **removed** from a related table (a revoked group membership, a deleted phone number) is a change to the parent object, and is detected only if the table records the removal somewhere a watermark can see: a soft-delete flag or a tombstone row that updates the row's own last-modified value, or an application that touches the parent's last-modified value as well. If the related table deletes its rows, the removal is invisible until the next Full Import.
 
 If deletions must reach JIM promptly, use a [change-log table](jim-sql-connector-delta-import-change-log.md) instead.
 
@@ -116,6 +123,12 @@ Create a **Full Import** Run Profile and a **Delta Import** Run Profile, then ru
 ## 6. Schedule both
 
 Schedule the Delta Import at the cadence the application warrants, and a Full Import at the longest interval your deprovisioning can tolerate, because the Full Import is what finds deletions. See [Schedules](../configuration/schedules.md).
+
+## Check it worked
+
+1. Change a row in one of the Object Type's tables, so its watermark column moves.
+2. Run the Delta Import.
+3. Open its Activity. It counts the object you changed, and carries no warning that it ran as a Full Import.
 
 ## Troubleshooting
 

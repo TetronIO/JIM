@@ -385,9 +385,23 @@ public class ConfigurationChangeClassificationCompletenessTests
         });
         system.ObjectTypes!.Add(objectType);
         system.Partitions = [partition];
+        // Every Run-Type-specific setting is populated, across the two Run Types that carry them, so each key a Run
+        // Profile can emit has to be classified: the Full Import settings (#1618 detected-deletion limits, Verification
+        // Mode, #2049 Allow Object Type Changes) and the Export limits.
         system.RunProfiles!.Add(new ConnectedSystemRunProfile
         {
-            Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = 100
+            Id = 50, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = 100,
+            VerifyImportContentHashes = true,
+            AllowObjectTypeChanges = true,
+            MaxDetectedDeletions = 500,
+            MaxDetectedDeletionsPercent = 10
+        });
+        system.RunProfiles!.Add(new ConnectedSystemRunProfile
+        {
+            Id = 51, Name = "Export", RunType = ConnectedSystemRunType.Export, PageSize = 100,
+            MaxCreates = 5,
+            MaxUpdates = 0,
+            MaxDeletes = 100
         });
         return system;
     }

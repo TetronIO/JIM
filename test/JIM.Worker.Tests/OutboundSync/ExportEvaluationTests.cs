@@ -557,6 +557,114 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// The append branch's face of the #2039 Phase 2 merge guard: an exported Create whose change was written with an
+    /// interim value until an Initial Password is delivered keeps that held change when a further evaluation restates
+    /// the very value it asserts. Appended over it, the restatement would be queued Pending and sent the moment the
+    /// Create is confirmed, to an account the target will not enable without its password.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ExistingExportedCreateWithAHeldChange_KeepsItAgainstAnEqualRestatementAsync()
+    {
+        // Arrange: the scenario of the test above, the Create's DisplayName change held and asserting the value the
+        // Metaverse Object still has.
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.DisplayName);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = displayNameMvAttr, AttributeId = displayNameMvAttr.Id, StringValue = "Same Name"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameCsAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+        exportRule.AttributeFlowRules.Clear();
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 9101,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = displayNameCsAttr,
+            TargetConnectedSystemAttributeId = displayNameCsAttr.Id,
+            Sources = { new SyncRuleMappingSource { Id = 9101, Order = 0, MetaverseAttribute = displayNameMvAttr, MetaverseAttributeId = displayNameMvAttr.Id } }
+        });
+
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
+
+        var heldChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = displayNameCsAttr.Id,
+            Attribute = displayNameCsAttr,
+            StringValue = "Same Name",
+            ChangeType = PendingExportAttributeChangeType.Update,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1,
+            AwaitsInitialPassword = true
+        };
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = pendingProvisioningCso.Id,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            AttributeValueChanges = [heldChange]
+        };
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, targetSystem.Id), pendingProvisioningCso } },
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        // Act
+        await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, mvo.AttributeValues.ToList(), cache);
+
+        // Assert
+        var displayNameChanges = SyncRepo.PendingExports[existingCreatePe.Id].AttributeValueChanges
+            .Where(avc => avc.AttributeId == displayNameCsAttr.Id)
+            .ToList();
+        Assert.That(displayNameChanges, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayNameChanges[0].Id, Is.EqualTo(heldChange.Id), "the held change stands; nothing replaced it");
+            Assert.That(displayNameChanges[0].AwaitsInitialPassword, Is.True);
+            Assert.That(displayNameChanges[0].Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+        }
+    }
+
+    /// <summary>
     /// The deprovisioning face of #1284: a Metaverse Object that falls out of an outbound rule's scope
     /// must be deprovisioned from the rule's target system even when that system is the one being
     /// synchronised. The whole-system Q3 skip silently suppressed scope-out deprovisioning too.

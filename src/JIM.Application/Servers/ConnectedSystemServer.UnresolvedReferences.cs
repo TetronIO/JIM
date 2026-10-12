@@ -42,27 +42,9 @@ public partial class ConnectedSystemServer
             return null;
 
         var classifier = new UnresolvedReferenceClassifier(connectedSystem, GetConnectorContainment(connectedSystem));
-
-        // The Object Types a reference could name, by their anchor; a type whose anchor is not exactly one attribute
-        // cannot be the target of a lookup, so it is left out rather than allowed to fail the read.
-        var objectTypes = connectedSystem.ObjectTypes ?? [];
-        var targets = objectTypes
-            .Select(type => (Type: type, Anchors: type.Attributes.Where(a => a.IsExternalId).ToList()))
-            .Where(pair => pair.Anchors.Count == 1)
-            .Select(pair => (AnchorAttributeId: pair.Anchors[0].Id, ObjectTypeName: pair.Type.Name))
-            .ToList();
-
-        // Ambiguity is only possible where the import resolves against Object Type anchors without a declared target:
-        // an object whose type has a text secondary external ID resolves its undeclared references by that instead,
-        // across every type at once, and a declared target names exactly one type.
-        var objectType = objectTypes.FirstOrDefault(type => type.Id == typeId);
-        var resolvesBySecondaryExternalId = objectType?.Attributes.Any(a => a.IsSecondaryExternalId && a.Type == AttributeDataType.Text) ?? false;
-        IReadOnlySet<int> candidateAttributeIds = objectType == null || resolvesBySecondaryExternalId || targets.Count < 2
-            ? new HashSet<int>()
-            : objectType.Attributes
-                .Where(a => a.Type == AttributeDataType.Reference && a.ReferencedObjectTypeId == null)
-                .Select(a => a.Id)
-                .ToHashSet();
+        var targets = AmbiguityTargetsOf(connectedSystem);
+        var objectType = (connectedSystem.ObjectTypes ?? []).FirstOrDefault(type => type.Id == typeId);
+        var candidateAttributeIds = AmbiguityCandidateAttributeIdsOf(objectType, targets.Count);
 
         return new ConnectedSystemObjectUnresolvedReferenceContext(
             connectedSystemId,
@@ -118,7 +100,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(values);
 
-        var ambiguous = await FindAmbiguousReferenceValuesAsync(context, values
+        var ambiguous = await FindAmbiguousReferenceValuesAsync(context.ConnectedSystemId, context.AmbiguityTargets, values
             .Where(v => context.AmbiguityCandidateAttributeIds.Contains(v.AttributeId))
             .Select(v => v.Value));
 
@@ -153,7 +135,7 @@ public partial class ConnectedSystemServer
         if (context.AmbiguityCandidateAttributeIds.Count > 0)
         {
             var candidates = await repository.GetUnresolvedReferenceValuesAsync(context.ConnectedSystemObjectId, [.. context.AmbiguityCandidateAttributeIds]);
-            var ambiguous = await FindAmbiguousReferenceValuesAsync(context, candidates.Select(v => v.Value));
+            var ambiguous = await FindAmbiguousReferenceValuesAsync(context.ConnectedSystemId, context.AmbiguityTargets, candidates.Select(v => v.Value));
             ambiguousCount = candidates.Count(v => ambiguous.ContainsKey(v.Value));
             candidateTypeNames = [.. ambiguous.Values.SelectMany(names => names).Distinct(StringComparer.OrdinalIgnoreCase)];
         }
@@ -166,16 +148,165 @@ public partial class ConnectedSystemServer
             entries.Add((context.Classifier.Diagnose(string.Empty, string.Empty), total - ambiguousCount));
 
         var summary = Summarise(total, entries);
+        DescribeAmbiguityOfTheGroup(summary.Fixes);
+        return summary;
+    }
 
-        // Values on several attributes can be ambiguous, so the per-value sentence (which names one attribute) does
-        // not fit the whole group; say it of them all. LargestFix is one of the Fixes, so this reaches both.
-        foreach (var fix in summary.Fixes.Where(f => f.Cause == UnresolvedReferenceCause.AmbiguousObjectType))
+    /// <summary>
+    /// How many unresolved reference values a Connected System's objects hold, and on how many objects: the cheap read
+    /// behind the Connected System page's signpost.
+    /// </summary>
+    public async Task<ConnectedSystemUnresolvedReferenceTotals> GetUnresolvedReferenceTotalsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceTotalsAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Every unresolved reference value across a Connected System, summarised by likely cause and next step with the
+    /// values and objects each addresses ("Where they point"), or null where the Connected System does not exist.
+    /// Judged against the Connected System's current Container Scope, exactly as one object's summary is.
+    /// </summary>
+    public async Task<ConnectedSystemUnresolvedReferenceSummary?> GetConnectedSystemUnresolvedReferenceSummaryAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        var repository = Application.Repository.ConnectedSystems;
+        var totals = await repository.GetUnresolvedReferenceTotalsAsync(connectedSystemId);
+        var summary = new ConnectedSystemUnresolvedReferenceSummary
+        {
+            ConnectedSystemId = connectedSystemId,
+            UnresolvedReferenceHandling = connectedSystem.UnresolvedReferenceHandling,
+            TotalCount = totals.ReferenceCount,
+            ObjectCount = totals.ObjectCount
+        };
+        if (totals.ReferenceCount == 0)
+            return summary;
+
+        var classifier = new UnresolvedReferenceClassifier(connectedSystem, GetConnectorContainment(connectedSystem));
+        var entries = classifier.CanPlaceValues
+            ? await PlaceConnectedSystemValuesAsync(connectedSystemId, classifier)
+            : await SplitConnectedSystemValuesAsync(connectedSystem, classifier, totals);
+
+        var steps = Summarise(totals.ReferenceCount, [.. entries.Select(e => (e.Diagnosis, e.Count))]);
+        foreach (var fix in steps.Fixes)
+        {
+            // A step standing for one group already knows its objects. One standing for several parents asks the
+            // database, because an object with values under two of them must be counted once.
+            var addressed = entries.Where(e => IsAddressedBy(fix, e.Diagnosis)).ToList();
+            fix.ObjectCount = addressed.Count == 1
+                ? addressed[0].ObjectCount
+                : await repository.GetUnresolvedReferenceObjectCountAsync(connectedSystemId, [.. addressed.Select(e => e.ParentKey!)]);
+        }
+
+        DescribeAmbiguityOfTheGroup(steps.Fixes);
+        summary.Causes = steps.Causes;
+        summary.Fixes = steps.Fixes;
+        summary.LargestFix = steps.LargestFix;
+        return summary;
+    }
+
+    /// <summary>
+    /// A Connected System's unresolved reference values, one diagnosis per parent they sit under, for a Connector whose
+    /// values name their Containers.
+    /// </summary>
+    private async Task<List<(ConnectedSystemObjectUnresolvedReference Diagnosis, int Count, int ObjectCount, string? ParentKey)>> PlaceConnectedSystemValuesAsync(
+        int connectedSystemId,
+        UnresolvedReferenceClassifier classifier)
+    {
+        var groups = await Application.Repository.ConnectedSystems.GetConnectedSystemUnresolvedReferenceValueGroupsAsync(connectedSystemId);
+        return [.. groups.Select(group => (classifier.Diagnose(string.Empty, group.SampleValue), group.Count, group.ObjectCount, (string?)group.ParentKey))];
+    }
+
+    /// <summary>
+    /// A Connected System's unresolved reference values split between those ambiguous across Object Types and those
+    /// simply not found, for a Connector without Containers. Each distinct candidate value is checked once against the
+    /// connector space, as one object's summary checks its own.
+    /// </summary>
+    private async Task<List<(ConnectedSystemObjectUnresolvedReference Diagnosis, int Count, int ObjectCount, string? ParentKey)>> SplitConnectedSystemValuesAsync(
+        ConnectedSystem connectedSystem,
+        UnresolvedReferenceClassifier classifier,
+        ConnectedSystemUnresolvedReferenceTotals totals)
+    {
+        var repository = Application.Repository.ConnectedSystems;
+        var notFound = classifier.Diagnose(string.Empty, string.Empty);
+        List<(ConnectedSystemObjectUnresolvedReference Diagnosis, int Count, int ObjectCount, string? ParentKey)> everyValueNotFound =
+            [(notFound, totals.ReferenceCount, totals.ObjectCount, null)];
+
+        var targets = AmbiguityTargetsOf(connectedSystem);
+        var candidateAttributeIds = (connectedSystem.ObjectTypes ?? [])
+            .SelectMany(type => AmbiguityCandidateAttributeIdsOf(type, targets.Count))
+            .ToHashSet();
+        if (candidateAttributeIds.Count == 0)
+            return everyValueNotFound;
+
+        var candidates = await repository.GetDistinctUnresolvedReferenceValuesAsync(connectedSystem.Id, candidateAttributeIds);
+        var ambiguous = await FindAmbiguousReferenceValuesAsync(connectedSystem.Id, targets, candidates);
+        if (ambiguous.Count == 0)
+            return everyValueNotFound;
+
+        // The values exactly as stored, so the database counts precisely the ones found ambiguous.
+        var ambiguousValues = candidates.Where(ambiguous.ContainsKey).ToList();
+        var split = await repository.GetUnresolvedReferenceValueSplitAsync(connectedSystem.Id, candidateAttributeIds, ambiguousValues);
+        var candidateTypeNames = ambiguous.Values.SelectMany(names => names).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        // Every ambiguous value matched at least two types, so their union always names two or more.
+        List<(ConnectedSystemObjectUnresolvedReference Diagnosis, int Count, int ObjectCount, string? ParentKey)> entries =
+            [(classifier.Diagnose(string.Empty, string.Empty, candidateTypeNames), split.MatchingReferenceCount, split.MatchingObjectCount, null)];
+        if (split.OtherReferenceCount > 0)
+            entries.Add((notFound, split.OtherReferenceCount, split.OtherObjectCount, null));
+
+        return entries;
+    }
+
+    /// <summary>
+    /// Whether a diagnosis is one of the values a step addresses: the same key <see cref="Summarise"/> merges by.
+    /// </summary>
+    private static bool IsAddressedBy(UnresolvedReferenceFix fix, ConnectedSystemObjectUnresolvedReference diagnosis) =>
+        fix.Cause == diagnosis.Cause &&
+        fix.ContainerExternalId == diagnosis.ContainerExternalId &&
+        fix.PartitionExternalId == diagnosis.PartitionExternalId;
+
+    /// <summary>
+    /// Values on several attributes can be ambiguous, so the per-value sentence (which names one attribute) does not fit
+    /// a step standing for many; say it of them all. LargestFix is one of the Fixes, so this reaches both.
+    /// </summary>
+    private static void DescribeAmbiguityOfTheGroup(IEnumerable<UnresolvedReferenceFix> fixes)
+    {
+        foreach (var fix in fixes.Where(f => f.Cause == UnresolvedReferenceCause.AmbiguousObjectType))
         {
             fix.Finding = "These values match objects of more than one Object Type, on attributes that do not declare which one they reference.";
             fix.Remedy = "Declare each attribute's target Object Type on the Schema tab if the Connector supports doing so.";
         }
+    }
 
-        return summary;
+    /// <summary>
+    /// The Object Types a reference could name, by their anchor. A type whose anchor is not exactly one attribute cannot
+    /// be the target of a lookup, so it is left out rather than allowed to fail the read.
+    /// </summary>
+    private static List<(int AnchorAttributeId, string ObjectTypeName)> AmbiguityTargetsOf(ConnectedSystem connectedSystem) =>
+        [.. (connectedSystem.ObjectTypes ?? [])
+            .Select(type => (Type: type, Anchors: type.Attributes.Where(a => a.IsExternalId).ToList()))
+            .Where(pair => pair.Anchors.Count == 1)
+            .Select(pair => (pair.Anchors[0].Id, pair.Type.Name))];
+
+    /// <summary>
+    /// An Object Type's attributes whose values can be ambiguous (#1285). Ambiguity is only possible where the import
+    /// resolves against Object Type anchors without a declared target: an object whose type has a text secondary external
+    /// ID resolves its undeclared references by that instead, across every type at once, and a declared target names
+    /// exactly one type. With fewer than two anchored types there is nothing to be ambiguous between.
+    /// </summary>
+    private static IReadOnlySet<int> AmbiguityCandidateAttributeIdsOf(ConnectedSystemObjectType? objectType, int targetCount)
+    {
+        var resolvesBySecondaryExternalId = objectType?.Attributes.Any(a => a.IsSecondaryExternalId && a.Type == AttributeDataType.Text) ?? false;
+        if (objectType == null || resolvesBySecondaryExternalId || targetCount < 2)
+            return new HashSet<int>();
+
+        return objectType.Attributes
+            .Where(a => a.Type == AttributeDataType.Reference && a.ReferencedObjectTypeId == null)
+            .Select(a => a.Id)
+            .ToHashSet();
     }
 
     private static ConnectedSystemObjectUnresolvedReferenceSummary Summarise(
@@ -227,22 +358,23 @@ public partial class ConnectedSystemServer
     /// anchor.
     /// </summary>
     private async Task<Dictionary<string, IReadOnlyList<string>>> FindAmbiguousReferenceValuesAsync(
-        ConnectedSystemObjectUnresolvedReferenceContext context,
+        int connectedSystemId,
+        IReadOnlyList<(int AnchorAttributeId, string ObjectTypeName)> targets,
         IEnumerable<string> values)
     {
         var distinctValues = values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var ambiguous = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-        if (distinctValues.Count == 0 || context.AmbiguityTargets.Count < 2)
+        if (distinctValues.Count == 0 || targets.Count < 2)
             return ambiguous;
 
         var typeNamesByValue = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (anchorAttributeId, objectTypeName) in context.AmbiguityTargets)
+        foreach (var (anchorAttributeId, objectTypeName) in targets)
         {
             for (var start = 0; start < distinctValues.Count; start += UnresolvedReferenceAmbiguityBatchSize)
             {
                 var batch = distinctValues.GetRange(start, Math.Min(UnresolvedReferenceAmbiguityBatchSize, distinctValues.Count - start));
                 var matches = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(
-                    context.ConnectedSystemId, anchorAttributeId, batch);
+                    connectedSystemId, anchorAttributeId, batch);
 
                 foreach (var matchedValue in matches.Keys)
                 {

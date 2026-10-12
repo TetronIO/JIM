@@ -28,6 +28,10 @@
       A11Y-2  every image has alt text; every included diagram has a <title>
               and a <desc>
       TYP-1   a page that declares a type has the shape that type requires
+      TUT-2   every bold label in a tutorial's Portal tab exists in the portal
+      PRI-1   a conformant priority page records the release it was last
+              checked against (validated: vX.Y.Z), no later than VERSION, and
+              no other page records one
       LANG-1  no em dash, and no spaced -- standing in for one
       LANG-2  British English, not American spellings
       LANG-3  product nouns in Title Case, and never a rejected variant
@@ -103,8 +107,9 @@
     docs/.conformance/vocabulary.psd1.
 
 .PARAMETER RepositoryRoot
-    The repository root, used to find tutorial scenario scripts and to read a
-    page's base-branch version for MNT-3. Defaults to the current directory.
+    The repository root, used to find tutorial scenario scripts, to read a
+    page's base-branch version for MNT-3, and to read VERSION for PRI-1.
+    Defaults to the current directory.
 
 .PARAMETER BaseRef
     The commit MNT-3 compares page sizes against. Defaults to the BASE_SHA
@@ -156,12 +161,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1',
-    'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
+$script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
-# later pull request.
-$script:UnmarkableRules = @('EXC-1', 'MNT-3')
+# later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
+# priority page excused from recording one would simply never be listed.
+$script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
 
@@ -177,7 +183,7 @@ function Read-Configuration {
 
     foreach ($key in 'Exclude', 'Rules', 'RequiredFrontMatter', 'AllowedFrontMatter', 'Audiences', 'PageTypes', 'DescriptionLength',
         'SizeBudgetWords', 'PrioritySizeBudgetWords', 'StubPatterns', 'PriorityPages', 'ConformantFolders', 'ConformantPages', 'ScenarioPathFormat',
-        'GlossaryPage', 'AmericanSpellings', 'IzeExceptions', 'AllowedSpellings', 'TimeRelativePatterns', 'FuturePatterns', 'MinimiserPatterns') {
+        'PortalLabelSources', 'GlossaryPage', 'AmericanSpellings', 'IzeExceptions', 'AllowedSpellings', 'TimeRelativePatterns', 'FuturePatterns', 'MinimiserPatterns') {
         if (-not $config.ContainsKey($key)) { throw "Configuration '$Path' has no '$key'." }
     }
     foreach ($r in $script:KnownRules | Where-Object { $_ -ne 'EXC-1' }) {
@@ -708,6 +714,37 @@ function Test-Accessibility {
     }
 }
 
+function Test-Validation {
+    param($Page, [bool]$Priority, [bool]$Conformant, [string]$VersionPath)
+
+    $fm = $Page.FrontMatter
+    $line = if ($fm.KeyLines.ContainsKey('validated')) { $fm.KeyLines['validated'] } else { 1 }
+    $value = $fm.Values['validated']
+
+    if ($null -eq $value) {
+        if ($Priority -and $Conformant) {
+            New-Finding 'PRI-1' 1 "a conformant priority page has no 'validated'; check the page against the product, then record the release, such as validated: v0.16.0."
+        }
+        return
+    }
+    if (-not $Priority) {
+        New-Finding 'PRI-1' $line "only a priority page records 'validated'; remove it, or add the page to PriorityPages in config.psd1."
+        return
+    }
+    if ($value -isnot [string] -or $value -notmatch '^v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') {
+        New-Finding 'PRI-1' $line "'validated' is '$value'; write the release the page was last checked against as vX.Y.Z, such as v0.16.0."
+        return
+    }
+    $validated = [System.Management.Automation.SemanticVersion]::new($Matches.version)
+    if (-not (Test-Path -LiteralPath $VersionPath)) {
+        throw "PRI-1 needs the current version, and there is no VERSION file at $VersionPath."
+    }
+    $current = [System.Management.Automation.SemanticVersion]::new((Get-Content -LiteralPath $VersionPath -Raw).Trim())
+    if ($validated -gt $current) {
+        New-Finding 'PRI-1' $line "'validated' names $value, a release after the current version $current; record the release the page was checked against, at most $current."
+    }
+}
+
 function Test-PageShape {
     param($Page, $Config, [string]$RepositoryRoot)
 
@@ -779,6 +816,43 @@ function Test-PageShape {
 # ---------------------------------------------------------------------------
 
 # The glossary's entries: "Term { #anchor }" or "Term (ABBR) { #anchor }" lines of its definition list.
+# TUT-2: every label a tutorial's Portal tab names in bold is one the portal shows. The portal's text
+# lives in its Razor markup and C#, and a Connector's setting names in its own source, so a label is
+# checked by finding it there; case is ignored, since MudBlazor upper-cases buttons and tabs on screen.
+# A label the portal builds from data ("Project Users to the Metaverse?") is excused with a marker.
+function Get-PortalLabelText {
+    param([string]$RepositoryRoot, [string[]]$Sources)
+    $text = [System.Text.StringBuilder]::new()
+    foreach ($source in $Sources) {
+        $full = Join-Path $RepositoryRoot $source
+        if (-not (Test-Path -LiteralPath $full)) { throw "PortalLabelSources names '$source', which does not exist." }
+        Get-ChildItem -LiteralPath $full -Recurse -File -Include '*.razor', '*.cs' |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
+            ForEach-Object { [void]$text.AppendLine([System.IO.File]::ReadAllText($_.FullName)) }
+    }
+    $text.ToString().ToLowerInvariant()
+}
+
+function Test-PortalLabel {
+    param($Page, $Config, [string]$RepositoryRoot)
+
+    if ($Page.FrontMatter.Values['type'] -ne 'tutorial') { return }
+    $inPortalTab = $false
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        $line = $Page.Lines[$i]
+        if ($line -match '^===\s+"(?<tab>[^"]+)"') { $inPortalTab = $Matches.tab -eq 'Portal'; continue }
+        if ($line -match '^\S') { $inPortalTab = $false; continue }
+        if (-not $inPortalTab -or $Page.InFenceLine[$i]) { continue }
+        foreach ($m in [regex]::Matches($line, '\*\*(?<label>[^*]+?)\*\*')) {
+            $label = $m.Groups['label'].Value.Trim()
+            if ($null -eq $script:PortalText) { $script:PortalText = Get-PortalLabelText -RepositoryRoot $RepositoryRoot -Sources @($Config.PortalLabelSources) }
+            if (-not $script:PortalText.Contains($label.ToLowerInvariant())) {
+                New-Finding 'TUT-2' ($i + 1) "the portal shows no '$label'; name each control exactly as the portal labels it, or excuse a label the portal builds from data with a marker saying so."
+            }
+        }
+    }
+}
+
 function Get-GlossaryEntry {
     param($Page)
     for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
@@ -1082,6 +1156,9 @@ $pages = [System.Collections.Generic.List[object]]::new()
 $findings = [System.Collections.Generic.List[object]]::new()
 
 $files = Get-ChildItem -LiteralPath $docsFull -Filter '*.md' -Recurse -File | Sort-Object FullName
+# The portal's text, for TUT-2; read on first use, since only a tutorial's Portal labels need it.
+$script:PortalText = $null
+
 foreach ($file in $files) {
     $relative = [System.IO.Path]::GetRelativePath($docsFull, $file.FullName) -replace '\\', '/'
     if ($relative -split '/' | Where-Object { $_.StartsWith('.') }) { continue }
@@ -1105,6 +1182,8 @@ foreach ($file in $files) {
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
+        Test-Validation -Page $page -Priority $priority -Conformant $conformant -VersionPath (Join-Path $repositoryFull 'VERSION')
+        Test-PortalLabel -Page $page -Config $config -RepositoryRoot $repositoryFull
         Test-Language -Page $page -Config $config -Language $language
     ) | Where-Object { $_ }
 

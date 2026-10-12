@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
+- ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
 - ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
+- ✨ The Connected System page shows how many references are unresolved and opens the Connector Space filtered to the objects holding them, under "Where they point": the changes that would fix them. Also via REST and `Get-JIMConnectedSystemUnresolvedReferenceSummary`. (#959)
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 - ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
 - ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
@@ -34,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
 - ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
 - ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
+- ✨ A Full Import Run Profile can now **Allow Object Type Changes**, carrying out an intended change of Object Type: the object imports under its new type and the old one is retired. Portal, REST (`allowObjectTypeChanges`) or `-AllowObjectTypeChanges`. (#2049)
+- ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. (#2049)
 - ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
 - ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
 - ✨ JIM now issues a generated Account Name only when the Email and User Principal Name built from it are free too, waiting while one needs an input the person doesn't have yet. Values issued before this release are left as they are. (#2023)
@@ -46,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 **Initiated By** reads the same on every page: a run a Schedule started names the Schedule and links its execution, and System has its own icon instead of the Schedule's clock. An execution item's **Operation** shows what was done to the object even when it failed. (#2066)
 - 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
 - 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
 - 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
@@ -58,10 +64,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
 - 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
 - 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
+- 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
+- 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
+- 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
+
+### Removed
+
+- 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
 ### Fixed
 
+- 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
+- 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
+- 🐛 Causality now follows a change that a later synchronisation merged into an export still waiting: every synchronisation that staged an export reaches it and its confirmation, and the export names them all, instead of only the latest. (#2100)
+- 🐛 A corrected Service Setting name or description now reaches existing installations, not only new ones; **Progress update interval** now says it paces Example Data generation, which is all it does. (#2101)
+- 🐛 **Deleted By** on the Deleted Objects page linked the person who deleted an object to a page that does not exist; it now opens their Metaverse Object. (#2066)
+- 🐛 Changes made through the REST API to Schedules, example data templates and a factory reset are recorded as the API key or person who made them; they were recorded against a person who does not exist, so **Initiated By** linked nowhere. (#2066)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
 
@@ -78,6 +97,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The LDAP Connector's **Connection Timeout** now applies to a directory server behind a firewall that drops traffic. Each connection waited over two minutes, so an unreachable domain controller held up a run for about nine minutes; it now fails in under a minute. (#2003)
 - 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
 - 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
+- 🐛 A group over Active Directory's MaxValRange (1,500 members by default) now imports its members once when the domain controller also returns an empty `member` beside `member;range=0-1499`, instead of importing that empty attribute as well. (#2041)
+- 🐛 An LDAP entry carrying two selected Object Types now imports as the more specific (an Active Directory computer as `computer`, not `user`), whatever order its classes are listed in. Refresh the schema of a Connected System with overlapping Object Types selected. (#2043)
+- 🐛 A deletion a Delta Import reads for an LDAP object JIM holds under another Object Type now retires that object, instead of being ignored until the next Full Import. (#2049)
+- 🐛 An LDAP, SCIM or SQL import that returns the same object twice in one page now rejects both copies as duplicates, as file imports do, instead of importing the first. Neither copy changes an object JIM already holds. (#2063)
+- 🐛 An LDAP export that adds a member already in the group, or removes one already gone, no longer fails, and the rest of that membership change is applied. JIM uses Permissive Modify where the directory offers it, and otherwise resends only the values the directory refused.
+- 🐛 Provisioning an enabled Active Directory account whose Synchronisation Rule has an Initial Password no longer fails with `0000052D`: JIM creates the account disabled and enables it once the password is set, so a `userAccountControl` Attribute Flow keeps working. (#2039)
+- 🐛 A Pending Export rebuilt while one of its changes awaits confirmation now keeps that change's export state and attempt count, instead of starting it again as though never sent. (#2039)
+- 🐛 Changing a Run Profile's Safeguards limits or Verification Mode is now recorded in its Connected System's configuration change history; until now these changes left no trace. (#2049)
+- 🐛 When a domain controller refuses the LDAP Connector's sign-in over plain LDAP because it requires LDAP signing (the Windows Server 2025 default), JIM now says to enable LDAPS, instead of only "Strong authentication is required for this operation". (#2042)
 - 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
 - 🐛 A rootful Podman JIM now survives a firewalld reload, which left it unable to reach its database until restarted: `setup.sh` enables Podman's `netavark-firewalld-reload.service`. Upgrading from v0.16.0 or earlier, enable it as the Podman page shows. (#2009)
 - 🐛 A service waiting for its database at start-up now names the address the database's name led to, so a name pointing at a server that has moved shows in the log. (#2009)

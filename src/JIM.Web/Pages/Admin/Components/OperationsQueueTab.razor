@@ -246,36 +246,11 @@ rather than appearing and disappearing with the processing state *@
                                             <MudText Typo="Typo.button">Initiated By</MudText>
                                         </HeaderTemplate>
                                         <CellTemplate>
-                                            @{
-                                                var task = context.Item;
-                                            }
-                                            @if (task.InitiatedByType == ActivityInitiatorType.User)
-                                            {
-                                                <div class="d-flex align-center">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
-                                                    <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById"
-                                                                        PrincipalName="@task.InitiatedByName" />
-                                                </div>
-                                            }
-                                            else if (task.InitiatedByType == ActivityInitiatorType.ApiKey)
-                                            {
-                                                <div class="d-flex align-center">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
-                                                    <AuditPrincipalLink PrincipalType="task.InitiatedByType" PrincipalId="task.InitiatedById"
-                                                                        PrincipalName="@task.InitiatedByName" />
-                                                </div>
-                                            }
-                                            else if (task.InitiatedByType == ActivityInitiatorType.System)
-                                            {
-                                                <div class="d-flex align-center">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
-                                                    <span>@(task.InitiatedByName ?? "Scheduler")</span>
-                                                </div>
-                                            }
-                                            else if (!string.IsNullOrEmpty(task.InitiatedByName))
-                                            {
-                                                <span>@task.InitiatedByName</span>
-                                            }
+                                            <AuditPrincipalLink PrincipalType="context.Item.InitiatedByType" PrincipalId="context.Item.InitiatedById"
+                                                                PrincipalName="@context.Item.InitiatedByName"
+                                                                ScheduleName="@context.Item.ScheduleExecutionName"
+                                                                ScheduleExecutionId="@context.Item.ScheduleExecutionId"
+                                                                Dense="true" />
                                         </CellTemplate>
                                     </TemplateColumn>
                                     <TemplateColumn T="WorkerTaskHeader" Title="Actions" Sortable="false" HeaderStyle="text-align: right;"

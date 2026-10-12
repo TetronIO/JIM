@@ -1,5 +1,8 @@
 ---
 title: API Authentication
+description: "Authenticate to JIM's REST API with an OpenID Connect bearer token or an API key, and when to use each."
+type: reference
+audience: automation-author
 ---
 
 # API Authentication

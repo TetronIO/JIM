@@ -1,5 +1,8 @@
 ---
 title: "SSO Setup: Keycloak"
+description: Register JIM with Keycloak so administrators sign in to the portal, and the PowerShell module, with their Keycloak accounts.
+type: how-to
+audience: implementer
 ---
 
 # SSO Setup: Keycloak
@@ -140,6 +143,14 @@ JIM_SSO_API_SCOPE=jim-api
 JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 ```
 
+## Check it worked
+
+1. Open JIM in a browser. JIM sends you to Keycloak to sign in, then returns you to JIM, signed in.
+2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
+3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+
+To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
 ## Keycloak Troubleshooting
 
 - **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive)
@@ -155,4 +166,4 @@ JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 
 ## Next steps
 
-With the configuration in place, [test your configuration](../sso-setup.md#testing-your-configuration) to verify sign-in, claims, sign-out, and API access. If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).
+If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

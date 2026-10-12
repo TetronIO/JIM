@@ -46,7 +46,10 @@ function Invoke-GitHubApi {
     }
 
     try {
-        return Invoke-RestMethod @request
+        # Invoke-RestMethod writes a JSON array as one object rather than as its items. Returned through a variable it
+        # unrolls, so a list reaches the caller as its items and an empty list as none, not as one empty item.
+        $response = Invoke-RestMethod @request
+        return $response
     }
     catch [Microsoft.PowerShell.Commands.HttpResponseException] {
         $status = [int]$_.Exception.Response.StatusCode

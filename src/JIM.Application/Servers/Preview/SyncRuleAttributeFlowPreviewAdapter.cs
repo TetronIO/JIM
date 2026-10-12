@@ -340,7 +340,8 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
     /// <summary>
     /// What one evaluation would leave the target system holding for this rule's attributes: the changes it would
-    /// stage, plus the ones it declined to stage because the target already holds the value (#1443).
+    /// stage, plus the ones it declined to stage because the target already holds the value (#1443), plus the ones it
+    /// declined to stage because they restate a change held until an Initial Password is delivered (#2039).
     /// </summary>
     /// <remarks>
     /// The skipped changes are what make an export delta an old-to-new PAIR rather than a bare new value. A domain
@@ -348,13 +349,16 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     /// configuration stages nothing and only the proposal stages anything; reading the staged changes alone would
     /// report "would now write X" with nothing to compare X against. Including both also makes an unchanged
     /// attribute cancel out, because a value skipped by both evaluations appears on both sides of the comparison.
+    /// A restatement of a held change is the same case in a different guise: the target holds only an interim value,
+    /// so the restatement is not skipped as already current, yet the held value is what the rule asserts, and without
+    /// it a proposal changing that value would read as a value written where none was before.
     /// </remarks>
     private static List<PendingExportAttributeValueChange> ExportChangesFor(SyncPreviewResult? preview, SyncRule rule) =>
         preview == null
             ? []
             : [.. preview.OutboundDecisions.Entries
                 .Where(entry => entry.SyncRuleId == rule.Id)
-                .SelectMany(entry => entry.AttributeChanges.Concat(entry.NoNetChangeSkippedChanges))];
+                .SelectMany(entry => entry.AttributeChanges.Concat(entry.NoNetChangeSkippedChanges).Concat(entry.HeldChangeRestatements))];
 
     private static Guid? ExportTargetObjectId(SyncPreviewResult? preview, SyncRule rule) =>
         preview?.OutboundDecisions.Entries

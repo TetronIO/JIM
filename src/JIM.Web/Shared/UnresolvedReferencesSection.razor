@@ -60,58 +60,12 @@
                     }
                 </MudStack>
 
-                @* Every distinct next step in full, so the table below can keep each row to one line. Grouped by where
-                   the step is taken, JIM first: whether an administrator can fix it themselves is the first question.
-                   One grid for both groups, so their columns line up. *@
+                @* Every distinct next step in full, so the table below can keep each row to one line. *@
                 <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Next steps</MudText>
-                <div class="jim-unresolved-fixes">
-                    @foreach (var group in UnresolvedReferenceDisplay.GroupFixes(summary.Fixes))
-                    {
-                        var inJim = group.FixLocation == UnresolvedReferenceFixLocation.Jim;
-                        var groupReferenceCount = group.Fixes.Sum(f => f.Count);
-                        var expanded = _expandedFixGroups.Contains(group.FixLocation);
-                        <div class="jim-unresolved-fix-group">
-                            <MudIcon Icon="@(inJim ? Icons.Material.Outlined.Settings : Icons.Material.Outlined.Storage)" Class="mud-text-secondary" />
-                            <MudText Typo="Typo.subtitle2">@(inJim ? "Fix in JIM" : $"Fix in {_context.ConnectedSystemName}")</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                @groupReferenceCount.ToString("N0") @(groupReferenceCount == 1 ? "reference" : "references"),
-                                @group.Fixes.Count.ToString("N0") @(group.Fixes.Count == 1 ? "step" : "steps")
-                            </MudText>
-                        </div>
-                        @foreach (var fix in expanded ? group.Fixes : group.Fixes.Take(CollapsedFixCount))
-                        {
-                            var action = UnresolvedReferenceDisplay.ActionFor(fix.Cause, ConnectedSystemId, objectTypeName);
-                            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.Finding, fix.ContainerExternalId ?? fix.PartitionExternalId);
-                            <div class="jim-unresolved-fix-cell jim-unresolved-fix-count-cell">
-                                <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(fix.FixLocation)"
-                                         Class="ma-0 jim-unresolved-fix-count">@fix.Count.ToString("N0")</MudChip>
-                            </div>
-                            <div class="jim-unresolved-fix-cell jim-unresolved-fix-text">
-                                @if (identifier == null)
-                                {
-                                    @before
-                                }
-                                else
-                                {
-                                    @before<span class="jim-text-code">@identifier</span>@after
-                                }
-                                <div class="jim-unresolved-fix-remedy">@fix.Remedy</div>
-                            </div>
-                            <div class="jim-unresolved-fix-cell">
-                                <MudLink Href="@action.Href" Class="jim-unresolved-fix-action">@action.Text<span aria-hidden="true">&nbsp;&rarr;</span></MudLink>
-                            </div>
-                        }
-                        @if (group.Fixes.Count > CollapsedFixCount)
-                        {
-                            var location = group.FixLocation;
-                            <div class="jim-unresolved-fix-more">
-                                <MudLink Typo="Typo.body2" OnClick="@(() => ToggleFixGroup(location))">
-                                    @(expanded ? "Show fewer steps" : $"Show all {group.Fixes.Count:N0} steps")
-                                </MudLink>
-                            </div>
-                        }
-                    }
-                </div>
+                <UnresolvedReferenceNextSteps Fixes="@summary.Fixes"
+                                              ConnectedSystemId="@ConnectedSystemId"
+                                              ConnectedSystemName="@_context.ConnectedSystemName"
+                                              ObjectTypeName="@objectTypeName" />
 
                 <VirtualisedDataGrid T="ConnectedSystemObjectUnresolvedReference"
                                      ContainerId="@ContainerId"
@@ -203,9 +157,6 @@
 }
 
 @code {
-    /// <summary>How many next steps each group shows before the rest are folded away.</summary>
-    private const int CollapsedFixCount = 3;
-
     /// <summary>
     /// The table's height ceiling. The section sits above other content on both pages, so a group with thousands of
     /// unresolved members scrolls within the table rather than pushing the rest of the page out of reach.
@@ -274,7 +225,6 @@
     private ConnectedSystemObjectUnresolvedReferenceContext? _context;
     private ConnectedSystemObjectUnresolvedReferenceSummary? _summary;
     private bool _loaded;
-    private readonly HashSet<UnresolvedReferenceFixLocation> _expandedFixGroups = [];
     private (int ConnectedSystemId, Guid? ObjectId, ConnectedSystemObjectUnresolvedReferenceContext? Context)? _loadedFor;
 
     protected override async Task OnParametersSetAsync()
@@ -286,7 +236,6 @@
         _loadedFor = (ConnectedSystemId, ConnectedSystemObjectId, Context);
         _context = null;
         _summary = null;
-        _expandedFixGroups.Clear();
 
         if (ConnectedSystemObjectId is { } objectId)
         {
@@ -335,12 +284,6 @@
         },
         Class
     }.Where(c => !string.IsNullOrEmpty(c)));
-
-    private void ToggleFixGroup(UnresolvedReferenceFixLocation location)
-    {
-        if (!_expandedFixGroups.Remove(location))
-            _expandedFixGroups.Add(location);
-    }
 
     private IEnumerable<string> IntroSentences()
     {

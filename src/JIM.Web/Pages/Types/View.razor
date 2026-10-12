@@ -36,7 +36,11 @@
         </MudAlert>
     </LongLoadMessage>
     <Loaded>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span>
+    <PageInfo Title="Metaverse Object" DocsPage="configuration/metaverse-objects.md">
+        A Metaverse Object is JIM's one view of an identity, built from the Connected Systems it is connected to. Each value can tell you where it came from.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @* Generated values held for a decision (#242, release 4): above the tabs, because a held export is work JIM has stopped

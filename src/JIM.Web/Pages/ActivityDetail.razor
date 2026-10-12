@@ -21,7 +21,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+    <PageInfo Title="Activity" DocsPage="configuration/activities.md">
+        An Activity records one thing JIM did: what started it, when, and how it ended. A Run Profile's Activity also lists what the run did to each object it touched.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -105,55 +109,14 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
-                @{
-                    if (_activity.InitiatedByType == ActivityInitiatorType.User)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                            @if (_activity.InitiatedById.HasValue && _initiatorMetaverseObjectHeader != null)
-                            {
-                                <MudLink Href="@Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader)">@_activity.InitiatedByName</MudLink>
-                            }
-                            else
-                            {
-                                <span>@_activity.InitiatedByName</span>
-                            }
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                            @if (_activity.InitiatedById.HasValue)
-                            {
-                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
-                            }
-                            else
-                            {
-                                <span>@_activity.InitiatedByName</span>
-                            }
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.System)
-                    {
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                            <span>@(_activity.InitiatedByName ?? "System")</span>
-                        </MudText>
-                    }
-                    else if (_activity.InitiatedByType == ActivityInitiatorType.Anonymous)
-                    {
-                        @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
-                        <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
-                            <span>Anonymous</span>
-                        </MudText>
-                    }
-                    else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
-                    {
-                        <MudText>@_activity.InitiatedByName</MudText>
-                    }
-                }
+                <MudText>
+                    <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                                       InitiatedById="@_activity.InitiatedById"
+                                       InitiatedByName="@_activity.InitiatedByName"
+                                       UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
+                                       ScheduleName="@_activity.ScheduledByScheduleName"
+                                       ScheduleExecutionId="@_activity.ScheduleExecutionId" />
+                </MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
@@ -295,6 +258,16 @@
             @foreach (var warningLine in _activity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@warningLine</MudText>
+            }
+            @* A run that left references unresolved under Warn says so here, and the objects are one click away (#959):
+               the Connector Space filtered to them, which shows the references as they stand now. *@
+            @if (_hasUnresolvedReferences && _activity.ConnectedSystemId is { } unresolvedConnectedSystemId)
+            {
+                <AlertButton Severity="Severity.Warning"
+                             Href="@UnresolvedReferenceDisplay.ConnectorSpaceHref(unresolvedConnectedSystemId)"
+                             Class="mt-3">
+                    View Affected Objects
+                </AlertButton>
             }
         </MudAlert>
     }
@@ -1193,6 +1166,7 @@
     /// Structured detail for a failure caused by a directory server's certificate, when the Activity carries it.
     /// </summary>
     private ServerCertificateDiagnostic? _serverCertificate;
+    private bool _hasUnresolvedReferences;
     private Activity? _parentActivity;
 
     // The preview that informed this change (#134), its Activity, and its verdict; empty where there is none.
@@ -1347,6 +1321,11 @@
         }
 
         _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
+
+        // Asked only where the answer can show: inside a warning, on a run against a Connected System.
+        _hasUnresolvedReferences = !string.IsNullOrEmpty(_activity.WarningMessage)
+                                   && _activity.ConnectedSystemId != null
+                                   && await jim.Activities.HasUnresolvedReferencesAsync(_activity.Id);
 
         // Seed the ETA sample window so the estimate appears as soon as a second sample lands.
         UpdateEtaEstimate(_activity);

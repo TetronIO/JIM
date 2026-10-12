@@ -124,6 +124,10 @@ internal class FileConnectorImport
 
                 var isMultiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
 
+                // Every value of the attribute that will not parse, so each is reported rather than the first (#2066).
+                // Allocated only for the rare attribute that has one.
+                List<string>? unreadableValues = null;
+
                 try
                 {
                     if (attribute.Type == AttributeDataType.Text)
@@ -156,7 +160,7 @@ internal class FileConnectorImport
                                     if (int.TryParse(value, out var intValue))
                                         importObjectAttribute.IntValues.Add(intValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as integer");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -178,7 +182,7 @@ internal class FileConnectorImport
                                     if (long.TryParse(value, out var longValue))
                                         importObjectAttribute.LongValues.Add(longValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as long number");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -205,7 +209,7 @@ internal class FileConnectorImport
                                     if (DecimalAttributeValue.TryParse(value, out var decimalValue))
                                         importObjectAttribute.DecimalValues.Add(decimalValue);
                                     else
-                                        throw new FormatException($"Cannot parse '{value}' as decimal");
+                                        (unreadableValues ??= []).Add(value);
                                 }
                             }
                             else
@@ -213,7 +217,7 @@ internal class FileConnectorImport
                                 if (DecimalAttributeValue.TryParse(fieldValue, out var decimalValue))
                                     importObjectAttribute.DecimalValues.Add(decimalValue);
                                 else
-                                    throw new FormatException($"Cannot parse '{fieldValue}' as decimal");
+                                    (unreadableValues ??= []).Add(fieldValue);
                             }
                         }
                     }
@@ -244,7 +248,7 @@ internal class FileConnectorImport
                                 if (Guid.TryParse(value, out var guidValue))
                                     importObjectAttribute.GuidValues.Add(guidValue);
                                 else
-                                    throw new FormatException($"Cannot parse '{value}' as GUID");
+                                    (unreadableValues ??= []).Add(value);
                             }
                         }
                         else if (!string.IsNullOrEmpty(fieldValue))
@@ -275,14 +279,26 @@ internal class FileConnectorImport
                 }
                 catch (Exception ex) when (ex is not NotSupportedException)
                 {
-                    // Record the error but continue processing other attributes and rows (unless stopOnFirstError is enabled)
-                    var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
-                    var rawValue = _reader.CsvReader.GetField(attribute.Name);
-                    _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
-                        attribute.Name, attribute.Type, rowNumber, LogSanitiser.Sanitise(rawValue));
+                    // A single-valued field the typed reader would not convert. Reported with the others below; the
+                    // exception is kept at Debug for whoever needs the parser's own account of it.
+                    _logger.Debug(ex, "Typed conversion of attribute '{AttributeName}' failed", attribute.Name);
+                    (unreadableValues ??= []).Add(_reader.CsvReader.GetField(attribute.Name) ?? string.Empty);
+                }
 
-                    importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
-                    importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";
+                if (unreadableValues != null)
+                {
+                    // Report every value that would not parse, and leave the attribute out: what did parse of a
+                    // multi-valued attribute is only part of what the file holds, and JIM leaves an attribute with an
+                    // unreadable value as it already held it rather than reading it as the whole set (#2066). The object
+                    // is still returned, so every other attribute imports.
+                    var reason = UnreadableValueReason(attribute.Type);
+                    importObject.SourceLocation ??= $"{_reader.FileName}, row {_reader.CsvReader.Context.Parser?.Row ?? 0:N0}";
+                    foreach (var unreadableValue in unreadableValues)
+                    {
+                        _logger.Warning("Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
+                            attribute.Name, attribute.Type, _reader.CsvReader.Context.Parser?.Row ?? 0, LogSanitiser.Sanitise(unreadableValue));
+                        importObject.AddAttributeValueError(attribute.Name, unreadableValue, reason);
+                    }
 
                     if (_stopOnFirstError)
                     {
@@ -291,7 +307,6 @@ internal class FileConnectorImport
                         return FinaliseResult(result, stopwatch);
                     }
 
-                    // Continue processing - the attribute will be skipped but the object can still be imported with other attributes
                     continue;
                 }
 
@@ -314,6 +329,20 @@ internal class FileConnectorImport
 
         return FinaliseResult(result, stopwatch);
     }
+
+    /// <summary>
+    /// Why a value would not parse, for the administrator (#2066). Worded from the attribute's type rather than the
+    /// parser's exception, whose text (CsvHelper's in particular) is written for developers and runs to several lines.
+    /// </summary>
+    private static string UnreadableValueReason(AttributeDataType type) => type switch
+    {
+        AttributeDataType.Number or AttributeDataType.LongNumber => "Not a valid whole number.",
+        AttributeDataType.Decimal => "Not a valid decimal number.",
+        AttributeDataType.DateTime => "Not a valid date and time.",
+        AttributeDataType.Boolean => "Not a valid true or false value.",
+        AttributeDataType.Guid => "Not a valid GUID.",
+        _ => $"Not a valid {type} value."
+    };
 
     /// <summary>
     /// Helper to cleanly finalise the import result, stopping the timer and disposing the reader.
