@@ -25,7 +25,7 @@ namespace JIM.Worker.Processors;
 public static class ExportCausalEdgeBuilder
 {
     /// <summary>
-    /// Records the synchronisation that staged this export's Pending Export as the cause of the export.
+    /// Records each synchronisation that staged this export's Pending Export as a cause of the export.
     /// </summary>
     /// <param name="executionItem">The export's own Run Profile Execution Item: the effect.</param>
     /// <param name="exportItem">The processed export, carrying the cause identifiers copied off the Pending
@@ -57,34 +57,43 @@ public static class ExportCausalEdgeBuilder
         // Neither the queueing run nor the identity behind it is known, which happens for an export staged
         // before this seam existed against an object that has since lost its Metaverse link. An edge here would
         // name nothing, and a "Caused by" whose one entry is unidentifiable is worse than none at all.
-        if (!exportItem.QueuedByRunProfileExecutionItemId.HasValue && !exportItem.SourceMetaverseObjectId.HasValue)
+        var stagers = exportItem.StagedByRunProfileExecutionItemIds.Count > 0
+            ? exportItem.StagedByRunProfileExecutionItemIds.Select(id => (Guid?)id).ToList()
+            : [exportItem.QueuedByRunProfileExecutionItemId];
+        if (!stagers.Any(id => id.HasValue) && !exportItem.SourceMetaverseObjectId.HasValue)
             return;
 
-        executionItem.CausalEdges.Add(new CausalCause
+        // One edge per run that staged the export (#2100): an export can carry changes from several
+        // synchronisations, and each caused it. One edge each lets every one of them reach this export walking
+        // down, and lets this export's chain name them all.
+        foreach (var stager in stagers)
         {
-            // Known by id rather than by reference: the queueing item belongs to an earlier Activity and is
-            // long persisted, which is the opposite of every same-run seam.
-            RunProfileExecutionItemId = exportItem.QueuedByRunProfileExecutionItemId,
-            MetaverseObjectId = exportItem.SourceMetaverseObjectId,
-            PendingExportId = exportItem.PendingExportId,
-            // Named from the exported object, because the Pending Export is deleted moments from now and the
-            // Metaverse Object may be too (this seam carries deprovisions as well as updates).
-            DisplayName = executionItem.DisplayNameSnapshot,
-            // What kind of change was staged, so the chain leads with "created the record" / "applied the
-            // changes" / "deleted the record" rather than a generic "a change was staged" (#1223 read design).
-            ReasonCode = exportItem.ChangeType switch
+            executionItem.CausalEdges.Add(new CausalCause
             {
-                PendingExportChangeType.Create => CausalReasonCode.ExportCreateStaged,
-                PendingExportChangeType.Delete => CausalReasonCode.ExportDeleteStaged,
-                _ => CausalReasonCode.ExportUpdateStaged
-            },
-            ConnectedSystemId = connectedSystem.Id,
-            ConnectedSystemName = connectedSystem.Name,
-            // A create names the rule whose provisioning decision it was, recorded on the Pending Export at
-            // staging time (#1121). Updates and deletes name none: an update flows from whichever rules map
-            // the changed attributes, and a delete is the Deletion Rule's decision, both told elsewhere.
-            SyncRuleId = exportItem.ProvisioningSyncRuleId,
-            SyncRuleName = exportItem.ProvisioningSyncRuleId.HasValue ? provisioningSyncRuleName : null
-        }.ToEdge(CausalEdgeType.PendingExportQueueingCausedExportExecution, effectOutcome));
+                // Known by id rather than by reference: the queueing item belongs to an earlier Activity and is
+                // long persisted, which is the opposite of every same-run seam.
+                RunProfileExecutionItemId = stager,
+                MetaverseObjectId = exportItem.SourceMetaverseObjectId,
+                PendingExportId = exportItem.PendingExportId,
+                // Named from the exported object, because the Pending Export is deleted moments from now and the
+                // Metaverse Object may be too (this seam carries deprovisions as well as updates).
+                DisplayName = executionItem.DisplayNameSnapshot,
+                // What kind of change was staged, so the chain leads with "created the record" / "applied the
+                // changes" / "deleted the record" rather than a generic "a change was staged" (#1223 read design).
+                ReasonCode = exportItem.ChangeType switch
+                {
+                    PendingExportChangeType.Create => CausalReasonCode.ExportCreateStaged,
+                    PendingExportChangeType.Delete => CausalReasonCode.ExportDeleteStaged,
+                    _ => CausalReasonCode.ExportUpdateStaged
+                },
+                ConnectedSystemId = connectedSystem.Id,
+                ConnectedSystemName = connectedSystem.Name,
+                // A create names the rule whose provisioning decision it was, recorded on the Pending Export at
+                // staging time (#1121). Updates and deletes name none: an update flows from whichever rules map
+                // the changed attributes, and a delete is the Deletion Rule's decision, both told elsewhere.
+                SyncRuleId = exportItem.ProvisioningSyncRuleId,
+                SyncRuleName = exportItem.ProvisioningSyncRuleId.HasValue ? provisioningSyncRuleName : null
+            }.ToEdge(CausalEdgeType.PendingExportQueueingCausedExportExecution, effectOutcome));
+        }
     }
 }
