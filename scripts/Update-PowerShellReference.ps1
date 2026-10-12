@@ -562,12 +562,12 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         $content = $item.Content
         $start = $block.Begin.Index + $block.Begin.Length
         $current = $text.Substring($start, $block.End.Index - $start)
-        if ($current -ne $content) {
+        if ($current -cne $content) {
             if ($Check) {
                 $expectedLines = $content -split "`n"
                 $foundLines = $current -split "`n"
                 $index = 0
-                while ($index -lt $expectedLines.Count -and $index -lt $foundLines.Count -and $expectedLines[$index] -eq $foundLines[$index]) { $index++ }
+                while ($index -lt $expectedLines.Count -and $index -lt $foundLines.Count -and $expectedLines[$index] -ceq $foundLines[$index]) { $index++ }
                 $expected = if ($index -lt $expectedLines.Count) { $expectedLines[$index] } else { '(end of block)' }
                 $found = if ($index -lt $foundLines.Count) { $foundLines[$index] } else { '(end of block)' }
                 Write-Finding $relative ($item.Line + $index) "the generated block for $($block.Name) differs from the module; run scripts/Update-PowerShellReference.ps1 to regenerate it, and change the cmdlet's help rather than the page. Expected: '$expected'; found: '$found'"
@@ -587,7 +587,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         }
     }
 
-    if (-not $Check -and $updated -ne $text) {
+    if (-not $Check -and $updated -cne $text) {
         Set-Content -LiteralPath $page.FullName -Value $updated -NoNewline
         $changedPages++
     }

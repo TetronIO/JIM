@@ -506,6 +506,20 @@ Describe 'Update-PowerShellReference -Check' {
         Get-Content -LiteralPath $path -Raw | Should -BeExactly $edited
     }
 
+    It 'writes, and checks, a change that differs only in case' {
+        $fixture = New-Fixture
+        Invoke-Generator $fixture | Out-Null
+        $path = Join-Path $fixture.Docs 'widgets.md'
+        $lowered = (Get-Content -LiteralPath $path -Raw) -creplace 'Number of Widgets per page\.', 'number of widgets per page.'
+        Set-Content -LiteralPath $path -Value $lowered -NoNewline
+
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0 -Because 'a block differing only in case is drift'
+
+        Invoke-Generator $fixture | Out-Null
+        Get-Content -LiteralPath $path -Raw | Should -MatchExactly 'Number of Widgets per page\.'
+    }
+
     It 'fails when a block names a cmdlet the module does not export' {
         $fixture = New-Fixture -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGone') }
         $result = Invoke-Generator $fixture -Check
