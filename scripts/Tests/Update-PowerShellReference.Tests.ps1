@@ -599,4 +599,29 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'Remove-JIMWidget'
         Get-Page $fixture | Should -Match 'Hand-written, not generated yet\.'
     }
+
+    It 'warns about every exported cmdlet with no block, whether or not it has a section, whatever its name' {
+        # Connect-JIM has nothing after "JIM", which a heading pattern can miss; Remove-JIMWidget is only
+        # mentioned in a table, so there is no heading to find at all.
+        $connect = @'
+function Connect-JIM {
+    <#
+    .SYNOPSIS
+        Connects.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param()
+}
+'@
+        $page = "# Widgets`n`n" + (New-Section 'Get-JIMWidget') + "`n## Connect-JIM`n`nHand-written.`n`n| Cmdlet | Purpose |`n|---|---|`n| ``Remove-JIMWidget -Id <int>`` | Removes one. |`n"
+        $fixture = New-Fixture -Functions @($script:GetWidget, $script:RemoveWidget, $connect) -Pages @{ 'widgets.md' = $page }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'widgets\.md: Connect-JIM\b'
+        $result.Output | Should -Match '\(no section\): Remove-JIMWidget'
+        $result.Output | Should -Match '2 cmdlets have no generated block'
+        $result.Output | Should -Not -Match ': Get-JIMWidget'
+    }
 }

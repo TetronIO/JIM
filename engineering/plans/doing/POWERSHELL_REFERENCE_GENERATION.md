@@ -61,7 +61,7 @@ Retrieves certificates from the trusted store.            <- hand-written
 `scripts/Update-PowerShellReference.ps1`:
 
 - Imports the module from `src/JIM.PowerShell/JIM.psd1` and, for every marked block under `docs/powershell/`, renders the cmdlet's block and writes it back.
-- `-Check` writes nothing and fails, naming the cmdlet and the first differing line, when any block differs from what it would generate, or a block names a cmdlet the module does not export, or a cmdlet with a block has a parameter with no `.PARAMETER` help or declares no output type. During migration it also lists, as warnings, the cmdlet sections that have no block yet.
+- `-Check` writes nothing and fails, naming the cmdlet and the first differing line, when any block differs from what it would generate, or a block names a cmdlet the module does not export, or a cmdlet with a block has a parameter with no `.PARAMETER` help or declares no output type. During migration it also lists, as warnings, the exported cmdlets that have no block yet, counted from the module rather than from the pages' headings, so a cmdlet the pages give no section at all is listed too.
 - `-OpenApiPath` reads the OpenAPI document; without it the script generates one with `Generate-OpenApiDoc.ps1`, which builds.
 
 ### Where it runs
@@ -94,7 +94,7 @@ As described under Examples above.
 
 ### Phase 4: Close
 
-A cmdlet section with no generated block fails ACC-5; `src/JIM.PowerShell/CLAUDE.md` and the standard drop the manual-verification guidance generation replaces; this plan moves to `done/`, closing #1083. The `powershell/` folder migration of #1454 (front matter, and splitting the three pages over their size budget) follows.
+An exported cmdlet with no generated block fails ACC-5; `src/JIM.PowerShell/CLAUDE.md` and the standard drop the manual-verification guidance generation replaces; this plan moves to `done/`, closing #1083. The `powershell/` folder migration of #1454 (front matter, and splitting the three pages over their size budget) follows.
 
 ## Success Criteria
 
@@ -121,4 +121,4 @@ None new. The OpenAPI document comes from `Generate-OpenApiDoc.ps1`, already run
 | A declared output type is wrong (the cmdlet returns a different object) | The declaration is one line beside the code that makes the call, reviewed with it; the cmdlet's Pester tests can assert it. A later check could match the declared schema to the endpoint the cmdlet calls, if declarations prove error-prone |
 | Generated tables push pages further over their size budget | The three pages already far over (Connected Systems, Synchronisation Rules, Metaverse) split in #1454's `powershell/` migration regardless |
 | Parameter descriptions lose the links the hand tables carried | Links belong in the hand-written introduction and notes; `.PARAMETER` help is also read in a terminal, where a Markdown link is noise |
-| A long migration leaves the site half generated | Pages without blocks are listed by `-Check` on every run, and Phase 4 makes a missing block a failure |
+| A long migration leaves the site half generated | Cmdlets without blocks are listed by `-Check` on every run, and Phase 4 makes a missing block a failure |

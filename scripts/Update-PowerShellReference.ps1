@@ -497,7 +497,7 @@ $failures = 0
 $blockCount = 0
 $changedPages = 0
 $seenBlocks = @{}
-$notGenerated = [System.Collections.Generic.List[string]]::new()
+$sectionPage = @{}
 
 foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | Sort-Object Name)) {
     $text = Get-Content -LiteralPath $page.FullName -Raw
@@ -507,7 +507,6 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
 
     $begins = @([regex]::Matches($text, $script:BeginPattern))
     $ends = @([regex]::Matches($text, $script:EndPattern))
-    $generatedHere = @{}
 
     # Blocks are replaced from the last to the first, so earlier indices stay valid.
     $blocks = foreach ($begin in $begins) {
@@ -533,7 +532,6 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
     $tabledOnPage = @{}
     $rendered = foreach ($block in @($blocks | Sort-Object { $_.Begin.Index })) {
         $line = Get-LineNumber $text $block.Begin.Index
-        $generatedHere[$block.Name] = $true
         if ($seenBlocks.ContainsKey($block.Name)) {
             Write-Finding $relative $line "$($block.Name) is generated on $($seenBlocks[$block.Name]) as well; give each cmdlet one block"
             $failures++
@@ -579,12 +577,11 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         }
     }
 
-    # Cmdlet sections that have no block yet: the migration still to do (#1083).
-    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?<name>[A-Za-z]+-JIM[A-Za-z0-9]+)\s*$')) {
+    # Where each cmdlet's section is, so the cmdlets with no block can be listed by page. A name can end at
+    # "JIM" (Connect-JIM).
+    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?<name>[A-Za-z]+-JIM[A-Za-z0-9]*)\s*$')) {
         $name = $heading.Groups['name'].Value
-        if ($exported.ContainsKey($name) -and -not $generatedHere.ContainsKey($name)) {
-            $notGenerated.Add("${relative}: $name")
-        }
+        if (-not $sectionPage.ContainsKey($name)) { $sectionPage[$name] = $relative }
     }
 
     if (-not $Check -and $updated -cne $text) {
@@ -607,8 +604,14 @@ foreach ($typeName in $nonApi.Keys) {
     }
 }
 
+# Exported cmdlets with no block anywhere: the migration still to do (#1083). Counted from the module, not
+# from the pages' headings, so a cmdlet the pages give no section at all is listed too.
+$notGenerated = @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey($_) } | ForEach-Object {
+        $page = if ($sectionPage.ContainsKey($_)) { $sectionPage[$_] } else { '(no section)' }
+        "${page}: $_"
+    } | Sort-Object)
 if ($notGenerated.Count -gt 0) {
-    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlet sections are not generated yet:"
+    Write-Host "ACC-5 (migration, #1083): $($notGenerated.Count) cmdlets have no generated block yet:"
     foreach ($entry in $notGenerated) { Write-Host "  $entry" }
 }
 
