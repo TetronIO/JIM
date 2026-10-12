@@ -31,7 +31,7 @@ Each container row shows how many objects it holds, so you can tell a container 
 
 The figure is read from the Connected System itself, not from what JIM has already imported, so it is there the first time you open the tab on a brand new Connected System. That is the moment it matters most: you are deciding what to manage, and JIM holds nothing yet.
 
-- **The figure follows the container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).** A container set to This and below reports what its whole branch holds; one narrowed to This level reports only what sits directly in it. Hover the number to see both, and which of them is on screen.
+- **The figure follows the container's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope).** A container set to This and below reports what its whole branch holds; one narrowed to This level reports only what sits directly in it. Hover the number to see both, and which of them is on screen.
 - **Only the Object Types you have selected are counted**, so the number matches what a Full Import would actually bring back. Select them on the Schema tab first; nothing is counted until you have.
 - **Zero and blank mean different things.** Zero is a container that was searched and found empty. A blank means nobody has counted it: either the Connector cannot report counts, the hierarchy has not been retrieved since this feature shipped, or counting was cut short, in which case the hierarchy refresh's Activity says so and why.
 - **Selections and exclusions are ignored.** The figure says what is in the container, not what JIM would import from it once your exclusions apply. [Preview Changes](#previewing-a-partition-or-container-change) answers that second question.
@@ -46,14 +46,14 @@ Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarc
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
 
 - A [Run Profile](run-profiles.md) that targets a deselected partition is refused rather than run. The Run Profiles tab marks it, and the property is available over REST and PowerShell so you can find every affected Run Profile at once.
-- Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
+- Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
 
 ## Stating Container Scope as text (Advanced Mode)
 
 The Scope tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
 
-- **Simple** is the tree: tick the Containers you manage, and set each one's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).
+- **Simple** is the tree: tick the Containers you manage, and set each one's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope).
 - **Advanced** is the same scope written out, one statement per line. It is for the hierarchy that is impractical to click through, and for keeping a scope under version control, reviewing it as a diff, or copying it between Connected Systems.
 
 ```text
@@ -98,7 +98,7 @@ The preview reports:
 | Becomes eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
 | Enters import scope | Objects JIM still holds from scope you are re-selecting. |
 
-The counts honour each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
+The counts honour each container's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
 
 Two limits are worth knowing, and the preview states both where they apply:
 

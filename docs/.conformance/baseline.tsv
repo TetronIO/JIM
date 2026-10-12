@@ -49,7 +49,6 @@ LANG-7	concepts/expressions.md	2
 LANG-7	configuration/data-flow.md	1
 LANG-7	configuration/metaverse.md	2
 LANG-7	configuration/schedules.md	1
-LANG-7	connectors/jim-ldap-connector.md	2
 LANG-7	connectors/jim-scim-connector.md	1
 LANG-7	connectors/jim-sql-connector-delta-import-watermark.md	1
 LANG-7	powershell/connection.md	1
@@ -91,7 +90,6 @@ STR-2	configuration/service-settings.md	3
 STR-2	configuration/sync-preview.md	3
 STR-2	connectors/index.md	4
 STR-2	connectors/jim-file-connector.md	4
-STR-2	connectors/jim-ldap-connector.md	4
 STR-2	connectors/jim-scim-connector.md	4
 STR-2	connectors/jim-sql-connector-delta-import-change-log.md	4
 STR-2	connectors/jim-sql-connector-delta-import-watermark.md	4
