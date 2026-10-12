@@ -168,6 +168,14 @@ public class ExportExecutionResult
     public int InitialPasswordStagingFailedCount { get; set; }
 
     /// <summary>
+    /// Number of exports that wrote an account's enabled state (#2064) whose owed first password JIM failed to mark as
+    /// set by an Attribute Flow. Contained like a staging failure: the directory has changed and the exports succeeded.
+    /// Not silent, because a password delivered to such an account would follow the provisioning Synchronisation
+    /// Rule's Enable Account instead of the flow, until Enforce State corrects it.
+    /// </summary>
+    public int InitialPasswordMarkingFailedCount { get; set; }
+
+    /// <summary>
     /// Unique Value Generation (#242, release 4): exports rejected because a generated value they carried was
     /// already in use, whose value Collision Remediation revised. Each is left Pending for the next synchronisation
     /// to re-stage, and is also counted in <see cref="DeferredCount"/>.

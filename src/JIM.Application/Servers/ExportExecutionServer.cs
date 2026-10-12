@@ -244,11 +244,12 @@ public class ExportExecutionServer
 
         // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
         // deployment would otherwise get a pair of zeroes on every export.
-        if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0)
+        if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0 || result.InitialPasswordMarkingFailedCount > 0)
         {
             Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
-                "recorded as owed an initial password, {FailedCount} that could not be recorded",
-                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount);
+                "recorded as owed an initial password, {FailedCount} that could not be recorded, {MarkingFailedCount} whose written " +
+                "enabled state could not be recorded on the password still owed",
+                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
         }
 
         // Only when it happened: most export runs meet no value already in use.
@@ -1520,6 +1521,7 @@ public class ExportExecutionServer
                         result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
                         result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
                         result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
+                        result.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
                         result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
                         result.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
                         result.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
@@ -1813,6 +1815,11 @@ public class ExportExecutionServer
         var provisionedAccounts = new List<PendingExport>();
         var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
+        // The accounts whose enabled state an export in this batch wrote (#2064), as the Connector reported it: a
+        // Create's staged first password is marked from it, and any other export's owed first password is marked
+        // after the loop, so delivering it leaves the enabled state to the Attribute Flow.
+        var accountsWithEnabledStateWritten = new HashSet<Guid>();
+
         // Collision Remediation's derived-input marks for this batch, made on the first import-mode revision and flushed
         // once below, after the batch's writes (#1750 Phase 4).
         DerivedInputMarkBatch? derivedInputMarks = null;
@@ -1975,6 +1982,9 @@ public class ExportExecutionServer
             else
                 successfulNonDeleteExports.Add(export);
 
+            if (exportResult.SetsAccountEnabledState && export.ConnectedSystemObject != null)
+                accountsWithEnabledStateWritten.Add(export.ConnectedSystemObject.Id);
+
             // #1121: an account that has just come into existence may be owed an initial password. Only a
             // Create can be: an Update changes an account that already has one, and resetting that would be a
             // password reset nobody asked for.
@@ -2013,7 +2023,17 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, result, repository, initialPasswordTimeToLive, connectedSystemName);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, accountsWithEnabledStateWritten,
+                result, repository, initialPasswordTimeToLive, connectedSystemName);
+        }
+
+        // #2064: an export other than the Create that wrote an account's enabled state (a leaver disabled, or an
+        // account disabled on deprovisioning) while its first password is still owed. The Creates' own rows were
+        // marked as they were staged just above.
+        accountsWithEnabledStateWritten.ExceptWith(provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id));
+        if (accountsWithEnabledStateWritten.Count > 0)
+        {
+            await MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(batch[0].ConnectedSystemId, accountsWithEnabledStateWritten, result, repository);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -2236,6 +2256,7 @@ public class ExportExecutionServer
     private static async Task StageInitialPasswordsForBatchAsync(
         List<PendingExport> provisionedAccounts,
         IReadOnlySet<int>? rulesAskingForAPassword,
+        IReadOnlySet<Guid> accountsWithEnabledStateWritten,
         ExportExecutionResult result,
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
@@ -2303,7 +2324,10 @@ public class ExportExecutionServer
                     Status = PendingPasswordChangeStatus.Pending,
                     CreatedAt = now,
                     ExpiresAt = now.Add(initialPasswordTimeToLive),
-                    ActivityId = Guid.NewGuid()
+                    ActivityId = Guid.NewGuid(),
+                    // #2064: the Create wrote the account's enabled state, so an Attribute Flow decides it and the
+                    // delivery leaves it alone (a pre-hire the flow creates disabled stays disabled).
+                    EnabledStateSetByAttributeFlow = accountsWithEnabledStateWritten.Contains(pe.ConnectedSystemObject!.Id)
                 });
             }
 
@@ -2368,6 +2392,42 @@ public class ExportExecutionServer
             Log.Error(ex, "StageInitialPasswordsForBatchAsync: Could not record that {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
                 "are owed an initial password. The accounts were created successfully; export them again to stage the passwords",
                 unrecorded, provisionedAccounts[0].ConnectedSystemId);
+        }
+    }
+
+    /// <summary>
+    /// Marks the owed first passwords of accounts whose enabled state an export other than their Create has just
+    /// written (#2064): a leaver disabled, or an account disabled on deprovisioning, before its Initial Password was
+    /// delivered. Delivering that password then leaves the enabled state to the Attribute Flow, so it never re-enables
+    /// the account.
+    /// <para>
+    /// Contained like staging: the directory has already changed and the exports are recorded as successful, so a
+    /// failure here must not fail them. It is logged as an Error and counted rather than passing quietly, because until
+    /// Enforce State corrects it, a delivery to one of these accounts would follow the Synchronisation Rule's Enable
+    /// Account instead of the flow.
+    /// </para>
+    /// </summary>
+    private static async Task MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(
+        int connectedSystemId,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        ExportExecutionResult result,
+        ISyncRepository repository)
+    {
+        try
+        {
+            var marked = await repository.MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(connectedSystemId, connectedSystemObjectIds);
+            if (marked > 0)
+                Log.Debug("MarkOwedInitialPasswordsAsSetByAttributeFlowAsync: Marked {Marked} owed initial password(s) on Connected System {ConnectedSystemId} " +
+                    "whose account's enabled state an export has now written; their delivery will leave it to the Attribute Flow",
+                    marked, connectedSystemId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            result.InitialPasswordMarkingFailedCount += connectedSystemObjectIds.Count;
+            Log.Error(ex, "MarkOwedInitialPasswordsAsSetByAttributeFlowAsync: Could not record that exports wrote the enabled state of {Count} account(s) " +
+                "on Connected System {ConnectedSystemId}. The exports succeeded; an initial password still owed to any of them will follow its " +
+                "Synchronisation Rule's Enable Account rather than the Attribute Flow until the flow's value is reasserted",
+                connectedSystemObjectIds.Count, connectedSystemId);
         }
     }
 

@@ -71,6 +71,12 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="MarkOwedInitialPasswordsAsSetByAttributeFlowAsync"/> throws it, so a test can prove that
+    /// failing to record an export's write of the enabled state leaves the export successful and is counted (#2064).
+    /// </summary>
+    public Exception? FailInitialPasswordMarkingWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -3413,6 +3419,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
+        if (FailInitialPasswordMarkingWith != null)
+            throw FailInitialPasswordMarkingWith;
+
         // Mirrors the PostgreSQL status mark (#2064): owed Provisioned rows for these accounts, not already marked.
         var accounts = connectedSystemObjectIds.ToHashSet();
         var marking = _pendingPasswordChanges.Values

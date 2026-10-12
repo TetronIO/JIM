@@ -479,6 +479,101 @@ public class InitialPasswordStagingTests
         }
     }
 
+    #region Whether an export wrote the account's enabled state (#2064)
+
+    /// <summary>
+    /// A Create whose Connector reports writing the account's enabled state (an Attribute Flow sets
+    /// <c>userAccountControl</c>) stages the first password marked, so its delivery leaves that state to the flow: a
+    /// pre-hire the flow creates disabled is not enabled with a password JIM knows.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateReportingItWroteTheEnabledState_StagesTheRowMarkedAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        Assert.That(SyncRepo.PendingPasswordChanges.Values.Single().EnabledStateSetByAttributeFlow, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_CreateNotReportingIt_StagesTheRowUnmarkedAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges.Values.Single().EnabledStateSetByAttributeFlow, Is.False,
+            "nothing sets the enabled state, so the rule's Enable Account decides");
+    }
+
+    /// <summary>
+    /// An Update that writes the enabled state of an account still owed its first password (a leaver disabled before
+    /// the password landed) marks that password, so a late delivery never re-enables the account.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportingItWroteTheEnabledState_MarksTheAccountsOwedFirstPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        var owed = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Parked, connectedSystemObjectId: cso.Id);
+
+        var result = await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.PendingPasswordChanges[owed.Id].EnabledStateSetByAttributeFlow, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateNotReportingIt_LeavesTheOwedFirstPasswordUnmarkedAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        var owed = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges[owed.Id].EnabledStateSetByAttributeFlow, Is.False);
+    }
+
+    /// <summary>
+    /// Recording the mark is contained like staging is: the directory has already changed, so the export stays
+    /// successful, and the failure is logged and counted rather than passing quietly.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenMarkingFails_TheExportStaysSuccessfulAndTheFailureIsCountedAsync()
+    {
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        export.ChangeType = PendingExportChangeType.Update;
+        SyncRepo.FailInitialPasswordMarkingWith = new InvalidOperationException("The database refused the mark.");
+
+        var result = await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.FailedCount, Is.Zero);
+            Assert.That(export.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(result.InitialPasswordMarkingFailedCount, Is.EqualTo(1));
+        }
+    }
+
+    private static ConnectedSystemExportResult SucceededWritingTheEnabledState()
+    {
+        var result = ConnectedSystemExportResult.Succeeded();
+        result.SetsAccountEnabledState = true;
+        return result;
+    }
+
+    #endregion
+
     #region An Initial Password follows the Create (#2039)
 
     /// <summary>
