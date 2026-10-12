@@ -1052,7 +1052,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $
 - `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
 - Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
 - `Selected` and `Excluded` are mutually exclusive: a container states one thing about itself. A request that would leave both set is rejected with a 400, whether it names both or names one against a stored other, so moving a container from a selection to an exclusion means setting both in the same call.
-- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector.md#excluding-a-container).
+- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector-topology.md#excluding-a-container).
 - Supports `ShouldProcess` (Medium impact).
 
 ---
@@ -1850,7 +1850,7 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 
 Lists the auxiliary classes that can be merged into a Connected System Object Type, and which of them are merged already.
 
-Merging an auxiliary class brings its attributes into the Object Type, so JIM can import and export them. See [Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes) for what this means on a directory.
+Merging an auxiliary class brings its attributes into the Object Type, so JIM can import and export them. See [Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md) for what this means on a directory.
 
 Nothing is returned for an Object Type whose Connected System does not let JIM compose class membership (Active Directory resolves its own auxiliary classes into each structural class), or for an Object Type that is itself an auxiliary class.
 
@@ -2113,7 +2113,7 @@ Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
 ## See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
-- [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
+- [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
 - [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation, including the initial password set on provisioned accounts
 - [Connection](connection.md): establish a session before using these cmdlets

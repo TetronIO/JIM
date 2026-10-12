@@ -5,7 +5,7 @@ A newly provisioned Connected System Object is not much use until somebody gives
 It can also set a password on demand: on the Connected System Objects you name, or on every system configured to receive a Metaverse Object's password changes.
 
 !!! info "Nothing happens until you ask for it"
-    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP, 389 Directory Server and generic LDAP directories.
+    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector-passwords.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP, 389 Directory Server and generic LDAP directories.
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
@@ -13,9 +13,9 @@ This page covers what JIM does with passwords and why. To actually configure it,
 
 Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, typically within seconds of the object existing, so it is complete and enabled without waiting on somebody to do it by hand.
 
-Active Directory goes further and refuses to create an account enabled at all while it has no password. When an Initial Password will follow, JIM creates the account disabled, even where the Synchronisation Rule's `userAccountControl` Attribute Flow asks for it enabled, and the password's delivery enables it; JIM waits for the password before checking the account against what the flow asked for. The [LDAP Connector](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts) describes this, and what happens to the account if its password cannot be delivered.
+Active Directory goes further and refuses to create an account enabled at all while it has no password. When an Initial Password will follow, JIM creates the account disabled, even where the Synchronisation Rule's `userAccountControl` Attribute Flow asks for it enabled, and the password's delivery enables it; JIM waits for the password before checking the account against what the flow asked for. The [LDAP Connector](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts) describes this, and what happens to the account if its password cannot be delivered.
 
-Unless you tell it not to, the delivery enables an account whatever the flow asked for. With **Enable the Connected System Object once the password is set** on, as it is by default, delivering the password on Active Directory or Samba AD enables every account the rule provisions, including one the flow deliberately creates disabled, such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export disable that account again; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch the setting off, or scope provisioning to active people; [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled) weighs the two.
+Unless you tell it not to, the delivery enables an account whatever the flow asked for. With **Enable the Connected System Object once the password is set** on, as it is by default, delivering the password on Active Directory or Samba AD enables every account the rule provisions, including one the flow deliberately creates disabled, such as a pre-hire's. With [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, as it is by default, the next import, synchronisation and export disable that account again; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch the setting off, or scope provisioning to active people; [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector-passwords.md#accounts-your-attribute-flow-creates-disabled) weighs the two.
 
 By default that password is different for every Connected System Object and JIM keeps no copy, so it is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below. One password for every Connected System Object is offered as well, and is [not recommended](#one-password-for-every-connected-system-object).
 
@@ -83,7 +83,7 @@ Whenever a Connected System's schema is retrieved or refreshed, JIM also reads i
 
 ### Discovering the target's rules
 
-What JIM can read depends on the directory, because each one keeps its policy in a different place and none of them publishes all of it. The LDAP Connector recognises three that publish one, and reads each where it keeps its rules; the [LDAP Connector reference](../connectors/jim-ldap-connector.md#password-policy-discovery) says where, and what your service account needs to be allowed to read.
+What JIM can read depends on the directory, because each one keeps its policy in a different place and none of them publishes all of it. The LDAP Connector recognises three that publish one, and reads each where it keeps its rules; the [LDAP Connector reference](../connectors/jim-ldap-connector-passwords.md#password-policy-discovery) says where, and what your service account needs to be allowed to read.
 
 | Rule | Active Directory and Samba AD | OpenLDAP (`ppolicy` overlay) | 389 Directory Server |
 |------|-------------------------------|------------------------------|----------------------|
@@ -106,7 +106,7 @@ A blank figure on the panel means that directory does not publish the rule, or h
 
 - **Read**<br /> JIM read the policy, and any blank figure is a rule that directory does not publish. If nothing at all is shown, JIM has not read this system yet; **Refresh Schema** reads it.
 - **Not published**<br /> This directory publishes no password policy that JIM can read. There is nothing to grant and nothing to refresh; configure the generator's rules by hand if the directory enforces any.
-- **Configuration not readable**<br /> The directory keeps its policy in server configuration, and the account JIM connects as may not read it. Grant the read described under [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions), then refresh the schema.
+- **Configuration not readable**<br /> The directory keeps its policy in server configuration, and the account JIM connects as may not read it. Grant the read described under [Service Account Permissions](../connectors/jim-ldap-connector-permissions.md), then refresh the schema.
 - **No policy configured**<br /> The directory's password policy mechanism is loaded but no policy is configured, so no rules apply.
 
 So treat what JIM discovered as a **floor, not a guarantee**, and read a blank value as "JIM could not find this out", never as "there is no such rule". That is also why the parked state above exists: handling a refusal is part of how this works, not a sign something went wrong.
@@ -164,7 +164,7 @@ There are two ways to give somebody something they can actually sign in with:
 !!! warning "Anyone who can set a password can reset any Connected System Object"
     These actions reset the password on whichever Connected System Object they are pointed at, including privileged ones, limited only by what the Connected System's service account is allowed to do. Grant the Administrator role accordingly, and restrict the service account's rights to the parts of the directory JIM manages.
 
-    That service account needs the **Reset Password** right on those containers and nothing more; in Active Directory this is separate from write access to attributes. **It does not need to be a Domain Admin, and should not be.** See [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions).
+    That service account needs the **Reset Password** right on those containers and nothing more; in Active Directory this is separate from write access to attributes. **It does not need to be a Domain Admin, and should not be.** See [Service Account Permissions](../connectors/jim-ldap-connector-permissions.md).
 
 ## ⚙️ Why passwords do not behave like other data
 
@@ -337,6 +337,6 @@ Each pass says what it removed, on its own Activity, so retention is something y
 | See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-system-passwords.md#password-policy-and-the-password-channel) |
 | Set a password on one Connected System Object, or on a Metaverse Object | [Connected Systems: Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) |
 | Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) |
-| Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) |
+| Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector-passwords.md#setting-passwords) |
 | See what is queued, and retry or cancel it | [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) |
 | Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-systems.md#set-jimconnectedsystemobjectpassword), [Metaverse](../powershell/metaverse.md#set-jimmetaverseobjectpassword), [Synchronisation Rules](../powershell/synchronisation-rules.md#initial-password) |

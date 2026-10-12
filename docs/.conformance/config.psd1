@@ -130,6 +130,7 @@
         'administration/tls-and-reverse-proxy.md'
         'configuration/connected-systems.md'
         'configuration/synchronisation-rules.md'
+        'connectors/jim-ldap-connector.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.
