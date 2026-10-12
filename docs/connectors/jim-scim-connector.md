@@ -1,6 +1,11 @@
-# JIM SCIM 2.0 Client Connector
+---
+title: JIM SCIM 2.0 Client Connector
+description: Synchronise identities with any system that publishes a SCIM 2.0 service provider interface, and the settings the Connector takes.
+type: object
+audience: administrator
+---
 
-## Overview
+# JIM SCIM 2.0 Client Connector
 
 The JIM SCIM 2.0 Client Connector synchronises identities with any system that exposes a **SCIM 2.0 service provider** interface, as defined by [RFC 7643](https://datatracker.ietf.org/doc/html/rfc7643) (core schema) and [RFC 7644](https://datatracker.ietf.org/doc/html/rfc7644) (protocol).
 
@@ -70,7 +75,7 @@ The **Change Detection** setting controls the choice:
 Where a Delta Import cannot filter, it reads every resource instead and reports a warning on the Activity rather than failing. This is deliberate: only a completed import can record a watermark, so failing the first Delta Import after a Connected System is configured would leave it permanently unable to import.
 
 !!! important "Deletions are only detected by a Full Import"
-    A deleted SCIM resource simply stops being returned; the protocol offers no way to ask what went. Only a Full Import, which reads everything, can tell that an object has gone. Schedule a Full Import regularly alongside your Delta Imports.
+    A deleted SCIM resource stops being returned; the protocol offers no way to ask what went. Only a Full Import, which reads everything, can tell that an object has gone. Schedule a Full Import regularly alongside your Delta Imports.
 
 The watermark is recorded only when a run finishes, and is deliberately set a minute behind the point the run started reading. A run that fails or is cancelled part way through therefore leaves the watermark where the last completed import put it, and the next run re-reads a small overlap. Re-reading an unchanged resource is harmless; missing a change would not be.
 
