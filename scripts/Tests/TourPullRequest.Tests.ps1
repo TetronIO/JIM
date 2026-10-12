@@ -228,3 +228,274 @@ Describe 'Open-TourPullRequest' {
         ($script:calls | Where-Object Method -eq 'PATCH').Body.body | Should -Be 'New body'
     }
 }
+
+# A release publishes its screenshots by merging these pull requests, from whichever of the release workflow and the
+# screenshots job finishes last. Invoke-RestMethod answers as it really does: a JSON list arrives as one object.
+Describe 'Test-JimReleasePublished' {
+    BeforeAll {
+        function New-HttpFailure([int]$Status, [string]$Message) {
+            $response = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]$Status)
+            $exception = [Microsoft.PowerShell.Commands.HttpResponseException]::new($Message, $response)
+            $record = [System.Management.Automation.ErrorRecord]::new($exception, 'WebCmdletWebResponseException', 'InvalidOperation', $null)
+            $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($Message)
+            return $record
+        }
+    }
+
+    It 'is false while the version has no release' {
+        Mock Invoke-RestMethod { throw (New-HttpFailure 404 '{"message":"Not Found"}') }
+
+        Test-JimReleasePublished -Version 'v0.17.0' -Token 't' | Should -BeFalse
+    }
+
+    It 'is true once the release is published' {
+        Mock Invoke-RestMethod { [pscustomobject]@{ tag_name = 'v0.17.0'; draft = $false } }
+
+        Test-JimReleasePublished -Version 'v0.17.0' -Token 't' | Should -BeTrue
+        Should -Invoke Invoke-RestMethod -ParameterFilter { $Uri -eq 'https://api.github.com/repos/TetronIO/JIM/releases/tags/v0.17.0' }
+    }
+
+    It 'is false for a draft' {
+        Mock Invoke-RestMethod { [pscustomobject]@{ tag_name = 'v0.17.0'; draft = $true } }
+
+        Test-JimReleasePublished -Version 'v0.17.0' -Token 't' | Should -BeFalse
+    }
+}
+
+Describe 'Merge-ScreenshotPullRequest' {
+    BeforeAll {
+        function New-HttpFailure([int]$Status, [string]$Message) {
+            $response = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]$Status)
+            $exception = [Microsoft.PowerShell.Commands.HttpResponseException]::new($Message, $response)
+            $record = [System.Management.Automation.ErrorRecord]::new($exception, 'WebCmdletWebResponseException', 'InvalidOperation', $null)
+            $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($Message)
+            return $record
+        }
+
+        $script:pull = [pscustomobject]@{
+            number = 12; html_url = 'https://github.com/TetronIO/tetron.io/pull/12'
+            head = [pscustomobject]@{ sha = 'abc123' }; created_at = '2026-01-01T00:00:00Z'
+        }
+        # The pull request as GET pulls/12 answers it: its mergeable state, whether it is merged, and its head commit.
+        function New-PullState([string]$MergeableState, [switch]$Merged, [string]$State = 'open', [string]$Sha = 'abc123') {
+            [pscustomobject]@{
+                number = 12; state = $State; merged = [bool]$Merged; mergeable_state = $MergeableState
+                head = [pscustomobject]@{ sha = $Sha }
+            }
+        }
+
+        # Answers each API call by its path: GET pulls/12 from $script:pullStates in turn (the last one repeats), and
+        # the merge refuses any method listed in $script:refusedMethods.
+        function Set-GitHubAnswers {
+            Mock Invoke-RestMethod {
+                $script:calls.Add([pscustomobject]@{ Method = $Method; Uri = $Uri; Body = $Body })
+                if ($Uri -like '*/pulls?head=*state=open') { return , @($script:openPulls) }
+                if ($Uri -like '*/pulls?head=*state=closed') { return , @($script:closedPulls) }
+                if ($Method -eq 'GET' -and $Uri -like '*/pulls/12') {
+                    if ($script:pullStates.Count -gt 1) { return $script:pullStates.Dequeue() }
+                    return $script:pullStates.Peek()
+                }
+                if ($Method -eq 'PUT' -and $Uri -like '*/pulls/12/merge') {
+                    $chosen = ($Body | ConvertFrom-Json).merge_method
+                    if ($chosen -in $script:refusedMethods) { throw (New-HttpFailure 405 "{`"message`":`"$chosen merges are not allowed on this repository.`"}") }
+                    return [pscustomobject]@{ merged = $true }
+                }
+                if ($Method -eq 'DELETE') {
+                    if ($script:deleteRefused) { throw (New-HttpFailure 403 '{"message":"Resource not accessible by integration"}') }
+                    return $null
+                }
+                throw "Unexpected call: $Method $Uri"
+            }
+        }
+    }
+
+    BeforeEach {
+        $script:calls = [System.Collections.Generic.List[object]]::new()
+        $script:pullStates = [System.Collections.Generic.Queue[object]]::new()
+        $script:openPulls = @($script:pull)
+        $script:closedPulls = @()
+        $script:refusedMethods = @()
+        $script:deleteRefused = $false
+    }
+
+    It 'merges the open pull request once its checks have passed, then deletes the branch' {
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0
+
+        $result.Status | Should -Be 'Merged'
+        $result.Url | Should -Be 'https://github.com/TetronIO/tetron.io/pull/12'
+        $merge = $script:calls | Where-Object Method -eq 'PUT' | Select-Object -Last 1
+        ($merge.Body | ConvertFrom-Json).sha | Should -Be 'abc123'
+        ($script:calls | Where-Object Method -eq 'DELETE').Uri | Should -Be 'https://api.github.com/repos/TetronIO/tetron.io/git/refs/heads/screenshots/v0.17.0'
+    }
+
+    It 'waits while GitHub works out the state and a check runs, then merges' {
+        $script:pullStates.Enqueue((New-PullState 'unknown'))
+        $script:pullStates.Enqueue((New-PullState 'unstable'))
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0
+
+        $result.Status | Should -Be 'Merged'
+        @($script:calls | Where-Object { $_.Method -eq 'GET' -and $_.Uri -like '*/pulls/12' }).Count | Should -Be 3
+    }
+
+    # A re-run of the screenshots job moves the branch; what merges is what was seen to pass.
+    It 'merges the head commit it saw pass, not the one it first found' {
+        $script:pullStates.Enqueue((New-PullState 'clean' -Sha 'def456'))
+        Set-GitHubAnswers
+
+        Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 | Out-Null
+
+        (($script:calls | Where-Object Method -eq 'PUT' | Select-Object -Last 1).Body | ConvertFrom-Json).sha | Should -Be 'def456'
+    }
+
+    It 'gives up on checks that do not pass in time' {
+        $script:pullStates.Enqueue((New-PullState 'unstable'))
+        Set-GitHubAnswers
+
+        { Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 -CheckTimeoutSeconds 0 } |
+            Should -Throw '*not all passed after 0 seconds*unstable*'
+        @($script:calls | Where-Object Method -eq 'PUT').Count | Should -Be 0
+    }
+
+    It 'refuses at once a pull request that conflicts with its base' {
+        $script:pullStates.Enqueue((New-PullState 'dirty'))
+        Set-GitHubAnswers
+
+        { Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 } |
+            Should -Throw '*GitHub reports it as dirty*'
+        @($script:calls | Where-Object Method -eq 'PUT').Count | Should -Be 0
+    }
+
+    # Closing the pull request is how a person keeps a release's screenshots off the site.
+    It 'refuses a pull request closed while it waited' {
+        $script:pullStates.Enqueue((New-PullState 'unstable'))
+        $script:pullStates.Enqueue((New-PullState 'clean' -State 'closed'))
+        Set-GitHubAnswers
+
+        { Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 } |
+            Should -Throw '*was closed*'
+        @($script:calls | Where-Object Method -eq 'PUT').Count | Should -Be 0
+    }
+
+    It 'merges with a merge commit where the repository does not allow squashing' {
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        $script:refusedMethods = @('squash')
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/junctional.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0
+
+        $result.Status | Should -Be 'Merged'
+        (($script:calls | Where-Object Method -eq 'PUT' | Select-Object -Last 1).Body | ConvertFrom-Json).merge_method | Should -Be 'merge'
+    }
+
+    # Both sides found it open; the other merged it while this one waited on the checks.
+    It 'reports a pull request merged while it waited as already merged' {
+        $script:pullStates.Enqueue((New-PullState 'unstable'))
+        $script:pullStates.Enqueue((New-PullState 'unknown' -Merged -State 'closed'))
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0
+
+        $result.Status | Should -Be 'AlreadyMerged'
+        $result.Url | Should -Be 'https://github.com/TetronIO/tetron.io/pull/12'
+        @($script:calls | Where-Object Method -eq 'PUT').Count | Should -Be 0
+    }
+
+    It 'reports a pull request merged between its checks passing and the merge as already merged' {
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        $script:pullStates.Enqueue((New-PullState 'unknown' -Merged -State 'closed'))
+        $script:refusedMethods = @('squash', 'merge', 'rebase')
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0
+
+        $result.Status | Should -Be 'AlreadyMerged'
+    }
+
+    It 'still refuses when no method merges and the pull request is open' {
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        $script:refusedMethods = @('squash', 'merge', 'rebase')
+        Set-GitHubAnswers
+
+        { Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 } |
+            Should -Throw 'Not merging*squash*'
+    }
+
+    It 'reports the merge even when the branch cannot be deleted' {
+        $script:pullStates.Enqueue((New-PullState 'clean'))
+        $script:deleteRefused = $true
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't' -PollSeconds 0 -WarningAction SilentlyContinue
+
+        $result.Status | Should -Be 'Merged'
+    }
+
+    It 'reports a branch with no pull request as not open' {
+        $script:openPulls = @()
+        Set-GitHubAnswers
+
+        (Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't').Status | Should -Be 'NotOpen'
+    }
+
+    # The release workflow and the screenshots job can both try; the second finds the work done.
+    It 'reports a pull request the other side already merged' {
+        $script:openPulls = @()
+        $script:closedPulls = @([pscustomobject]@{ number = 12; html_url = 'https://github.com/TetronIO/tetron.io/pull/12'; merged_at = '2026-01-01T00:00:00Z' })
+        Set-GitHubAnswers
+
+        $result = Merge-ScreenshotPullRequest -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Token 't'
+
+        $result.Status | Should -Be 'AlreadyMerged'
+        $result.Url | Should -Be 'https://github.com/TetronIO/tetron.io/pull/12'
+    }
+}
+
+Describe 'Invoke-ScreenshotMergeIfReleased' {
+    It 'leaves the pull request for the release workflow while the release is not out' {
+        Mock Test-JimReleasePublished { $false }
+        Mock Merge-ScreenshotPullRequest { throw 'should not merge' }
+
+        $result = Invoke-ScreenshotMergeIfReleased -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Version 'v0.17.0' -Token 't' -ReleaseToken 'r'
+
+        $result | Should -BeNullOrEmpty
+        Should -Invoke Test-JimReleasePublished -Times 1 -ParameterFilter { $Version -eq 'v0.17.0' -and $Token -eq 'r' }
+    }
+
+    It 'merges straight away when the release is already published' {
+        Mock Test-JimReleasePublished { $true }
+        Mock Merge-ScreenshotPullRequest { [pscustomobject]@{ Status = 'Merged'; Url = 'https://github.com/TetronIO/tetron.io/pull/12' } }
+
+        $result = Invoke-ScreenshotMergeIfReleased -Repository 'TetronIO/tetron.io' -Branch 'screenshots/v0.17.0' -Version 'v0.17.0' -Token 't' -ReleaseToken 'r'
+
+        $result.Status | Should -Be 'Merged'
+        Should -Invoke Merge-ScreenshotPullRequest -Times 1 -ParameterFilter { $Repository -eq 'TetronIO/tetron.io' -and $Branch -eq 'screenshots/v0.17.0' -and $Token -eq 't' }
+    }
+}
+
+Describe 'Invoke-ReleaseScreenshotMerge' {
+    It "merges each site's pull request for the release's branch" {
+        Mock Merge-ScreenshotPullRequest { [pscustomobject]@{ Status = 'Merged'; Url = "https://github.com/$Repository/pull/3" } }
+
+        $results = @(Invoke-ReleaseScreenshotMerge -Version 'v0.17.0' -Repository 'TetronIO/junctional.io', 'TetronIO/tetron.io' -Token 't')
+
+        $results.Repository | Should -Be @('TetronIO/junctional.io', 'TetronIO/tetron.io')
+        $results.Status | Should -Be @('Merged', 'Merged')
+        Should -Invoke Merge-ScreenshotPullRequest -Times 2 -ParameterFilter { $Branch -eq 'screenshots/v0.17.0' -and $Token -eq 't' }
+    }
+
+    It 'carries on to the next site after one fails, and reports why' {
+        Mock Merge-ScreenshotPullRequest { throw 'Not merging https://github.com/TetronIO/junctional.io/pull/3: Build ended failure.' } -ParameterFilter { $Repository -eq 'TetronIO/junctional.io' }
+        Mock Merge-ScreenshotPullRequest { [pscustomobject]@{ Status = 'NotOpen'; Url = $null } } -ParameterFilter { $Repository -eq 'TetronIO/tetron.io' }
+
+        $results = @(Invoke-ReleaseScreenshotMerge -Version 'v0.17.0' -Repository 'TetronIO/junctional.io', 'TetronIO/tetron.io' -Token 't')
+
+        $results.Status | Should -Be @('Failed', 'NotOpen')
+        $results[0].Message | Should -BeLike '*Build ended failure*'
+    }
+}

@@ -182,6 +182,9 @@ public static class CausalityModelBuilder
             // recorded tree's, so a disconnection, a cancelled provisioning or a withdrawal never shows
             // its system's id as a stray number.
             DetailMessage = UsesDetailMessageIdChannel(node.OutcomeType) ? null : node.DetailMessage,
+            ObjectMatchingRuleDescription = node.ObjectMatchingRuleDescriptionSnapshot,
+            MatchedValue = node.MatchedValue,
+            JoinMatchDetail = DescribeJoinMatch(node.MatchedValue, node.ObjectMatchingRuleDescriptionSnapshot, isSpeculative: true),
             SyncRuleId = node.SyncRuleId,
             SyncRuleName = node.SyncRuleName,
             EffectiveSyncRuleId = effectiveSyncRuleId,
@@ -461,6 +464,9 @@ public static class CausalityModelBuilder
             Badge = GetBadge(outcome.OutcomeType),
             DetailCount = outcome.DetailCount,
             DetailMessage = usesIdChannel ? parsedDetail.PlainMessage : outcome.DetailMessage,
+            ObjectMatchingRuleDescription = outcome.ObjectMatchingRuleDescriptionSnapshot,
+            MatchedValue = outcome.MatchedValue,
+            JoinMatchDetail = DescribeJoinMatch(outcome.MatchedValue, outcome.ObjectMatchingRuleDescriptionSnapshot, isSpeculative: false),
             SyncRuleId = outcome.SyncRuleId,
             SyncRuleName = outcome.SyncRuleName,
             EffectiveSyncRuleId = effectiveSyncRuleId,
@@ -493,6 +499,20 @@ public static class CausalityModelBuilder
                 : OutcomeDisplayMap.Get(outcome.OutcomeType));
 
         return ApplySpeculativeLabel(display, outcome.OutcomeType, isSpeculative);
+    }
+
+    /// <summary>
+    /// The line a Joined event made by matching carries (#2052): the value the join matched on and, where it was
+    /// recorded, what the Object Matching Rule compared. Null when no value was recorded, which is every event other
+    /// than such a join, and a join recorded before the match was captured; that says nothing rather than guess.
+    /// </summary>
+    private static string? DescribeJoinMatch(string? matchedValue, string? ruleDescription, bool isSpeculative)
+    {
+        if (matchedValue == null)
+            return null;
+
+        var matched = isSpeculative ? $"Would match on \"{matchedValue}\"" : $"Matched on \"{matchedValue}\"";
+        return string.IsNullOrWhiteSpace(ruleDescription) ? matched : $"{matched}, where {ruleDescription}";
     }
 
     /// <summary>

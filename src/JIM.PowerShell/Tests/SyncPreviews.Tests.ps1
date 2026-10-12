@@ -226,4 +226,38 @@ Describe 'ConvertTo-JIMSyncPreviewOutcomeRows' {
             $rows[0].SyncRule | Should -Be 7
         }
     }
+
+    It 'Carries the Object Matching Rule and value a predicted join would match on' {
+        InModuleScope JIM {
+            $node = [PSCustomObject]@{
+                OutcomeType                           = 'Joined'
+                TargetEntityId                        = [guid]::NewGuid()
+                TargetEntityDescription               = 'Ann Bloggs'
+                ObjectMatchingRuleId                  = 12
+                ObjectMatchingRuleDescriptionSnapshot = 'Employee ID equals employeeId'
+                MatchedValue                          = 'E123'
+                Ordinal                               = 0
+                Children                              = @()
+            }
+
+            $rows = @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes @($node))
+
+            $rows[0].ObjectMatchingRule | Should -Be 'Employee ID equals employeeId'
+            $rows[0].MatchedValue | Should -Be 'E123'
+        }
+    }
+
+    It 'Falls back to the Object Matching Rule id when no description was captured' {
+        InModuleScope JIM {
+            $node = [PSCustomObject]@{
+                OutcomeType                           = 'Joined'
+                ObjectMatchingRuleId                  = 12
+                ObjectMatchingRuleDescriptionSnapshot = $null
+                MatchedValue                          = 'E123'
+                Children                              = @()
+            }
+
+            (@(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes @($node)))[0].ObjectMatchingRule | Should -Be 12
+        }
+    }
 }

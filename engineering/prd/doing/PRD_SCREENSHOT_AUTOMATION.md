@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (all phases built: the release's pre-release run captures the library and opens pull requests on junctional.io and tetron.io, and the README reads junctional.io's fixed address; junctional.io's first automated publish was TetronIO/junctional.io#17, and tetron.io's first is at the next release)
+- **Status:** Doing (all phases built: the release's pre-release run captures and checks the library and opens pull requests on junctional.io and tetron.io, which the release merges when it is published, and the README reads junctional.io's fixed address; junctional.io's first publish was TetronIO/junctional.io#17, merged by hand, and the first unattended publish to both sites is at the next release)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -53,6 +53,7 @@ Because a refresh is this expensive, screenshots fall behind the product, which 
 8. Terminal screenshots run real PowerShell commands against the live stack inside a 120×30 pseudo-terminal, so the output, its colours and its Format-List styling are exactly what a terminal shows. The typed command is highlighted from PowerShell's own tokeniser with PSReadLine's default colours. The session is drawn in a recreated macOS-style terminal window (IBM Plex Mono, which JIM already self-hosts; the palette, window box and shadow are measured from the published images) and captured with a transparent background. Box-drawing and block characters are drawn as vectors, one per cell, so the banner tiles whatever the font covers. A command may be marked as set-up (for example signing in), which runs but does not appear. Like a real terminal, a session longer than 30 rows shows its last 30. The session signs in with an API key read from a file (by default the one the integration runner leaves), never from a command line, so the image shows only `Connect-JIM`'s masked form of it; dates and numbers are written as en-GB, whatever the recording host's locale.
 9. The run ends with a summary: images written, by kind and theme, and elapsed time.
 10. Publishing (`scripts/screenshots/Publish-TourScreenshots.ps1`) updates a junctional.io checkout and opens a pull request with it. Only the images the tour's steps name are published, read from the site's own dictionaries, which must name identical images; the homepage images are also written to `public/assets/screenshots/`, whose addresses never change; folders no step uses are removed. Everything is checked before anything changes: a missing image or disagreeing dictionaries stop the run with the site untouched. The commit is made through GitHub's API with the `jim-automation` app's token, so GitHub signs it. One branch and one pull request per version: publishing again moves the branch and updates the open pull request.
+11. Publishing needs no one. Before anything is published the capture refuses an image that is blank (its luminance barely varies) or a dark and light pair in the same theme (the light image not clearly brighter), and junctional.io is built with the new images. The pull requests merge when JIM's release is published, never before, once GitHub reports their checks passed: `release.yml` merges them after creating the release, and the screenshots job merges its own if the release was published while it was still capturing. A merge that fails is a warning on the run, never a failed release. Closing a pull request keeps its images off the site. Alt text is not generated; the `/release` checklist reminds the releaser to check it where an image changed.
 
 ### Non-Functional Requirements
 
@@ -109,9 +110,9 @@ The integration runner resets the environment at the start of a run and leaves i
 
 | Destination | Mechanism | Phase |
 |---|---|---|
-| junctional.io | A PR adding `src/assets/tour/<version>/` with the images the tour shows (22 of the 78; the whole library stays in the run's artefact, because every image committed to the site stays in its history for good) and setting `tour.imageVersion` in both `src/i18n/en-GB.ts` and `src/i18n/en-US.ts`. The site's Astro pipeline makes the AVIF/WebP variants, so only the PNG sources are needed. Opened by the release's pre-release run, merged by a person once the release is published. | 5 ✅ |
+| junctional.io | A PR adding `src/assets/tour/<version>/` with the images the tour shows (22 of the 78; the whole library stays in the run's artefact, because every image committed to the site stays in its history for good) and setting `tour.imageVersion` in both `src/i18n/en-GB.ts` and `src/i18n/en-US.ts`. The site's Astro pipeline makes the AVIF/WebP variants, so only the PNG sources are needed. Opened by the release's pre-release run after the site builds with it, merged automatically when the release is published. | 5, 7 ✅ |
 | JIM README | Point the hero image at `https://junctional.io/assets/screenshots/homepage-dark.png`, which every publish writes, instead of the content-hashed `/_astro/` path, which stops resolving at the first publish. Light and dark, as the README's diagrams are. | 5 ✅ |
-| tetron.io | A PR replacing `assets/images/homepage-dark.png`, the homepage hero (the same capture as junctional.io's homepage image; Hugo's `resized-figure` shortcode makes the WebP). The publisher first checks a page still names the image, so a redesign stops the publish rather than having each release commit a file nothing shows. Opened by the same job with its own token and steps, merged by a person after looking at the PR's preview deployment. | 5 ✅ |
+| tetron.io | A PR replacing `assets/images/homepage-dark.png`, the homepage hero (the same capture as junctional.io's homepage image; Hugo's `resized-figure` shortcode makes the WebP). The publisher first checks a page still names the image, so a redesign stops the publish rather than having each release commit a file nothing shows. Opened by the same job with its own token and steps, merged automatically when the release is published, once the PR's preview deployment has built. | 5, 7 ✅ |
 | docs.junctional.io | Not in scope (see Non-Goals). | n/a |
 
 ## Implementation Phases
@@ -122,6 +123,7 @@ The integration runner resets the environment at the start of a run and leaves i
 4. **The rest of the library** ✅. The 54 images in junctional.io's asset folder that are not on a tour page. Reaching a particular object (a user, a group, the first Full Sync) uses a `fill` step to type into a page's search box, or a list's own URL state (`?q=`, `desc=0`), never an id that changes from run to run.
 5. **Distribution** ✅. The junctional.io pull request; the README reading the fixed address (the address added by TetronIO/junctional.io#16); the tetron.io pull request (`Publish-TetronScreenshots.ps1`).
 6. **Release workflow** ✅. The `jim-screenshots` job in `pre-release.yml`, after a passing suite, on the same runner and commit. A job there rather than a workflow of its own, because the `jim-prerelease` runner group admits that one file; it cannot hold up a release, since the gate reads the status the suite has already posted.
+7. **Unattended publishing** ✅. The blank and same-theme checks (`ScreenshotChecks.ps1`), junctional.io's build before committing, and the merge when the release is published: `release.yml`'s `publish-screenshots` job (`Merge-ReleaseScreenshots.ps1`), or the screenshots job when the release came first (`-MergeWhenReleased`).
 
 ## Affected Areas
 
@@ -136,8 +138,8 @@ The integration runner resets the environment at the start of a run and leaves i
 | Doc | Change |
 |------|--------|
 | `engineering/SANDBOX_RUNTIME_VERIFICATION.md` | Capture at 2× density and 1674×1046 instead of 1440×900 at 1×, so verification screenshots are legible |
-| `engineering/RELEASE_PROCESS.md` | Product Tour Screenshots: when the job runs, where the images go, what to merge, the runner's one-time setup (Phase 6) ✅ |
-| `.claude/skills/release/SKILL.md` | Post-release: merge the screenshot pull request; the site prompt leaves the tour's images to it (Phase 6) ✅ |
+| `engineering/RELEASE_PROCESS.md` | Product Tour Screenshots: when the job runs, what it refuses, where the images go, when the sites change, the runner's one-time setup (Phases 6 and 7) ✅ |
+| `.claude/skills/release/SKILL.md` | Post-release: confirm the sites show the new screenshots, and check alt text where an image changed; the site prompt leaves the tour's images to the job (Phases 6 and 7) ✅ |
 
 ## Acceptance Criteria
 
@@ -145,5 +147,5 @@ The integration runner resets the environment at the start of a run and leaves i
 - [x] The portal is captured in Production mode, with every service running and navigation groups expanded.
 - [x] `-PrepareData` reproduces the Scenario 8 dataset unattended.
 - [x] The three terminal images are generated from a live session.
-- [ ] One end-to-end flow is proven: manifest entry, capture, published to junctional.io.
-- [ ] Refreshing every screenshot for a release is one command plus a review.
+- [x] One end-to-end flow is proven: manifest entry, capture, published to junctional.io (TetronIO/junctional.io#17, from the v0.16.0 release's run).
+- [ ] A release refreshes every published screenshot with no one taking a step: captured, checked and merged on junctional.io and tetron.io when it is published.

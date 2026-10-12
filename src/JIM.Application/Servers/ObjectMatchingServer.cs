@@ -208,7 +208,7 @@ public class ObjectMatchingServer
             : ids.Count;
 
         var listed = await repository.GetMetaverseObjectsByIdsNoTrackingAsync(ids.Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded));
-        var description = DescribeRule(rule);
+        var description = rule.DescribeComparison();
         return listed
             .OrderBy(mvo => mvo.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(mvo => mvo.Id)
@@ -274,21 +274,7 @@ public class ObjectMatchingServer
             .ToList();
         if (ambiguity.MatchValues.Count > maxValuesShown)
             values.Add($"and {ambiguity.MatchValues.Count - maxValuesShown} more");
-        return $" on {DescribeRule(ambiguity.Rule)} ({string.Join(", ", values)})";
-    }
-
-    /// <summary>
-    /// What a rule compares, for example "Employee ID equals employeeNumber", or the expression in place of the
-    /// attribute name when the rule computes its value.
-    /// </summary>
-    internal static string DescribeRule(ObjectMatchingRule rule)
-    {
-        var source = rule.Sources.OrderBy(s => s.Order).FirstOrDefault();
-        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
-            ? source?.ConnectedSystemAttribute?.Name
-            : source.Expression;
-        var target = rule.TargetMetaverseAttribute?.Name ?? rule.TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
-        return $"{target} equals {sourceText}";
+        return $" on {ambiguity.Rule.DescribeComparison()} ({string.Join(", ", values)})";
     }
 
     /// <summary>
@@ -593,7 +579,7 @@ public class ObjectMatchingServer
         Func<Guid, string> matchedOn,
         int total)
     {
-        var description = DescribeRule(rule);
+        var description = rule.DescribeComparison();
         return eligible
             .Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded)
             .Select(cso => (Cso: cso, Name: cso.NameOrId ?? cso.Id.ToString()))

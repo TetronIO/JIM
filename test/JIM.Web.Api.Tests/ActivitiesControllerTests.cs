@@ -1152,6 +1152,52 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Verify(r => r.GetMatchCandidatesAsync(It.IsAny<Guid>()), Times.Never);
     }
 
+    [Test]
+    public async Task GetActivityExecutionItemAsync_JoinedByMatching_ReturnsTheRuleAndValueItMatchedOnAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Joined
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetJoinedOutcomeAsync(item.Id)).ReturnsAsync(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 3,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals employeeNumber",
+            MatchedValue = "48213"
+        });
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.JoinObjectMatchingRuleId, Is.EqualTo(3));
+            Assert.That(dto.JoinObjectMatchingRuleDescriptionSnapshot, Is.EqualTo("Employee ID equals employeeNumber"));
+            Assert.That(dto.JoinMatchedValue, Is.EqualTo("48213"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemThatDidNotJoin_DoesNotAskForTheJoinAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Projected
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.JoinMatchedValue, Is.Null);
+        _mockActivityRepo.Verify(r => r.GetJoinedOutcomeAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
     private static ActivityRunProfileExecutionItemMatchCandidate Candidate(Guid id, string name, int ordinal) => new()
     {
         CandidateKind = MatchCandidateKind.MetaverseObject,

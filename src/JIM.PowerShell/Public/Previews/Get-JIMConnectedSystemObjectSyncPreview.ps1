@@ -39,7 +39,9 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         PSCustomObject with OutcomeTree (the raw, recursive outcome tree), Outcomes (the same
         tree flattened by ConvertTo-JIMSyncPreviewOutcomeRows into a depth-ordered list for
         Format-Table), Inbound (the inbound summary: would the object project or join, and
-        what attribute flows would result), ProposedExports (the Pending Exports a real
+        what attribute flows would result; a join names the Object Matching Rule and the
+        value it would match on, in WouldJoinObjectMatchingRuleDescription and
+        WouldJoinMatchedValue), ProposedExports (the Pending Exports a real
         synchronisation would stage), Errors, Warnings, HasBlockingErrors and
         AffectedSyncRules. An AmbiguousMatch error carries MatchCandidates: the Metaverse
         Objects the object's Object Matching Rule found. An AmbiguousProvisioningMatch error

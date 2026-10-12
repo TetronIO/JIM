@@ -1800,6 +1800,14 @@ try {
             }
             $exImport2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $exImport2.activityId -Name "CSV Import (ExpressionJoin)"
+
+            # Before synchronising, Sync Preview names the value the join would be made on (#2052).
+            $exUnjoined = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.CSVSystemId -Search "Test Expression Join" -JoinType NotJoined -PageSize 10) |
+                Where-Object { $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+            $exPreviewValue = if ($exUnjoined) {
+                "$((Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId $config.CSVSystemId -Id $exUnjoined.id).inbound.wouldJoinMatchedValue)"
+            } else { "" }
+
             $exSync2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $exSync2.activityId -Name "Full Sync (ExpressionJoin)"
 
@@ -1809,13 +1817,23 @@ try {
             $exJoined = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.CSVSystemId -Search "Test Expression Join" -JoinType Joined -PageSize 10) |
                 Where-Object { $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
 
-            if ($exIdentities.Count -eq 1 -and $exIdentities[0].id -eq $exOriginal.id -and $exJoined) {
+            # The run's Activity item records the rule and the value the join was made on (#2052).
+            $exJoinItem = @(Get-JIMActivity -Id $exSync2.activityId -ExecutionItems) |
+                Where-Object { "$($_.objectChangeType)" -eq "Joined" -and $_.displayName -eq "Test Expression Join" } | Select-Object -First 1
+            $exJoinDetail = if ($exJoinItem) { Get-JIMActivityExecutionItem -Id $exJoinItem.id } else { $null }
+            $exJoinRecorded = $exJoinDetail -and "$($exJoinDetail.joinMatchedValue)" -eq "E7001" -and
+                "$($exJoinDetail.joinObjectMatchingRuleDescriptionSnapshot)".Contains('Trim(cs["employeeId"])')
+
+            if ($exIdentities.Count -eq 1 -and $exIdentities[0].id -eq $exOriginal.id -and $exJoined -and $exPreviewValue -eq "E7001" -and $exJoinRecorded) {
                 Write-Host "  ✓ The record holding '7001' joined the identity holding 'E7001'; no second identity was projected" -ForegroundColor Green
+                Write-Host "  ✓ Sync Preview and the Activity item both name the value 'E7001' and the expression rule" -ForegroundColor Green
                 $testResults.Steps += @{ Name = "ExpressionJoin"; Success = $true }
             }
             else {
-                Write-Host "  ✗ Found $($exIdentities.Count) identities for 'Test Expression Join' (expected the original one, joined)" -ForegroundColor Red
-                $testResults.Steps += @{ Name = "ExpressionJoin"; Success = $false; Error = "Expected the original identity to be joined; found $($exIdentities.Count)" }
+                $exError = "Expected the original identity to be joined (found $($exIdentities.Count)), the preview to name 'E7001' (got '$exPreviewValue') " +
+                    "and the Activity item to record the value and rule (value '$($exJoinDetail.joinMatchedValue)', rule '$($exJoinDetail.joinObjectMatchingRuleDescriptionSnapshot)')"
+                Write-Host "  ✗ $exError" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExpressionJoin"; Success = $false; Error = $exError }
             }
         }
         finally {

@@ -50,6 +50,10 @@
     {
         <div class="evt-sub">@Event.DetailMessage</div>
     }
+    @if (!string.IsNullOrWhiteSpace(Event.JoinMatchDetail))
+    {
+        <div class="evt-sub evt-match">@Event.JoinMatchDetail</div>
+    }
     @if (!string.IsNullOrWhiteSpace(Note))
     {
         <div class="evt-sub evt-note">@Note</div>

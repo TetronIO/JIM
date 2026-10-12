@@ -34,7 +34,12 @@ function Get-JIMActivityExecutionItem {
         Without a switch: PSCustomObject with Id, ActivityId, ObjectChangeType, NoChangeReason,
         ConnectedSystemObjectId, MetaverseObjectId, PendingExportId, ExternalIdSnapshot, DisplayNameSnapshot,
         ObjectTypeSnapshot, ErrorType, ErrorMessage, ErrorStackTrace, AttributeFlowCount, UnresolvedReferenceCount,
-        OutcomeSummary and MatchCandidates.
+        OutcomeSummary, MatchCandidates, JoinObjectMatchingRuleId, JoinObjectMatchingRuleDescriptionSnapshot and
+        JoinMatchedValue.
+
+        The three Join properties are set when the object was joined to an existing Metaverse Object by matching:
+        the Object Matching Rule that found it, what the rule compared at the time (for example
+        'Employee ID equals employeeId'), and the value the join matched on. They are empty for any other item.
 
         UnresolvedReferenceCount is how many of the object's reference values the import could not resolve to a
         Connected System Object. It is set whatever ErrorType the item carries and under every Unresolved Reference
@@ -86,6 +91,15 @@ function Get-JIMActivityExecutionItem {
                 @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
 
         Lists the identities an ambiguous match found, the value each matched on, and where each is connected.
+
+    .EXAMPLE
+        Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+            Where-Object ObjectChangeType -eq 'Joined' |
+            Get-JIMActivityExecutionItem |
+            Select-Object DisplayNameSnapshot, JoinMatchedValue, JoinObjectMatchingRuleDescriptionSnapshot
+
+        Lists each object a synchronisation joined, with the value it matched on and the Object Matching Rule that
+        made the join.
 
     .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
