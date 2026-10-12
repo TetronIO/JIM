@@ -196,3 +196,14 @@ public enum CausalityLineageConsequenceKind
     /// </summary>
     FurtherThanShown
 }
+
+/// <summary>
+/// What the Causality Explorer (#2100) is focused on: an execution item, whose Lineage it shows, or an object, whose
+/// causal timeline it shows.
+/// </summary>
+public enum CausalityFocusKind
+{
+    Item,
+    ConnectedSystemObject,
+    MetaverseObject
+}

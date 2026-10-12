@@ -26,13 +26,27 @@ namespace JIM.Web.Tests;
 /// <see cref="CausalityPageContext"/> for the full list).
 /// </para>
 /// <para>
-/// These tests began on the item page, reaching its private state by reflection because the page had no render harness;
-/// the logic they pin moved here with the loader, unchanged, and so did they.
+/// These tests began on the item page, most of them reaching its private state by reflection because the page had no
+/// render harness; the logic they pin moved here with the loader, unchanged, and so did they.
 /// </para>
 /// </remarks>
 [TestFixture]
 public class CausalityItemLoaderTests
 {
+    [Test]
+    public void ShowsCausality_ExportHeldForADecision_ShowsTheBandThoughNothingWasRecorded()
+    {
+        // A held export (#242, release 4) records no outcome, since nothing was exported; its band is what says why.
+        var held = new ActivityRunProfileExecutionItem { ErrorType = ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved };
+        var failed = new ActivityRunProfileExecutionItem { ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CausalityItemLoader.ShowsCausality(held), Is.True);
+            Assert.That(CausalityItemLoader.ShowsCausality(failed), Is.False, "an item with nothing recorded and an ordinary error has no story to tell");
+        }
+    }
+
     [Test]
     public void BuildContext_RunSystemDiffersFromObjectSystem_UsesRunSystem()
     {

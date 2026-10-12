@@ -106,7 +106,15 @@
                                    "deleted after this run" note at the other end for the same reason. *@
                                 @foreach (var ending in lineageObject.Endings)
                                 {
-                                    <div class="ln-end" @key="ending">@ending.Text</div>
+                                    <div class="ln-end" @key="ending">
+                                        @ending.Text
+                                        @foreach (var continuation in ending.Continuations)
+                                        {
+                                            <div class="ln-end-continue">
+                                                <a class="ln-link" href="@continuation.Href">@continuation.Text</a>
+                                            </div>
+                                        }
+                                    </div>
                                 }
                                 @foreach (var card in lineageObject.Cards)
                                 {

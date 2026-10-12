@@ -1,0 +1,131 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+@using JimUtilities = JIM.Utilities.Utilities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What the Causality Explorer has in view (#2100), and the way out to the page it stands for: the execution item's
+   page, the object's own page while it exists, or its deletion record once it does not. *@
+
+<MudPaper Outlined="true" Class="pa-3 jim-causality-focus">
+    <div class="jim-causality-focus-what">
+        <span class="jim-causality-focus-label">Focused on</span>
+        @if (Labels == null)
+        {
+            <span>@CausalityFocusLabel.For(Focus, null)</span>
+        }
+        else if (Focus.Kind == CausalityFocusKind.Item)
+        {
+            @if (Labels.Items.TryGetValue(Focus.Id, out var entry))
+            {
+                <strong>@(entry.ActivityTargetName ?? "A run")</strong>
+                <span>of</span>
+                <ObjectChip Kind="@(IsMetaverseObjectItem(entry) ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
+                            TypeName="@entry.ObjectType" Name="@ObjectDescription.ChipName(entry.DisplayName, entry.ExternalId)" />
+                @if (!string.IsNullOrWhiteSpace(entry.ActivityTargetContext))
+                {
+                    <span>in @entry.ActivityTargetContext</span>
+                }
+                var executedLocal = entry.Executed.ToLocalTime();
+                <span class="jim-causality-focus-when" title="@executedLocal.ToFriendlyDate()">&middot; @executedLocal.ToRelativeTime()</span>
+            }
+            else
+            {
+                <span>This execution item is no longer retained: history retention has removed it.</span>
+            }
+        }
+        else if (Focus.Subject is { } subject && Labels.Objects.TryGetValue(subject, out var header))
+        {
+            <ObjectChip Kind="@(Focus.Kind == CausalityFocusKind.MetaverseObject ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject)"
+                        TypeName="@header.ObjectTypeName" Name="@ObjectDescription.ChipName(header.DisplayName, header.ExternalId)" />
+            <span>@(Focus.Kind == CausalityFocusKind.MetaverseObject
+                      ? ObjectDescription.ForMetaverseObjectPlace()
+                      : ObjectDescription.ForConnectedSystemObjectPlace(header.ConnectedSystemName))</span>
+            @if (header is { IsDeleted: true, DeletedAt: { } deletedAt })
+            {
+                var deletedLocal = deletedAt.ToLocalTime();
+                <span class="jim-causality-focus-when" title="@deletedLocal.ToFriendlyDate()">&middot; deleted @deletedLocal.ToRelativeTime()</span>
+            }
+            else if (header.IsDeleted)
+            {
+                <span class="jim-causality-focus-when">&middot; deleted</span>
+            }
+        }
+        else
+        {
+            <span>This object is no longer retained: neither it nor a record of its deletion remains.</span>
+        }
+    </div>
+    <div class="jim-causality-focus-acts">
+        @if (OnCopyLink.HasDelegate)
+        {
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Link" Class="jim-causality-copy-link"
+                       OnClick="OnCopyLink">Copy link</MudButton>
+        }
+        @if (WayOut() is { } wayOut)
+        {
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.OpenInNew" Href="@wayOut.Href"
+                       Class="jim-causality-way-out">@wayOut.Text</MudButton>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// The focus in view.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityFocus Focus { get; set; } = null!;
+
+    /// <summary>
+    /// What the explorer read for its foci; null while it is being read.
+    /// </summary>
+    [Parameter]
+    public CausalFocusLabels? Labels { get; set; }
+
+    /// <summary>
+    /// Copies the explorer's address; the button shows only where the host handles it.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCopyLink { get; set; }
+
+    /// <summary>
+    /// An item that recorded a Metaverse Object rather than a Connected System Object (an export scope review, #1971).
+    /// </summary>
+    private static bool IsMetaverseObjectItem(CausalTimelineEntry entry) =>
+        entry.ConnectedSystemObjectId == null && entry.MetaverseObjectId != null;
+
+    /// <summary>
+    /// The page the focus stands for, or null where there is none to open.
+    /// </summary>
+    private (string Text, string Href)? WayOut()
+    {
+        if (Labels == null)
+            return null;
+
+        if (Focus.Kind == CausalityFocusKind.Item)
+            return Labels.Items.ContainsKey(Focus.Id) ? ("Open activity item", $"/activity/item/{Focus.Id}") : null;
+
+        if (Focus.Subject is not { } subject || !Labels.Objects.TryGetValue(subject, out var header))
+            return null;
+
+        if (header.IsDeleted)
+        {
+            return ("View deletion record", Focus.Kind == CausalityFocusKind.MetaverseObject
+                ? CausalityModelBuilder.GetDeletedMvoHref(Focus.Id)
+                : CausalityModelBuilder.GetDeletedCsoHref(Focus.Id));
+        }
+
+        if (Focus.Kind == CausalityFocusKind.MetaverseObject)
+        {
+            return CausalityPageLinks.Instance.MetaverseObjectHref(Focus.Id, header.ObjectTypePluralName) is { } mvoHref
+                ? ("Open Metaverse Object", mvoHref)
+                : null;
+        }
+
+        return header.ConnectedSystemId is { } connectedSystemId
+            ? ("Open Connected System Object", JimUtilities.GetConnectedSystemObjectHref(connectedSystemId, Focus.Id))
+            : null;
+    }
+}

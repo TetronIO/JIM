@@ -113,11 +113,21 @@ public static partial class CausalityLineageModelBuilder
             if (cohort.IsFurtherThanShown)
             {
                 _furtherThanShown = true;
+                // Carrying on from the farthest item the walk reached shows what followed from there (#2100). A cohort of
+                // several already links each member, so only a single item gets a link of its own.
+                var farthestItemId = cohort.MemberCount == 1
+                    ? cohort.Representative?.Id ?? cohort.Members.FirstOrDefault()?.RunProfileExecutionItemId
+                    : null;
+                var farthestName = cohort.Representative?.DisplayNameSnapshot ?? cohort.Members.FirstOrDefault()?.DisplayName;
                 Add(cohortObject, new CausalityLineageConsequence
                 {
                     Kind = CausalityLineageConsequenceKind.FurtherThanShown,
                     Title = "This goes further than shown",
-                    Text = "Open the last item above to carry on from there."
+                    Text = farthestItemId != null
+                        ? "The walk stopped at the item above. Carry on from there to see what followed."
+                        : "The walk stopped at the items above. Carry on from any of them by its own link.",
+                    LinkText = farthestItemId != null ? ContinueFromText(farthestName) : null,
+                    LinkHref = farthestItemId is { } itemId ? context.Links.ItemHref(itemId) : null
                 });
             }
 

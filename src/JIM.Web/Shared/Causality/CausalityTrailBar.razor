@@ -1,0 +1,48 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Causality Explorer's trail (#2100): the foci that led to the one in view, oldest first, each a link back to
+   itself as it stood, then the focus in view. A focus the explorer can no longer find keeps its place and says so, so
+   the steps still number the way they were taken. *@
+
+<nav class="jim-causality-trail" aria-label="Trail">
+    <span class="jim-causality-trail-title">Trail</span>
+    @for (var i = 0; i < Trail.Foci.Count; i++)
+    {
+        var index = i;
+        var label = CausalityFocusLabel.For(Trail.Foci[index], Labels);
+        <a class="jim-causality-crumb" href="@Trail.CrumbHref(index)" title="@label">
+            <span class="jim-causality-crumb-n">@(index + 1)</span>
+            <span class="jim-causality-crumb-label">@label</span>
+        </a>
+        <span class="jim-causality-trail-sep" aria-hidden="true">&rsaquo;</span>
+    }
+    @{ var currentLabel = CausalityFocusLabel.For(Current, Labels); }
+    <span class="jim-causality-crumb on" aria-current="page" title="@currentLabel">
+        <span class="jim-causality-crumb-n">@(Trail.Foci.Count + 1)</span>
+        <span class="jim-causality-crumb-label">@currentLabel</span>
+    </span>
+</nav>
+
+@code {
+    /// <summary>
+    /// The foci that led to the one in view.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityTrail Trail { get; set; } = null!;
+
+    /// <summary>
+    /// The focus in view.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityFocus Current { get; set; } = null!;
+
+    /// <summary>
+    /// What the explorer read for every focus on the trail; null while it is being read.
+    /// </summary>
+    [Parameter]
+    public CausalFocusLabels? Labels { get; set; }
+}

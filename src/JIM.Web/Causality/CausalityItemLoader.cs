@@ -34,6 +34,16 @@ public static class CausalityItemLoader
     ];
 
     /// <summary>
+    /// Whether the item has a causality story to show: something it recorded, or an export held for a decision about a
+    /// generated value (#242, release 4), which records nothing because nothing was exported, so its band says why.
+    /// </summary>
+    public static bool ShowsCausality(ActivityRunProfileExecutionItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return item.SyncOutcomes.Count > 0 || item.ErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved;
+    }
+
+    /// <summary>
     /// Reads an execution item's causality.
     /// </summary>
     /// <param name="jim">The application to read through, owned by the caller.</param>
