@@ -35,10 +35,10 @@
         @{ Anchor = 'configuration-change-history'; Home = 'configuration/activities.md'; TitleCase = $true }
         @{ Anchor = 'configuration-change-preview'; Home = 'configuration/configuration-changes.md'; TitleCase = $true }
         @{ Anchor = 'connected-system'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
-        @{ Anchor = 'connected-system-object'; Home = 'configuration/connected-systems.md'; TitleCase = $true; Rejected = @('Connector Space Object') }
+        @{ Anchor = 'connected-system-object'; Home = 'configuration/connector-space.md'; TitleCase = $true; Rejected = @('Connector Space Object') }
         @{ Anchor = 'connector'; Home = 'connectors/index.md'; TitleCase = $false }
-        @{ Anchor = 'connector-space'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
-        @{ Anchor = 'container-scope'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
+        @{ Anchor = 'connector-space'; Home = 'configuration/connector-space.md'; TitleCase = $true }
+        @{ Anchor = 'container-scope'; Home = 'configuration/partitions-and-containers.md'; TitleCase = $true }
         @{ Anchor = 'delta-synchronisation'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $true }
         @{ Anchor = 'deprovisioning'; Home = 'concepts/jml-lifecycle.md'; TitleCase = $false }
         @{ Anchor = 'deprovisioning-action'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
@@ -55,8 +55,8 @@
         @{ Anchor = 'metaverse-object'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'null-is-a-value'; Home = 'concepts/attribute-priority.md'; TitleCase = $false }
         @{ Anchor = 'object-matching-rule'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true }
-        @{ Anchor = 'obsoletion'; Home = 'configuration/connected-systems.md'; TitleCase = $false }
-        @{ Anchor = 'partition'; Home = 'configuration/connected-systems.md'; TitleCase = $false }
+        @{ Anchor = 'obsoletion'; Home = 'configuration/connector-space.md'; TitleCase = $false }
+        @{ Anchor = 'partition'; Home = 'configuration/partitions-and-containers.md'; TitleCase = $false }
         @{ Anchor = 'password-synchronisation'; Home = 'concepts/passwords.md'; TitleCase = $true }
         @{ Anchor = 'pending-export'; Home = 'configuration/connected-systems.md'; TitleCase = $true }
         @{ Anchor = 'projection'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $false }

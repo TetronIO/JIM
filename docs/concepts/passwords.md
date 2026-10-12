@@ -180,7 +180,7 @@ Passwords therefore travel their own path, which never touches any of it.
 | Read back when JIM imports | ✅ | ❌ |
 | Retried automatically | ✅ | ✅ on their own clock, and parked rather than retried into the same refusal |
 
-The practical consequence is that **attributes holding credentials cannot be managed as attributes at all.** `unicodePwd`, `userPassword` and their relatives cannot be imported and cannot be chosen in an Attribute Flow; JIM does not offer them. If an earlier version of your deployment had selected one, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule referring to it stays intact. See [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed).
+The practical consequence is that **attributes holding credentials cannot be managed as attributes at all.** `unicodePwd`, `userPassword` and their relatives cannot be imported and cannot be chosen in an Attribute Flow; JIM does not offer them. If an earlier version of your deployment had selected one, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule referring to it stays intact. See [Credential attributes are never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed).
 
 It also means JIM writes passwords the way each directory expects rather than writing an attribute: for Active Directory it sets `unicodePwd` with the correct encoding, and elsewhere it uses the standard LDAP Password Modify operation. It never writes a password attribute directly, because directories store a directly written value exactly as supplied, which would leave the password readable in the directory.
 
@@ -334,9 +334,9 @@ Each pass says what it removed, on its own Activity, so retention is something y
 | To | See |
 |---|---|
 | Switch on initial passwords for a rule | [Synchronisation Rules: Initial password](../configuration/synchronisation-rules.md#initial-password) |
-| See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel) |
-| Set a password on one Connected System Object, or on a Metaverse Object | [Connected Systems: Setting the password on one Connected System Object](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object) |
-| Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-systems.md#password-synchronisation) |
+| See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-system-passwords.md#password-policy-and-the-password-channel) |
+| Set a password on one Connected System Object, or on a Metaverse Object | [Connected Systems: Setting the password on one Connected System Object](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) |
+| Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) |
 | Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) |
 | See what is queued, and retry or cancel it | [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) |
 | Do any of it from a script | [PowerShell: Connected Systems](../powershell/connected-systems.md#set-jimconnectedsystemobjectpassword), [Metaverse](../powershell/metaverse.md#set-jimmetaverseobjectpassword), [Synchronisation Rules](../powershell/synchronisation-rules.md#initial-password) |

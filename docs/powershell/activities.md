@@ -73,7 +73,7 @@ An Activity that a [Schedule](../configuration/schedules.md) produced also carri
 
 All four are empty for work nobody scheduled.
 
-An Activity for a [Connector Space clear](../configuration/connected-systems.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
+An Activity for a [Connector Space clear](../configuration/connector-space.md#clearing-the-connector-space) carries what the clear did, retrieved with `-Id`:
 
 | Property | Type | Description |
 |---|---|---|
@@ -274,7 +274,7 @@ Returns a `PSCustomObject` describing the item:
 | `ErrorMessage` | What went wrong, in words; empty when the object did not fail. |
 | `ErrorStackTrace` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
-| `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/connected-systems.md#unresolved-reference-handling) mode. The values themselves are on the Connected System Object. |
+| `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/unresolved-references.md) mode. The values themselves are on the Connected System Object. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
 
