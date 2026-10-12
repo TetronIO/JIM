@@ -27,7 +27,7 @@ function Set-JIMCertificate {
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the certificate's
-        configuration change history.
+        Configuration Change History.
 
     .PARAMETER PassThru
         Returns the certificate as updated.

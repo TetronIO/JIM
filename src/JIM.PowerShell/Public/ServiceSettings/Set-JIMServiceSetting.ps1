@@ -13,19 +13,20 @@ function Set-JIMServiceSetting {
         An audit activity is created for each update.
 
     .PARAMETER Key
-        The unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").
+        The key of the setting to change, such as "ChangeTracking.CsoChanges.Enabled".
 
     .PARAMETER Value
-        The new value for the setting as a string.
+        The new value, as a string.
 
     .PARAMETER ChangeReason
-        An optional reason for the change, recorded against the setting's configuration change history.
+        Optional reason for the change, recorded on the audit Activity and shown in the setting's
+        Configuration Change History.
 
     .PARAMETER PassThru
-        If specified, returns the updated service setting object.
+        Returns the setting as updated.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated service setting object.
+        With -PassThru, the setting as updated; otherwise nothing.
 
     .EXAMPLE
         Set-JIMServiceSetting -Key "ChangeTracking.CsoChanges.Enabled" -Value "false"
@@ -47,7 +48,7 @@ function Set-JIMServiceSetting {
         Reset-JIMServiceSetting
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ServiceSettingDto')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string]$Key,

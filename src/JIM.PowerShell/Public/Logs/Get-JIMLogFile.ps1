@@ -11,7 +11,7 @@ function Get-JIMLogFile {
         disk, across all services (Web, Worker, Scheduler).
 
     .OUTPUTS
-        PSCustomObject representing log file metadata.
+        Each log file's service, date and size.
 
     .EXAMPLE
         Get-JIMLogFile
@@ -27,7 +27,7 @@ function Get-JIMLogFile {
         Get-JIMLogEntry
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.LogFileDto')]
     param()
 
     process {

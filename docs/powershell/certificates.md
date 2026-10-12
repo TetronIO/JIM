@@ -131,7 +131,7 @@ Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] 
 | `CertificateData` | `byte[]` | Yes (FromData) |  | Raw certificate data as a byte array. |
 | `CertificateBase64` | `string` | Yes (FromBase64) |  | Certificate data as a Base64-encoded string. |
 | `Notes` | `string` | No |  | Optional notes about the certificate. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the certificate added. |
 
 ### Output
@@ -188,7 +188,7 @@ Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Dis
 | `Notes` | `string` | No |  | New notes for the certificate. |
 | `Enable` | `switch` | No |  | Enables the certificate for use. |
 | `Disable` | `switch` | No |  | Disables the certificate without removing it. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the certificate as updated. |
 
 ### Output
@@ -244,7 +244,7 @@ Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-F
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById) |  | The unique identifier (GUID) of the certificate to delete. Accepts pipeline input by property name. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | The certificate to remove, as Get-JIMCertificate returns it. Accepts pipeline input. |
-| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's configuration change history. |
+| `ChangeReason` | `string` | No |  | Optional reason for the change, recorded on the audit Activity and shown in the certificate's Configuration Change History. |
 | `Force` | `switch` | No |  | Suppresses the confirmation prompt. |
 | `PassThru` | `switch` | No |  | Returns the certificate as it was before it was removed. |
 
