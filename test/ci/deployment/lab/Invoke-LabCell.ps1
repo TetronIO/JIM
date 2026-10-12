@@ -15,13 +15,12 @@
          as the installation guide tells a customer to.
       3. Carries in PowerShell, the repository's deployment checks and the documentation they run commands from.
 
-    Then it runs its scenario, from scenarios/<Scenario>.ps1 (Install: README.md, "What an Install cell checks";
-    Upgrade: "What an Upgrade cell checks"), and every scenario ends by checking that nothing crashed: no container
-    has restarted, and the kernel has logged no fault or container AppArmor denial since the last boot
-    (Select-KernelFault.ps1).
+    Then it runs its scenario, from scenarios/<Scenario>.ps1 (README.md says what each checks), and every scenario
+    ends by checking that nothing crashed: no container has restarted, and the kernel has logged no fault or container
+    AppArmor denial since the last boot (Select-KernelFault.ps1).
 
     Results go to results.json in -OutputPath, with the cell's log (cell.log) and everything else the scenario saves.
-    The VM is deleted afterwards, unless -KeepVm says otherwise.
+    The VM, and an ExternalDatabase cell's database server, are deleted afterwards, unless -KeepVm says otherwise.
 
 .PARAMETER CellName
     The cell, as Cells.psd1 names it.
@@ -101,6 +100,8 @@ $bundleName = Split-Path $BundlePath -Leaf
 # Set once JIM is installed: where the lab host reaches it, and the installer's certificate authority.
 $address = $null
 $caPath = Join-Path $OutputPath 'ca.crt'
+# An ExternalDatabase cell's PostgreSQL server, a VM of its own, which the scenario sets up.
+$databaseVm = $null
 
 #region What every scenario uses
 
@@ -118,12 +119,20 @@ function Add-Check {
 }
 
 function Invoke-Guest {
-    # One of guest/Invoke-LabGuestCommand.ps1's queries, on the VM.
+    # One of guest/Invoke-LabGuestCommand.ps1's queries, on the VM; a query of JIM's database goes to its own server,
+    # if it has one.
     param([string]$Action, [string]$Sql)
+    if ($Action -eq 'Sql' -and $databaseVm) {
+        return Invoke-LabVm -Name $databaseVm -Command @('runuser', '-u', 'postgres', '--', 'psql', '-d', 'jim', '-v',
+            'ON_ERROR_STOP=1', '-Atc', $Sql)
+    }
     $command = @('pwsh', '-NoProfile', '-File', '/root/jim/test/ci/deployment/lab/guest/Invoke-LabGuestCommand.ps1',
         '-Action', $Action, '-Runtime', $cell.Runtime)
     if ($rootless) {
         $command += '-Rootless'
+    }
+    if ($databaseVm) {
+        $command += '-ExternalDatabase'
     }
     if ($Sql) {
         $command += @('-Sql', $Sql)
@@ -235,6 +244,85 @@ function Get-BundleVersion {
     (Split-Path $Path -Leaf) -replace '^jim-release-', '' -replace '\.tar\.gz$', ''
 }
 
+function Get-BundleModule {
+    # The JIM PowerShell module from a bundle, extracted on the lab host for the checks run from it; returns its
+    # manifest's path.
+    param([string]$Path)
+    $folder = Join-Path $OutputPath "module-$(Get-BundleVersion $Path)"
+    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+    & tar -xzf $Path -C $folder --wildcards '*/powershell/JIM/*' --strip-components=2
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not take the PowerShell module out of $(Split-Path $Path -Leaf)"
+    }
+    Join-Path $folder 'JIM' 'JIM.psd1'
+}
+
+function New-SetupSettings {
+    # setup.sh's settings for an unattended installation, as a customer gives them: the lab's identity provider, the
+    # bundled database, a certificate for the lab's host name and the VM's address, and the firewall and AppArmor
+    # offers accepted. -Extra adds to them or replaces them.
+    param([hashtable]$Extra = @{})
+    $settings = @{
+        JIM_SSO_AUTHORITY = $authority; JIM_SSO_CLIENT_ID = 'jim-web'; JIM_SSO_SECRET = 'jim-dev-secret'
+        JIM_SSO_API_SCOPE = 'jim-api'; JIM_SSO_CLAIM_TYPE = 'sub'; JIM_SSO_MV_ATTRIBUTE = 'Subject Identifier'
+        JIM_SSO_INITIAL_ADMIN = '00000000-0000-0000-0000-000000000001'; JIM_SETUP_DB_MODE = 'bundled'; JIM_WEB_PORT = '443'
+        JIM_SETUP_TLS_MODE = 'generate'; JIM_SETUP_TLS_NAMES = "$hostName,$address"; JIM_TRUSTED_PROXIES = ''
+        JIM_SETUP_AUTO_START = 'true'; JIM_SETUP_RUNTIME = $cell.Runtime; JIM_SETUP_PODMAN_ROOTLESS = "$($rootless.ToString().ToLower())"
+        JIM_SETUP_FIX_APPARMOR = 'true'; JIM_SETUP_OPEN_FIREWALL = 'true'
+    }
+    foreach ($key in $Extra.Keys) {
+        $settings[$key] = $Extra[$key]
+    }
+    $settings
+}
+
+function Invoke-Setup {
+    # Runs a bundle's setup.sh on the VM, as root, with the settings given, and returns its exit code and output. Each
+    # line of -Answer answers one of its questions in turn; with none, its standard input is closed, so every question
+    # takes its default. The output also goes to -Log in the cell's folder.
+    param([string]$Folder, [hashtable]$Settings = @{}, [string[]]$Argument = @(), [string[]]$Answer = @(), [string]$Log)
+    $command = if ($Answer) {
+        @('bash', '-c', "printf '%s\n' `"`$@`" | ./setup.sh $($Argument -join ' ')", 'setup') + $Answer
+    }
+    else {
+        @('./setup.sh') + $Argument
+    }
+    Write-CellLog "running $Folder/setup.sh $Argument ($Log)"
+    $output = Invoke-LabVm -Name $vm -WorkingDirectory $Folder -Environment $Settings -Command $command -AllowFailure `
+        -LogPath (Join-Path $OutputPath $Log)
+    [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = @($output) }
+}
+
+function Get-Fingerprint {
+    @(Invoke-Guest -Action Fingerprint)
+}
+
+function Test-UnchangedCheck {
+    # That the installation is as its fingerprint was: every file, and every JIM container running.
+    param([string]$Name, [string[]]$Before)
+    $difference = @(Compare-LabFingerprint -Before $Before -After (Get-Fingerprint))
+    Add-Check $Name ($difference.Count -eq 0) "$($difference | Select-Object -First 4)"
+}
+
+function Invoke-DocumentedStart {
+    # Starts JIM as the documentation says: on Docker, as installing by hand does (without the bundled database's
+    # profile for a server of JIM's own, as it says); on Podman, as Operating JIM does. Returns the exit code.
+    if ($cell.Runtime -eq 'docker') {
+        $start = Get-DocumentedCommand -Page 'deployment.md' -Heading 'By Hand' -Block 3
+        if ($databaseVm) {
+            $start = $start -replace '--profile with-db\s*', ''
+        }
+    }
+    else {
+        $start = (Get-DocumentedCommand -Page 'podman.md' -Heading 'Operating JIM') -split "`n" |
+            Where-Object { $_ -match 'systemctl restart jim\.service' } | Select-Object -First 1
+        if (-not $start) {
+            throw 'Operating JIM no longer gives systemctl restart jim.service'
+        }
+    }
+    Invoke-Documented -Command $start -WorkingDirectory '/opt/jim' -Title 'starting JIM'
+}
+
 #endregion
 
 try {
@@ -293,11 +381,12 @@ finally {
         Vm = $vm
     } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $OutputPath 'results.json')
 
+    $vms = @($vm) + @($databaseVm | Where-Object { $_ })
     if ($KeepVm -eq 'Always' -or ($KeepVm -eq 'OnFailure' -and $failed)) {
-        Write-CellLog "kept VM $vm"
+        Write-CellLog "kept VM $($vms -join ' and ')"
     }
     else {
-        Remove-LabVm -Name $vm
+        $vms | ForEach-Object { Remove-LabVm -Name $_ }
     }
     Write-CellLog "== ${CellName}: $(@($checks | Where-Object { $_.Passed }).Count) of $($checks.Count) checks passed$(if ($cellError) { "; stopped: $cellError" })"
 }
