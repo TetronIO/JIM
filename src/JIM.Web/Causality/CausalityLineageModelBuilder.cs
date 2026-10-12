@@ -4,7 +4,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
-using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
 
@@ -188,7 +187,7 @@ public static partial class CausalityLineageModelBuilder
             foreach (var cohort in cohorts)
             {
                 var column = AssignCohort(cohort);
-                column.Hops.Add((BuildHop(cohort, effectName, effectItemId), hopSequence++));
+                column.Hops.Add((BuildHop(cohort, effectName, effectItemId, context.Links), hopSequence++));
 
                 foreach (var member in cohort.Members)
                 {
@@ -281,7 +280,8 @@ public static partial class CausalityLineageModelBuilder
             Columns = columns,
             Joins = joins,
             IsTruncatedByDepth = chain?.IsTruncatedByDepth ?? false,
-            Consequences = consequenceSummary
+            Consequences = consequenceSummary,
+            Links = context.Links
         };
     }
 
@@ -289,7 +289,8 @@ public static partial class CausalityLineageModelBuilder
     /// Prepares one cohort for rendering: sentence, attribution, run kind, timestamp, links and the
     /// member list a plural cohort expands to.
     /// </summary>
-    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId)
+    private static CausalityLineageChainHop BuildHop(CausalChainCohort cohort, string? effectName, Guid? effectItemId,
+        ICausalityLinks links)
     {
         var soleMember = cohort.MemberCount == 1 ? cohort.Members[0] : null;
 
@@ -301,13 +302,13 @@ public static partial class CausalityLineageModelBuilder
             ShowConnectedSystemChip = CausalityCauseWording.ShowConnectedSystemChip(cohort),
             RunKind = GetRunKind(cohort),
             Operation = OutcomeDisplayMap.GetHopOperation(cohort),
-            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId) : null,
+            ActivityItemHref = soleMember != null ? GetActivityItemHref(soleMember, effectItemId, links) : null,
             Occurred = cohort.Members.Count > 0 ? cohort.Members.Min(m => m.Occurred) : default,
             Members = soleMember != null
                 ? []
                 : cohort.Members.Select(m => new CausalityLineageChainHopMember(
                     string.IsNullOrWhiteSpace(m.DisplayName) ? "Unnamed object" : m.DisplayName!,
-                    GetActivityItemHref(m, effectItemId))).ToList()
+                    GetActivityItemHref(m, effectItemId, links))).ToList()
         };
     }
 
@@ -343,12 +344,12 @@ public static partial class CausalityLineageModelBuilder
     /// The href of the item that recorded a cause, or null where there is nothing useful to link to:
     /// the cause named no item, or named the very item being viewed.
     /// </summary>
-    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId)
+    private static string? GetActivityItemHref(CausalChainMember member, Guid? effectItemId, ICausalityLinks links)
     {
         if (member.RunProfileExecutionItemId is not { } itemId || itemId == Guid.Empty)
             return null;
 
-        return itemId == effectItemId ? null : $"/activity/item/{itemId}";
+        return itemId == effectItemId ? null : links.ItemHref(itemId);
     }
 
     /// <summary>
@@ -501,8 +502,8 @@ public static partial class CausalityLineageModelBuilder
     {
         if (state.IsPageRecord)
         {
-            string? href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
-                ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
+            var href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
+                ? context.Links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
             return new ColumnHead(
                 ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? "Connected System Object",

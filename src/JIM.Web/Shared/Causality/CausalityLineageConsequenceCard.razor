@@ -85,6 +85,13 @@
     public Func<string, int, string?, Task<PagedResultSet<CausalConsequenceMember>?>>? LoadMembers { get; set; }
 
     /// <summary>
+    /// The link policy the card's addresses were written with (#2100): a cohort's members, paged here on request, are
+    /// linked under the same policy, and every item link says what the policy says.
+    /// </summary>
+    [Parameter]
+    public ICausalityLinks Links { get; set; } = CausalityPageLinks.Instance;
+
+    /// <summary>
     /// How many members a page holds: the walk's own first page is the first page here.
     /// </summary>
     private const int MemberPageSize = JIM.Application.Servers.ActivityServer.CausalConsequenceMemberPageSize;
@@ -156,7 +163,7 @@
             @if (Consequence.ActivityItemHref != null)
             {
                 <div class="ln-actions">
-                    <a class="ln-link" href="@Consequence.ActivityItemHref">View activity item</a>
+                    <a class="ln-link" href="@Consequence.ActivityItemHref">@Links.ItemLinkText</a>
                 </div>
             }
             @if (Consequence.Cohort is { } cohort)
@@ -188,7 +195,7 @@
                         <span class="ln-member-name">@(string.IsNullOrWhiteSpace(member.DisplayName) ? "Unnamed object" : member.DisplayName)</span>
                         @if (member.RunProfileExecutionItemId is { } itemId)
                         {
-                            <a class="ln-link" href="@($"/activity/item/{itemId}")">View activity item</a>
+                            <a class="ln-link" href="@Links.ItemHref(itemId)">@Links.ItemLinkText</a>
                         }
                     </li>
                 }

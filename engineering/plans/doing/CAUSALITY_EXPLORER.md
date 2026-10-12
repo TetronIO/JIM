@@ -1,6 +1,6 @@
 # Causality Explorer: Implementation Plan (Causal Provenance Phase 3)
 
-- **Status:** Doing (Phases 3-0, 3a and 3b complete; Phase 3c next)
+- **Status:** Doing (Phases 3-0, 3a, 3b and 3c complete; Phase 3d next)
 - **Issue:** [#2100](https://github.com/TetronIO/JIM/issues/2100)
 - **PRD:** [PRD_CAUSALITY_EXPLORER.md](../../prd/doing/PRD_CAUSALITY_EXPLORER.md)
 - **Earlier phases:** [Phase 1 plan](../done/CAUSAL_PROVENANCE.md), [Phase 2 plan](../done/CAUSAL_PROVENANCE_PHASE_2.md)
@@ -143,9 +143,20 @@ Delivery notes:
 - Queued by settles a tie between items of one run (same Activity time) by the order the Pending Export recorded them, not by id, and flags a full stager list as possibly missing earlier runs.
 - Timeline paging is clamped (page from 1, page size 1 to 100) and widened before multiplying, so a page far past the end reads empty instead of overflowing.
 
-### Phase 3c: Portal groundwork (no visible change)
+### Phase 3c: Portal groundwork (no visible change) ✅
 
 `ICausalityLinks` and `CausalityPageLinks`, threaded through the Lineage builders and the consequence card. Then a move-only extraction of `CausalityItemLoader` from the item page. The existing UI suite and the item page's own tests stay green throughout, with new tests pinning that the page policy writes today's addresses. The **Open in explorer** button on the causality panel follows.
+
+Delivery notes:
+
+- **The policy travels on `CausalityPageContext.Links`** rather than as a parameter to each builder. The context already reaches every builder, including the context each later run's item is built under when consequences are placed; a parameter would have had to be threaded through every private method of `CausalityModelBuilder`, and a missed one would silently send that link back to the item page. The Lineage model carries the policy on to the cards (`CausalityLineageModel.Links`), which take from it what an item link says and the addresses of a cohort's paged members. A test proves the per-item context carries the policy by failing without it.
+- **The policy decides whether a Metaverse Object can be addressed.** The item page's address needs the type's plural name and is withheld without one, as before; an explorer address needs only the id, so the explorer can link a Metaverse Object whose type the item page could not resolve.
+- What the policy covers: execution items, Connected System Objects and Metaverse Objects, wherever the Lineage, the summary band, the Timeline or the Table writes them, since all four read the same causality model. Connected Systems, Synchronisation Rules, Pending Exports and deletion records keep their own pages on both hosts.
+- `CausalityItemLoader.LoadAsync` returns a `CausalityItemData`: everything the panel takes, plus the headers and object type the item page's own sections show, so the page reads nothing twice. What the item went on to cause stays a separate read, owned by each host.
+- Six of the item page's tests reached its private `BuildCausalityPageContext` and `ResolveIdentityId` by reflection, because the page had no render harness. Both methods moved into the loader, so the tests moved with them into `CausalityItemLoaderTests`, with identical assertions; only `ShowsCausality`'s stays with the page.
+- Side effect: the page is reused across navigations between items, and kept a previous item's chain, headers or object type where the next item had none. The loader returns fresh values, so that can no longer happen.
+- **Open in explorer** moves to Phase 3d with the page it opens, so this phase changes nothing visible.
+- Verified at runtime by comparison: every link and line of the panel's text, in all three views, for 20 items chosen to cover each change type, deleted records, chain hops of each edge type and the items with the most consequences, read from the image before this phase and again after it. The 570 links were identical; the only text that changed was the "Checked at" time.
 
 ### Phase 3d: The explorer and its entry points
 
