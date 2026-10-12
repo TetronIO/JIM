@@ -35,23 +35,21 @@ Get-JIMWorkerTask -Id <guid>
 
 Each Worker Task's header, with one property the module adds: StepDisplay, the step the run is on as one sentence, such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Queue, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. It is empty for a task that is not a Run Profile execution, since those record no steps.
 
-**`WorkerTaskHeader`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` |  |
 | `Name` | `string` |  |
 | `Type` | `string` |  |
 | `Timestamp` | `datetime` |  |
-| `Status` | `WorkerTaskStatus` |  |
-| `InitiatedByType` | `ActivityInitiatorType` | The type of security principal that initiated this task. |
+| `Status` | `string` | One of `Queued`, `Processing`, `CancellationRequested` or `WaitingForPreviousStep`. |
+| `InitiatedByType` | `string` | The type of security principal that initiated this task. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this task. |
 | `InitiatedByName` | `string` | The name of the security principal at the time of task creation. |
 | `ActivityId` | `guid` | The associated Activity ID (if the task has started processing). |
 | `ObjectsToProcess` | `int` | The total number of objects to process (from the associated Activity). |
 | `ObjectsProcessed` | `int` | The number of objects processed so far (from the associated Activity). |
 | `ProgressMessage` | `string` | The current progress message (from the associated Activity). |
-| `Steps` | `RunPhaseSummary` | The run's steps and the one running now, or empty where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. |
+| `Steps` | `object` | The run's steps and the one running now, or empty where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. It has `CurrentStepName`, `CurrentStepNumber`, `TotalSteps` and `Steps`. |
 | `ScheduleExecutionId` | `guid` | If this task is part of a schedule execution, the execution ID for UI grouping. |
 | `ScheduleExecutionName` | `string` | The schedule name at execution time, for display in the queue UI. |
 | `ScheduleStepIndex` | `int` | The step index within the schedule, for ordering within the group. |

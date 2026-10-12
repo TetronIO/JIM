@@ -43,44 +43,44 @@ Get-JIMActivityExecutionItem -Id <guid> -Causes
 
 Without a switch, the item. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step.
 
-**`ActivityRunProfileExecutionItemDetailDto`** (Item):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` | The item's unique identifier. |
 | `ActivityId` | `guid` | The Run Profile Activity the item belongs to. |
-| `ObjectChangeType` | `ObjectChangeType` | What happened to the object. |
-| `NoChangeReason` | `NoChangeReason` | Why nothing changed, when nothing did. |
+| `ObjectChangeType` | `string` | What happened to the object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `NoChangeReason` | `string` | Why nothing changed, when nothing did. One of `NotSet`, `MvoNoAttributeChanges` or `CsoAlreadyCurrent`. |
 | `ConnectedSystemObjectId` | `guid` | The Connected System Object the item is about, when it still exists. |
 | `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one (kept as history; it may since have been deleted). |
 | `PendingExportId` | `guid` | The Pending Export the item is about, for an export. |
 | `ExternalIdSnapshot` | `string` | The object's external ID when the item was recorded. |
 | `DisplayNameSnapshot` | `string` | The object's display name when the item was recorded. |
 | `ObjectTypeSnapshot` | `string` | The object's type name when the item was recorded. |
-| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or empty when the object did not fail. |
+| `ErrorType` | `string` | The kind of failure; `NotSet` or empty when the object did not fail. One of `NotSet`, `AmbiguousMatch`, `CouldNotMatchObjectType`, `CouldNotJoinDueToExistingJoin`, `DuplicateImportedAttributes`, `MissingExternalIdAttributeValue`, `UnexpectedAttribute`, `UnresolvedReference`, `UnsupportedExternalIdAttributeType`, `ExportNotConfirmed`, `ExportConfirmationFailed`, `CsoCreationFailed`, `DuplicateObject`, `InvalidGeneratedExternalId`, `UnhandledError`, `ExpressionEvaluationError`, `ExpressionMissingInput`, `MultiValuedToSingleValued`, `DeltaImportFallbackToFullImport`, `ImportHashVerificationFailed`, `ImportAttributeValueError`, `ConnectorConfigurationError`, `CouldNotExportDueToExistingConnectedSystemObject`, `ClassMembershipRequirementsNotMet`, `GeneratedValueExhausted`, `GeneratedValueWidthExceeded`, `GeneratedValueCollisionUnresolved`, `UniqueValueAlreadyInUse`, `ObjectMatchingRuleFailed`, `ObjectTypeChanged`, `PasswordRequiredToEnableAccount` or `AmbiguousProvisioningMatch`. |
 | `ErrorMessage` | `string` | What went wrong, in words; empty when the object did not fail. |
 | `ErrorStackTrace` | `string` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | `int` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
 | `UnresolvedReferenceCount` | `int` | How many of the object's reference values the import could not resolve to a Connected System Object, under any Unresolved Reference Handling and whatever error the item carries; empty when none were left unresolved. The values themselves are on the Connected System Object. |
-| `AttributeValueErrors` | `AttributeValueErrorDto[]` | Every value the import found on the object but could not read as its attribute's type, in the order the Connector reported them; JIM left each attribute as it already held it. Empty when there were none. |
+| `AttributeValueErrors` | `object[]` | Every value the import found on the object but could not read as its attribute's type, in the order the Connector reported them; JIM left each attribute as it already held it. Empty when there were none. Each has `AttributeName`, `AttributeType`, `Value` and `Reason`. |
 | `AttributeValueErrorTotal` | `int` | How many values could not be read, which can exceed AttributeValueErrors where the item keeps only the first thousand; empty when there were none. |
 | `SourceLocation` | `string` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12`. |
-| `MatchCandidates` | `MatchCandidateDetailDto[]` | For an `AmbiguousMatch`, the Metaverse Objects the match found, and for an `AmbiguousProvisioningMatch`, the Connected System Objects: up to 10, ordered by display name, each with whether it still exists and, for a Metaverse Object, what is joined to it now. Empty for any other item. |
+| `MatchCandidates` | `object[]` | For an `AmbiguousMatch`, the Metaverse Objects the match found, and for an `AmbiguousProvisioningMatch`, the Connected System Objects: up to 10, ordered by display name, each with whether it still exists and, for a Metaverse Object, what is joined to it now. Empty for any other item. Each has `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `ConnectedSystemId`, `ConnectedSystemNameSnapshot`, `MatchedValue`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `Ordinal`, `CandidateTotal`, `Exists` and `JoinedObjects`. |
 | `JoinObjectMatchingRuleId` | `int` | For an object joined to an existing Metaverse Object by matching, the id of the Object Matching Rule that found it; empty for any other item. The rule may since have been changed or deleted; the description below records what it compared at the time. |
 | `JoinObjectMatchingRuleDescriptionSnapshot` | `string` | For an object joined by matching, what the Object Matching Rule compared when the join was made, for example `Employee ID equals employeeId`; empty for any other item. |
 | `JoinMatchedValue` | `string` | For an object joined by matching, the value the join matched on: what the rule computed from the object, with several separated by commas for a multi-valued source. Empty for any other item. |
 
-**`CauseCohort`** (Causes):
+**With `-Causes`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ExecutionItemId` | `guid` | The execution item the walk started from. |
 | `Level` | `int` | How many steps back from the item: 1 for its direct causes. |
-| `EdgeType` | `CausalEdgeType` | The recorded cause; empty for a step to the import that fed a synchronisation, or to the Metaverse Object's creation. |
-| `SourceImportChangeType` | `ObjectChangeType` | For the step to the import that fed a synchronisation, what that import did: Added, Updated or Deleted. |
-| `MetaverseChangeType` | `ObjectChangeType` | For the step to the Metaverse Object's creation: Projected, Joined or Created. |
-| `ReasonCode` | `CausalReasonCode` | Why the cause produced its effect; NotSet where no reason was recorded. |
+| `EdgeType` | `string` | The recorded cause; empty for a step to the import that fed a synchronisation, or to the Metaverse Object's creation. One of `MetaverseObjectDeletionCausedDeprovision`, `MetaverseObjectDeletionCausedReferenceRemoval`, `ExportCausedImportConfirmation`, `PendingExportQueueingCausedExportExecution`, `ExportRejectionCausedGeneratedValueRevision` or `MetaverseObjectDeletionScheduleCausedDeletion`. |
+| `SourceImportChangeType` | `string` | For the step to the import that fed a synchronisation, what that import did: Added, Updated or Deleted. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `MetaverseChangeType` | `string` | For the step to the Metaverse Object's creation: Projected, Joined or Created. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `ReasonCode` | `string` | Why the cause produced its effect; NotSet where no reason was recorded. One of `NotSet`, `LastConnectorDisconnected`, `LastConnectorDisconnectedNoSourcesConfigured`, `AllAuthoritativeSourcesDisconnected`, `AuthoritativeSourceDisconnected`, `ExportCreateStaged`, `ExportUpdateStaged`, `ExportDeleteStaged`, `NoConnectorRemainsStateConvergence`, `GeneratedValueAlreadyInUse`, `GeneratedValueAnchoredElsewhere` or `GeneratedValueRenameAuthorised`. |
 | `Count` | `int` | How many causes the cohort holds. |
 | `ObjectType` | `string` | The causes' object type, plural where there are several. |
 | `Attribute` | `string` | The reference attribute the causes acted through, where one applies. |
@@ -89,22 +89,22 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `Members` | `string[]` | The causes' names, as recorded. |
 | `Resolution` | `string` | Why the walk stopped at these causes, for example CauseNotRetained; empty where each carries on to the next level. |
 
-**`ConsequenceCohort`** (Consequences):
+**With `-Consequences`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ExecutionItemId` | `guid` | The execution item the walk started from. |
 | `Level` | `int` | How many steps on from the item: 1 for what it directly caused. A Level 0 row gives the item's own ending where it caused nothing. |
-| `HopKind` | `CausalConsequenceHopKind` | How the consequences were reached: Edge (a recorded cause), Confirmation (the import confirming an export), NextSynchronisation (the synchronisation after an import), OutstandingPendingExport or ScheduledDeletion. |
-| `EdgeType` | `CausalEdgeType` | The recorded cause, for an Edge or Confirmation hop. |
-| `ReasonCode` | `CausalReasonCode` | Why the cause produced these consequences; NotSet for any other hop. |
+| `HopKind` | `string` | How the consequences were reached: Edge (a recorded cause), Confirmation (the import confirming an export), NextSynchronisation (the synchronisation after an import), OutstandingPendingExport or ScheduledDeletion. One of `Edge`, `Confirmation`, `NextSynchronisation`, `OutstandingPendingExport` or `ScheduledDeletion`. |
+| `EdgeType` | `string` | The recorded cause, for an Edge or Confirmation hop. One of `MetaverseObjectDeletionCausedDeprovision`, `MetaverseObjectDeletionCausedReferenceRemoval`, `ExportCausedImportConfirmation`, `PendingExportQueueingCausedExportExecution`, `ExportRejectionCausedGeneratedValueRevision` or `MetaverseObjectDeletionScheduleCausedDeletion`. |
+| `ReasonCode` | `string` | Why the cause produced these consequences; NotSet for any other hop. One of `NotSet`, `LastConnectorDisconnected`, `LastConnectorDisconnectedNoSourcesConfigured`, `AllAuthoritativeSourcesDisconnected`, `AuthoritativeSourceDisconnected`, `ExportCreateStaged`, `ExportUpdateStaged`, `ExportDeleteStaged`, `NoConnectorRemainsStateConvergence`, `GeneratedValueAlreadyInUse`, `GeneratedValueAnchoredElsewhere` or `GeneratedValueRenameAuthorised`. |
 | `Count` | `int` | How many consequences the cohort holds, counted exactly. |
 | `ObjectType` | `string` | The consequences' object type, plural where there are several. |
 | `Attribute` | `string` | The reference attribute a removal acted through, where one applies. |
 | `ConnectedSystem` | `string` | The Connected System the consequences are attributed to. |
 | `SyncRule` | `string` | The Synchronisation Rule the cause names, where it names one. |
 | `OutcomeSummary` | `string` | The outcomes the consequences share. |
-| `PendingExportStatus` | `PendingExportStatus` | For outstanding Pending Exports, their live status. |
+| `PendingExportStatus` | `string` | For outstanding Pending Exports, their live status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
 | `Ending` | `string` | Where the branch stops: the cohort's own ending (Confirmed, WaitingForExport, WaitingForRetry, NeedsAttention, WaitingForConfirmingImport or DeletionScheduled), else how many consequences led nowhere further and why, for example "NoFurtherConsequences (2)", else FurtherThanShown where the walk reached its bound. Empty where every consequence carries on. |
 | `FirstOccurred` | `datetime` | When the earliest consequence happened, in UTC. |
 | `LastOccurred` | `datetime` | When the latest consequence happened, in UTC. |
@@ -214,8 +214,6 @@ Get-JIMCausalCohortMember -ExecutionItemId <guid> -CohortKey <string> -All [-Sea
 ### Output
 
 Each member of the cohort, earliest first and then by name.
-
-**`CausalConsequenceMemberDto`**:
 
 | Property | Type | Description |
 |----------|------|-------------|

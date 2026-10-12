@@ -35,24 +35,22 @@ Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId <int> -Id <guid>
 
 What synchronising the object would do, were the real synchronisation to run now, with the outcome tree flattened beside it. Check HasBlockingErrors first: a preview that surfaced a blocking error describes a synchronisation that would fail.
 
-**`SyncPreview`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
-| `OutcomeTree` | `SyncOutcomeNodeDto[]` | The speculative causal outcome tree, in the same shape a really-recorded Run Profile Execution Item's outcomes render from. |
-| `Inbound` | `SyncPreviewInboundSummaryDto` | The inbound summary: would the object project or join, and what Attribute Flows would result. Empty for a Metaverse Object preview, which has no inbound chain. |
-| `ProposedExports` | `SyncPreviewProposedExportDto[]` | The Pending Exports that would be staged per target Connected System, were the real synchronisation to run. None of these are persisted. |
-| `Errors` | `SyncPreviewMessageDto[]` | Conditions that would prevent the real synchronisation. Distinct from Warnings so a caller can render blockers and advisories differently without parsing message text. |
-| `Warnings` | `SyncPreviewMessageDto[]` | Advisory conditions that would not prevent the real synchronisation. |
+| `OutcomeTree` | `object[]` | The speculative causal outcome tree, in the same shape a really-recorded Run Profile Execution Item's outcomes render from. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `Ordinal` and `Children`. |
+| `Inbound` | `object` | The inbound summary: would the object project or join, and what Attribute Flows would result. Empty for a Metaverse Object preview, which has no inbound chain. It has `WouldProject`, `ProjectedMetaverseObjectTypeId`, `ProjectedMetaverseObjectTypeName`, `WouldJoinMetaverseObjectId`, `WouldJoinObjectMatchingRuleId`, `WouldJoinObjectMatchingRuleDescription`, `WouldJoinMatchedValue`, `AlreadyJoinedMetaverseObjectId` and `AttributeFlowChanges`. |
+| `ProposedExports` | `object[]` | The Pending Exports that would be staged per target Connected System, were the real synchronisation to run. None of these are persisted. Each has `ConnectedSystemId`, `ChangeType`, `ConnectedSystemObjectId`, `SourceMetaverseObjectId` and `AttributeChanges`. |
+| `Errors` | `object[]` | Conditions that would prevent the real synchronisation. Distinct from Warnings so a caller can render blockers and advisories differently without parsing message text. Each has `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. |
+| `Warnings` | `object[]` | Advisory conditions that would not prevent the real synchronisation. Each has `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. |
 | `HasBlockingErrors` | `bool` | True when the preview surfaced at least one blocking condition (that is, Errors is non-empty). |
-| `AffectedSyncRules` | `SyncRuleReferenceDto[]` | The Synchronisation Rules that participated at any step of the previewed chain. |
-| `GeneratedValueProbes` | `SyncPreviewGeneratedValueProbeDto[]` | Each value the preview generated that the real synchronisation would also probe for (Unique Value Generation): the preview is a dry run and checks JIM's own records only, while the synchronisation also asks these Connected Systems whether the value is already in use, and generates a different value if one of them already has an account using it. Empty when no generated value would be probed. |
+| `AffectedSyncRules` | `object[]` | The Synchronisation Rules that participated at any step of the previewed chain. Each has `Id` and `Name`. |
+| `GeneratedValueProbes` | `object[]` | Each value the preview generated that the real synchronisation would also probe for (Unique Value Generation): the preview is a dry run and checks JIM's own records only, while the synchronisation also asks these Connected Systems whether the value is already in use, and generates a different value if one of them already has an account using it. Empty when no generated value would be probed. Each has `AttributeName`, `BuiltFromAttributeName`, `Value` and `ConnectedSystemNames`. |
 | `Outcomes` | `object[]` | The outcome tree flattened in its own display order, for Format-Table: one row per outcome, with Depth, OutcomeType, Target (its description, or its id), SyncRule (its name, or its id), DetailCount, DetailMessage and StagedChangeType. A Joined row made by matching also carries ObjectMatchingRule (what the rule compares, or its id) and MatchedValue (the value the join would match on); both are empty on every other row. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectSyncPreview -->
 
 When the object would join, `Inbound` names the [Object Matching Rule](../configuration/object-matching-rules.md) behind the join in `WouldJoinObjectMatchingRuleId` and `WouldJoinObjectMatchingRuleDescription` (what the rule compares), and the value it would match on in `WouldJoinMatchedValue`.
 
-Each entry in `Errors` and `Warnings` carries `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. An `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](execution-items.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
+In `Errors`, an `AmbiguousMatch` error lists in `MatchCandidates` the Metaverse Objects the object's Object Matching Rule found. An `AmbiguousProvisioningMatch` error lists the Connected System Objects found before provisioning. Both carry the fields [`Get-JIMActivityExecutionItem`](execution-items.md#get-jimactivityexecutionitem) returns for them apart from `Exists` and `JoinedObjects`.
 
 ### Examples
 
@@ -94,7 +92,7 @@ Get-JIMMetaverseObjectSyncPreview -Id <guid>
 
 What synchronising from the Metaverse Object as it stands now would do, outbound only, with the outcome tree flattened beside it. Inbound is always empty: a Metaverse Object has no inbound chain of its own. Check HasBlockingErrors first.
 
-**`SyncPreview`**: as under [Get-JIMConnectedSystemObjectSyncPreview](#get-jimconnectedsystemobjectsyncpreview).
+Properties as under [Get-JIMConnectedSystemObjectSyncPreview](#get-jimconnectedsystemobjectsyncpreview).
 <!-- END GENERATED: Get-JIMMetaverseObjectSyncPreview -->
 
 ### Examples

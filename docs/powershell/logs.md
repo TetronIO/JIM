@@ -43,7 +43,7 @@ Get-JIMLogEntry -ListServices
 
 Each log entry; `-ListLevels` and `-ListServices` return each name as a string.
 
-**`LogEntryDto`** (Entries):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -55,7 +55,7 @@ Each log entry; `-ListLevels` and `-ListServices` return each name as a string.
 | `Service` | `string` | The service that generated the log entry (web, worker, scheduler). |
 | `Properties` | `object` | Additional structured properties from the log entry. |
 
-**`string`** (Levels, Services)
+**With `-ListLevels` or `-ListServices`**: a `string`.
 <!-- END GENERATED: Get-JIMLogEntry -->
 
 ### Examples
@@ -92,8 +92,6 @@ None.
 ### Output
 
 Each log file's service, date and size.
-
-**`LogFileDto`**:
 
 | Property | Type | Description |
 |----------|------|-------------|

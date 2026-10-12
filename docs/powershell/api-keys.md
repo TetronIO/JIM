@@ -37,8 +37,6 @@ Get-JIMApiKey -Id <guid>
 
 Each API Key. The key itself is never returned; KeyPrefix identifies it.
 
-**`ApiKeyDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` | Unique identifier for the API key. |
@@ -50,7 +48,7 @@ Each API Key. The key itself is never returned; KeyPrefix identifies it.
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
-| `Roles` | `RoleDto[]` | The roles assigned to this API key. |
+| `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
 <!-- END GENERATED: Get-JIMApiKey -->
 
 ### Examples
@@ -95,8 +93,6 @@ New-JIMApiKey -Name <string> [-Description <string>] [-RoleIds <int[]>] [-Expire
 
 With `-PassThru`, the API Key created, with the key itself in Key; otherwise nothing. This is the only time JIM returns the key, so store it securely: without `-PassThru` it cannot be retrieved.
 
-**`ApiKeyCreateResponseDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Key` | `string` | The full API key. This is only returned on creation and cannot be retrieved again. |
@@ -109,7 +105,7 @@ With `-PassThru`, the API Key created, with the key itself in Key; otherwise not
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
-| `Roles` | `RoleDto[]` | The roles assigned to this API key. |
+| `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
 <!-- END GENERATED: New-JIMApiKey -->
 
 ### Examples
@@ -165,7 +161,7 @@ Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>] [-RoleIds <int
 
 With `-PassThru`, the API Key as updated; otherwise nothing.
 
-**`ApiKeyDto`**: as under [Get-JIMApiKey](#get-jimapikey).
+Properties as under [Get-JIMApiKey](#get-jimapikey).
 <!-- END GENERATED: Set-JIMApiKey -->
 
 ### Examples
@@ -227,7 +223,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 
 With `-PassThru`, the API Key as it was before it was removed; otherwise nothing.
 
-**`ApiKeyDto`**: as under [Get-JIMApiKey](#get-jimapikey).
+Properties as under [Get-JIMApiKey](#get-jimapikey).
 <!-- END GENERATED: Remove-JIMApiKey -->
 
 ### Examples

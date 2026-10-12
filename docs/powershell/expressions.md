@@ -29,8 +29,6 @@ Test-JIMExpression [-Expression] <string> [-MvAttributes <hashtable>] [-CsAttrib
 
 The result of evaluating the expression against the sample values.
 
-**`TestExpressionResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `IsValid` | `bool` | Indicates whether the expression is valid and evaluated successfully. |

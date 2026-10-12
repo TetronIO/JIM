@@ -248,6 +248,10 @@ function New-JIMConfigurationChangePreview {
         the finished preview, as Get-JIMConfigurationChangePreview returns it; or the start result, at once, where
         the proposal was blocked or validation failed, since nothing further will run.
 
+        JIM.ConfigurationChangePreviewStartResponse: Without -Wait, or where the proposal was blocked or validation failed
+
+        JIM.ConfigurationChangePreviewResponse: With -Wait, once the preview finishes
+
     .EXAMPLE
         New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
 
