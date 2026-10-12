@@ -52,6 +52,19 @@ Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-con
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
+Each Pending Export has a status, which the list shows and filters by:
+
+| Status | What it means |
+|---|---|
+| **Pending** | Waiting for the next export run. |
+| **Executing** | Being written by an export run now. |
+| **Exported** | Written to the Connected System, and waiting for an import to confirm it. |
+| **Export Not Confirmed** | Written, but an import did not show every value in place; the next export run sends those values again. |
+| **Failed** | Not attempted again, because its attempts ran out; it clears when an import shows its values in place. |
+| **Parked** | Held for your decision about a Generated Value the Connected System refused; see [When a target rejects a value](generated-values-in-target-systems.md#when-a-target-rejects-a-value). |
+
+**The next import confirms an export.** After an export run writes a change, its Pending Export stays **Exported** until an import from the Connected System shows the values in place, and then clears. Values the import does not show are sent again, and a change still unconfirmed after its attempts run out is marked **Failed** (see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#export-pending-we-exported-a-change-but-did-not-get-confirmation-of-it)). The File and SQL Connectors confirm their own writes instead, so their Pending Exports clear as soon as the export succeeds. A Pending Export left **Executing** by a Worker that stopped part-way returns, when the Worker starts again, to **Exported** if any of it was sent and to **Pending** if none was.
+
 A Pending Export's detail page names two distinct things about each attribute change, side by side: **Attribute Flow** is the outbound Synchronisation Rule that staged the change, and **Value from** is where the underlying Metaverse value came from (a Connected System through an import Attribute Flow, a computed expression, or a Generated Value), linking into that attribute's inspector on the source Metaverse Object. Troubleshooting a wrong exported value usually needs both: which rule sent it, and which source put it on the Metaverse Object in the first place.
 
 ## Configuration changes pending a Full Synchronisation

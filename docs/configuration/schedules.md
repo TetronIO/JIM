@@ -49,6 +49,8 @@ The portal also lists **PowerShell Script**, **Executable** and **SQL Script** s
 
 What happens when a step fails is set once for the whole Schedule, with exceptions per step.
 
+A step fails when its Activity ends **Failed With Error**, **Complete With Error** or **Cancelled**. Warnings do not count, including object-level data errors reported as warnings. A step whose Worker stopped part-way through fails too, because JIM marks its Activity **Failed With Error** (see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#task-was-abandoned-due-to-worker-crash-or-restart)).
+
 **The Schedule's setting.** On the Steps tab of the Schedule editor, above the step list, **When a step fails** is one of:
 
 - **Stop the Schedule** (the default)<br /> The steps after the failed one do not run, each says why, and the Schedule Execution ends **Failed**.
@@ -81,7 +83,11 @@ Nothing is lost when a schedule stops or cannot start: the steps that did not ru
 
 Each schedule run produces a **Schedule Execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
 
-A Schedule Execution typically appears as a parent activity with one child activity per step; this lets you walk down a schedule's execution tree from a single high-level record into the per-step detail.
+Each step's work is recorded as an [Activity](activities.md) of its own, which names the Schedule and the step that produced it; the [Schedule Execution view](#the-schedule-execution-view) links each step to its Activity.
+
+### When a run is due
+
+The Scheduler checks for Schedules that are due at least every 30 seconds. A Schedule that falls due while its previous run is still going does not start a second run beside it: it starts at the first check after the running one ends. A Schedule with no steps never runs: nothing starts when it falls due, and running it by hand is refused.
 
 ### Seeing how a run ended
 
@@ -135,7 +141,7 @@ Disabled schedules don't fire on their cron trigger and don't appear as eligible
 
 JIM ships with a small number of **built-in schedules** that are part of the product rather than something you create. They behave like any other schedule with one difference: their name is fixed and they cannot be deleted. You can still change **when** they run and enable or disable them.
 
-- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work.
+- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work. Each run re-checks the time since the last run that ended **Complete**, so a run that ended any other way, including **Complete With Error**, is covered again by the next one.
 
 - **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
 
@@ -192,4 +198,4 @@ When changing a schedule from automation you can record a reason alongside the c
 ## Related
 
 - [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
-- [Activities](activities.md): each schedule execution produces a parent activity with child activities per step
+- [Activities](activities.md): the Activity each step produces, and filtering Activities by Schedule
