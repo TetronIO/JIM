@@ -260,7 +260,8 @@ public class PreviewSummariser
             NewValue = d.NewValue,
             // Detected here rather than carried from Add: a collapsed group's rows do not share a pattern, and the
             // rows kept are bounded by the cap, so this is the cheapest place to get each row's own answer right.
-            PatternKey = DetectPattern(d)
+            PatternKey = DetectPattern(d),
+            MatchCandidates = [.. (d.MatchCandidates ?? []).OrderBy(c => c.Ordinal).Select(ConfigurationChangePreviewDeltaMatchCandidate.From)]
         })];
 
         return group;

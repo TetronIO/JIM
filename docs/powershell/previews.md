@@ -333,7 +333,9 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId <guid> -All [-GroupId <guid>]
 
 ### Output
 
-Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey` and the identifiers of the objects concerned.
+Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey`, `MatchCandidates` and the identifiers of the objects concerned.
+
+`MatchCandidates` is empty unless the row is `WouldMatchAmbiguously`. There it lists up to 10 of the objects the match would find, in the same shape as an Activity item's `MatchCandidates` (see [`Get-JIMActivityExecutionItem`](activities.md#get-jimactivityexecutionitem)); each carries `CandidateTotal`, the full count.
 
 `PatternKey` takes the same values as on a group (see [`Get-JIMConfigurationChangePreview`](#get-jimconfigurationchangepreview) above). It is per row here, so a group covering a mixture of edits can still be sorted by the kind each object makes.
 
@@ -351,6 +353,13 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId
 $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
 $group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldBecomeDeletionEligible' }
 Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All
+```
+
+```powershell title="List the objects a proposed rule would match ambiguously, with what each would find"
+$preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
+$group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldMatchAmbiguously' }
+Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All |
+    Select-Object ObjectDisplayName, @{ n = 'Matches'; e = { $_.MatchCandidates.DisplayNameSnapshot -join ', ' } }
 ```
 
 ---

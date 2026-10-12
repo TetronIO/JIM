@@ -371,6 +371,85 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_AmbiguousDrillDownRow_LinksTheObjectsItWouldFind()
+    {
+        // #2052: an ambiguous row's next question is "which ones?", so the drill-down lists the candidates as links,
+        // the first inline and the rest behind "+n more", rather than only saying there were several.
+        GivenPreview(Complete);
+        var group = Group(1, attributeName: "Object Matching");
+        group.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously;
+        GivenGroups(group);
+        var first = Guid.CreateVersion7();
+        var delta = Delta("Ada King", "More than one match (on E1)", null);
+        delta.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously;
+        delta.MatchCandidates =
+        [
+            new ConfigurationChangePreviewDeltaMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.ConnectedSystemObject, CandidateId = first, DisplayNameSnapshot = "aking",
+                TypeNameSnapshot = "user", ConnectedSystemId = 4, ConnectedSystemNameSnapshot = "Directory", Ordinal = 0, CandidateTotal = 2
+            },
+            new ConfigurationChangePreviewDeltaMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.ConnectedSystemObject, CandidateId = Guid.CreateVersion7(), DisplayNameSnapshot = "aking2",
+                TypeNameSnapshot = "user", ConnectedSystemId = 4, ConnectedSystemNameSnapshot = "Directory", Ordinal = 1, CandidateTotal = 2
+            }
+        ];
+        GivenDeltas(delta);
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Object Matching");
+        panel.WaitForState(() => panel.FindComponents<ObjectChip>().Any(c => c.Instance.Name == "aking"), TimeSpan.FromSeconds(2));
+
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "aking");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystemObject));
+            Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/4/connector-space/{first}"));
+            Assert.That(panel.FindComponents<OverflowList<ConfigurationChangePreviewDeltaMatchCandidate>>().Single().Instance.Items,
+                Has.Count.EqualTo(2), "every candidate is reachable, the rest behind \"+n more\"");
+        }
+    }
+
+    [Test]
+    public void Panel_AmbiguousDrillDownRow_LinksAMetaverseObjectCandidateThroughItsTypesPluralName()
+    {
+        var metaverseRepository = new Mock<IMetaverseRepository>();
+        metaverseRepository
+            .Setup(r => r.GetMetaverseObjectTypeAsync("Person", It.IsAny<bool>(), It.IsAny<bool>()))
+            .ReturnsAsync(new JIM.Models.Core.MetaverseObjectType { Id = 12, Name = "Person", PluralName = "People" });
+        _repository.Setup(r => r.Metaverse).Returns(metaverseRepository.Object);
+        GivenPreview(Complete);
+        var group = Group(1, attributeName: "Object Matching");
+        group.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously;
+        GivenGroups(group);
+        var candidateId = Guid.CreateVersion7();
+        var delta = Delta("No match", "More than one match (on E1)", null);
+        delta.TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously;
+        delta.MatchCandidates =
+        [
+            new ConfigurationChangePreviewDeltaMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.MetaverseObject, CandidateId = candidateId, DisplayNameSnapshot = "Ada King",
+                TypeNameSnapshot = "Person", Ordinal = 0, CandidateTotal = 2
+            }
+        ];
+        GivenDeltas(delta);
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Object Matching");
+        panel.WaitForState(() => panel.FindComponents<ObjectChip>().Any(c => c.Instance.Name == "Ada King" && c.Instance.Href != null),
+            TimeSpan.FromSeconds(2));
+
+        var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Ada King");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.MetaverseObject));
+            Assert.That(chip.Instance.Href, Is.EqualTo($"/t/people/v/{candidateId}"));
+        }
+    }
+
+    [Test]
     public void Panel_DrillDownRowNamingBothObjects_LinksToTheConnectedSystemObject()
     {
         // A row carrying both ids is an identity and its object in the Connected System the group is about (the

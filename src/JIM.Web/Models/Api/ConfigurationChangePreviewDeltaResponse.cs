@@ -50,6 +50,13 @@ public class ConfigurationChangePreviewDeltaResponse
     /// </summary>
     public string? PatternKey { get; set; }
 
+    /// <summary>
+    /// For a row predicting an ambiguous match, the objects it would find, in recorded order: at most ten, each
+    /// carrying the full count in <c>candidateTotal</c>. Empty for every other row. The same shape as an Activity
+    /// item's <c>matchCandidates</c>.
+    /// </summary>
+    public List<MatchCandidateDto> MatchCandidates { get; set; } = [];
+
     public static ConfigurationChangePreviewDeltaResponse FromEntity(ConfigurationChangePreviewDelta delta)
     {
         ArgumentNullException.ThrowIfNull(delta);
@@ -67,7 +74,8 @@ public class ConfigurationChangePreviewDeltaResponse
             AttributeName = delta.AttributeName,
             OldValue = delta.OldValue,
             NewValue = delta.NewValue,
-            PatternKey = delta.PatternKey
+            PatternKey = delta.PatternKey,
+            MatchCandidates = [.. delta.MatchCandidates.OrderBy(c => c.Ordinal).Select(MatchCandidateDto.FromModel)]
         };
     }
 }

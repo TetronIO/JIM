@@ -416,6 +416,40 @@ public class ObjectMatchingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ProposalMatchesMoreThanOneMetaverseObject_ListsEveryCandidate()
+    {
+        // The administrator's next question is "which ones?", so the row carries every identity the value found
+        // (#2052), in the shape an Activity item records them, rather than only saying there were several.
+        var bobby = MetaverseObjectWith("Bobby Jones", employeeId: "E8", email: "alice@example.com");
+        _syncRepo.SeedMetaverseObject(bobby);
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E7", "alice@example.com")];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        var candidates = deltas.Single().MatchCandidates;
+        Assert.That(candidates, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates!.Select(c => c.CandidateId), Is.EquivalentTo(new[] { _bob.Id, bobby.Id }));
+            Assert.That(candidates!.Select(c => c.DisplayNameSnapshot), Is.EqualTo(new[] { "Bob Jones", "Bobby Jones" }));
+            Assert.That(candidates!.All(c => c.CandidateKind == MatchCandidateKind.MetaverseObject), Is.True);
+            Assert.That(candidates!.All(c => c.MatchedValue == "alice@example.com"), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposalMatchingOneMetaverseObject_CarriesNoCandidates()
+    {
+        _csoType.ObjectMatchingRules = [StoredRule()];
+        _csos = [UnjoinedCso("E1", "alice@example.com")];
+
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(ProposalWith(MailRuleProposal())), CancellationToken.None).ToListAsync();
+
+        Assert.That(deltas.Single().MatchCandidates, Is.Null.Or.Empty);
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_AlreadyJoinedObject_IsNeverEvaluated()
     {
         // The honest negative. A joined object never re-runs matching, so a matching change cannot move it, and

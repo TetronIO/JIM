@@ -32,6 +32,9 @@ namespace JIM.Models.Preview;
 /// The value now. Personal data: never log this, and never put it in a diagnostic message.
 /// </param>
 /// <param name="NewValue">The value the proposed configuration would produce. Personal data, as above.</param>
+/// <param name="MatchCandidates">
+/// For a predicted ambiguous match, the objects it would find (#2052), as an Activity item would record them.
+/// </param>
 public record PreviewDelta(
     ActivityRunProfileExecutionItemSyncOutcomeType TransitionType,
     string? ObjectDisplayName = null,
@@ -42,4 +45,5 @@ public record PreviewDelta(
     int? ConnectedSystemId = null,
     string? AttributeName = null,
     string? OldValue = null,
-    string? NewValue = null);
+    string? NewValue = null,
+    IReadOnlyList<MatchCandidateSnapshot>? MatchCandidates = null);

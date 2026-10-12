@@ -279,7 +279,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         }
         catch (MultipleMatchesException ex)
         {
-            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues);
+            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues, Candidates: ex.Candidates);
         }
         catch (ObjectMatchingRuleFailedException ex)
         {
@@ -359,7 +359,9 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
             ConnectedSystemId: connectedSystemId,
             AttributeName: MatchAttributeName,
             OldValue: stored.Describe(),
-            NewValue: proposed.Describe());
+            NewValue: proposed.Describe(),
+            // The row describes the proposal, so it lists what the proposal would find when that is ambiguous.
+            MatchCandidates: proposed.Kind == MatchKind.Ambiguous ? proposed.Candidates : null);
     }
 
     private enum MatchKind
@@ -374,8 +376,15 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     /// <param name="MatchValues">What the deciding rule computed, so a row shows the value it matched on.</param>
     /// <param name="FailureMessage">Why a rule could not be worked out, for <see cref="MatchKind.Failed"/>.</param>
-    private record MatchOutcome(MatchKind Kind, MetaverseObject? MetaverseObject, IReadOnlyList<object>? MatchValues = null, string? FailureMessage = null)
+    /// <param name="Candidates">The identities an <see cref="MatchKind.Ambiguous"/> match found (#2052).</param>
+    private record MatchOutcome(
+        MatchKind Kind,
+        MetaverseObject? MetaverseObject,
+        IReadOnlyList<object>? MatchValues = null,
+        string? FailureMessage = null,
+        IReadOnlyList<ActivityRunProfileExecutionItemMatchCandidate>? Candidates = null)
     {
+
         public static readonly MatchOutcome NoMatch = new(MatchKind.NoMatch, null);
 
         /// <summary>How this outcome reads in a drill-down row's value column.</summary>

@@ -111,7 +111,7 @@ The preview reports:
 | Joins a different Metaverse Object | The object joins one Metaverse Object under the rules as they stand and would join a different one. The most dangerous outcome a matching change can produce. |
 | Joins instead of projecting | The object matches nothing today, so the next synchronisation would create a new Metaverse Object for it, and under the proposal it would join an existing one. Usually what a widened rule is for. |
 | Projects instead of joining | The inverse, and a duplicate Metaverse Object risk: the object matches today and would match nothing, so a second Metaverse Object would be created beside the one it should have joined. |
-| Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. |
+| Matches more than one Metaverse Object | The proposal is ambiguous for this object, so its next synchronisation refuses it rather than joining it to anything. Each row's **Matches** column links the Metaverse Objects it would find. |
 
 One thing decides how to read every one of those counts: **Object Matching Rules are evaluated only for objects that
 are not already joined**. An account with a Metaverse Object keeps it, whatever you change here, so the impact covers
