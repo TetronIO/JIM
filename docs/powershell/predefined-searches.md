@@ -45,7 +45,7 @@ Get-JIMPredefinedSearch -Uri <string>
 
 The list and a wildcard `-Uri` return a header per search; `-Id` and a literal `-Uri` return the search in full, with its attributes and criteria groups.
 
-**`PredefinedSearchHeader`** (List, ByUri):
+**By default, or with a wildcard `-Uri`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -59,7 +59,7 @@ The list and a wildcard `-Uri` return a header per search; `-Id` and a literal `
 | `MetaverseAttributeCount` | `int` | How many attributes the search shows as columns in its results. |
 | `Created` | `datetime` | When the search was created (UTC). |
 
-**`PredefinedSearchDetailDto`** (ById, ByUri):
+**With `-Id`, or a literal `-Uri`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -75,8 +75,8 @@ The list and a wildcard `-Uri` return a header per search; `-Id` and a literal `
 | `CreatedByName` | `string` | The display name of the principal that created the search. |
 | `LastUpdated` | `datetime` | When the search was last modified (UTC). Empty if never modified after creation. |
 | `LastUpdatedByName` | `string` | The display name of the principal that last modified the search. |
-| `Attributes` | `PredefinedSearchAttributeDto[]` | The attributes surfaced as columns in the search results, ordered by Position. |
-| `CriteriaGroups` | `PredefinedSearchCriteriaGroupDto[]` | The criteria groups that filter which objects match the search, ordered by Position. |
+| `Attributes` | `object[]` | The attributes surfaced as columns in the search results, ordered by Position. Each has `Id`, `MetaverseAttributeId`, `MetaverseAttributeName` and `Position`. |
+| `CriteriaGroups` | `object[]` | The criteria groups that filter which objects match the search, ordered by Position. Each has `Id`, `Type`, `Position`, `Criteria` and `ChildGroups`. |
 <!-- END GENERATED: Get-JIMPredefinedSearch -->
 
 ### Examples
@@ -127,7 +127,7 @@ Set-JIMPredefinedSearch -Id <int> [-IsEnabled <bool>] [-ChangeReason <string>] [
 
 With `-PassThru`, the updated search in full, as `Get-JIMPredefinedSearch -Id` returns it; otherwise nothing.
 
-**`PredefinedSearchDetailDto`**: as under [Get-JIMPredefinedSearch](#get-jimpredefinedsearch).
+Properties as under [Get-JIMPredefinedSearch](#get-jimpredefinedsearch).
 <!-- END GENERATED: Set-JIMPredefinedSearch -->
 
 ### Examples
@@ -207,15 +207,13 @@ Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>
 
 One object per top-level criteria group, with its criteria and nested groups.
 
-**`PredefinedSearchCriteriaGroupDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the criteria group. |
 | `Type` | `string` | The logical operator for this group: "All" (AND) or "Any" (OR). |
 | `Position` | `int` | The position/order of this group relative to its siblings. |
-| `Criteria` | `PredefinedSearchCriteriaDto[]` | The criteria in this group. |
-| `ChildGroups` | `PredefinedSearchCriteriaGroupDto[]` | Nested child groups. A group combines its criteria and child groups with AND (type All) or OR (type Any); top-level groups are combined with OR. Groups nest to any depth. |
+| `Criteria` | `object[]` | The criteria in this group. Each has `Id`, `MetaverseAttributeId`, `MetaverseAttributeName`, `AttributeDataType`, `ComparisonType`, `StringValue`, `IntValue`, `LongValue`, `DecimalValue`, `DateTimeValue`, `BoolValue`, `GuidValue`, `CaseSensitive`, `ValueMode`, `RelativeCount`, `RelativeUnit` and `RelativeDirection`. |
+| `ChildGroups` | `object[]` | Nested child groups. A group combines its criteria and child groups with AND (type All) or OR (type Any); top-level groups are combined with OR. Groups nest to any depth. Each has `Id`, `Type`, `Position`, `Criteria` and `ChildGroups`. |
 <!-- END GENERATED: Get-JIMPredefinedSearchCriteriaGroup -->
 
 ### Examples
@@ -252,7 +250,7 @@ New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <
 
 With `-PassThru`, the created group, with a PredefinedSearchId property added naming its search; otherwise nothing.
 
-**`PredefinedSearchCriteriaGroupDto`**: as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
+Properties as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
 <!-- END GENERATED: New-JIMPredefinedSearchCriteriaGroup -->
 
 ### Examples
@@ -293,7 +291,7 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-
 
 With `-PassThru`, the updated group, with a PredefinedSearchId property added naming its search; otherwise nothing.
 
-**`PredefinedSearchCriteriaGroupDto`**: as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
+Properties as under [Get-JIMPredefinedSearchCriteriaGroup](#get-jimpredefinedsearchcriteriagroup).
 <!-- END GENERATED: Set-JIMPredefinedSearchCriteriaGroup -->
 
 ### Examples
@@ -383,8 +381,6 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Metav
 
 With `-PassThru`, the created criterion, with a GroupId property added naming its group; otherwise nothing.
 
-**`PredefinedSearchCriteriaDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the criterion. |
@@ -470,7 +466,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 
 With `-PassThru`, the updated criterion, with a GroupId property added naming its group; otherwise nothing.
 
-**`PredefinedSearchCriteriaDto`**: as under [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion).
+Properties as under [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion).
 <!-- END GENERATED: Set-JIMPredefinedSearchCriterion -->
 
 ### Examples

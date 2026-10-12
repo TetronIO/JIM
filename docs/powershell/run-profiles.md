@@ -35,21 +35,19 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 Each Run Profile on the Connected System, or each one whose name matches `-Name`.
 
-**`RunProfileDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Run Profile. |
 | `Name` | `string` | The user-supplied name for this Run Profile. |
 | `ConnectedSystemId` | `int` | The Connected System this Run Profile belongs to. |
-| `RunType` | `ConnectedSystemRunType` | The type of synchronisation operation (FullImport, DeltaImport, FullSynchronisation, DeltaSynchronisation, Export). |
+| `RunType` | `string` | The type of synchronisation operation (FullImport, DeltaImport, FullSynchronisation, DeltaSynchronisation, Export). One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
 | `PageSize` | `int` | How many items to process in one batch. |
 | `PartitionName` | `string` | The partition name if this Run Profile targets a specific partition. |
 | `TargetsDeselectedPartition` | `bool` | True when this Run Profile targets a partition that is no longer selected on the Connected System, which makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run Profile is refused rather than reading scope the administrator has withdrawn. |
 | `FilePath` | `string` | File path for file-based connectors. |
 | `VerifyImportContentHashes` | `bool` | Whether Verification Mode is enabled: the Full Import skips no object whose content looks unchanged, and instead raises an error for any object whose stored content hash disagrees with what was read. Only meaningful when `RunType` is `FullImport`. |
 | `AllowObjectTypeChanges` | `bool` | Whether this Full Import carries out an Object Type change rather than refusing it. Only ever true when `RunType` is `FullImport`, and only has an effect on a Connected System whose Connector can tell an Object Type change from a new object, as the LDAP Connector can. |
-| `Safeguards` | `RunProfileSafeguardsDto` | The limits on what this Run Profile may attempt. Always present. |
+| `Safeguards` | `object` | The limits on what this Run Profile may attempt. Always present. It has `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`. |
 <!-- END GENERATED: Get-JIMRunProfile -->
 
 `Safeguards` carries `MaxCreates`, `MaxUpdates` and `MaxDeletes` for an Export Run Profile, and `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent` for a Full Import; each is empty when that limit is not set.
@@ -113,7 +111,7 @@ New-JIMRunProfile [-Name] <string> -ConnectedSystemName <string> -RunType <strin
 
 With `-PassThru`, the created Run Profile; otherwise nothing.
 
-**`RunProfileDto`**: as under [Get-JIMRunProfile](#get-jimrunprofile).
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
 <!-- END GENERATED: New-JIMRunProfile -->
 
 ### Examples
@@ -210,7 +208,7 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 
 With `-PassThru`, the updated Run Profile; otherwise nothing.
 
-**`RunProfileDto`**: as under [Get-JIMRunProfile](#get-jimrunprofile).
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
 <!-- END GENERATED: Set-JIMRunProfile -->
 
 ### Examples
@@ -304,7 +302,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 
 With `-PassThru`, the deleted Run Profile, as it was before the deletion; otherwise nothing.
 
-**`RunProfileDto`**: as under [Get-JIMRunProfile](#get-jimrunprofile).
+Properties as under [Get-JIMRunProfile](#get-jimrunprofile).
 <!-- END GENERATED: Remove-JIMRunProfile -->
 
 ### Examples
@@ -375,8 +373,6 @@ Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wai
 ### Output
 
 With `-PassThru`, the response to queuing the run; `Get-JIMActivity -Follow` follows its ActivityId. Otherwise nothing. Warnings in the response are also written as PowerShell warnings.
-
-**`RunProfileExecutionResponse`**:
 
 | Property | Type | Description |
 |----------|------|-------------|

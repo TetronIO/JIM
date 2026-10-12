@@ -40,44 +40,44 @@ Get-JIMCertificate [-Name <string>] [-EnabledOnly]
 
 Listing returns each certificate's summary; `-Id` returns the certificate in full.
 
-**`TrustedCertificateHeader`** (List, Enabled):
+**By default, or with `-EnabledOnly`**:
 
-| Property | Type |
-|----------|------|
-| `Id` | `guid` |
-| `Name` | `string` |
-| `Thumbprint` | `string` |
-| `Subject` | `string` |
-| `Issuer` | `string` |
-| `ValidFrom` | `datetime` |
-| `ValidTo` | `datetime` |
-| `SourceType` | `CertificateSourceType` |
-| `IsEnabled` | `bool` |
-| `IsExpired` | `bool` |
-| `IsExpiringSoon` | `bool` |
-| `DaysUntilExpiry` | `int` |
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` |  |
+| `Name` | `string` |  |
+| `Thumbprint` | `string` |  |
+| `Subject` | `string` |  |
+| `Issuer` | `string` |  |
+| `ValidFrom` | `datetime` |  |
+| `ValidTo` | `datetime` |  |
+| `SourceType` | `string` | One of `Uploaded` or `FilePath`. |
+| `IsEnabled` | `bool` |  |
+| `IsExpired` | `bool` |  |
+| `IsExpiringSoon` | `bool` |  |
+| `DaysUntilExpiry` | `int` |  |
 
-**`TrustedCertificateDetailDto`** (ById):
+**With `-Id`**:
 
-| Property | Type |
-|----------|------|
-| `Id` | `guid` |
-| `Name` | `string` |
-| `Thumbprint` | `string` |
-| `Subject` | `string` |
-| `Issuer` | `string` |
-| `SerialNumber` | `string` |
-| `ValidFrom` | `datetime` |
-| `ValidTo` | `datetime` |
-| `SourceType` | `CertificateSourceType` |
-| `FilePath` | `string` |
-| `IsEnabled` | `bool` |
-| `CreatedAt` | `datetime` |
-| `CreatedBy` | `string` |
-| `Notes` | `string` |
-| `IsExpired` | `bool` |
-| `IsExpiringSoon` | `bool` |
-| `DaysUntilExpiry` | `int` |
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` |  |
+| `Name` | `string` |  |
+| `Thumbprint` | `string` |  |
+| `Subject` | `string` |  |
+| `Issuer` | `string` |  |
+| `SerialNumber` | `string` |  |
+| `ValidFrom` | `datetime` |  |
+| `ValidTo` | `datetime` |  |
+| `SourceType` | `string` | One of `Uploaded` or `FilePath`. |
+| `FilePath` | `string` |  |
+| `IsEnabled` | `bool` |  |
+| `CreatedAt` | `datetime` |  |
+| `CreatedBy` | `string` |  |
+| `Notes` | `string` |  |
+| `IsExpired` | `bool` |  |
+| `IsExpiringSoon` | `bool` |  |
+| `DaysUntilExpiry` | `int` |  |
 <!-- END GENERATED: Get-JIMCertificate -->
 
 ### Examples
@@ -138,7 +138,7 @@ Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] 
 
 With `-PassThru`, the certificate added; otherwise nothing.
 
-**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
+Properties as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Add-JIMCertificate -->
 
 ### Examples
@@ -194,7 +194,7 @@ Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Dis
 
 With `-PassThru`, the certificate as updated; otherwise nothing.
 
-**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
+Properties as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Set-JIMCertificate -->
 
 ### Examples
@@ -252,7 +252,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 
 With `-PassThru`, the certificate as it was before it was removed; otherwise nothing.
 
-**`TrustedCertificateDetailDto`**: as under [Get-JIMCertificate](#get-jimcertificate).
+Properties as under [Get-JIMCertificate](#get-jimcertificate).
 <!-- END GENERATED: Remove-JIMCertificate -->
 
 ### Examples
@@ -299,8 +299,6 @@ Test-JIMCertificate -Id <guid>
 ### Output
 
 The result of the checks. IsValid is true when the certificate passed every one; Warnings lists problems that do not stop it being used, such as expiring soon, and Errors those that do, such as having expired or an untrusted chain.
-
-**`CertificateValidationResult`**:
 
 | Property | Type |
 |----------|------|
@@ -369,7 +367,7 @@ Export-JIMCertificate -Id <guid> -PassThru
 
 With `-PassThru`, the certificate's bytes, DER-encoded; otherwise nothing, the certificate being written to `-Path`.
 
-**`byte[]`** (PassThru)
+**With `-PassThru`**: a `byte[]`.
 <!-- END GENERATED: Export-JIMCertificate -->
 
 ### Examples

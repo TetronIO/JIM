@@ -45,6 +45,10 @@ function Get-JIMDeletedObject {
         Connected System Object carries Id, ExternalId, DisplayName, ObjectTypeName, ConnectedSystemId,
         ConnectedSystemName, ChangeTime, InitiatedByType and InitiatedByName.
 
+        JIM.DeletedObjectsPagedResponseOfDeletedMvoResponse: By default, or with `-ObjectType MVO`
+
+        JIM.DeletedObjectsPagedResponseOfDeletedCsoResponse: With `-ObjectType CSO`
+
     .EXAMPLE
         Get-JIMDeletedObject
 

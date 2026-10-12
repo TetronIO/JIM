@@ -32,7 +32,7 @@ Get-JIMRole -Id <int>
 
 One object per Role.
 
-**`RoleHeader`** (List):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -42,7 +42,7 @@ One object per Role.
 | `Created` | `datetime` | When the Role was created (UTC). |
 | `StaticMemberCount` | `int` | How many Metaverse Objects have been made members of the Role. |
 
-**`RoleDto`** (ById):
+**With `-Id`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -100,13 +100,11 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 One object per member of the Role.
 
-**`RoleMemberDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` | The unique identifier (GUID) of the Metaverse Object. |
 | `DisplayName` | `string` | The display name of the Metaverse Object. |
-| `Type` | `MetaverseObjectTypeDto` | The Metaverse Object Type, with its Id and Name. |
+| `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
 <!-- END GENERATED: Get-JIMRoleMember -->
 
 ### Examples
@@ -153,7 +151,7 @@ Get-JIMMetaverseObjectRole -Id <guid>
 
 One object per Role the Metaverse Object is a member of; nothing when it is in none.
 
-**`RoleDto`**: as under [Get-JIMRole](#get-jimrole).
+Properties as under [Get-JIMRole](#get-jimrole).
 <!-- END GENERATED: Get-JIMMetaverseObjectRole -->
 
 ### Examples

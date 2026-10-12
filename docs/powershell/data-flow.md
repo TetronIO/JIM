@@ -46,15 +46,13 @@ Get-JIMDataFlow -ConnectedSystemName <string> [-Direction <string>] [-MetaverseO
 
 One object per flow. The cmdlet pages through the whole result set itself.
 
-**`DataFlowHeader`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `SyncRuleMappingId` | `int` | The Attribute Flow this row is; identifies the flow. |
 | `SyncRuleId` | `int` | The owning Synchronisation Rule. |
 | `SyncRuleName` | `string` | The owning Synchronisation Rule's name. |
 | `SyncRuleEnabled` | `bool` | Whether the owning Synchronisation Rule is enabled. A disabled rule's flows are shown, because they remain configuration an administrator is reasoning about, but they never move data. |
-| `Direction` | `SyncRuleDirection` | Import, for a flow into the Metaverse, or Export, for a flow out of it. |
+| `Direction` | `string` | Import, for a flow into the Metaverse, or Export, for a flow out of it. One of `NotSet`, `Import` or `Export`. |
 | `ConnectedSystemId` | `int` | The Connected System the owning Synchronisation Rule belongs to. |
 | `ConnectedSystemName` | `string` | The name of the Connected System the owning Synchronisation Rule belongs to. |
 | `ConnectedSystemObjectTypeId` | `int` | The Connected System Object Type the flow applies to. |
@@ -65,7 +63,7 @@ One object per flow. The cmdlet pages through the whole result set itself.
 | `TargetMetaverseAttributeName` | `string` | The Metaverse Attribute an Import flow writes. Empty on an Export flow. |
 | `TargetConnectedSystemAttributeId` | `int` | The Connected System attribute an Export flow writes. Empty on an Import flow, where the Connected System side is the source. |
 | `TargetConnectedSystemAttributeName` | `string` | The Connected System attribute an Export flow writes. Empty on an Import flow. |
-| `Sources` | `DataFlowSource[]` | What feeds the target, in evaluation order: Connected System attributes on an Import flow, Metaverse Attributes on an Export flow, or an expression on either. Each names its attribute, or carries the expression, with its place in the order and a display name. |
+| `Sources` | `object[]` | What feeds the target, in evaluation order: Connected System attributes on an Import flow, Metaverse Attributes on an Export flow, or an expression on either. Each names its attribute, or carries the expression, with its place in the order and a display name. Each has `Order`, `MetaverseAttributeId`, `MetaverseAttributeName`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName`, `Expression`, `IsExpression` and `DisplayName`. |
 | `Priority` | `int` | The flow's place in its target Metaverse Attribute's priority order, 1 being highest; Import flows only. A flow that has never been ordered carries 2147483647, which the portal shows as Unranked. |
 | `NullIsValue` | `bool` | Whether this contribution asserts "no value" authoritatively rather than falling through to the next contributor. Import flows only. |
 | `EnforceState` | `bool` | Whether the owning Export Synchronisation Rule corrects the Connected System when its value diverges from the Metaverse. Export flows only. |

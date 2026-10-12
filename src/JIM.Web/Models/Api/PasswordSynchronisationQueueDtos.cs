@@ -53,9 +53,10 @@ public class PendingPasswordChangeResponse
     public string ConnectedSystemName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or
-    /// it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer
-    /// be delivered), or Cancelled (an administrator stopped it).
+    /// Where the change has got to: Pending (JIM still intends to deliver it), Delivering (the Password Delivery
+    /// Service has claimed it and is delivering it now), Parked (the target refused it, or it ran out of attempts,
+    /// so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or
+    /// Cancelled (an administrator stopped it).
     /// </summary>
     public PendingPasswordChangeStatus Status { get; set; }
 

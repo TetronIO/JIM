@@ -36,8 +36,6 @@ Get-JIMServiceSetting [-Key] <string>
 
 Each service setting, with its default, its stored value and the value in effect.
 
-**`ServiceSettingDto`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Key` | `string` | Unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled"). |
@@ -96,7 +94,7 @@ Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>]
 
 With `-PassThru`, the setting as updated; otherwise nothing.
 
-**`ServiceSettingDto`**: as under [Get-JIMServiceSetting](#get-jimservicesetting).
+Properties as under [Get-JIMServiceSetting](#get-jimservicesetting).
 <!-- END GENERATED: Set-JIMServiceSetting -->
 
 ### Examples
@@ -148,7 +146,7 @@ Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru] [-W
 
 With `-PassThru`, the setting as reverted; otherwise nothing.
 
-**`ServiceSettingDto`**: as under [Get-JIMServiceSetting](#get-jimservicesetting).
+Properties as under [Get-JIMServiceSetting](#get-jimservicesetting).
 <!-- END GENERATED: Reset-JIMServiceSetting -->
 
 ### Examples

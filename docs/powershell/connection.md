@@ -46,8 +46,6 @@ Connect-JIM [-Url] <string> [-ApiKey] <string>
 
 The connection made.
 
-**`Connection`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Url` | `string` | The JIM instance's address. |
@@ -177,7 +175,7 @@ Test-JIMConnection [-Quiet]
 
 The connection's status; with `-Quiet`, `$true` if connected and otherwise `$false`.
 
-**`ConnectionStatus`**:
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -189,7 +187,7 @@ The connection's status; with `-Quiet`, `$true` if connected and otherwise `$fal
 | `Message` | `string` | A sentence describing the result. |
 | `TokenExpiresAt` | `datetime` | When the access token expires; OAuth only. |
 
-**`bool`**
+**With `-Quiet`**: a `bool`.
 <!-- END GENERATED: Test-JIMConnection -->
 
 ### Examples
