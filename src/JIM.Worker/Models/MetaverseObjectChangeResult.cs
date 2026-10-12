@@ -132,6 +132,12 @@ public readonly struct MetaverseObjectChangeResult
     public string? CancelledMvoDeletionDetailMessage { get; init; }
 
     /// <summary>
+    /// Set on a join made by matching (#2052): the match it was made on, so whichever site builds the Joined root
+    /// outcome records the Object Matching Rule and the value. Null for any other change.
+    /// </summary>
+    public ImportMatch? JoinMatch { get; init; }
+
+    /// <summary>
     /// When a scheduled deletion becomes due (UTC), so the outcome node can state the date rather than
     /// leaving the reader to derive it from the disconnection time and the grace period (#119).
     /// Null unless the deletion was scheduled.
@@ -197,18 +203,21 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="attributesRemoved">The number of MVO attributes that were removed alongside the join.</param>
     /// <param name="cancelledMvoDeletionDetailMessage">The detail message for an MvoDeletionCancelled child outcome, when this join cancelled a previously scheduled deletion (#1620); null otherwise.</param>
     /// <param name="mvoDeletionPolicySnapshotJson">The scheduled deletion's decision-time policy snapshot, carried through unchanged so the causality panel can still show the rule that had scheduled it (#1620); null otherwise.</param>
+    /// <param name="joinMatch">The match the join was made on (#2052); null when the join was not made by matching.</param>
     public static MetaverseObjectChangeResult Joined(
         int attributesAdded = 0,
         int attributesRemoved = 0,
         string? cancelledMvoDeletionDetailMessage = null,
-        string? mvoDeletionPolicySnapshotJson = null) => new()
+        string? mvoDeletionPolicySnapshotJson = null,
+        ImportMatch? joinMatch = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.Joined,
         AttributesAdded = attributesAdded,
         AttributesRemoved = attributesRemoved,
         CancelledMvoDeletionDetailMessage = cancelledMvoDeletionDetailMessage,
-        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson
+        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
+        JoinMatch = joinMatch
     };
 
     /// <summary>

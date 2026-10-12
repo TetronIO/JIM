@@ -88,6 +88,25 @@ public class ActivityRunProfileExecutionItemDetailDto
     public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
 
     /// <summary>
+    /// For an object joined to an existing Metaverse Object by matching, the id of the Object Matching Rule that found
+    /// it; null for any other item. The rule may since have been changed or deleted; the description below records
+    /// what it compared at the time.
+    /// </summary>
+    public int? JoinObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// For an object joined by matching, what the Object Matching Rule compared when the join was made, for example
+    /// <c>Employee ID equals employeeId</c>; null for any other item.
+    /// </summary>
+    public string? JoinObjectMatchingRuleDescriptionSnapshot { get; set; }
+
+    /// <summary>
+    /// For an object joined by matching, the value the join matched on: what the rule computed from the object, with
+    /// several separated by commas for a multi-valued source. Null for any other item.
+    /// </summary>
+    public string? JoinMatchedValue { get; set; }
+
+    /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.
     /// </summary>
     public static ActivityRunProfileExecutionItemDetailDto FromEntity(ActivityRunProfileExecutionItem entity)

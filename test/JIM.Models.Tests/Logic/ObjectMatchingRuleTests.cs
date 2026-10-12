@@ -104,6 +104,38 @@ public class ObjectMatchingRuleTests
         Assert.That(ObjectMatchingRule.IsMatchableType(type), Is.EqualTo(matchable));
     }
 
+    [Test]
+    public void DescribeComparison_AttributeSource_NamesTheMetaverseAttributeAndTheConnectedSystemAttribute()
+    {
+        var rule = new ObjectMatchingRule
+        {
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID" },
+            Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "employeeId" } }]
+        };
+
+        Assert.That(rule.DescribeComparison(), Is.EqualTo("Employee ID equals employeeId"));
+    }
+
+    [Test]
+    public void DescribeComparison_ExpressionSource_NamesTheMetaverseAttributeAndTheExpression()
+    {
+        var rule = new ObjectMatchingRule
+        {
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 201, Name = "Employee ID" },
+            Sources = [new ObjectMatchingRuleSource { Order = 0, Expression = "\"E\" + Trim(cs[\"employeeId\"])" }]
+        };
+
+        Assert.That(rule.DescribeComparison(), Is.EqualTo("Employee ID equals \"E\" + Trim(cs[\"employeeId\"])"));
+    }
+
+    [Test]
+    public void DescribeComparison_AttributesNotLoaded_FallsBackToTheirIds()
+    {
+        var rule = SimpleModeRule();
+
+        Assert.That(rule.DescribeComparison(), Is.EqualTo("201 equals 101"));
+    }
+
     private static ObjectMatchingRule SimpleModeRule() => new()
     {
         ConnectedSystemObjectTypeId = 7,

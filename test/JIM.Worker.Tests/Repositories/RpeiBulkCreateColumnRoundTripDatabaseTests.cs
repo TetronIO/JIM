@@ -120,7 +120,10 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             ConnectedSystemObjectChangeId = null,
             SyncRuleId = 42,
             SyncRuleName = "HR Import",
-            StagedChangeType = null
+            StagedChangeType = null,
+            ObjectMatchingRuleId = 12,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals \"E\" + Trim(cs[\"employeeId\"])",
+            MatchedValue = "E1007"
         };
         var childOutcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -196,6 +199,9 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRoot.SyncRuleId, Is.EqualTo(42));
             Assert.That(storedRoot.SyncRuleName, Is.EqualTo("HR Import"));
             Assert.That(storedRoot.StagedChangeType, Is.Null);
+            Assert.That(storedRoot.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(storedRoot.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo(rootOutcome.ObjectMatchingRuleDescriptionSnapshot));
+            Assert.That(storedRoot.MatchedValue, Is.EqualTo("E1007"));
 
             var storedChild = storedOutcomes.Single(o => o.Id == childOutcome.Id);
             Assert.That(storedChild.ParentSyncOutcomeId, Is.EqualTo(rootOutcome.Id));
@@ -207,6 +213,9 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedChild.SyncRuleId, Is.Null);
             Assert.That(storedChild.SyncRuleName, Is.Null);
             Assert.That(storedChild.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(storedChild.ObjectMatchingRuleId, Is.Null);
+            Assert.That(storedChild.ObjectMatchingRuleDescriptionSnapshot, Is.Null);
+            Assert.That(storedChild.MatchedValue, Is.Null);
         }
     }
 

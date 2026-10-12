@@ -100,6 +100,30 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     public PendingExportChangeType? StagedChangeType { get; set; }
 
     /// <summary>
+    /// On a Joined outcome made by matching, the id of the Object Matching Rule that found the Metaverse Object;
+    /// null on every other outcome. The rule may since have been changed or deleted, so read
+    /// <c>ObjectMatchingRuleDescriptionSnapshot</c> for what it compared.
+    /// </summary>
+    /// <remarks>
+    /// A plain scalar with no foreign key, like <see cref="SyncRuleId"/>, so the record survives the rule's deletion
+    /// (#2052).
+    /// </remarks>
+    public int? ObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// On a Joined outcome made by matching, what the Object Matching Rule compared when the join was made, for
+    /// example <c>Employee ID equals "E" + Trim(cs["employeeId"])</c>; null on every other outcome.
+    /// </summary>
+    public string? ObjectMatchingRuleDescriptionSnapshot { get; set; }
+
+    /// <summary>
+    /// On a Joined outcome made by matching, the value the join matched on: what the rule computed from the object,
+    /// which can differ in case from the Metaverse Object's value under a rule that ignores case, with several
+    /// separated by commas for a multi-valued source. Null on every other outcome.
+    /// </summary>
+    public string? MatchedValue { get; set; }
+
+    /// <summary>
     /// Quantitative detail (e.g., "12 attributes flowed", "3 attributes exported").
     /// </summary>
     public int? DetailCount { get; set; }

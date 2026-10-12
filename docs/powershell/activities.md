@@ -280,6 +280,8 @@ Returns a `PSCustomObject` describing the item:
 | `SourceLocation` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | For an `AmbiguousMatch` or `AmbiguousProvisioningMatch`, the objects the match found; empty otherwise. See below. |
+| `JoinObjectMatchingRuleId`, `JoinObjectMatchingRuleDescriptionSnapshot` | For an object joined to an existing Metaverse Object by matching, the [Object Matching Rule](../configuration/object-matching-rules.md) that found it, and what the rule compared when the join was made, for example `Employee ID equals employeeNumber`; empty for any other item. |
+| `JoinMatchedValue` | For an object joined by matching, the value the join matched on: what the rule computed from the object. Empty for any other item. |
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 

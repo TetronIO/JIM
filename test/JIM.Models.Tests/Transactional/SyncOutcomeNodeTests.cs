@@ -50,6 +50,27 @@ public class SyncOutcomeNodeTests
     }
 
     [Test]
+    public void FromSyncOutcome_JoinedByMatching_MapsTheRuleAndValueItMatchedOn()
+    {
+        var outcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            ObjectMatchingRuleId = 12,
+            ObjectMatchingRuleDescriptionSnapshot = "Employee ID equals \"E\" + Trim(cs[\"employeeId\"])",
+            MatchedValue = "E1007"
+        };
+
+        var node = SyncOutcomeNode.FromSyncOutcome(outcome);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(node.ObjectMatchingRuleId, Is.EqualTo(12));
+            Assert.That(node.ObjectMatchingRuleDescriptionSnapshot, Is.EqualTo(outcome.ObjectMatchingRuleDescriptionSnapshot));
+            Assert.That(node.MatchedValue, Is.EqualTo("E1007"));
+        }
+    }
+
+    [Test]
     public void FromSyncOutcome_MapsChildrenRecursivelyInOrdinalOrder()
     {
         // Real trees are persisted flat and re-assembled with children in arbitrary insertion order; the

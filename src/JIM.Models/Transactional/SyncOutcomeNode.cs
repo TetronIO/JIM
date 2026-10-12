@@ -63,6 +63,24 @@ public class SyncOutcomeNode
     public string? DetailMessage { get; set; }
 
     /// <summary>
+    /// On a Joined outcome made by matching, the id of the Object Matching Rule that found, or would find, the
+    /// Metaverse Object; null on every other outcome.
+    /// </summary>
+    public int? ObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// On a Joined outcome made by matching, what the Object Matching Rule compares, for example
+    /// <c>Employee ID equals "E" + Trim(cs["employeeId"])</c>; null on every other outcome.
+    /// </summary>
+    public string? ObjectMatchingRuleDescriptionSnapshot { get; set; }
+
+    /// <summary>
+    /// On a Joined outcome made by matching, the value the join matched on, or would match on; null on every other
+    /// outcome.
+    /// </summary>
+    public string? MatchedValue { get; set; }
+
+    /// <summary>
     /// Ordering among siblings, for consistent display order.
     /// </summary>
     public int Ordinal { get; set; }
@@ -89,6 +107,9 @@ public class SyncOutcomeNode
         StagedChangeType = outcome.StagedChangeType,
         DetailCount = outcome.DetailCount,
         DetailMessage = outcome.DetailMessage,
+        ObjectMatchingRuleId = outcome.ObjectMatchingRuleId,
+        ObjectMatchingRuleDescriptionSnapshot = outcome.ObjectMatchingRuleDescriptionSnapshot,
+        MatchedValue = outcome.MatchedValue,
         Ordinal = outcome.Ordinal,
         Children = outcome.Children.OrderBy(c => c.Ordinal).Select(FromSyncOutcome).ToList()
     };
