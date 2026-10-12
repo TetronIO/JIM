@@ -62,7 +62,8 @@ public class CausalTimelineEntry
     public string? DisplayName { get; init; }
 
     /// <summary>
-    /// The object's type as the item recorded it.
+    /// The object's type as the item recorded it, or, where it recorded none, the type of the Connected System Object it
+    /// processed while that still exists.
     /// </summary>
     public string? ObjectType { get; init; }
 

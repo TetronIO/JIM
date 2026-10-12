@@ -174,6 +174,8 @@ Delivery notes:
 - **The Metaverse Object page's button sits in its tab bar,** beside the view switcher, because the page has no action row; it shows on every tab. The Connected System Object page's sits beside Preview Sync, and Open in explorer in the causality panel's band.
 - Two pieces became shared components rather than second copies: the Activity page's outcome chips (`OutcomeSummaryChips`) and a row's nearest cause (`CausalityNearestCause`), used by the object timeline and Queued by.
 - Showing more of an object's timeline skips any row already shown, since an item recorded after the first page was read moves later rows down one.
+- Verified at runtime on the full stack by driving every entry point and re-centring path: item links, object heads and timeline rows re-centre with the trail; crumbs and browser back return; Copy link offers its dialog over plain HTTP; a deleted Connected System Object focus offers its deletion record; a Pending Export staged by two runs and one purged run lists both and counts the third. Layout fixes from the screenshots: the Metaverse Object page's button and the run cells no longer wrap, and trail steps clip later.
+- **An item that recorded no object type takes its record's.** The walk-through showed one trail step naming "jimGroup" and the next not: an import updating a record it already holds records only the name. The timeline reads now fall back to the Connected System Object's own type, keeping a recorded one, which can name the Metaverse Object. The timeline page now also reads its columns for the page's rows alone rather than for the whole history it counts.
 
 ### Phase 3e: REST and PowerShell
 

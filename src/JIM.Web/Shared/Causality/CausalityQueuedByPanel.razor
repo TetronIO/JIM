@@ -32,7 +32,7 @@
                     {
                         var executedLocal = row.Entry.Executed.ToLocalTime();
                         <tr class="jim-causality-queued-row" @key="row.Entry.RunProfileExecutionItemId">
-                            <td>
+                            <td class="jim-nowrap">
                                 <div>@(row.Entry.ActivityTargetName ?? "A run")</div>
                                 <div class="mud-text-secondary jim-causality-timeline-system">
                                     @(row.Entry.ActivityTargetContext is { } systemName ? $"{systemName} · " : null)<span title="@executedLocal.ToFriendlyDate()">@executedLocal.ToRelativeTime()</span>

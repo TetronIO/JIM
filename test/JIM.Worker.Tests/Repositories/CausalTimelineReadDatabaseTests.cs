@@ -110,6 +110,32 @@ public class CausalTimelineReadDatabaseTests
     }
 
     [Test]
+    public async Task CausalTimelineReads_ItemRecordedNoObjectType_TakeItsConnectedSystemObjectsTypeAsync()
+    {
+        // Not every item records the object's type: an import updating a record it already holds records only the name.
+        // The record's own type stands in, so the explorer's trail and focus header name every item alike. A type the
+        // item did record is kept, since it can name the Metaverse Object the item was about rather than the record.
+        var hr = await SeedConnectedSystemAsync("Yellowstone APAC");
+        var tina = await SeedCsoAsync(hr);
+        var import = await SeedActivityAsync(hr.SystemId, ConnectedSystemRunType.DeltaImport, T0, "Delta Import", "Yellowstone APAC");
+        var untyped = await SeedItemAsync(import, ObjectChangeType.Updated, "Tina Adams", objectType: null, csoId: tina);
+        var sync = await SeedActivityAsync(hr.SystemId, ConnectedSystemRunType.DeltaSynchronisation, T0.AddMinutes(5), "Delta Sync", "Yellowstone APAC");
+        var typed = await SeedItemAsync(sync, ObjectChangeType.AttributeFlow, "Tina Adams", "User", csoId: tina);
+
+        var (page, _) = await ReadTimelineAsync(CsoSubject(tina));
+        await using var ctx = NewContext();
+        var byId = await new PostgresDataRepository(ctx).Activity.GetCausalTimelineEntriesAsync([untyped, typed]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Single(e => e.RunProfileExecutionItemId == untyped).ObjectType, Is.EqualTo("person"), "a timeline page");
+            Assert.That(byId[untyped].ObjectType, Is.EqualTo("person"), "items read by id");
+            Assert.That(page.Single(e => e.RunProfileExecutionItemId == typed).ObjectType, Is.EqualTo("User"), "a recorded type is kept");
+            Assert.That(byId[typed].ObjectType, Is.EqualTo("User"));
+        }
+    }
+
+    [Test]
     public async Task GetCausalTimelinePageAsync_LongerThanAPage_PagesNewestFirstAndCountsEveryItemAsync()
     {
         var hr = await SeedConnectedSystemAsync("Yellowstone APAC");
@@ -799,7 +825,7 @@ public class CausalTimelineReadDatabaseTests
         return activity.Id;
     }
 
-    private async Task<Guid> SeedItemAsync(Guid activityId, ObjectChangeType changeType, string displayName, string objectType,
+    private async Task<Guid> SeedItemAsync(Guid activityId, ObjectChangeType changeType, string displayName, string? objectType,
         Guid? csoId = null, string? externalId = null, string? outcomeSummary = null, Guid? metaverseObjectId = null,
         ActivityRunProfileExecutionItemErrorType? errorType = null)
     {

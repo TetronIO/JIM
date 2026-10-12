@@ -1823,7 +1823,7 @@ a.jim-causality-crumb:hover {
 
 .jim-causality-crumb-label {
     min-width: 0;
-    max-width: 32ch;
+    max-width: 48ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

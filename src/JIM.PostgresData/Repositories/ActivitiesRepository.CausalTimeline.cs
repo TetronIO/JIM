@@ -97,14 +97,26 @@ public partial class ActivityRepository
 
     /// <summary>
     /// The columns of a <see cref="CausalTimelineEntry"/>, read by <see cref="ReadTimelineEntry"/> in this order, from
-    /// an item <c>r</c> and its Activity <c>a</c>.
+    /// an item <c>r</c> joined by <see cref="TimelineEntryJoinsSql"/>. Not every item records the object's type (an
+    /// import updating a record it already holds records only the name), so the record's own type stands in where the
+    /// item recorded none; a recorded type is kept, since it can name the Metaverse Object the item was about.
     /// </summary>
     private const string TimelineEntryColumnsSql = """
         r."Id" AS item_id, r."ActivityId" AS activity_id, a."Executed" AS executed, a."TargetType" AS target_type,
         a."TargetName" AS target_name, a."TargetContext" AS target_context, a."ConnectedSystemId" AS cs_id,
         a."ConnectedSystemRunType" AS run_type, r."ObjectChangeType" AS change_type, r."OutcomeSummary" AS outcome_summary,
-        r."ErrorType" AS error_type, r."DisplayNameSnapshot" AS display_name, r."ObjectTypeSnapshot" AS object_type,
+        r."ErrorType" AS error_type, r."DisplayNameSnapshot" AS display_name,
+        COALESCE(r."ObjectTypeSnapshot", cso_type."Name") AS object_type,
         r."ConnectedSystemObjectId" AS cso_id, r."ExternalIdSnapshot" AS external_id, r."MetaverseObjectId" AS mvo_id
+        """;
+
+    /// <summary>
+    /// What <see cref="TimelineEntryColumnsSql"/> reads beside an item <c>r</c>: its Activity, and its record's type.
+    /// </summary>
+    private const string TimelineEntryJoinsSql = """
+        JOIN "Activities" a ON a."Id" = r."ActivityId"
+        LEFT JOIN "ConnectedSystemObjects" cso ON cso."Id" = r."ConnectedSystemObjectId"
+        LEFT JOIN "ConnectedSystemObjectTypes" cso_type ON cso_type."Id" = cso."TypeId"
         """;
 
     private const int TimelineEntryColumnCount = 16;
@@ -141,14 +153,15 @@ public partial class ActivityRepository
     /// </summary>
     internal static void PrepareCausalTimelinePageCommand(DbCommand command, CausalTimelineSubject subject, int skip, int take)
     {
-        // "timeline" is referenced twice, by the page and by the count, and so is materialised once.
+        // "timeline" is referenced twice, by the page and by the count, and so is materialised once. It holds only what
+        // orders it; the entry's columns are read for the page's rows alone, however long the history.
         var idsSql = subject.Kind == CausalTimelineSubjectKind.ConnectedSystemObject
             ? ConnectedSystemObjectTimelineIdsSql
             : MetaverseObjectTimelineIdsSql;
         command.CommandText = idsSql + $"""
             ,
             timeline AS (
-                SELECT {TimelineEntryColumnsSql}
+                SELECT r."Id" AS item_id, a."Executed" AS executed
                 FROM ids
                 JOIN "ActivityRunProfileExecutionItems" r ON r."Id" = ids.id
                 JOIN "Activities" a ON a."Id" = r."ActivityId"
@@ -156,9 +169,15 @@ public partial class ActivityRepository
             SELECT page.*, (SELECT count(*) FROM timeline) AS total
             FROM (SELECT 1) AS one
             LEFT JOIN LATERAL (
-                SELECT * FROM timeline
-                ORDER BY executed DESC, item_id DESC
-                OFFSET @skip LIMIT @take
+                SELECT {TimelineEntryColumnsSql}
+                FROM (
+                    SELECT item_id FROM timeline
+                    ORDER BY executed DESC, item_id DESC
+                    OFFSET @skip LIMIT @take
+                ) AS shown
+                JOIN "ActivityRunProfileExecutionItems" r ON r."Id" = shown.item_id
+                {TimelineEntryJoinsSql}
+                ORDER BY a."Executed" DESC, r."Id" DESC
             ) AS page ON TRUE
             """;
 
@@ -184,7 +203,7 @@ public partial class ActivityRepository
             SELECT {TimelineEntryColumnsSql}
             FROM (SELECT DISTINCT unnest(@item_ids) AS id) AS ids
             JOIN "ActivityRunProfileExecutionItems" r ON r."Id" = ids.id
-            JOIN "Activities" a ON a."Id" = r."ActivityId"
+            {TimelineEntryJoinsSql}
             """;
         AddParameter(command, "item_ids", runProfileExecutionItemIds.ToArray(), NpgsqlDbType.Array | NpgsqlDbType.Uuid);
 

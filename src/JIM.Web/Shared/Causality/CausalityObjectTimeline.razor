@@ -38,7 +38,7 @@
         <MudTd DataLabel="When" Class="jim-nowrap">
             <span title="@executedLocal.ToFriendlyDate()">@executedLocal.ToRelativeTime()</span>
         </MudTd>
-        <MudTd DataLabel="Run">
+        <MudTd DataLabel="Run" Class="jim-nowrap">
             <div>@(context.Entry.ActivityTargetName ?? "A run")</div>
             @if (!string.IsNullOrWhiteSpace(context.Entry.ActivityTargetContext))
             {
