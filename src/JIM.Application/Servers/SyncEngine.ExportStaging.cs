@@ -1277,6 +1277,18 @@ public partial class SyncEngine
             return pendingChange.DateTimeValue == existingValue.DateTimeValue;
         }
 
+        // Boolean comparison
+        if (pendingChange.BoolValue.HasValue || existingValue.BoolValue.HasValue)
+        {
+            return pendingChange.BoolValue == existingValue.BoolValue;
+        }
+
+        // Guid comparison
+        if (pendingChange.GuidValue.HasValue || existingValue.GuidValue.HasValue)
+        {
+            return pendingChange.GuidValue == existingValue.GuidValue;
+        }
+
         // Binary comparison
         if (pendingChange.ByteValue != null || existingValue.ByteValue != null)
         {
@@ -1291,22 +1303,6 @@ public partial class SyncEngine
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
             return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
-        }
-
-        // Guid comparison (pending stores as StringValue, CSO has GuidValue)
-        if (existingValue.GuidValue.HasValue)
-        {
-            if (Guid.TryParse(pendingChange.StringValue, out var pendingGuid))
-                return pendingGuid == existingValue.GuidValue.Value;
-            return false;
-        }
-
-        // Bool comparison (pending stores as StringValue, CSO has BoolValue)
-        if (existingValue.BoolValue.HasValue)
-        {
-            if (bool.TryParse(pendingChange.StringValue, out var pendingBool))
-                return pendingBool == existingValue.BoolValue.Value;
-            return false;
         }
 
         // Both null/empty - consider them matching
