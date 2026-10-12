@@ -25,11 +25,13 @@
       [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], the sets that return it, and the
       properties of that schema in the OpenAPI document, in the PascalCase the module returns them in.
       A JIM type that is not an OpenAPI schema (a cmdlet that builds its own object) must be listed in
-      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help.
+      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help;
+      one the module names itself but whose properties are an API schema's is listed in
+      OutputTypeSchemas with that schema, whose properties are tabled for it.
 
     -Check writes nothing, and fails (rule ACC-5 of engineering/DOCUMENTATION_STANDARD.md) when a block
     differs from what this script would write, names a cmdlet the module does not export, or belongs to
-    a cmdlet with an undescribed parameter or undescribed output. Cmdlet sections with no block yet are
+    a cmdlet with an undescribed parameter or undescribed output. Exported cmdlets with no block yet are
     listed as a warning while the pages migrate.
 
 .PARAMETER ModulePath
@@ -43,7 +45,8 @@
     Generate-OpenApiDoc.ps1, which builds the solution.
 
 .PARAMETER ConfigPath
-    The configuration (NonApiOutputTypes). Defaults to docs/.conformance/powershell-reference.psd1.
+    The configuration (NonApiOutputTypes, OutputTypeSchemas). Defaults to
+    docs/.conformance/powershell-reference.psd1.
 
 .PARAMETER Check
     Write nothing; fail if any page differs from what would be written.
@@ -375,7 +378,7 @@ function Get-HeadingAnchor {
 # Each type the cmdlet declares: a schema's properties are tabled the first time the page returns it, and
 # later cmdlets on the page refer back to that one rather than repeat the table.
 function Format-Output {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$OutputTypeSchemas, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
     if ($Reference.OutputTypes.Count -eq 0) {
         $Problems.Add("$($Reference.Name) declares nothing about its output; name what it returns with [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], or add [OutputType([void])] if it returns nothing")
@@ -395,7 +398,12 @@ function Format-Output {
         $schemaName = $null
         if ($typeName -like 'JIM.*') {
             $display = $typeName.Substring(4)
-            if ($Schemas.Contains($display)) { $schemaName = $display }
+            # A name the module gives the API's object: tabled with that object's properties.
+            if ($OutputTypeSchemas.ContainsKey($typeName)) {
+                if ($Schemas.Contains($OutputTypeSchemas[$typeName])) { $schemaName = $OutputTypeSchemas[$typeName] }
+                else { $Problems.Add("OutputTypeSchemas maps $typeName to $($OutputTypeSchemas[$typeName]), which is not a schema in the OpenAPI document; correct the schema's name") }
+            }
+            elseif ($Schemas.Contains($display)) { $schemaName = $display }
             elseif (-not $NonApiOutputTypes.ContainsKey($typeName)) {
                 $Problems.Add("$($Reference.Name) declares output type $typeName, which is not a schema in the OpenAPI document; correct the name, or list it in NonApiOutputTypes with the reason")
             }
@@ -444,13 +452,13 @@ function Format-Output {
 }
 
 function Format-Block {
-    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
+    param($Reference, $Schemas, [hashtable]$NonApiOutputTypes, [hashtable]$OutputTypeSchemas, [hashtable]$TabledOnPage, [System.Collections.Generic.List[string]]$Problems)
 
     foreach ($parameter in @($Reference.Parameters | Where-Object { -not $_.Description })) {
         $Problems.Add("$($Reference.Name) has no .PARAMETER help for -$($parameter.Name)")
     }
     (Format-Syntax $Reference) + "`n`n" + (Format-Parameters $Reference) + "`n`n" +
-        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -TabledOnPage $TabledOnPage -Problems $Problems)
+        (Format-Output -Reference $Reference -Schemas $Schemas -NonApiOutputTypes $NonApiOutputTypes -OutputTypeSchemas $OutputTypeSchemas -TabledOnPage $TabledOnPage -Problems $Problems)
 }
 
 function Get-LineNumber {
@@ -477,6 +485,7 @@ function Write-Finding {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $config = if (Test-Path -LiteralPath $ConfigPath) { Import-PowerShellDataFile -LiteralPath $ConfigPath } else { @{} }
 $nonApi = if ($config.ContainsKey('NonApiOutputTypes') -and $config.NonApiOutputTypes) { $config.NonApiOutputTypes } else { @{} }
+$schemaFor = if ($config.ContainsKey('OutputTypeSchemas') -and $config.OutputTypeSchemas) { $config.OutputTypeSchemas } else { @{} }
 
 if (-not $OpenApiPath) {
     $OpenApiPath = Join-Path ([System.IO.Path]::GetTempPath()) "jim-openapi-$([guid]::NewGuid().ToString('N')).json"
@@ -547,7 +556,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
         $blockCount++
         $problems = [System.Collections.Generic.List[string]]::new()
         $reference = Get-CmdletReference -Command $exported[$block.Name]
-        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -TabledOnPage $tabledOnPage -Problems $problems) + "`n"
+        $content = "`n" + (Format-Block -Reference $reference -Schemas $schemas -NonApiOutputTypes $nonApi -OutputTypeSchemas $schemaFor -TabledOnPage $tabledOnPage -Problems $problems) + "`n"
         foreach ($problem in $problems) {
             Write-Finding $relative $line $problem
             $failures++
@@ -590,7 +599,7 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
     }
 }
 
-# An allowed non-API output type that no exported cmdlet declares any more.
+# An allowed non-API output type, or a mapped one, that no exported cmdlet declares any more.
 $declared = @{}
 foreach ($command in $exported.Values) {
     foreach ($attribute in @($command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
@@ -600,6 +609,12 @@ foreach ($command in $exported.Values) {
 foreach ($typeName in $nonApi.Keys) {
     if (-not $declared.ContainsKey($typeName)) {
         Write-Finding '' 0 "NonApiOutputTypes lists $typeName, which no cmdlet declares; remove the entry"
+        $failures++
+    }
+}
+foreach ($typeName in $schemaFor.Keys) {
+    if (-not $declared.ContainsKey($typeName)) {
+        Write-Finding '' 0 "OutputTypeSchemas lists $typeName, which no cmdlet declares; remove the entry"
         $failures++
     }
 }

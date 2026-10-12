@@ -191,6 +191,19 @@ function Get-JIMHealth {
 }
 '@
 
+    # Gives the API's WidgetHeader a type name of its own, so the name is not a schema but the properties are.
+    $script:GetGadget = @'
+function Get-JIMGadget {
+    <#
+    .SYNOPSIS
+        Gets Gadgets, which are Widgets under the module's own name.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.Gadget')]
+    param()
+}
+'@
+
     $script:OpenApi = @'
 {
   "openapi": "3.1.1",
@@ -241,7 +254,8 @@ function Get-JIMHealth {
         param(
             [string[]]$Functions = @($script:GetWidget, $script:RemoveWidget),
             [hashtable]$Pages = @{ 'widgets.md' = "---`ntitle: Widgets`n---`n`n# Widgets`n`n$script:Intro`n`n" + (New-Section 'Get-JIMWidget') + "`n" + (New-Section 'Remove-JIMWidget') },
-            [hashtable]$NonApiOutputTypes = @{}
+            [hashtable]$NonApiOutputTypes = @{},
+            [hashtable]$OutputTypeSchemas = @{}
         )
 
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
@@ -260,8 +274,9 @@ function Get-JIMHealth {
         Set-Content -LiteralPath $openApiPath -Value $script:OpenApi
 
         $entries = ($NonApiOutputTypes.Keys | ForEach-Object { "        '$_' = '$($NonApiOutputTypes[$_])'" }) -join "`n"
+        $mappings = ($OutputTypeSchemas.Keys | ForEach-Object { "        '$_' = '$($OutputTypeSchemas[$_])'" }) -join "`n"
         $configPath = Join-Path $root 'config.psd1'
-        Set-Content -LiteralPath $configPath -Value "@{`n    NonApiOutputTypes = @{`n$entries`n    }`n}"
+        Set-Content -LiteralPath $configPath -Value "@{`n    NonApiOutputTypes = @{`n$entries`n    }`n    OutputTypeSchemas = @{`n$mappings`n    }`n}"
 
         [pscustomobject]@{
             Root     = $root
@@ -581,6 +596,32 @@ Describe 'Update-PowerShellReference -Check' {
         $result = Invoke-Generator $fixture -Check
         $result.ExitCode | Should -Not -Be 0
         $result.Output | Should -Match 'JIM\.Stale'
+    }
+
+    It "tables a type the module names itself with the properties of the API schema it carries" {
+        $fixture = New-Fixture -Functions @($script:GetGadget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $types = @(Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMGadget'))
+        $types[0].Type | Should -Be 'Gadget'
+        @($types[0].Table | ForEach-Object Property) | Should -Be @('Id', 'Name', 'IsEnabled', 'Status', 'Count', 'Tags')
+        ($types[0].Table | Where-Object Property -eq 'Id').Description | Should -Be "The Widget's identifier."
+    }
+
+    It 'fails on a type mapped to a schema that no cmdlet declares' {
+        $fixture = New-Fixture -OutputTypeSchemas @{ 'JIM.Stale' = 'WidgetHeader' }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'JIM\.Stale'
+    }
+
+    It 'fails on a type mapped to a schema the OpenAPI document does not have' {
+        $fixture = New-Fixture -Functions @($script:GetGadget) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMGadget') } -OutputTypeSchemas @{ 'JIM.Gadget' = 'GadgetResponse' }
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'GadgetResponse'
     }
 
     It 'fails on a BEGIN marker with no END' {

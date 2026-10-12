@@ -13,4 +13,10 @@
     NonApiOutputTypes = @{
         'JIM.ConnectionStatus' = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
     }
+
+    # A cmdlet that gives the API's object a type name of its own (PSObject.TypeNames) declares that name;
+    # map it here to the schema whose properties the object carries, and they are tabled under the name.
+    # An entry no cmdlet declares fails the check.
+    OutputTypeSchemas = @{
+    }
 }
