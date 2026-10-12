@@ -165,6 +165,25 @@ public class ImportContentHashVerificationModeTests
     }
 
     /// <summary>
+    /// The Activity message counts the compared, unchanged object as unchanged, not updated (#2129): Verification Mode
+    /// compares every object in full, so none is skipped by its content hash, but finding one unchanged is no update.
+    /// </summary>
+    [Test]
+    public async Task VerificationMode_UnchangedObject_ReportsItUnchangedAsync()
+    {
+        var hrId = Guid.NewGuid();
+        var connector = new MockFileConnector();
+        connector.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        await RunFullImportAsync(connector, verify: false);
+
+        var connector2 = new MockFileConnector();
+        connector2.TestImportObjects.Add(CreateImportObject(hrId, "Jane Smith"));
+        var activity2 = await RunFullImportAsync(connector2, verify: true);
+
+        Assert.That(activity2.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"));
+    }
+
+    /// <summary>
     /// (2) Dangerous disagreement: seed a stored hash that matches the incoming hash but then
     /// corrupt the stored attribute value directly (bypassing the normal write path, simulating a
     /// hypothetical calculator/diff divergence) so the honest diff still finds a change.

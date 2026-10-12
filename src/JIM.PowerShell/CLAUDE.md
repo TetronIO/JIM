@@ -78,6 +78,10 @@ An example that deletes or clears data must not understate its scope in its titl
 - **Name the multiplicity when a filter is a wildcard.** `-Name "Decommissioned*"` piped into a removal deletes everything matching, and Connected System deletion cascades to the whole connector space.
 - **Suggest a dry run.** For any forced bulk delete, tell the reader to run it without `-Force` first, or to inspect the `Get-` output, before committing.
 
+## `-Force` skips the prompt, never `-WhatIf`
+
+A cmdlet with both `SupportsShouldProcess` and a `-Force` switch decides whether to act with `Confirm-JIMAction -Cmdlet $PSCmdlet -Target <what> -Action <verb phrase> -Force:$Force`, never `if ($Force -or $PSCmdlet.ShouldProcess(...))`. The `-or` form never consults `ShouldProcess` once `-Force` is given, so `-WhatIf -Force` carries the action out instead of previewing it: 22 cmdlets did this, `Reset-JIMSystem` among them. `Confirm-JIMAction` lets `-Force` answer the prompt and leaves `-WhatIf` (or a session-wide `$WhatIfPreference`) in charge. The older idiom of setting `$ConfirmPreference = 'None'` under `-Force` and then calling `ShouldProcess` is also correct, and four Metaverse and Synchronisation Rule Mapping cmdlets use it. `Confirm-JIMAction.Tests.ps1` fails the build on any line that combines `$Force` with a `.ShouldProcess(` call.
+
 ## Every exported cmdlet is documented
 
 A new exported cmdlet needs a heading (or a row in the first column of a table) on a `docs/powershell/` page in the same pull request, and a removed one must leave the docs with it: `scripts/Test-DocsCoverage.ps1` (COV-1) fails the `changelog-lint` check otherwise. Before it existed, `Get-JIMDataFlow` shipped with no reference page at all.

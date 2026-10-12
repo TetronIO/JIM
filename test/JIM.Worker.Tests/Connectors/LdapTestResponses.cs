@@ -147,6 +147,38 @@ internal static class LdapTestResponses
     }
 
     /// <summary>
+    /// Creates an entry whose attribute values are given as the directory would hold them: a string, or a byte array
+    /// for a binary value. <see cref="EntryWithValues"/> takes strings only, and <see cref="SearchResponseWithBinary"/>
+    /// bytes only; an entry with a binary objectGUID beside its text attributes needs both.
+    /// </summary>
+    internal static SearchResultEntry EntryWithRawValues(string distinguishedName, params (string Name, object[] Values)[] attributes)
+    {
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        foreach (var (name, values) in attributes)
+            add.Invoke(attributeCollection, [name, new DirectoryAttribute(name, values)]);
+
+        return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
+            args: [distinguishedName, attributeCollection], culture: null)!;
+    }
+
+    /// <summary>
+    /// Creates an attribute as a search result carries it: every value held as the bytes the directory sent, and
+    /// decoded as UTF-8 only when asked for text. An attribute built with string values, as the other helpers here
+    /// build them, holds the strings themselves, so it cannot show what reading a value that is not valid UTF-8 does.
+    /// </summary>
+    internal static DirectoryAttribute SearchResultAttribute(string name, params byte[][] values)
+    {
+        var attribute = new DirectoryAttribute { Name = name };
+        foreach (var value in values)
+            attribute.Add(value);
+
+        typeof(DirectoryAttribute).GetField("_isSearchResult", NonPublicInstance)!.SetValue(attribute, true);
+        return attribute;
+    }
+
+    /// <summary>
     /// Creates a successful SearchResponse holding one entry with a single multi-valued attribute, as the
     /// rootDSE's namingContexts attribute is (RFC 4512).
     /// </summary>

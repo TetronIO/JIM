@@ -113,13 +113,13 @@ Adds a certificate to the trusted store.
 
 ```powershell
 # FromFile (default)
-Add-JIMCertificate -Name <string> -Path <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -Path <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # FromData
-Add-JIMCertificate -Name <string> -CertificateData <byte[]> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -CertificateData <byte[]> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # FromBase64
-Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
+Add-JIMCertificate -Name <string> -CertificateBase64 <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -162,7 +162,6 @@ Add-JIMCertificate -Name "Root CA" -CertificateData $bytes -PassThru
 
 ### Notes
 
-- Supports `ShouldProcess` (Medium impact). Use `-WhatIf` or `-Confirm` to preview or prompt before adding.
 - The certificate is enabled by default after creation. Use `Set-JIMCertificate` to disable it.
 - Run `Test-JIMCertificate` after adding a certificate to confirm it has not expired and its chain is trusted.
 
@@ -176,7 +175,7 @@ Updates a certificate's editable properties (name, notes, enabled status). Certi
 ### Syntax
 
 ```powershell
-Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru]
+Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>] [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -218,7 +217,6 @@ Set-JIMCertificate -Id "a1b2c3d4-..." -Notes "Renewed 2026-03-01; expires 2028-0
 
 ### Notes
 
-- Supports `ShouldProcess` (Medium impact). Use `-WhatIf` or `-Confirm` to preview or prompt before changes.
 - `-Enable` and `-Disable` are mutually exclusive; specifying both will produce an error.
 
 ---
@@ -232,11 +230,13 @@ Permanently deletes a certificate from the trusted store.
 
 ```powershell
 # ById (default)
-Remove-JIMCertificate -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMCertificate -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru]
+Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -275,7 +275,6 @@ Get-JIMCertificate | Where-Object { -not $_.IsEnabled } | Remove-JIMCertificate 
 
 ### Notes
 
-- Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
 - Removing a certificate stops any Connected System whose server JIM trusts only through it from connecting securely. Its settings are kept, and it connects again once the certificate is back in the store. To keep a copy, export it first with `Export-JIMCertificate`; to stop trusting it without losing it, disable it with `Set-JIMCertificate -Disable` instead.
 
 ---

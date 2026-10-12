@@ -84,7 +84,7 @@ function Remove-JIMCertificate {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Certificate")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action "Delete Certificate" -Force:$Force) {
             Write-Verbose "Deleting certificate: $certId"
 
             try {

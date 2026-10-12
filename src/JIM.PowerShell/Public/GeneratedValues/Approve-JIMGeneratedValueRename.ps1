@@ -82,7 +82,7 @@ function Approve-JIMGeneratedValueRename {
             "generated value $valueId"
         }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Allow the rename (renames the account holding it at the next export)")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Allow the rename (renames the account holding it at the next export)" -Force:$Force)) {
             return
         }
 

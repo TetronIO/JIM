@@ -141,7 +141,7 @@ function Stop-JIMPendingPasswordChange {
         elseif ($EntireQueue) { "every queued password change" }
         else { "the matching queued password changes" }
 
-        if (-not $Force -and -not $PSCmdlet.ShouldProcess($target, "Stop delivering, leaving the password unchanged on the target")) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action "Stop delivering, leaving the password unchanged on the target" -Force:$Force)) {
             return
         }
 

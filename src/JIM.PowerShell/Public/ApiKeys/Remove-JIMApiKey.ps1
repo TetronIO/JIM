@@ -87,7 +87,7 @@ function Remove-JIMApiKey {
 
         $confirmMessage = "Delete API Key '$($existing.name)' ($keyId)?"
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete API Key")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action "Delete API Key" -Force:$Force) {
             Write-Verbose "Deleting API Key: $keyId"
 
             try {

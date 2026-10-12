@@ -75,7 +75,7 @@ Switches a feature flag on. Enabling an In Development flag requires `-AllowInDe
 ### Syntax
 
 ```powershell
-Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru]
+Enable-JIMFeature [-Name] <string> [-AllowInDevelopment] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -122,7 +122,7 @@ Switches a feature flag off. Disabling never requires acknowledgement, whatever 
 ### Syntax
 
 ```powershell
-Disable-JIMFeature [-Name] <string> [-PassThru]
+Disable-JIMFeature [-Name] <string> [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters

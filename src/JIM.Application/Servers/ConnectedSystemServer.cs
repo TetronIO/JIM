@@ -6559,7 +6559,16 @@ public partial class ConnectedSystemServer
             connectedSystemObjectChange.AttributeChanges.Add(attributeChange);
         }
 
-        switch (connectedSystemObjectAttributeValue.Attribute.Type)
+        // A value removed because it was stored while its attribute had another data type (#2128) holds nothing in the
+        // column of the attribute's current type. It is recorded as the value it was, so the history says what went,
+        // rather than reported as corrupt. Only a removal can be one: nothing adds a value under a type it no longer has.
+        var recordedType = valueChangeType == ValueChangeType.Remove &&
+                           !connectedSystemObjectAttributeValue.HoldsValueOfType(connectedSystemObjectAttributeValue.Attribute.Type) &&
+                           connectedSystemObjectAttributeValue.HeldDataType() is { } heldType
+            ? heldType
+            : connectedSystemObjectAttributeValue.Attribute.Type;
+
+        switch (recordedType)
         {
             case AttributeDataType.Text when connectedSystemObjectAttributeValue.StringValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.StringValue));

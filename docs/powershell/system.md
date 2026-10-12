@@ -330,8 +330,10 @@ Performs a factory reset against the connected JIM instance, wiping all data and
 ### Syntax
 
 ```powershell
-Reset-JIMSystem [-Force] [-IncludeAdministrators] [-AcknowledgeAdministratorLockout]
+Reset-JIMSystem [-Force] [-IncludeAdministrators] [-AcknowledgeAdministratorLockout] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -391,7 +393,6 @@ $result = Reset-JIMSystem -Force
 ### Notes
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
-- Supports `-WhatIf` and `-Confirm`. Its confirmation impact is High, so it prompts by default; pass `-Force` to skip the prompt.
 - **Removed:** all Connected Systems (and their objects and change history), Metaverse Objects (and their change history), Synchronisation Rules, Object Matching Rules, Schedules (and their executions), Activities, Pending Exports, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, Example Data Sets, and Example Data Templates, plus non-infrastructure API Keys and Trusted Certificates.
 - **Preserved:** the database schema and its upgrade history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, infrastructure API keys (`IsInfrastructureKey = true`), and (unless `-IncludeAdministrators` is supplied) the Metaverse Objects holding the Administrator role. The Service Settings record survives, but a setting naming something the reset removes does not: if the SSO Unique Identifier maps to a custom Metaverse Attribute, that mapping is cleared along with the attribute, and must be set again against a Metaverse Attribute that still exists.
 - **Restored:** immediately after the wipe, the reset applies JIM's built-in configuration exactly as a service start does, so anything the wipe removed as collateral (the built-in Schedules, the built-in Example Data Template's attributes) is back before the command returns, rather than on the next restart. Built-ins that survived the wipe are left untouched, but have their factory-state provenance re-recorded, because the wipe removes the Activities that carried it. Read-only Service Settings that come from the deployment's environment variables (the SSO endpoints, the encryption key path) are re-asserted from the environment as part of this.
