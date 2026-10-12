@@ -63,4 +63,11 @@ public class ConfigurationChangePreviewDelta
     /// registry can be added later without a schema change; nothing populates it yet.
     /// </summary>
     public string? PatternKey { get; set; }
+
+    /// <summary>
+    /// For a row predicting an ambiguous match, the objects it would find (#2052), in recorded order: at most
+    /// <see cref="JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/>, each carrying the
+    /// full count. Empty for every other row.
+    /// </summary>
+    public List<ConfigurationChangePreviewDeltaMatchCandidate> MatchCandidates { get; set; } = [];
 }

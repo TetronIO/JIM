@@ -182,6 +182,55 @@ public class PreviewsControllerTests
     }
 
     [Test]
+    public async Task GetPreviewDeltasAsync_AmbiguousRow_ReturnsItsCandidatesAsync()
+    {
+        // #2052: an ambiguous row names every object it found, so a script can resolve the conflict without opening
+        // the portal.
+        GivenPreview();
+        var candidateId = Guid.CreateVersion7();
+        _previewRepository.Setup(r => r.GetPreviewDeltasAsync(ActivityId, null, 1, 25, null))
+            .ReturnsAsync(new PagedResultSet<ConfigurationChangePreviewDelta>
+            {
+                Results = [new ConfigurationChangePreviewDelta
+                {
+                    Id = Guid.CreateVersion7(),
+                    ActivityId = ActivityId,
+                    TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
+                    ObjectDisplayName = "Ada Lovelace",
+                    MatchCandidates =
+                    [
+                        new ConfigurationChangePreviewDeltaMatchCandidate
+                        {
+                            CandidateKind = MatchCandidateKind.MetaverseObject,
+                            CandidateId = candidateId,
+                            DisplayNameSnapshot = "Ada King",
+                            TypeNameSnapshot = "Person",
+                            MatchedValue = "E1",
+                            Ordinal = 0,
+                            CandidateTotal = 2
+                        }
+                    ]
+                }],
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 25
+            });
+
+        var result = await _controller.GetPreviewDeltasAsync(ActivityId, new PaginationRequest { Page = 1, PageSize = 25 })
+            as OkObjectResult;
+        var candidate = (result!.Value as PaginatedResponse<ConfigurationChangePreviewDeltaResponse>)!.Items.Single().MatchCandidates.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidate.CandidateKind, Is.EqualTo(MatchCandidateKind.MetaverseObject));
+            Assert.That(candidate.CandidateId, Is.EqualTo(candidateId));
+            Assert.That(candidate.DisplayNameSnapshot, Is.EqualTo("Ada King"));
+            Assert.That(candidate.MatchedValue, Is.EqualTo("E1"));
+            Assert.That(candidate.CandidateTotal, Is.EqualTo(2));
+        }
+    }
+
+    [Test]
     public async Task GetPreviewDeltasAsync_WithASearchTerm_PassesItToTheQueryAsync()
     {
         // Filtering has to happen in the query, not in the caller: a capped group holds up to a thousand rows and a

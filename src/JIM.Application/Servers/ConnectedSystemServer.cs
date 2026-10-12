@@ -23,6 +23,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
 using JIM.Utilities;
@@ -40,6 +41,8 @@ public partial class ConnectedSystemServer
     /// production code never assigns it.
     /// </summary>
     internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
+
+    private readonly ObjectMatchingRuleValidator _objectMatchingRuleValidator = new(new DynamicExpressoEvaluator());
 
     internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
@@ -9111,6 +9114,11 @@ public partial class ConnectedSystemServer
             await ClearInertExportMatchingRulesAsync(syncRule);
         }
 
+        // Advanced mode keeps the rule's own Object Matching Rules, and the portal stores them only through this save,
+        // so they are refused here exactly as the Object Matching Rule endpoints refuse them (#2052). After the
+        // branches above, which clear the rules a simple mode system would never consult.
+        await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
+
         // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
         // initial password. Switching the setting off with the provisioning it depended on keeps the stored
         // configuration honest, rather than leaving one that reads as on and can never run.
@@ -9346,6 +9354,11 @@ public partial class ConnectedSystemServer
             // rule's own rules, so only Simple Mode's inert rules are cleared (#1589).
             await ClearInertExportMatchingRulesAsync(syncRule);
         }
+
+        // Advanced mode keeps the rule's own Object Matching Rules, and the portal stores them only through this save,
+        // so they are refused here exactly as the Object Matching Rule endpoints refuse them (#2052). After the
+        // branches above, which clear the rules a simple mode system would never consult.
+        await EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(syncRule);
 
         // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
         // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
@@ -9910,13 +9923,100 @@ public partial class ConnectedSystemServer
         await RemoveSyncRuleObjectMatchingRulesAsync(syncRule);
     }
 
-    private static void EnsureObjectMatchingRuleIsWorkable(ObjectMatchingRule rule)
+    /// <summary>
+    /// Refuses an Object Matching Rule that could never match anything: one of the wrong shape (#1458), or one whose
+    /// source and Metaverse attribute cannot be compared, or whose expression could never be worked out (#2052).
+    /// </summary>
+    /// <exception cref="InvalidDataException">The rule is unworkable, with the reason.</exception>
+    private async Task EnsureObjectMatchingRuleIsWorkableAsync(ObjectMatchingRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
         var invalidity = rule.DescribeInvalidity();
         if (invalidity != null)
             throw new InvalidDataException(invalidity);
+
+        var objectType = await ResolveObjectMatchingRuleObjectTypeAsync(rule);
+        var problem = await DescribeObjectMatchingRuleComparisonProblemAsync(rule, objectType);
+        if (problem != null)
+            throw new InvalidDataException(problem);
+    }
+
+    /// <summary>
+    /// Refuses a Synchronisation Rule whose own Object Matching Rules include one that could never match anything,
+    /// naming the rule by the position the portal shows it in.
+    /// </summary>
+    /// <exception cref="ArgumentException">One of the rules is unworkable, with which one and why.</exception>
+    private async Task EnsureSyncRuleObjectMatchingRulesAreWorkableAsync(SyncRule syncRule)
+    {
+        if (syncRule.ObjectMatchingRules.Count == 0)
+            return;
+
+        var objectType = await GetObjectTypeWithAttributesAsync(syncRule.ConnectedSystemObjectType, syncRule.ConnectedSystemObjectTypeId);
+        foreach (var rule in syncRule.ObjectMatchingRules.OrderBy(r => r.Order))
+        {
+            // The rule's owner is this Synchronisation Rule, which a rule being added in the portal does not point
+            // back to yet, so only what it compares is checked.
+            var problem = rule.DescribeComparisonInvalidity() ?? await DescribeObjectMatchingRuleComparisonProblemAsync(rule, objectType);
+            if (problem != null)
+                throw new ArgumentException($"Object Matching Rule {rule.Order + 1}: {problem}");
+        }
+    }
+
+    /// <summary>
+    /// Why what <paramref name="rule"/> compares could never be worked out for objects of
+    /// <paramref name="objectType"/>, or null when it can. Reads the Metaverse attribute from the store when the
+    /// caller supplied only its id.
+    /// </summary>
+    private async Task<string?> DescribeObjectMatchingRuleComparisonProblemAsync(ObjectMatchingRule rule, ConnectedSystemObjectType? objectType)
+    {
+        if (objectType == null)
+            return "The Connected System Object Type this Object Matching Rule reads could not be found, so what it compares cannot be checked.";
+
+        var target = rule.TargetMetaverseAttribute;
+        if (target == null && rule.TargetMetaverseAttributeId is { } targetId)
+        {
+            target = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(targetId);
+            if (target == null)
+                return $"The Metaverse Attribute with id {targetId} does not exist.";
+        }
+
+        // DescribeComparisonInvalidity has already refused a rule naming no Metaverse attribute at all.
+        return target == null ? null : _objectMatchingRuleValidator.DescribeProblem(rule, objectType, target);
+    }
+
+    /// <summary>
+    /// The Connected System Object Type an Object Matching Rule reads, with its attributes: the type it belongs to in
+    /// simple mode, or its Synchronisation Rule's type in advanced mode.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType?> ResolveObjectMatchingRuleObjectTypeAsync(ObjectMatchingRule rule)
+    {
+        if (rule.ConnectedSystemObjectType != null || rule.ConnectedSystemObjectTypeId.HasValue)
+            return await GetObjectTypeWithAttributesAsync(rule.ConnectedSystemObjectType, rule.ConnectedSystemObjectTypeId);
+
+        var syncRule = rule.SyncRule;
+        if (syncRule == null && rule.SyncRuleId is { } syncRuleId)
+            syncRule = await GetSyncRuleAsync(syncRuleId);
+
+        return syncRule == null
+            ? null
+            : await GetObjectTypeWithAttributesAsync(syncRule.ConnectedSystemObjectType, syncRule.ConnectedSystemObjectTypeId);
+    }
+
+    /// <summary>
+    /// <paramref name="loaded"/> when it carries its attributes, otherwise the persisted type. Loaders differ on
+    /// whether they include an Object Type's attributes (<c>GetObjectMatchingRuleAsync</c> does not), and a type
+    /// whose attributes were never fetched must not read as one that has none.
+    /// </summary>
+    private async Task<ConnectedSystemObjectType?> GetObjectTypeWithAttributesAsync(ConnectedSystemObjectType? loaded, int? id)
+    {
+        if (loaded is { Attributes.Count: > 0 })
+            return loaded;
+
+        var objectTypeId = id is int knownId && knownId > 0 ? knownId : loaded?.Id ?? 0;
+        return objectTypeId > 0
+            ? await Application.Repository.ConnectedSystems.GetObjectTypeAsync(objectTypeId)
+            : null;
     }
 
     /// <summary>
@@ -9988,7 +10088,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
         await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
@@ -10010,7 +10110,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
         await EnsureObjectMatchingRuleScopeMatchesModeAsync(rule);
 
         var activity = new Activity
@@ -10032,7 +10132,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
 
         var activity = new Activity
         {
@@ -10053,7 +10153,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
-        EnsureObjectMatchingRuleIsWorkable(rule);
+        await EnsureObjectMatchingRuleIsWorkableAsync(rule);
 
         var activity = new Activity
         {

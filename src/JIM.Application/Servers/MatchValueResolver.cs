@@ -25,16 +25,6 @@ namespace JIM.Application.Servers;
 /// </remarks>
 public sealed class MatchValueResolver
 {
-    /// <summary>The data types an equality lookup can compare; the Metaverse attribute value indexes cover these.</summary>
-    private static readonly HashSet<AttributeDataType> MatchableTypes =
-    [
-        AttributeDataType.Text,
-        AttributeDataType.Number,
-        AttributeDataType.LongNumber,
-        AttributeDataType.Decimal,
-        AttributeDataType.Guid
-    ];
-
     private readonly IExpressionEvaluator _expressionEvaluator;
 
     public MatchValueResolver(IExpressionEvaluator expressionEvaluator)
@@ -65,10 +55,10 @@ public sealed class MatchValueResolver
         if (target == null)
             return MatchValueResolution.Failed("The rule has no Metaverse attribute to compare with.", AttributeDataType.NotSet, expression);
 
-        if (!MatchableTypes.Contains(target.Type))
+        if (!ObjectMatchingRule.IsMatchableType(target.Type))
             return MatchValueResolution.Failed(
                 $"The Metaverse attribute '{target.Name}' is {target.Type}, which Object Matching cannot compare. " +
-                "Match on a Text, Number, LongNumber, Decimal or Guid attribute.",
+                $"Match on a {ObjectMatchingRule.MatchableTypesDescription} attribute.",
                 target.Type, expression);
 
         if (source == null)

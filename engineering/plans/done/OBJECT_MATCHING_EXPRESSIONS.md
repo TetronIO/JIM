@@ -1,9 +1,9 @@
 # Object Matching Rules: Match on an Expression
 
-- **Status:** Doing (Layers 1 and 2 complete; Layer 3, surfaces, outstanding)
+- **Status:** Done (Layers 1, 2 and 3 complete)
 - **Issue:** [#2052](https://github.com/TetronIO/JIM/issues/2052)
 - **PRD:** [PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md](../../prd/doing/PRD_COMPARISON_AND_EXPRESSION_VOCABULARY.md) (Phase 1, Decisions 1, 4 and 6)
-- **Builds on:** [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
+- **Builds on:** [CASE_SENSITIVITY_POLICY.md](../doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the bottom layer of this stack)
 
 ## Overview
 
@@ -272,6 +272,13 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 
 **Changelog:** ✨ "Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match."
 
+**As built:**
+- Section 7's checks live in `ObjectMatchingRuleValidator` (JIM.Application), because parsing an expression needs the evaluator. Saving, the Preview Impact adapter and the portal editor's live warning all call it, so the three cannot disagree about what is workable.
+- Try it calls `ObjectMatchingServer.ResolveSampleMatchValues`, which converts each sample to its attribute's type and then runs the same `MatchValueResolver` a synchronisation does.
+- The expression documentation lives in `docs/configuration/object-matching-rules.md` ("Matching on an expression"), the page that owns Object Matching Rules. `docs/configuration/synchronisation-rules.md` links to it rather than repeating it. The multi-source suggestion the plan names had already gone.
+- Preview Impact's Matches column shows each candidate without its type, to keep the row to one line. The chip's tooltip names the type.
+- Scenario 005's four steps share helpers with the existing ExportMatchJoin step. Those helpers append an HR row, reset the HR file, and create or delete an out-of-band directory account on each directory type.
+
 ## Success Criteria
 
 - Expression rules join on import and match on export in both modes, across the portal, REST API and PowerShell.
@@ -287,7 +294,7 @@ This is a stack on top of [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.m
 
 ## Dependencies
 
-- [CASE_SENSITIVITY_POLICY.md](CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
+- [CASE_SENSITIVITY_POLICY.md](../doing/CASE_SENSITIVITY_POLICY.md) PR 1 (the default helper), beneath this stack.
 - #1750 derived Metaverse attributes, already shipped, for normalising the Metaverse side.
 - No new packages.
 

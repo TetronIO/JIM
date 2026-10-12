@@ -53,6 +53,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectorDefinitionSetting> ConnectorDefinitionSettings { get; set; } = null!;
     public virtual DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreview> ConfigurationChangePreviews { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewDeltaMatchCandidate> ConfigurationChangePreviewDeltaMatchCandidates { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewGroup> ConfigurationChangePreviewGroups { get; set; } = null!;
     public virtual DbSet<ConfigurationChangePreviewDelta> ConfigurationChangePreviewDeltas { get; set; } = null!;
     public virtual DbSet<ExampleDataObjectType> ExampleDataObjectTypes { get; set; } = null!;
@@ -1219,6 +1220,20 @@ public class JimDbContext : DbContext
             // disconnected") is the other access path, and it must not degrade into a scan of every delta row.
             delta.HasIndex(d => new { d.ActivityId, d.TransitionType })
                 .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
+        });
+
+        // The objects an ambiguous row predicts it would find (#2052): owned by the row and cascading from it, so they
+        // leave with the preview like everything else here.
+        modelBuilder.Entity<ConfigurationChangePreviewDeltaMatchCandidate>(candidate =>
+        {
+            candidate.HasOne(c => c.ConfigurationChangePreviewDelta)
+                .WithMany(d => d.MatchCandidates)
+                .HasForeignKey(c => c.ConfigurationChangePreviewDeltaId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltas");
+
+            candidate.HasIndex(c => c.ConfigurationChangePreviewDeltaId)
+                .HasDatabaseName("IX_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltaId");
         });
 
         // Performance index for Metaverse Object deletion automation

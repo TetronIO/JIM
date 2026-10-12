@@ -39,7 +39,13 @@ function Get-JIMConfigurationChangePreviewDelta {
 
     .OUTPUTS
         PSCustomObject per row, with ObjectDisplayName, ObjectTypeName, AttributeName, OldValue,
-        NewValue, TransitionType, PatternKey and the identifiers of the objects concerned.
+        NewValue, TransitionType, PatternKey, MatchCandidates and the identifiers of the objects concerned.
+
+        MatchCandidates is empty unless the row is WouldMatchAmbiguously, where it lists up to 10 of the
+        objects the match would find, in the same shape as an Activity item's MatchCandidates (see
+        Get-JIMActivityExecutionItem): CandidateKind, CandidateId, DisplayNameSnapshot, TypeNameSnapshot,
+        ConnectedSystemId, ConnectedSystemNameSnapshot, MatchedValue, ObjectMatchingRuleId,
+        ObjectMatchingRuleDescriptionSnapshot, Ordinal and CandidateTotal (the full count).
 
         PatternKey names what kind of change the row describes (EmailDomainChanged, ContainerChanged,
         CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded, SuffixRemoved), and is empty where no
@@ -56,6 +62,14 @@ function Get-JIMConfigurationChangePreviewDelta {
         Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All
 
         Lists the objects that would become eligible for deletion.
+
+    .EXAMPLE
+        $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
+        $group = $preview.Groups | Where-Object { $_.TransitionType -eq 'WouldMatchAmbiguously' }
+        Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.Id -All |
+            Select-Object ObjectDisplayName, @{ n = 'Matches'; e = { $_.MatchCandidates.DisplayNameSnapshot -join ', ' } }
+
+        Lists each object a proposed Object Matching Rule would match ambiguously, with the objects it would find.
 
     .LINK
         New-JIMConfigurationChangePreview
