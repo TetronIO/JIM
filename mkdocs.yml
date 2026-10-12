@@ -122,6 +122,13 @@ nav:
       - Configuration Changes: configuration/configuration-changes.md
       - Sync Preview: configuration/sync-preview.md
       - Connected Systems: configuration/connected-systems.md
+      - Connector Space: configuration/connector-space.md
+      - Partitions and Containers: configuration/partitions-and-containers.md
+      - Unresolved References: configuration/unresolved-references.md
+      - Connected System Schema: configuration/connected-system-schema.md
+      - Connected System Attributes: configuration/connected-system-attributes.md
+      - Connected System Passwords: configuration/connected-system-passwords.md
+      - Removing a Connected System: configuration/removing-a-connected-system.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
       - Data Flow: configuration/data-flow.md

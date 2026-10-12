@@ -10,7 +10,6 @@ LANG-3	concepts/expressions.md	2
 LANG-3	configuration/api-keys.md	1
 LANG-3	configuration/certificates.md	1
 LANG-3	configuration/configuration-changes.md	2
-LANG-3	configuration/connected-systems.md	33
 LANG-3	configuration/data-flow.md	2
 LANG-3	configuration/index.md	3
 LANG-3	configuration/metaverse.md	17
@@ -39,7 +38,6 @@ LANG-3	powershell/synchronisation-rules.md	22
 LANG-3	powershell/system.md	3
 LANG-3	powershell/worker-tasks.md	1
 LANG-3	reference/glossary.md	1
-LANG-4	configuration/connected-systems.md	9
 LANG-4	configuration/synchronisation-rules.md	24
 LANG-4	connectors/index.md	3
 LANG-4	connectors/jim-file-connector.md	1
@@ -50,7 +48,6 @@ LANG-7	administration/configuration.md	1
 LANG-7	administration/preview-features.md	2
 LANG-7	concepts/attribute-priority.md	6
 LANG-7	concepts/expressions.md	2
-LANG-7	configuration/connected-systems.md	5
 LANG-7	configuration/data-flow.md	1
 LANG-7	configuration/metaverse.md	2
 LANG-7	configuration/schedules.md	1
@@ -86,7 +83,6 @@ STR-2	concepts/passwords.md	4
 STR-2	configuration/api-keys.md	3
 STR-2	configuration/certificates.md	3
 STR-2	configuration/configuration-changes.md	4
-STR-2	configuration/connected-systems.md	3
 STR-2	configuration/data-flow.md	4
 STR-2	configuration/index.md	3
 STR-2	configuration/metaverse.md	3

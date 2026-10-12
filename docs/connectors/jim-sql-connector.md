@@ -174,7 +174,7 @@ On the Connected System's **Schema** tab, import the schema. JIM reads the datab
 What you will see:
 
 - **The External ID is chosen for you.** The anchor column becomes the Object Type's External ID attribute. Where an Object Type has a two-or-more-column key, JIM composes a single read-only Text attribute from them, named by joining the column names with `+` (`REGION+EMPLOYEE_NO`).
-- **Each attribute's data type**, decided from the column's SQL type; the full mapping is in [Type mapping](#type-mapping). The attribute's Description tells you the column type it was decided from (`Source column type: NUMBER(10).`), and where the database cannot be definitive (Oracle's `NUMBER` columns in particular) you can change the type on the Schema tab. See [Attribute data types](../configuration/connected-systems.md#attribute-data-types) for when you would want to.
+- **Each attribute's data type**, decided from the column's SQL type; the full mapping is in [Type mapping](#type-mapping). The attribute's Description tells you the column type it was decided from (`Source column type: NUMBER(10).`), and where the database cannot be definitive (Oracle's `NUMBER` columns in particular) you can change the type on the Schema tab. See [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types) for when you would want to.
 - **Writability.** Columns of a table are writable; the key columns are set when JIM creates a row and never changed afterwards; columns of a view or a `select` statement are read-only.
 - **Reference hints.** Where a table has a foreign key to another Object Type's key column, the attribute's Description says so and shows you the `referencesObjectType` line to add to your document. JIM suggests; you decide.
 - **Columns JIM cannot synchronise.** A column of a type JIM has no equivalent for (`xml`, `geography`, and the others listed under [Type mapping](#type-mapping)) is left out, and the schema import's warnings name it. Expose it through a view that casts it to a supported type if you need it.
@@ -218,7 +218,7 @@ An Export writes each Pending Export to the Object Type's table. Everything belo
 | Update | Updates only the columns whose values changed. Key columns are never rewritten. |
 | Delete | Deletes the related-table rows, then the row. A row that has already gone counts as deleted. |
 | Add or remove a multi-valued value | Inserts or deletes one row of the related table. |
-| Reference | Writes the referenced object's own key. If the referenced object does not exist in this database yet, JIM writes the rest of the object now and fills the reference in on a later run, once it does; see [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling) for how a reference that cannot be resolved is reported. |
+| Reference | Writes the referenced object's own key. If the referenced object does not exist in this database yet, JIM writes the rest of the object now and fills the reference in on a later run, once it does; see [Unresolved reference handling](../configuration/unresolved-references.md) for how a reference that cannot be resolved is reported. |
 
 JIM checks every write took effect. A statement the database accepted but which changed nothing (a trigger discarding the insert, a row deleted outside JIM) is reported as a failure for that object, with a message saying what to check, rather than being recorded as done. One object's failure never stops the rest of the batch, and the failed export is retried with JIM's normal backoff.
 
@@ -255,7 +255,7 @@ JIM decides each attribute's type from the column's declared SQL type:
 
 Two things to know:
 
-- **An Oracle `NUMBER(10)` key is a Long Number, not a Number.** Oracle's single `NUMBER` type can only be narrowed by its declared precision, and ten digits is more than a 32-bit number holds. If such a column needs to flow to a built-in Metaverse Attribute that is a Number (`Employee Number` is the usual one), change the attribute's type to Number on the Schema tab; the procedure is in [Attribute data types](../configuration/connected-systems.md#attribute-data-types).
+- **An Oracle `NUMBER(10)` key is a Long Number, not a Number.** Oracle's single `NUMBER` type can only be narrowed by its declared precision, and ten digits is more than a 32-bit number holds. If such a column needs to flow to a built-in Metaverse Attribute that is a Number (`Employee Number` is the usual one), change the attribute's type to Number on the Schema tab; the procedure is in [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types).
 - **Floating-point columns are approximate.** `float`, `real`, `BINARY_FLOAT` and `BINARY_DOUBLE` are read as Decimal so that they can be compared numerically, but a binary floating-point value does not round-trip to decimal exactly. Prefer an exact numeric column where JIM is authoritative for the value.
 
 A Decimal attribute holds 28 significant digits. A value wider than that is reported rather than rounded, naming the column. Column types JIM has no equivalent for (`xml`, `XMLTYPE`, `sql_variant`, `hierarchyid`, `geography`, `geometry`, `INTERVAL`, `time`, `ROWID`, `BFILE`) are left out of the schema with a warning; expose them through a view that casts to a supported type if they need synchronising.
@@ -462,6 +462,6 @@ The column carries no offset and the Database Time Zone does not match what the 
 
 - [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md)
 - [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md)
-- [Attribute data types](../configuration/connected-systems.md#attribute-data-types)
+- [Attribute data types](../configuration/connected-system-attributes.md#attribute-data-types)
 - [Connected Systems](../configuration/connected-systems.md)
 - [Connectors](index.md)
