@@ -223,8 +223,10 @@ jobs:
   # loads integration Scenario 8 at Scale100k50Groups, captures every image in scripts/screenshots/manifest.json with
   # the portal in Production mode, keeps the whole library as an artefact, and opens a pull request on junctional.io
   # with the images its product tour shows (scripts/screenshots/Publish-TourScreenshots.ps1), and one on tetron.io
-  # replacing the JIM screenshot in its homepage hero (scripts/screenshots/Publish-TetronScreenshots.ps1). Nothing
-  # merges by itself: a person looks through the images and merges once the release is published.
+  # replacing the JIM screenshot in its homepage hero (scripts/screenshots/Publish-TetronScreenshots.ps1). No one
+  # reviews them: the capture refuses blank images and dark and light pairs in the same theme, junctional.io is built
+  # with the new images before anything is committed, and each pull request merges once its checks pass and the
+  # release is published (release.yml's publish-screenshots job, or this job if the release came out first).
   #
   # A job here rather than a workflow of its own, because the jim-prerelease runner group admits exactly this file. It
   # cannot hold up a release: the gate reads the jim-pre-release commit status, which the job above has already posted.
@@ -334,15 +336,20 @@ jobs:
           path: junctional.io
           persist-credentials: false
 
+      # No one reviews the pull request: the capture refused blank images and pairs in the wrong theme, -Build refuses
+      # images the site will not build with, and release.yml's publish-screenshots job merges it once the release is
+      # published. If the release came out while this job was capturing, -MergeWhenReleased merges it here instead.
       - name: Open the junctional.io pull request
         if: ${{ steps.site-token.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ steps.site-token.outputs.token }}
+          JIM_RELEASE_TOKEN: ${{ github.token }}
           VERSION_FOLDER: ${{ steps.capture.outputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           pwsh -File ./scripts/screenshots/Publish-TourScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
-            -Version $env:VERSION_FOLDER -SitePath junctional.io -Repository "$env:GITHUB_REPOSITORY_OWNER/junctional.io" -RunUrl $env:RUN_URL
+            -Version $env:VERSION_FOLDER -SitePath junctional.io -Repository "$env:GITHUB_REPOSITORY_OWNER/junctional.io" -RunUrl $env:RUN_URL `
+            -Build -MergeWhenReleased
           exit $LASTEXITCODE
 
       # tetron.io's homepage hero shows JIM's home page. Its own token and steps, run whether or not junctional.io's
@@ -366,15 +373,18 @@ jobs:
           path: tetron.io
           persist-credentials: false
 
+      # Merged the same way; its own check (the Azure Static Web Apps preview) builds the site with the new image.
       - name: Open the tetron.io pull request
         if: ${{ !cancelled() && steps.tetron-token.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ steps.tetron-token.outputs.token }}
+          JIM_RELEASE_TOKEN: ${{ github.token }}
           VERSION_FOLDER: ${{ steps.capture.outputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           pwsh -File ./scripts/screenshots/Publish-TetronScreenshots.ps1 -ScreenshotPath "artifacts/screenshots/$env:VERSION_FOLDER" `
-            -Version $env:VERSION_FOLDER -SitePath tetron.io -Repository "$env:GITHUB_REPOSITORY_OWNER/tetron.io" -RunUrl $env:RUN_URL
+            -Version $env:VERSION_FOLDER -SitePath tetron.io -Repository "$env:GITHUB_REPOSITORY_OWNER/tetron.io" -RunUrl $env:RUN_URL `
+            -MergeWhenReleased
           exit $LASTEXITCODE
 
       # A serial run's stack carries the SambaAD lane's names (the serial defaults), whatever directory it used.

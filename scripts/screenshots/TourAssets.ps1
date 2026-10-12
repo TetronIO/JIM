@@ -152,3 +152,28 @@ function Update-TourAssetFolder {
         RemovedFolders  = @($removed | ForEach-Object Name)
     }
 }
+
+<#
+.SYNOPSIS
+    Builds a junctional.io checkout as its deploy workflow does, failing when the site does not build.
+.DESCRIPTION
+    A release publishes the refresh with no one looking first, so the site must build with the new images (Astro's
+    type check, then every page and image variant) before anything is committed. The output goes to dist/ and
+    node_modules/, which the site's .gitignore keeps out of the commit.
+#>
+function Invoke-TourSiteBuild {
+    param([Parameter(Mandatory)][string]$SitePath)
+
+    Push-Location -LiteralPath $SitePath
+    try {
+        npm ci --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed in $SitePath (exit $LASTEXITCODE); the site was not built." }
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            throw "The site does not build with these screenshots (npm run build exited $LASTEXITCODE); nothing was published."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
