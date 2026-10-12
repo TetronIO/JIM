@@ -1305,7 +1305,8 @@ public abstract class SyncTaskProcessorBase
                             targetEntityDescription: mvoDescription,
                             detailCount: rootDetailCount,
                             syncRuleId: changeResult.SyncRuleId,
-                            syncRuleName: changeResult.SyncRuleName);
+                            syncRuleName: changeResult.SyncRuleName,
+                            joinMatch: changeResult.JoinMatch);
 
                         // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned
                         // child per resolved attribute from a re-elected survivor's own
@@ -2036,6 +2037,10 @@ public abstract class SyncTaskProcessorBase
         string? cancelledMvoDeletionDetailMessage = null;
         string? cancelledMvoDeletionPolicySnapshotJson = null;
 
+        // The match a join was made on (#2052), threaded the same way so the Joined root outcome records which Object
+        // Matching Rule found the Metaverse Object and on what value.
+        ImportMatch? joinMatch = null;
+
         // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
@@ -2073,7 +2078,7 @@ public abstract class SyncTaskProcessorBase
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
             {
-                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson) =
+                (wasJoined, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch) =
                     await AttemptJoinAsync(scopedSyncRules, connectedSystemObject);
             }
 
@@ -2246,7 +2251,8 @@ public abstract class SyncTaskProcessorBase
                         targetEntityId: mvoId,
                         targetEntityDescription: mvoDescription,
                         syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
-                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null);
+                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
+                        joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
 
                     // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
                     // child per resolved attribute. Not gated to Detailed mode: a
@@ -2362,7 +2368,7 @@ public abstract class SyncTaskProcessorBase
             if (wasJoined)
             {
                 return MetaverseObjectChangeResult.Joined(attributesAdded, attributesRemoved,
-                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+                    cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, joinMatch);
             }
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
@@ -6211,11 +6217,12 @@ public abstract class SyncTaskProcessorBase
     /// <returns>
     /// Whether a join was established, plus (#1620) the MvoDeletionCancelled facts from
     /// <see cref="EstablishJoinAsync"/> when the join cancelled a previously scheduled deletion; both null
-    /// when no join was found or no deletion was cancelled.
+    /// when no join was found or no deletion was cancelled. Also the match the join was made on (#2052), so the
+    /// Joined outcome can record the rule and value; null when no join was found.
     /// </returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
     /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
-    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
@@ -6262,7 +6269,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         // No join could be established.
-        return (false, null, null);
+        return (false, null, null, null);
     }
 
     /// <summary>
@@ -6326,7 +6333,7 @@ public abstract class SyncTaskProcessorBase
     /// when the join is the sole change, so the facts travel back through <see cref="MetaverseObjectChangeResult"/>
     /// to whichever site builds the root.
     /// </returns>
-    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson)> EstablishJoinAsync(
+    private async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> EstablishJoinAsync(
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
@@ -6415,7 +6422,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson);
+        return (true, cancelledMvoDeletionDetailMessage, cancelledMvoDeletionPolicySnapshotJson, match);
     }
 
     /// <summary>

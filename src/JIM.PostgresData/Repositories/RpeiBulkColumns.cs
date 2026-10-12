@@ -64,6 +64,7 @@ internal static class RpeiBulkColumns
         "Id", "ActivityRunProfileExecutionItemId", "ParentSyncOutcomeId",
         "OutcomeType", "TargetEntityId", "TargetEntityDescription",
         "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId",
-        "SyncRuleId", "SyncRuleName", "StagedChangeType"
+        "SyncRuleId", "SyncRuleName", "StagedChangeType",
+        "ObjectMatchingRuleId", "ObjectMatchingRuleDescriptionSnapshot", "MatchedValue"
     ];
 }

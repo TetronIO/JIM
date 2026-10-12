@@ -134,6 +134,10 @@
                 {
                     <div class="tl-detail-line">@causalityEvent.DetailMessage</div>
                 }
+                @if (!string.IsNullOrWhiteSpace(causalityEvent.JoinMatchDetail))
+                {
+                    <div class="tl-detail-line tl-match">@causalityEvent.JoinMatchDetail</div>
+                }
                 @if (chipLinks.Count > 0)
                 {
                     <div class="evt-entities">

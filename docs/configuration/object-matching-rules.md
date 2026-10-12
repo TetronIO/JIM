@@ -27,7 +27,7 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 
 | Outcome | Description |
 |---------|-------------|
-| **Joined** | Exactly one Metaverse Object (or, before provisioning, one Connected System Object) matches; the connection records the rule and value |
+| **Joined** | Exactly one Metaverse Object (or, before provisioning, one Connected System Object) matches; the connection records the rule and value. A join to a Metaverse Object also records them on the joining object's [Activity item](activity-execution-items.md), and a [Sync Preview](sync-preview.md) of an object that would join names them |
 | **No match** | No rule matches; projection or provisioning creates one, if the Synchronisation Rule allows it |
 | **Ambiguous Match** | The rule's values, every value of a multi-valued attribute counting, match several Metaverse Objects; the Activity item lists them, and nothing joins or projects |
 | **Ambiguous Provisioning Match** | Before provisioning, the rule's values match several existing Connected System Objects; the Activity item lists them, and nothing joins or provisions for that export rule. See [Ambiguous Provisioning Match](../administration/troubleshooting-synchronisation.md) |
