@@ -9,7 +9,9 @@
     Every screenshot on the junctional.io product tour is listed in scripts/screenshots/manifest.json: the page, the
     steps that reach it, the themes it is published in and its geometry profile (#582). This script validates the
     manifest, signs in to the portal, captures each entry in each of its themes, and fails if any image is not exactly
-    its profile's size, so a low-resolution image can never be published by accident.
+    its profile's size, so a low-resolution image can never be published by accident. It also fails if any image is
+    blank, or a dark and light pair came out in the same theme (ScreenshotChecks.ps1): a release publishes these with
+    no one looking at them first.
 
     Portal images are 3348x2092: the portal at 1674x1046 CSS pixels and 100% zoom, rendered at 2x density. Navigation
     groups are expanded and the theme is set through the portal's own preferences before the first page loads.
@@ -92,6 +94,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'screenshots' 'ScreenshotManifest.ps1')
 . (Join-Path $PSScriptRoot 'screenshots' 'CapturePreflight.ps1')
 . (Join-Path $PSScriptRoot 'screenshots' 'TerminalScreen.ps1')
+. (Join-Path $PSScriptRoot 'screenshots' 'ScreenshotChecks.ps1')
 . (Join-Path $PSScriptRoot 'JimPlaywright.ps1')
 
 if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'screenshots' 'manifest.json' }
@@ -308,6 +311,13 @@ foreach ($job in $jobs | Where-Object { $_.fileName -notin $reported }) {
     $problems.Add("$($job.fileName): no result from the capture driver.")
 }
 
+# Nothing blank, and every dark and light pair in its own theme. A release publishes these with no one looking first.
+$writtenPaths = @($results | Where-Object ok | ForEach-Object { Join-Path $versionPath $_.fileName } |
+        Where-Object { Test-Path -LiteralPath $_ })
+if ($writtenPaths.Count -gt 0) {
+    foreach ($problem in @(Find-ScreenshotContentProblem -Path $writtenPaths)) { $problems.Add($problem) }
+}
+
 $elapsed = (Get-Date) - $started
 $written = @($results | Where-Object ok).Count
 Write-Host ''
@@ -326,4 +336,4 @@ if ($problems.Count -gt 0) {
     exit 1
 }
 
-Write-Host "All images are at their published size. Output: $versionPath" -ForegroundColor Green
+Write-Host "All images are at their published size, none blank, and each pair in its own theme. Output: $versionPath" -ForegroundColor Green
