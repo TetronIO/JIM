@@ -23,7 +23,7 @@ mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 
 Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning. Changing an export rule's criteria moves objects too, at the next synchronisation; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
 
-An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activity-execution-items.md).
+An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) can be **Remain joined (stop Attribute Flow)** instead of **Disconnect from Metaverse**. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md).
 
 Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter; criteria do not use the [expression language](../concepts/expressions.md).
 

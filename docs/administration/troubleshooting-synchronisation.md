@@ -14,7 +14,7 @@ Every run of a Run Profile is an Activity. When a run goes wrong, open its Activ
 - **Complete with error** means at least one object hit an error JIM did not anticipate.
 - **Failed with error** means the run itself stopped, or every object in it failed.
 
-The Activity's execution items name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
+The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
 
 ## `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
