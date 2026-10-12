@@ -45,6 +45,23 @@ Describe 'Invoke-GitHubApi' {
         { Invoke-GitHubApi -Method POST -Path 'repos/o/r/pulls' -Body @{} -Token 't' } | Should -Throw '*403*not accessible by integration*'
     }
 
+    # Invoke-RestMethod writes a JSON array to the pipeline as one object, not as its items (the unary comma below
+    # does the same). Passed on as it is, an empty list reaches the caller as one item that is itself an empty list.
+    It 'answers an empty list as no items' {
+        Mock Invoke-RestMethod { , @() }
+
+        @(Invoke-GitHubApi -Method GET -Path 'repos/o/r/pulls?head=o:x&state=open' -Token 't').Count | Should -Be 0
+    }
+
+    It 'answers a list as its items' {
+        Mock Invoke-RestMethod { , @([pscustomobject]@{ number = 7 }) }
+
+        $items = @(Invoke-GitHubApi -Method GET -Path 'repos/o/r/pulls?head=o:x&state=open' -Token 't')
+
+        $items.Count | Should -Be 1
+        $items[0].number | Should -Be 7
+    }
+
     It 'sends the token and a JSON body' {
         Mock Invoke-RestMethod { @{ ok = $true } }
 
@@ -178,6 +195,22 @@ Describe 'Open-TourPullRequest' {
         $create.Body.head | Should -Be 'screenshots/v0.17.0'
         $create.Body.base | Should -Be 'main'
         ($script:calls | Where-Object Method -eq 'GET').Path | Should -Match ([regex]::Escape('head=TetronIO:screenshots/v0.17.0'))
+    }
+
+    # Through the real Invoke-GitHubApi, with GitHub answering as Invoke-RestMethod delivers it: the first refresh for a
+    # version, when the branch has no pull request yet.
+    It 'opens a pull request when GitHub lists none for the branch' {
+        Mock Invoke-RestMethod {
+            $script:calls.Add([pscustomobject]@{ Method = $Method; Uri = $Uri })
+            if ($Method -eq 'GET') { return , @() }
+            return [pscustomobject]@{ html_url = 'https://github.com/TetronIO/junctional.io/pull/7' }
+        }
+
+        $url = Open-TourPullRequest -Repository 'TetronIO/junctional.io' -BaseBranch 'main' -Branch 'screenshots/v0.17.0' `
+            -Title 'Refresh' -Body 'Body' -Token 'token'
+
+        $url | Should -Be 'https://github.com/TetronIO/junctional.io/pull/7'
+        @($script:calls | Where-Object Method -eq 'POST').Count | Should -Be 1
     }
 
     It 'updates the open pull request rather than opening a second one' {
