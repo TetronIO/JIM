@@ -1093,13 +1093,9 @@ public class Worker : BackgroundService
                 .GroupBy(sr => sr.ConnectedSystemId)
                 .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
 
-            // Connected System id to CSO type name, so the causality panel can name a staged export's target
-            // "type: name" instead of the bare name or id, matching the sync engine's own lookup.
-            var csoTypeNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                .SelectMany(rules => rules)
-                .Where(sr => sr.ConnectedSystemObjectType != null)
-                .GroupBy(sr => sr.ConnectedSystemId)
-                .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+            // Target object type names, so the causality panel can name a staged export's target "type: name"
+            // instead of the bare name or id, matching the sync engine's own naming.
+            var typeNames = ExportTargetTypeNames.From(exportEvaluationCache);
 
             foreach (var mvo in mvosToDelete)
             {
@@ -1164,9 +1160,9 @@ public class Worker : BackgroundService
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
                                 activity, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
+                                typeNames.ForPendingExport(deletePendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id),
                                 deprovisioningRule?.Id, deprovisioningRule?.Name);
-                            deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
+                            deletePendingExport.RecordStager(deletionItem.Id);
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
 
@@ -1179,7 +1175,8 @@ public class Worker : BackgroundService
                                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
+                                    cancellation.ConnectedSystemId,
+                                    typeNames.Resolve(cancellation.ConnectedSystemId, objectTypeId: cancellation.ConnectedSystemObjectTypeId)));
                         }
 
                         // Accounts left in place: a Disconnect Deprovisioning Action broke the join and queued
@@ -1191,7 +1188,8 @@ public class Worker : BackgroundService
                                 targetEntityId: disconnection.ConnectedSystemObjectId,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId),
                                 detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
-                                    disconnection.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(disconnection.ConnectedSystemId)),
+                                    disconnection.ConnectedSystemId,
+                                    typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId)),
                                 syncRuleId: disconnection.SyncRuleId,
                                 syncRuleName: disconnection.SyncRuleName);
                         }
@@ -1206,14 +1204,15 @@ public class Worker : BackgroundService
                         deletionCauses[mvo.Id] = deprovisionCause;
                         foreach (var pendingExport in reportableDeleteExports)
                         {
+                            mvoWorkingSet.TryGetDeprovisioningRule(pendingExport.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
                             var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                                 activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                                csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                                typeNames.ForPendingExport(pendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id));
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
-                            pendingExport.QueuedByRunProfileExecutionItemId = deprovisionItem.Id;
+                            pendingExport.RecordStager(deprovisionItem.Id);
                             queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
                             executionItems.Add(deprovisionItem);
                         }
@@ -1289,7 +1288,7 @@ public class Worker : BackgroundService
                         objectTypeSnapshot: null,
                         csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
                         activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
-                        csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
+                        typeNames.ForPendingExport(pendingExport));
 
                     if (pendingExport.SourceMetaverseObjectId.HasValue
                         && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
@@ -1299,7 +1298,7 @@ public class Worker : BackgroundService
                             recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
                     }
 
-                    pendingExport.QueuedByRunProfileExecutionItemId = recallItem.Id;
+                    pendingExport.RecordStager(recallItem.Id);
                     queueingStamps.Add((pendingExport.Id, recallItem.Id));
                     executionItems.Add(recallItem);
                 }
@@ -1548,42 +1547,32 @@ public class Worker : BackgroundService
             // Query the database for precise RPEI error counts.
             // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
             // precise has-errors/all-errors detection for all processor types uniformly.
-            var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
-            objectLevelErrorCount = totalWithErrors;
+            var counts = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
+            objectLevelErrorCount = counts.TotalWithErrors;
 
-            var hasItems = totalRpeis > 0;
-            var hasErrors = totalWithErrors > 0;
-            var hasUnhandledErrors = totalUnhandledErrors > 0;
-            var allErrors = hasItems && totalWithErrors == totalRpeis;
-
-            if (allErrors)
+            // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the Activity, not as
+            // RPEIs, and still complete it with a warning.
+            switch (ActivityOutcomeEvaluator.Evaluate(counts, hasWarningMessage: !string.IsNullOrEmpty(activity.WarningMessage)))
             {
-                await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
-            }
-            else if (hasUnhandledErrors)
-            {
-                // UnhandledError RPEIs indicate code/logic bugs, not data issues.
-                // These must escalate to CompleteWithError to ensure visibility and investigation.
-                await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{totalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
-                Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, totalUnhandledErrors);
-            }
-            else if (hasErrors)
-            {
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
-            }
-            else if (!string.IsNullOrEmpty(activity.WarningMessage))
-            {
-                // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the
-                // Activity, not as RPEIs. The activity should still complete with warning status.
-                await jim.Activities.CompleteActivityWithWarningAsync(activity);
-                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warning (connector warning: {WarningMessage})", activity.Id, activity.WarningMessage);
-            }
-            else
-            {
-                await jim.Activities.CompleteActivityAsync(activity);
-                Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                case ActivityStatus.FailedWithError:
+                    await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
+                    break;
+                case ActivityStatus.CompleteWithError:
+                    // UnhandledError RPEIs indicate code/logic bugs, not data issues.
+                    // These must escalate to CompleteWithError to ensure visibility and investigation.
+                    await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{counts.TotalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
+                    Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, counts.TotalUnhandledErrors);
+                    break;
+                case ActivityStatus.CompleteWithWarning:
+                    await jim.Activities.CompleteActivityWithWarningAsync(activity);
+                    Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings ({ErrorCount} item error(s), {RefusedObjectTypeChanges} refused Object Type change(s), warning message: {WarningMessage})",
+                        activity.Id, counts.TotalWithErrors, counts.TotalObjectTypeChangeRefusals, activity.WarningMessage);
+                    break;
+                default:
+                    await jim.Activities.CompleteActivityAsync(activity);
+                    Log.Debug("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed successfully", activity.Id);
+                    break;
             }
         }
         catch (Exception ex)

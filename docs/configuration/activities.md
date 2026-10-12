@@ -14,12 +14,12 @@ Activities move through a small set of statuses:
 
 - **In progress**<br /> Currently executing.
 - **Complete**<br /> Finished successfully.
-- **Complete with warning**<br /> Finished with non-fatal warnings.
-- **Complete with error**<br /> Finished, but some individual objects had errors.
-- **Failed with error**<br /> Failed due to a critical error before or during execution.
+- **Complete with warning**<br /> Finished, but some objects hit a problem JIM recognises (a rejected import object, an export refusal its Connector classified), or a safeguard stepped in. Each object's error is on its execution item.
+- **Complete with error**<br /> For a Run Profile execution, at least one object hit an error JIM did not anticipate: a fault in JIM, or an export refusal its Connector could not classify. For a password delivery, the target system refused the password, and the message says why.
+- **Failed with error**<br /> Failed due to a critical error before or during execution, or every object the run recorded had an error.
 - **Cancelled**<br /> Cancelled before completion.
 
-Most monitoring code only cares about whether the activity has reached a terminal status, and whether errors were recorded along the way.
+[Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md) explains each warning and error.
 
 ## Initiated by
 

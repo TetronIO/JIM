@@ -1108,7 +1108,8 @@ public interface IConnectedSystemRepository
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
-        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool? hasUnresolvedReferences = null);
 
     /// <summary>
     /// Retrieves a window of Connected System Object headers addressed by absolute offset and count, for
@@ -1127,6 +1128,8 @@ public interface IConnectedSystemRepository
     /// <param name="objectTypeFilter">Optional filter by one or more object type ids.</param>
     /// <param name="joinTypeFilter">Optional filter by one or more join types.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    /// <param name="hasUnresolvedReferences">Optional filter (#959): true for only the objects holding an unresolved
+    /// reference value, false for only those holding none.</param>
     public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -1137,7 +1140,8 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
-        bool includeTotalCount = true);
+        bool includeTotalCount = true,
+        bool? hasUnresolvedReferences = null);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
@@ -1534,6 +1538,83 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// The Object Type of a Connected System Object in the given Connected System, or null where no such object
+    /// exists there. A light lookup for callers that need only the type, not the object's values.
+    /// </summary>
+    public Task<int?> GetConnectedSystemObjectTypeIdAsync(int connectedSystemId, Guid connectedSystemObjectId);
+
+    /// <summary>
+    /// A window of one Connected System Object's unresolved reference values (#959): the values whose
+    /// <c>UnresolvedReferenceValue</c> is set while <c>ReferenceValueId</c> is not, ordered by attribute name, then
+    /// value, then id.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The object.</param>
+    /// <param name="offset">The absolute index of the first value wanted.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the value and the attribute's name.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set; the total is then null.</param>
+    public Task<RangeResultSet<ConnectedSystemObjectUnresolvedReferenceValue>> GetUnresolvedReferenceValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
+    /// How many unresolved reference values one Connected System Object holds (#959).
+    /// </summary>
+    public Task<int> GetUnresolvedReferenceValueCountAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
+    /// Every unresolved reference value one Connected System Object holds on the given attributes (#959), for the
+    /// summaries that must consider all of them rather than a window.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectUnresolvedReferenceValue>> GetUnresolvedReferenceValuesAsync(
+        Guid connectedSystemObjectId,
+        IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
+    /// One Connected System Object's unresolved reference values grouped by their parent in the Connected System's
+    /// hierarchy (#959): each group holds the values whose identifiers differ only in their first component, with one
+    /// of them as its sample and how many it holds. For a Distinguished Name, the parent is what follows the first
+    /// unescaped comma, compared without regard to case.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectUnresolvedReferenceValueGroup>> GetUnresolvedReferenceValueGroupsAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
+    /// How many unresolved reference values a Connected System's objects hold between them, and how many objects hold
+    /// them (#959): what the Connected System page's signpost shows. Zero for both where there are none.
+    /// </summary>
+    public Task<ConnectedSystemUnresolvedReferenceTotals> GetUnresolvedReferenceTotalsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// A whole Connected System's unresolved reference values grouped by their parent in its hierarchy (#959), the
+    /// largest group first, each with how many objects hold its values. The Connected System-wide counterpart of
+    /// <see cref="GetUnresolvedReferenceValueGroupsAsync(Guid)"/>, compared the same way.
+    /// </summary>
+    public Task<List<ConnectedSystemUnresolvedReferenceValueGroup>> GetConnectedSystemUnresolvedReferenceValueGroupsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// How many of a Connected System's objects hold an unresolved reference value under any of the given parents
+    /// (each a <see cref="ConnectedSystemUnresolvedReferenceValueGroup.ParentKey"/>), counting each object once
+    /// however many of the parents its values sit under (#959).
+    /// </summary>
+    public Task<int> GetUnresolvedReferenceObjectCountAsync(int connectedSystemId, IReadOnlyCollection<string> parentKeys);
+
+    /// <summary>
+    /// Every distinct unresolved reference value a Connected System's objects hold on the given attributes (#959): the
+    /// values whose ambiguity across Object Types has to be checked, each checked once however many objects hold it.
+    /// </summary>
+    public Task<List<string>> GetDistinctUnresolvedReferenceValuesAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
+    /// A Connected System's unresolved reference values split between those holding one of
+    /// <paramref name="values"/> on one of <paramref name="attributeIds"/> and the rest, with the objects behind each
+    /// (#959). Values are compared exactly, as they were checked.
+    /// </summary>
+    public Task<UnresolvedReferenceValueSplit> GetUnresolvedReferenceValueSplitAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds, IReadOnlyCollection<string> values);
 
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);

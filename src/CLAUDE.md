@@ -300,6 +300,8 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 4. Add tests
 5. **Declare the Connector's phases** via `IConnectorPhases` if it performs internal work an administrator would otherwise wait through blind (a file load, a paged fetch), and enter them through the `IConnectorProgress` it is handed. Derive the Connector's tests from `ConnectorPhaseConformanceTests` (JIM.Worker.Tests), which enforces the declaration rules. Declaring nothing is a valid answer where per-item counts already say more; say so where the interface is implemented. Author guidance: `docs/developer/connectors.md` > Declaring the steps of your work; design: `engineering/notes/RUN_PROFILE_PHASES.md`
 
+**Adding a Service Setting:** declare the key in `Constants.SettingKeys`, seed it in `SeedingServer.SyncServiceSettingsAsync` (`ServiceSettingSeedingCoverageTests` fails for a key that is declared but never seeded, #2060), and give it a row in the Service Settings table of `docs/administration/configuration.md` (COV-3; `ServiceSettingDocsCoverageTests`). A Connector setting added to `GetSettings()` likewise needs a row in a Setting table on its Connector's page, named exactly as the form shows it (COV-6; `ConnectorSettingDocsCoverageTests`).
+
 **Adding a built-in (seeded) object or audited configuration entity:**
 
 Two invariants here are enforced only by remembering them, and both have been missed before (the built-in example data template in #866, then the built-in Temporal Scope Reconciliation schedule):
@@ -327,6 +329,7 @@ Two invariants here are enforced only by remembering them, and both have been mi
 2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for OpenAPI documentation
 4. Test via the Scalar API reference at `/api/reference`
+5. A new controller is a new resource group: give it a row in the Resource groups table on `docs/api/index.md` (COV-4). Renaming or removing a route breaks any page that gives it (ACC-3). `build-and-test` checks both against the OpenAPI document; run them locally with `pwsh ./scripts/Generate-OpenApiDoc.ps1 -OutputPath <file>` then `pwsh ./scripts/Test-DocsCoverage.ps1 -OpenApiPath <file> -Rule ACC-3,COV-4`
 
 **Route templates are validated at runtime, not by the compiler (boot the app to catch route bugs):**
 - Route parameter names must be unique across the *combined* template (the controller-level `[Route]` plus the action's `[HttpGet]`/`[HttpPost]` template). Every controller route is `api/v{version:apiVersion}/[controller]`, so **`version` is already a route parameter on every action** - never reuse it. An action template like `change-history/{version:int}` yields two `version` parameters in the merged route, which ASP.NET rejects at **startup** with an `ArgumentException` ("An item with the same key has already been added"), crashing the app (and the `openapi-gen` Docker build stage) before the route table is built. Use a distinct name such as `{changeVersion:int}`. Likewise avoid colliding with `[controller]` or other ambient tokens.

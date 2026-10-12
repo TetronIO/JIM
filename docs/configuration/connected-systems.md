@@ -37,7 +37,7 @@ This two-stage approach gives you:
 
 A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
 
-The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /connected-systems/{id}/connector-space` and `Get-JIMConnectedSystemObject` too.
+The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space` and `Get-JIMConnectedSystemObject` too.
 
 ### Connected System Objects (CSOs)
 
@@ -59,13 +59,13 @@ CSOs have a lifecycle:
 
 An obsoleted CSO is not deleted straight away. It stays obsolete until a Synchronisation Run Profile runs on the same Connected System, which is what disconnects it from its Metaverse Object and deletes it, applying grace periods and [Metaverse Deletion Rules](metaverse.md#deletion-behaviour) as configured. On a system that is imported and synchronised on a normal schedule this is a state objects pass through in minutes.
 
-A system that is imported but rarely synchronised is the case worth watching, because obsolete objects accumulate there with nothing acting on them. The Connected System's page states the count whenever it is above zero, with **Review** opening the Connector Space narrowed to exactly those objects; you can also reach them from the Connector Space's own **Obsolete** status filter, over the REST API with `GET /connected-systems/{id}/connector-space?status=Obsolete`, or with `Get-JIMConnectedSystemObject -ConnectedSystemId <id> -Status Obsolete`.
+A system that is imported but rarely synchronised is the case worth watching, because obsolete objects accumulate there with nothing acting on them. The Connected System's page states the count whenever it is above zero, with **Review** opening the Connector Space narrowed to exactly those objects; you can also reach them from the Connector Space's own **Obsolete** status filter, over the REST API with `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space?status=Obsolete`, or with `Get-JIMConnectedSystemObject -ConnectedSystemId <id> -Status Obsolete`.
 
 Only the first import to find an object missing records a deletion against it. Later imports that find it still missing change nothing and record nothing, because nothing has happened: the object was already obsolete when they started.
 
 ### Clearing the connector space
 
-Clearing a Connected System's connector space removes every CSO (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing itself is a hard delete: no Metaverse Object Deletion Rule or grace period runs at the moment of the clear, so the removal of the CSOs is immediate. The portal's Connector Space page, `POST /connected-systems/{id}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
+Clearing a Connected System's connector space removes every CSO (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing itself is a hard delete: no Metaverse Object Deletion Rule or grace period runs at the moment of the clear, so the removal of the CSOs is immediate. The portal's Connector Space page, `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
 
 Because a clear skips obsoletion, any Metaverse attribute value the cleared system contributed keeps its provenance and keeps exporting downstream even though nothing joins it to the system any more, and the identities themselves receive no Deletion Rule decision at all. For the common case, a Full Import that brings every object straight back, this is exactly what you want: the join re-forms and nothing changes. It only matters when an object never returns, for example a source population that shrank during the clear, or a system you are decommissioning without deleting: without something to notice the gap, those values and identities would be stranded indefinitely.
 
@@ -202,19 +202,39 @@ Each Connected System has an **Unresolved Reference Handling** setting that cont
 
 | Mode | Behaviour |
 |------|-----------|
-| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, and the Activity completes with a warning status showing the errored items. Choose this when every reference is expected to resolve. |
-| **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
+| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, headed **Reference Unresolved**, and the Activity completes with a warning status showing the errored items. The error counts every reference the object was left with, broken down by attribute. Choose this when every reference is expected to resolve. |
+| **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved, and a **View Affected Objects** button that opens them in the Connector Space. Choose this when unresolved references are worth a glance but should not read as failures. |
 | **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
+
+Whichever mode is selected, each affected object's execution item records how many of its references the import left unresolved, so none is ever lost from the Activity. Under Error, an object whose item already carries a different error (for example an attribute value the Connector could not parse) keeps that error, and its item lists the unresolved references as well, in amber rather than red. Under Warn and Ignore, the item is not marked as an error, but opening it lists the references, in amber.
 
 The same setting also governs **ambiguous references**: a reference value that matches objects of more than one Object Type, where the attribute does not declare which Object Type it points at. Two Object Types may legitimately share an anchor value space (a view over a table has the table's keys by construction), so JIM never resolves such a reference by guessing; it is reported per the mode above, with a message naming the candidate Object Types. Where the Connector's schema can declare the reference's target Object Type (the [SQL Connector](../connectors/jim-sql-connector.md)'s `referencesObjectType`), declaring it removes the ambiguity entirely: the reference resolves within the declared Object Type alone.
 
 Whichever mode is selected, genuine data-quality issues remain discoverable:
 
-- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
-- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds.
+- **Connected System page and Connector Space**<br /> While any reference is unresolved, the Connected System page shows an **Unresolved References** button beside **Connector Space** and **Pending Exports**, its count amber under Error and Warn and plain under Ignore. It opens the Connector Space filtered to the affected objects (**Filter by References: Unresolved**), each with how many it holds, beneath **Where they point** (see below).
+- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects. The object's detail page opens with an **Unresolved References** panel listing every one, with its likely cause, where the fix lies and the next step (see [Finding out why a reference is unresolved](#finding-out-why-a-reference-is-unresolved)), and each unresolved value in the Attributes table carries its likely cause too.
+- **Activity execution items**<br /> Each item records how many references its object was left with (`UnresolvedReferenceCount` from `Get-JIMActivityExecutionItem` and the REST API), whatever the mode and whatever error the item carries. Opening the item lists the references as they stand now on the object, says how that compares with what the run left (fewer remain once some resolve), and links to the object.
+- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceSummary` summarises a Connected System's unresolved references by likely cause and next step, `Get-JIMConnectedSystemObject -HasUnresolvedReference` lists the objects holding them, and `Get-JIMConnectedSystemObjectUnresolvedReference` lists one object's with their likely causes, or summarises them with `-Summary`.
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
+### Finding out why a reference is unresolved
+
+For each unresolved reference, JIM works out the most likely cause by comparing the value with the Connected System's partitions and its current Container Scope, using the Connector's own rule for which Container holds a value (for a directory, the Distinguished Name's position in the hierarchy). It then says whether the fix lies in JIM's configuration or in the Connected System, and what to do:
+
+| Likely cause | What it means | Where to fix it |
+|--------------|---------------|-----------------|
+| **Container not in scope** | The referenced object sits in a Container that is not selected, so it was never imported. | JIM: select the Container on the Scope tab, then run a Full Import. |
+| **Container excluded** | The referenced object sits beneath a Container excluded from Container Scope. | JIM: lift the exclusion on the Scope tab if its objects belong in JIM, then run a Full Import. |
+| **Partition not selected** | The referenced object is in a partition that is not selected. | JIM: select the partition on the Scope tab, then run a Full Import. |
+| **Ambiguous Object Type** | The value matches objects of more than one Object Type, and the attribute does not declare which one it references. | JIM: declare the attribute's target Object Type on the Schema tab, where the Connector supports it. |
+| **Outside this Connected System** | The value is in none of the Connected System's partitions, for example a member from another domain. JIM cannot import the object it names. | The Connected System. If references like this are expected, set Unresolved Reference Handling to Warn. |
+| **Not found in scope** | The value sits in Container Scope, but nothing with that value has been imported. | The Connected System. Run a Full Import to rule out a missed change; if it is still unresolved, the object no longer exists there, or its Object Type is not imported. |
+| **Not found** | JIM cannot place the value in a Container (the Connector does not say which Container holds a value, as with a file or a database), and nothing with that value has been imported. | The Connected System, as for **Not found in scope**. |
+
+The causes are judged against the Container Scope as it stands now, not as it stood when the import ran, so they always describe what would fix the references today: once you select a Container, its references read **Not found in scope** until the next Full Import imports the objects they name and resolves them. Above the list, the panel's **Next steps** group the references by the change that would fix them, most first, so a group whose hundreds of unresolved members all sit in one unselected Container shows one step rather than hundreds. Steps you can take in JIM are listed first, under **Fix in JIM**, then those that lie in the Connected System. **Where they point**, above the filtered Connector Space, gives the same steps for the whole Connected System, each with how many objects its references sit on, so a thousand affected objects read as the two or three changes behind them. Nothing about the references themselves changes until an import resolves them.
 
 ### On export
 
@@ -235,7 +255,7 @@ The Schema tab's ticks decide what JIM **reads**, and the two kinds of tick beha
 
 | What you deselect | What actually happens |
 |---|---|
-| An **Object Type** | JIM takes it out of management. The Connector stops returning its objects, so the next **Full Import** finds every Connected System Object already imported from it missing and marks it obsolete, and the following synchronisation disconnects the joined ones from their Metaverse Objects. Their contributed values are withdrawn (see below), and a Metaverse Object left with no connectors may become eligible for deletion under its type's deletion rule. Nothing happens on save, and a Delta Import does not act on it; the Full Import does. |
+| An **Object Type** | JIM takes it out of management. The Connector stops returning its objects, so the next **Full Import** finds every Connected System Object already imported from it missing and marks it obsolete (unless an object also matches another selected Object Type, in which case it [changes Object Type](#when-an-object-changes-object-type) instead of disappearing), and the following synchronisation disconnects the joined ones from their Metaverse Objects. Their contributed values are withdrawn (see below), and a Metaverse Object left with no connectors may become eligible for deletion under its type's deletion rule. Nothing happens on save, and a Delta Import does not act on it; the Full Import does. |
 | An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
 
 Deselecting an Object Type is the same as deselecting a partition or a container: all three take objects out of an import that still runs, so the next Full Import does not find them and marks them obsolete. They go through the same deletion detection as any other missing object, so a Full Import Run Profile's [deletion limits](run-profiles.md#safeguards) hold them back too, which is worth setting before taking a large Object Type out of management.
@@ -272,13 +292,52 @@ Two things the preview is deliberately careful about:
 - **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
 - **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
 
-Validation names what stands in the way and what would go on running over frozen data. Deselecting an Object Type that an enabled Synchronisation Rule still manages is a blocking finding naming the rules, because saving it is refused; the preview counts nothing until those rules are disabled. Attribute Flow mappings still reading an attribute you are deselecting are named as a warning. Deselecting an External ID is refused outright.
+Validation names what stands in the way and what would go on running over frozen data. Deselecting an Object Type that an enabled Synchronisation Rule still manages is a blocking finding naming the rules, because saving it is refused; the preview counts nothing until those rules are disabled. Attribute Flow mappings still reading an attribute you are deselecting are named as a warning. Deselecting an External ID is refused outright. Selecting or deselecting an Object Type that overlaps another selected one (a class that inherits from it, or a structural class beside an auxiliary one) is named as a warning, because the objects carrying both [change Object Type](#when-an-object-changes-object-type); for a deselection, the obsoletion counts above overstate what happens to those objects, since they are kept rather than obsoleted. The warning relies on the class kinds and inheritance a schema refresh records, so it appears only for the LDAP Connector, and only once the schema has been refreshed since JIM began recording them.
 
 Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
 
 The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId -SchemaObjectType`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/schema-selection/preview` in the [REST API](../../api/reference/). Every omission means "leave this as it stands", so a request changing one flag cannot accidentally propose deselecting a whole Object Type.
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
+
+## When an object changes Object Type
+
+A Connected System Object belongs to one Object Type, and JIM recognises it by that Object Type's External ID. An object that starts arriving under a different Object Type therefore does not look like an existing object changing: it looks like a new object of the new type, while the old one seems to have disappeared. Taken at face value, the next Full Import would retire the old one, which can delete its Metaverse Object and deprovision it from every other Connected System before anything joins the new one.
+
+JIM does not let that happen unannounced. For a Connector whose External IDs are unique across the whole Connected System, such as the [LDAP Connector](../connectors/jim-ldap-connector.md) (an entry's objectGUID, entryUUID or nsUniqueId never repeats, whatever its class), the import recognises the object and **refuses the change**:
+
+- The object's Run Profile execution item records an **Object Type Changed** error naming the Object Type JIM holds it as, the Object Type it now arrives as, and its External ID. The [Activity](activities.md) completes with a warning, even when the refused objects are all it recorded, so a refusal never stops the Schedule the run belongs to.
+- Nothing is lost. Nothing is created, and the existing Connected System Object is kept exactly as it is: it stays joined, its values stay in place, and deletion detection leaves it alone, so nothing is disconnected or deprovisioned. The one exception is an object an earlier import already marked obsolete (because it had left scope, say): the next synchronisation still disconnects it, as it would have anyway, and the error says so.
+- The refusal repeats on every import until you either undo the cause or carry the change out deliberately.
+
+A Connector whose External IDs are only unique within an Object Type (the SQL, File and SCIM 2.0 Client Connectors) cannot tell a changed object from a different object that shares the value, so there an object under a new Object Type is imported as a new object. Their Object Types do not overlap the way directory classes do, so the causes below do not arise for them in ordinary running.
+
+### What changes an object's Object Type
+
+- **Selecting an overlapping Object Type**<br /> An entry carrying two selected classes imports as the more specific one, so selecting `computer` while `user` is selected moves every computer account, which also carries `user`, to `computer`. The [schema preview](#previewing-a-schema-change) warns about this.
+- **Deselecting an overlapping Object Type**<br /> The objects fall back to the other selected class: deselecting `computer` while `user` stays selected brings every computer back as a `user`, rather than taking them out of management. The preview warns about this too. To stop managing objects, scope them out by [partition or container](#partitions-and-containers) instead.
+- **Refreshing the schema**<br /> When a class changes between structural and auxiliary, or what it inherits from changes, the Object Type its entries resolve to can change. The [refresh preview](#refreshing-the-schema) lists these classification changes.
+- **Editing an entry in the directory**<br /> Changing an entry's structural class where the directory allows it, or adding or removing an auxiliary class that is itself a selected Object Type.
+
+Deleting an object and creating it again is not a type change. The new object has a new External ID, and JIM treats it as a leaver and a joiner.
+
+### Carrying out an intended change
+
+1. Build and enable the new Object Type's Synchronisation Rules first, with Object Matching Rules that join the new objects to the same Metaverse Objects.
+2. Protect the Metaverse Objects while the old objects are retired: set a [deletion grace period](metaverse.md#deletion-behaviour) on their Metaverse Object Type, and [deletion limits](run-profiles.md#full-import) on the Full Import Run Profile.
+3. Run a Full Import Run Profile with [Allow Object Type Changes](run-profiles.md#allow-object-type-changes-full-import) enabled, by hand. It imports each object as a new Connected System Object of its new type and marks the old one obsolete. Deletion limits hold back genuinely missing objects, not these retirements, which the change itself asks for. Where an old object cannot be retired (it is in a partition this Run Profile does not import, or its Object Type is deselected with an enabled Synchronisation Rule still bound to it), JIM does not create its replacement either, and reports the object as an Object Type Changed error saying why.
+4. [Preview the Full Synchronisation](#previewing-a-full-synchronisation), then run a Full Synchronisation, not a Delta Synchronisation. The old objects are disconnected under their type's Deletion Rules, and the new ones join or project through the new type's Synchronisation Rules.
+5. Check the Activities: each changed object should have an obsoleted old object and a new one joined to the same Metaverse Object, and there should be no new Metaverse Objects you did not expect.
+
+Keep Allow Object Type Changes off on the Run Profiles your Schedules run, so a change nobody planned is always refused and reported rather than carried out.
+
+### Undoing an unintended change
+
+Undo its cause: put the Object Type selection back, or revert the directory edit. Nothing needs repairing, because the refused objects were never changed; the next import matches them under their original Object Type again and the errors stop.
+
+A schema refresh is undone differently, because JIM resolves entries from the classification it has stored, not from the directory's live schema. Before applying, **Cancel** on the refresh preview keeps the current classification. After applying, either change the directory's schema back and refresh again, change which of the overlapping Object Types are selected so the entries resolve as before, or carry the change out as described above.
+
+Once a Full Import that allows Object Type changes has run, the old objects are obsolete, and JIM does not restore an obsolete object. Going back is then a second Object Type change: run the Full Synchronisation first so the change completes, then make the reverse change the same way.
 
 ## Refreshing the schema
 
@@ -290,6 +349,7 @@ The preview reports, per object type:
 |---|---|
 | Object types or attributes **added** | Recorded and available for selection. Additions cannot affect anything that already works. |
 | Object types or attributes **no longer reported** | **Retained** in JIM; nothing is deleted by a refresh. Their values stop refreshing from that point, and any Synchronisation Rule or Attribute Flow reading them works from stale data, so the preview flags them for your attention. |
+| Object Type **classification changed** (class kind, or which selected Object Type a class inherits from) | The new classification is recorded, which can change the Object Type that existing entries import as. Each object that would change is refused at the next import and kept as it is until you decide; see [When an object changes Object Type](#when-an-object-changes-object-type). A refresh with only these changes offers **Apply Schema Changes**, and its Activity completes with a warning listing them. A classification difference that cannot change resolution (an unselected Object Type, inheritance naming no other selected Object Type, or a class kind that neither becomes nor stops being auxiliary) is listed as **Object Type Classification Recorded** among the safe changes instead, without a warning; apply it so the [schema preview](#previewing-a-schema-change) can warn about overlapping Object Types later. |
 | Attribute **definitions changed** (data type or plurality) | The new definition is recorded. A mapping validated against the old definition may no longer behave as intended, so these are flagged too. A data type you [overrode yourself](#overriding-an-inferred-type) is never overwritten, and never appears here. |
 
 Where the diff carries destructive changes, the review also names the configuration that depends on them: Synchronisation Rules bound to a removed object type, Attribute Flow mappings reading a removed or redefined attribute (including attributes consumed inside an expression), and Object Matching Rules that match on a removed attribute, each deep-linking to its page so you can inspect a dependent without losing the review.

@@ -111,15 +111,13 @@ flowchart TD
     TypeFound -->|No| TypeErr[RPEI: CouldNotMatchObjectType<br/>Skip object]
 
     TypeFound -->|Yes| ExtractExtId[Extract external ID value<br/>from import attributes]
-    ExtractExtId --> CrossPageDup{Cross-page<br/>duplicate?}
+    ExtractExtId --> CrossPageDup{Returned on an<br/>earlier page?}
     CrossPageDup -->|Yes| CrossPageErr[RPEI: DuplicateObject<br/>Cross-page duplicate detected<br/>Skip object]
 
-    CrossPageDup -->|No| SameBatchDup{Same-batch<br/>duplicate?}
-    SameBatchDup -->|3rd+ occurrence| ThirdDupErr[RPEI: DuplicateObject<br/>Skip object]
-    SameBatchDup -->|2nd occurrence| BothDupErr[Error BOTH objects:<br/>Mark current as DuplicateObject<br/>Go back and mark first as DuplicateObject<br/>Remove first CSO from create list<br/>No random winner]
+    CrossPageDup -->|No| SameBatchDup{Returned more than<br/>once on this page? #2063}
+    SameBatchDup -->|Yes| BothDupErr[RPEI: DuplicateObject<br/>Every copy rejected, no random winner<br/>Object held under another<br/>Object Type is kept]
 
-    SameBatchDup -->|First occurrence| TrackExtId[Track external ID<br/>in seenExternalIds]
-    TrackExtId --> HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
+    SameBatchDup -->|No| HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
     HashSkip -->|Yes| SkipObject[Skip hydration and diff<br/>Remove RPEI, count as skipped<br/>Not added to update list<br/>External ID already collected<br/>for deletion detection]
     HashSkip -->|No| CheckDelete{Connector says<br/>Delete?}
 
@@ -127,7 +125,9 @@ flowchart TD
     CheckDelete -->|Yes| FindExisting[Find existing CSO<br/>by external ID]
     FindExisting --> ExistsDel{CSO<br/>exists?}
     ExistsDel -->|Yes| AlreadyObsoleteDel{CSO already<br/>Obsolete?}
-    ExistsDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
+    ExistsDel -->|No| HeldElsewhereDel{External ID held under<br/>another Object Type? #2049<br/>Connector declares External IDs<br/>unique across Object Types}
+    HeldElsewhereDel -->|Yes| AlreadyObsoleteDel
+    HeldElsewhereDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
     AlreadyObsoleteDel -->|Yes| ReplayedDel[Delete already reported<br/>by an earlier import<br/>Remove RPEI, skip]
     AlreadyObsoleteDel -->|No| MarkObsolete[Set Status = Obsolete<br/>RPEI: Deleted<br/>Add to update list]
 
@@ -135,7 +135,11 @@ flowchart TD
     CheckDelete -->|No| FindCso[Find existing CSO<br/>by external ID]
     FindCso --> CsoExists{CSO<br/>exists?}
 
-    CsoExists -->|No| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added]
+    CsoExists -->|No| HeldElsewhere{External ID held under<br/>another Object Type? #2049<br/>Connector declares External IDs<br/>unique across Object Types}
+    HeldElsewhere -->|No| CreateCso
+    HeldElsewhere -->|Yes| TypeChangeAllowed{Full Import whose Run Profile<br/>allows Object Type changes?}
+    TypeChangeAllowed -->|No| RefuseTypeChange[RPEI: ObjectTypeChanged<br/>naming both Object Types<br/>Nothing created; held CSO kept<br/>and excluded from deletion detection]
+    TypeChangeAllowed -->|Yes| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added<br/>A held CSO is left to<br/>deletion detection]
     CreateCso --> AddToCreate[Add to create list<br/>Update seenExternalIds<br/>with CSO reference]
 
     CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
@@ -161,7 +165,7 @@ flowchart TD
     Compare --> Loop{More missing<br/>external IDs?}
     Loop -->|No| NextType([Next object type])
     Loop -->|Yes| FindCso[Find CSO by external ID<br/>and attribute ID]
-    FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run?}
+    FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run, nor<br/>refused an Object Type change?}
     Found -->|No| Drop[Not a candidate<br/>Not found, or ext ID may have<br/>been updated during import]
     Drop --> Loop
     Found -->|Yes| Classify{CSO already<br/>Obsolete?}
@@ -170,8 +174,12 @@ flowchart TD
     AlreadyObsolete --> Loop
     NewlyMarked --> Loop
 
-    NextType -.->|All object types resolved| Limits{Newly marked count above<br/>MaxDetectedDeletions, or share of<br/>in-scope CSOs above<br/>MaxDetectedDeletionsPercent?}
-    Limits -->|Yes| Refuse[Refuse: touch nothing<br/>not even stale Pending Export cleanup<br/>Activity.DetectedDeletionsWithheld = count<br/>Warning appended to the Activity]
+    NextType -.->|All object types resolved| Limits{Newly marked count, not counting<br/>CSOs retired by an allowed<br/>Object Type change #2049, above<br/>MaxDetectedDeletions, or share of<br/>in-scope CSOs above<br/>MaxDetectedDeletionsPercent?}
+    Limits -->|Yes| Refuse[Refuse: touch nothing else<br/>not even stale Pending Export cleanup<br/>Activity.DetectedDeletionsWithheld = count<br/>Warning appended to the Activity<br/>Object Type change retirements still applied]
+    Refuse --> Reconcile
+    Obsolete --> Reconcile
+    StillGone --> Reconcile
+    Reconcile[Reconcile allowed Object Type changes #2049:<br/>a replacement whose held CSO was not retired<br/>is withdrawn before it is created<br/>RPEI: ObjectTypeChanged]
     Limits -->|No, or no limits set| Apply[Apply each candidate]
     Apply --> ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
     ClearPes --> WasObsolete{Already<br/>Obsolete?}
@@ -243,10 +251,16 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs]
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Per page, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
-    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
-    Summary --> Done([Done])
+    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed /<br/>Held / Released]
+    Summary --> Sweep[JudgeUnreconciledInitialPasswordHoldsAsync #2039:<br/>every held change whose CSO this import<br/>did not reconcile, Full and Delta Import alike<br/>One query from the partial index on the flag,<br/>one owed-password lookup for them all]
+    Sweep --> SweepOwed{Password still owed<br/>to its Metaverse Object?}
+    SweepOwed -->|Yes| SweepHeld[Still held: untouched]
+    SweepOwed -->|No, or no Metaverse Object| SweepReleased[Released exactly as above, no RPEI<br/>Nothing else on the object is<br/>confirmed or retried<br/>An unconfirmed Create keeps its status]
+    SweepHeld --> SweepSummary[Log held / released summary]
+    SweepReleased --> SweepSummary
+    SweepSummary --> Done([Done])
 
     Loop -->|Yes| StatusGate{Pending Export<br/>status? #1826}
     StatusGate -->|Executing, or Pending<br/>with nothing written yet| Untouched[Left untouched<br/>Executing ones stranded by a crash<br/>are recovered at Worker startup]
@@ -259,10 +273,14 @@ flowchart TD
     PerChange -->|Yes| RemoveConfirmed[Remove the confirmed change<br/>from the Pending Export<br/>RPEI: ExportConfirmed outcome]
     PerChange -->|No, retries remain| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Retried on the next export]
     PerChange -->|No, max retries exceeded| PermanentFail[Status = Failed<br/>RPEI: ExportConfirmationFailed<br/>Manual intervention required]
+    PerChange -->|No, written with an interim value<br/>and a password still owed, #2039| Held[Held: left exactly as it is<br/>No RPEI, not retried<br/>Counted in the summary]
+    PerChange -->|No, written with an interim value<br/>and no password owed any more| Released[Released: Status = Pending<br/>AwaitsInitialPassword cleared, no RPEI<br/>Written as an Update on the next export]
 
     RemoveConfirmed --> Remaining{Any changes<br/>remaining?}
     Retry --> Remaining
     PermanentFail --> Remaining
+    Held --> Remaining
+    Released --> Remaining
     Remaining -->|No| Delete[Queue Pending Export<br/>for batch deletion<br/>Export fully confirmed]
     Remaining -->|Yes| Update[A Create becomes an Update:<br/>the import proved the object exists<br/>Recompute status, queue for batch update]
 
@@ -272,9 +290,11 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Cross-page duplicate detection**<br /> A `HashSet<string>` tracks external IDs across all pages of a paginated import. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
+- **Duplicates are found before any object is processed**<br /> Each page is scanned for repeated external IDs before its first object is processed (#2063), so every copy of a repeated object is rejected before anything is created or updated from it. Rejecting the first copy only once the second turned up was too late for an object JIM already held, whose update had been applied by then. A rejected copy still counts as returned for deletion detection, so a duplicate never deletes the object it repeats.
 
-- **Same-batch duplicate handling**<br /> When duplicates are found within a single page, BOTH objects are rejected (no "random winner" based on file order). This forces data owners to fix the source data.
+- **Cross-page duplicate detection**<br /> A `HashSet<string>` holds the external IDs of every earlier page of a paginated import; a later copy is rejected, because the earlier page has already decided the object. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
+
+- **Same-batch duplicate handling**<br /> When an external ID is repeated within a single page, EVERY copy is rejected (no "random winner" based on order). This forces data owners to fix the source data. It applies to every Connector, whether it imports from a file or by calls.
 
 - **Watermark consistency**<br /> For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page, ensuring consistent queries. The new watermark from the first page is only saved at the very end of the run, once everything the pages returned has been staged (#1868): a run that fails or is cancelled before then keeps the watermark it started with, so the next Delta Import re-reads what it did not stage rather than skipping it.
 
@@ -283,6 +303,8 @@ flowchart TD
 - **Zero-import safety**<br /> If no objects are imported, deletion detection is skipped entirely to prevent accidental mass-deletion when connectivity to the source system fails.
 
 - **PendingProvisioning transition**<br /> CSOs created during export (provisioning) start with `PendingProvisioning` status. The confirming import transitions them to `Normal` when the object is confirmed to exist in the target system.
+
+- **Holds are judged at every import, returned or not (#2039)**<br /> Reconciliation runs only over the CSOs an import updated, but a change held until an Initial Password is delivered usually sits on an account that stops changing: the confirming import stamped its disabled state, so a later Full Import skips it by its content hash, and a Delta Import never returns it. A password that then expires or is cancelled, or is delivered without enabling the account, changes nothing an import reads. So after reconciliation every import, Full or Delta, judges each held change on a CSO it did not reconcile (`JudgeUnreconciledInitialPasswordHoldsAsync`): still held while a password is owed to the Metaverse Object, released otherwise. It releases and nothing more, because that CSO's values may predate the export. The held set comes from one query per run (`ISyncRepository.GetInitialPasswordHoldSummariesAsync`) led by the partial index on `AwaitsInitialPassword`, so a Connected System with nothing held pays an empty index probe. See "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
 - **Parallel LDAP connections (#72)**<br /> OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
 

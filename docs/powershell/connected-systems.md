@@ -442,7 +442,7 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-Preview] [-Disab
 
 ### Output
 
-With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input. Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings).
+With `-Preview`, returns the preview result: `Success`, `HasChanges`, `HasRemovalsOrDefinitionChanges`, `Dependents` (what the destructive changes invalidate: `InvalidatedSyncRules`, `InvalidatedMappings` and `ReferencedObjectMatchingRules`, each entry carrying its `Reason`, plus `DependentDerivedFlows`, the Attribute Flows deriving Metaverse attributes that disabling or removing them would leave with a missing input), `RemovalImpact` (what committing with `RemoveDependents` would take: `RemovedObjectTypes` with a `ConnectedSystemObjectCount` each, and `RemovedAttributes` with a `StoredValueCount` each), `AddedObjectTypes`, `RemovedObjectTypes`, `UpdatedObjectTypes`, `AddedAttributes`, `RemovedAttributes`, `ChangedAttributes` (attribute definition changes: name, aspect, old and new value), `ChangedObjectTypeClassifications` (keyed by Object Type name, each entry an `Aspect` of `ClassKind` or `Inheritance` with its `OldValues` and `NewValues`), `HasObjectTypeClassificationChanges`, `ObjectTypesWithClassificationUpdates` (Object Types whose classification changed in a way that cannot change which Object Type an entry resolves to; applying records it, and no warning is written), `AttributesInUse`, `BlockedCredentialAttributes`, `DiscoveryWarnings` and `PasswordPolicyDiscovered`. Otherwise, when `-PassThru` is specified, returns the Connected System Object; without it, no output. Its `DependentDerivedFlows` is empty unless `-DisableDependents` or `-RemoveDependents` left an Attribute Flow deriving a Metaverse attribute with a missing input. Those flows are written with `Write-Warning` either way, worded as a prediction for `-Preview`; see [Derived Attribute Flow warnings](synchronisation-rules.md#derived-attribute-flow-warnings). `-Preview` also writes one warning per Object Type classification change, because a class whose kind or inheritance changed can change the Object Type that existing entries import as; see [When an object changes Object Type](../configuration/connected-systems.md#when-an-object-changes-object-type). Applying such a refresh completes its Activity with a warning listing the same changes.
 
 ### Examples
 
@@ -1177,12 +1177,13 @@ Retrieves connector space objects (CSOs) from a Connected System, with support f
 ```powershell
 # List (default)
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> [-Search <string>] [-Status <string>]
-    [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending]
+    [-ObjectTypeId <int>] [-JoinType <string>] [-HasUnresolvedReference] [-SortBy <string>] [-Ascending]
     [-Page <int>] [-PageSize <int>]
 
 # ListAll
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Force] [-Search <string>] [-Status <string>]
-    [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending] [-PageSize <int>]
+    [-ObjectTypeId <int>] [-JoinType <string>] [-HasUnresolvedReference] [-SortBy <string>] [-Ascending]
+    [-PageSize <int>]
 
 # ById
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
@@ -1207,6 +1208,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 | `Status` | `string` | No | | Filter the object list by status: `Normal`, `Obsolete`, `PendingProvisioning` |
 | `ObjectTypeId` | `int` | No | | Filter the object list by Connected System Object Type |
 | `JoinType` | `string` | No | | Filter the object list by join type: `NotJoined`, `Projected`, `Provisioned`, `Joined` |
+| `HasUnresolvedReference` | `switch` | No | `$false` | List only the objects holding a reference value that could not be linked to another Connected System Object |
 | `SortBy` | `string` | No | | Property name to sort the object list by |
 | `Ascending` | `switch` | No | `$false` | Sort the object list ascending instead of the default descending |
 | `Page` | `int` | No | `1` | Page number for paginated results |
@@ -1216,7 +1218,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 ### Output
 
-- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters. Each row carries `State`, the derived connection state the portal's Connector Space list and a Metaverse Object's Connections tab both show: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending` or `Obsolete`. It combines the object's own `Status` with any queued Pending Export, so `Where-Object { $_.State -eq "ExportFailed" }` finds the accounts a run could not write without reading the Pending Exports separately.
+- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters. Each row carries `State`, the derived connection state the portal's Connector Space list and a Metaverse Object's Connections tab both show: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending` or `Obsolete`. It combines the object's own `Status` with any queued Pending Export, so `Where-Object { $_.State -eq "ExportFailed" }` finds the accounts a run could not write without reading the Pending Exports separately. Each row's `UnresolvedReferenceCount` says how many of its reference values are unresolved now (zero when none).
 - **ById**: A connector space object with its attributes and current values.
 - **AttributeValues / AttributeValuesAll**: Paged or complete list of values for the specified multi-valued attribute.
 
@@ -1229,6 +1231,12 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3
 ```powershell title="Find the objects whose export failed"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All |
     Where-Object { $_.State -eq "ExportFailed" }
+```
+
+```powershell title="List the ten objects holding the most unresolved references"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -HasUnresolvedReference -All |
+    Sort-Object UnresolvedReferenceCount -Descending |
+    Select-Object DisplayName, TypeName, UnresolvedReferenceCount -First 10
 ```
 
 ```powershell title="Find Obsolete objects matching a search term"
@@ -1400,6 +1408,127 @@ Get-JIMConnectedSystem | ForEach-Object {
 ### Notes
 
 - A non-zero count indicates data integrity issues in the connector space. This commonly occurs after a partial import. Running a full import typically resolves outstanding references.
+- To see what the references have in common and what would fix them, use [`Get-JIMConnectedSystemUnresolvedReferenceSummary`](#get-jimconnectedsystemunresolvedreferencesummary); to see which references are unresolved on one object, and why, use [`Get-JIMConnectedSystemObjectUnresolvedReference`](#get-jimconnectedsystemobjectunresolvedreference).
+
+---
+
+## Get-JIMConnectedSystemUnresolvedReferenceSummary
+
+Summarises every unresolved reference across a Connected System's Connector Space: how many there are and on how many objects, how they split by likely cause, and every distinct next step with how many references and objects it addresses. It is what the portal shows as **Where they point** above the Connector Space filtered to unresolved references. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemUnresolvedReferenceSummary -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+One `PSCustomObject`:
+
+| Property | Description |
+|----------|-------------|
+| `ConnectedSystemId` | The Connected System summarised. |
+| `UnresolvedReferenceHandling` | The Connected System's Unresolved Reference Handling now: `Error`, `Warn` or `Ignore`. |
+| `TotalCount` | How many reference values are unresolved. |
+| `ObjectCount` | How many Connected System Objects hold them. |
+| `Causes` | The likely causes, each with `Cause`, `FixLocation` and `Count`, most frequent first. |
+| `Fixes` | Every distinct next step, most references first, each with `Cause`, `FixLocation`, `ContainerExternalId`, `PartitionExternalId`, `Count`, `ObjectCount` (each object counted once), `Finding` and `Remedy`. |
+| `LargestFix` | The change to JIM's configuration that would fix the most references (the same shape as a `Fixes` entry), or `$null` where every cause lies in the Connected System. |
+
+### Examples
+
+```powershell title="See what would fix a Connected System's unresolved references"
+(Get-JIMConnectedSystemUnresolvedReferenceSummary -ConnectedSystemId 3).Fixes |
+    Format-Table FixLocation, Count, ObjectCount, Finding -Wrap
+```
+
+```powershell title="Unresolved references across every Connected System"
+Get-JIMConnectedSystem | ForEach-Object {
+    $summary = $_ | Get-JIMConnectedSystemUnresolvedReferenceSummary
+    [PSCustomObject]@{ Name = $_.Name; References = $summary.TotalCount; Objects = $summary.ObjectCount }
+}
+```
+
+---
+
+## Get-JIMConnectedSystemObjectUnresolvedReference
+
+Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/connected-systems.md#finding-out-why-a-reference-is-unresolved) describes each one.
+
+### Syntax
+
+```powershell
+# Page (default)
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid>
+    [-Search <string>] [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid>
+    [-Search <string>] -All [-Force] [-PageSize <int>]
+
+# Summary
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId <int> -Id <guid> -Summary
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes | | Connected System Object identifier. Accepts pipeline input by property name. |
+| `Search` | `string` | No | | Case-insensitive text matched against each reference's value and attribute name. Not valid with `-Summary`. |
+| `Summary` | `switch` | No | `$false` | Return the summary instead of the references. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling. Only valid with `-All`. |
+| `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
+| `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
+
+### Output
+
+Without `-Summary`, one `PSCustomObject` per unresolved reference, ordered by attribute name and then value:
+
+| Property | Description |
+|----------|-------------|
+| `AttributeName` | The attribute the value is on. |
+| `Value` | The reference value as imported, for example a Distinguished Name. |
+| `Cause` | The likely cause: `NotFound`, `NotFoundInScope`, `ContainerNotInScope`, `ContainerExcluded`, `PartitionNotSelected`, `OutsideConnectedSystem` or `AmbiguousObjectType`. |
+| `FixLocation` | `Jim` where a change to JIM's configuration fixes it, `SourceSystem` where the fix lies in the Connected System. |
+| `ContainerExternalId` | The Container the cause concerns (the one to select, or the one excluding the value), or `$null`. |
+| `PartitionExternalId` | The partition the cause concerns: the one to select, for `PartitionNotSelected`, or the one holding a value that no Container JIM knows of holds. Otherwise `$null`. |
+| `CandidateObjectTypeNames` | The Object Types an ambiguous value matches; empty for every other cause. |
+| `Finding` | What is wrong, naming the Container or partition concerned exactly as `ContainerExternalId` or `PartitionExternalId` holds it. |
+| `Remedy` | What to do about it. |
+
+With `-Summary`, one `PSCustomObject` with `TotalCount`; `Causes`, each with `Cause`, `FixLocation` and `Count`; `Fixes`, every distinct next step with `Cause`, `FixLocation`, `ContainerExternalId`, `PartitionExternalId`, `Count`, `Finding` and `Remedy`, most values first; and `LargestFix`, the change to JIM's configuration that would fix the most references (the same shape as a `Fixes` entry), or `$null` where every cause lies in the Connected System.
+
+### Examples
+
+```powershell title="List an object's unresolved references"
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="See what would fix them"
+(Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-..." -Summary).Fixes |
+    Select-Object Count, FixLocation, Finding, Remedy
+```
+
+```powershell title="Every reference a Container Scope change would fix, by Container"
+Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3d4-..." -All |
+    Where-Object { $_.Cause -eq 'ContainerNotInScope' } |
+    Group-Object ContainerExternalId |
+    Select-Object Count, Name
+```
+
+### Notes
+
+- The references are read as they stand now on the object, so an import that resolves some of them shortens the list. To see how many references a particular import left unresolved, read `UnresolvedReferenceCount` from `Get-JIMActivityExecutionItem`.
 
 ---
 

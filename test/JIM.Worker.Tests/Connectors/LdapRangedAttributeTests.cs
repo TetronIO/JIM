@@ -134,4 +134,77 @@ public class LdapRangedAttributeTests
             Assert.That(attribute.Count, Is.EqualTo(4), "What the directory answered is kept; the reader that consumes it removes duplicates.");
         });
     }
+
+    // A directory may answer a value set over MaxValRange with the plain attribute, carrying no values, beside the
+    // range-qualified one (#2041). Read naively, the empty plain attribute either wins (no values at all) or lands
+    // beside the ranged one as a second attribute of the same name.
+
+    [Test]
+    public void DescriptionsToRead_AnEmptyPlainAttributeBesideItsRangedForm_LeavesThePlainOneOut()
+    {
+        var entry = LdapTestResponses.EntryWithValues(GroupDn,
+            ("objectClass", ["top", "group"]), ("member", []), ("member;range=0-1", ["CN=a", "CN=b"]));
+
+        Assert.That(LdapRangedAttribute.DescriptionsToRead(entry), Is.EquivalentTo(new[] { "objectClass", "member;range=0-1" }).IgnoreCase);
+    }
+
+    [Test]
+    public void DescriptionsToRead_TheRangedFormInADifferentCase_StillLeavesThePlainOneOut()
+    {
+        // The overload over descriptions keeps their case, which an entry's own collection does not.
+        Assert.That(LdapRangedAttribute.DescriptionsToRead(["Member;Range=0-1", "member"]), Is.EqualTo(new[] { "Member;Range=0-1" }));
+    }
+
+    [Test]
+    public void FindReturnedRange_ThePlainAttributeListedBeforeTheRange_ReturnsTheRange()
+    {
+        // Deterministic where the ReadAll test below is not: an entry's attribute collection is hash-ordered, so
+        // which of the two it lists first varies from process to process.
+        var returned = LdapRangedAttribute.FindReturnedRange(["member", "member;range=2-3"], "member", out var high);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.EqualTo("member;range=2-3"));
+            Assert.That(high, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public void FindReturnedRange_OnlyThePlainAttribute_ReturnsIt()
+    {
+        // A directory may answer the rest of the values whole; that is the last of them.
+        var returned = LdapRangedAttribute.FindReturnedRange(["objectClass", "member"], "member", out var high);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(returned, Is.EqualTo("member"));
+            Assert.That(high, Is.Null);
+        }
+    }
+
+    [Test]
+    public void DescriptionsToRead_AnEntryWithNoRangedAttribute_ReturnsEveryDescription()
+    {
+        var entry = LdapTestResponses.EntryWithValues(GroupDn, ("objectClass", ["top", "group"]), ("member", ["CN=a"]), ("userCertificate;binary", ["x"]));
+
+        Assert.That(LdapRangedAttribute.DescriptionsToRead(entry), Is.EquivalentTo(new[] { "objectClass", "member", "userCertificate;binary" }).IgnoreCase);
+    }
+
+    [Test]
+    public void ReadAll_AFollowUpAnswerCarryingAnEmptyPlainAttributeBesideTheRange_FollowsTheRange()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(e => e.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
+            .Returns((DirectoryRequest request, TimeSpan _) => ((SearchRequest)request).Attributes[0] switch
+            {
+                "member;range=2-*" => LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn, ("member", []), ("member;range=2-3", ["CN=c", "CN=d"]))),
+                "member;range=4-*" => LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn, ("member", []), ("member;range=4-*", ["CN=e"]))),
+                var other => throw new InvalidOperationException($"Unexpected request for {other}")
+            });
+        var entry = LdapTestResponses.EntryWithValues(GroupDn, ("member", []), ("member;range=0-1", ["CN=a", "CN=b"]));
+
+        var attribute = LdapRangedAttribute.ReadAll(executor.Object, entry, "member;range=0-1", Timeout, Logger);
+
+        Assert.That(attribute.GetValues(typeof(string)), Is.EqualTo(new object[] { "CN=a", "CN=b", "CN=c", "CN=d", "CN=e" }));
+    }
 }

@@ -42,6 +42,7 @@ public class ConnectorDeclarationSyncTests
         public bool SupportsPasswordPolicyDiscovery { get; init; }
         public bool SupportsUniquenessProbe { get; init; }
         public bool SupportsUniquenessRejectionClassification { get; init; }
+        public bool ExternalIdsUniqueAcrossObjectTypes { get; init; }
         public AttributeStandard SchemaStandard { get; init; }
     }
 
@@ -63,6 +64,7 @@ public class ConnectorDeclarationSyncTests
         SupportsPasswordPolicyDiscovery = true,
         SupportsUniquenessProbe = true,
         SupportsUniquenessRejectionClassification = true,
+        ExternalIdsUniqueAcrossObjectTypes = true,
         SchemaStandard = AttributeStandard.Ldap
     };
 
@@ -90,6 +92,7 @@ public class ConnectorDeclarationSyncTests
         Assert.That(definition.SupportsPasswordPolicyDiscovery, Is.True);
         Assert.That(definition.SupportsUniquenessProbe, Is.True);
         Assert.That(definition.SupportsUniquenessRejectionClassification, Is.True);
+        Assert.That(definition.ExternalIdsUniqueAcrossObjectTypes, Is.True);
         Assert.That(definition.SchemaStandard, Is.EqualTo(AttributeStandard.Ldap));
     }
 

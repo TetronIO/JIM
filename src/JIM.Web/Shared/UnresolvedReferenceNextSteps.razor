@@ -1,0 +1,118 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The next steps for unresolved references (#959), grouped by where each is taken, JIM first: whether an administrator
+   can fix it themselves is the first question. One grid for both groups, so their columns line up. Shared by one
+   object's Unresolved References section and the Connector Space's "Where they point", so a step reads the same
+   wherever it is offered; across a whole Connected System each step also says how many objects its values sit on. *@
+
+<div class="@GridClass">
+    @foreach (var group in UnresolvedReferenceDisplay.GroupFixes(Fixes))
+    {
+        var inJim = group.FixLocation == UnresolvedReferenceFixLocation.Jim;
+        var groupReferenceCount = group.Fixes.Sum(f => f.Count);
+        var expanded = _expandedFixGroups.Contains(group.FixLocation);
+        <div class="jim-unresolved-fix-group">
+            <MudIcon Icon="@(inJim ? Icons.Material.Outlined.Settings : Icons.Material.Outlined.Storage)" Class="mud-text-secondary" />
+            <MudText Typo="Typo.subtitle2">@(inJim ? "Fix in JIM" : $"Fix in {ConnectedSystemName}")</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @groupReferenceCount.ToString("N0") @(groupReferenceCount == 1 ? "reference" : "references"),
+                @group.Fixes.Count.ToString("N0") @(group.Fixes.Count == 1 ? "step" : "steps")
+            </MudText>
+        </div>
+        @foreach (var fix in expanded ? group.Fixes : group.Fixes.Take(CollapsedFixCount))
+        {
+            var action = UnresolvedReferenceDisplay.ActionFor(fix.Cause, ConnectedSystemId, ObjectTypeName);
+            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.Finding, fix.ContainerExternalId ?? fix.PartitionExternalId);
+            <div class="jim-unresolved-fix-cell jim-unresolved-fix-count-cell">
+                <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(fix.FixLocation)"
+                         Class="ma-0 jim-unresolved-fix-count">@fix.Count.ToString("N0")</MudChip>
+            </div>
+            <div class="jim-unresolved-fix-cell jim-unresolved-fix-text">
+                @if (identifier == null)
+                {
+                    @before
+                }
+                else
+                {
+                    @before<span class="jim-text-code">@identifier</span>@after
+                }
+                <div class="jim-unresolved-fix-remedy">@fix.Remedy</div>
+            </div>
+            @if (ShowObjectCounts)
+            {
+                <div class="jim-unresolved-fix-cell jim-unresolved-fix-objects">
+                    @if (fix.ObjectCount is { } objectCount)
+                    {
+                        @UnresolvedReferenceDisplay.ObjectCountText(objectCount)
+                    }
+                </div>
+            }
+            <div class="jim-unresolved-fix-cell">
+                <MudLink Href="@action.Href" Class="jim-unresolved-fix-action">@action.Text<span aria-hidden="true">&nbsp;&rarr;</span></MudLink>
+            </div>
+        }
+        @if (group.Fixes.Count > CollapsedFixCount)
+        {
+            var location = group.FixLocation;
+            <div class="jim-unresolved-fix-more">
+                <MudLink Typo="Typo.body2" OnClick="@(() => ToggleFixGroup(location))">
+                    @(expanded ? "Show fewer steps" : $"Show all {group.Fixes.Count:N0} steps")
+                </MudLink>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>How many next steps each group shows before the rest are folded away.</summary>
+    private const int CollapsedFixCount = 3;
+
+    /// <summary>The steps, most values first, as a summary lists them.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<UnresolvedReferenceFix> Fixes { get; set; } = [];
+
+    /// <summary>The Connected System whose tabs the steps link to.</summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>The Connected System's name, for the group of steps that lie in it.</summary>
+    [Parameter, EditorRequired]
+    public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>
+    /// The Object Type the Schema link opens, where the steps concern one object; null across a Connected System, where
+    /// ambiguous values can span several types.
+    /// </summary>
+    [Parameter]
+    public string? ObjectTypeName { get; set; }
+
+    /// <summary>Whether each step says how many objects its values sit on.</summary>
+    [Parameter]
+    public bool ShowObjectCounts { get; set; }
+
+    private readonly HashSet<UnresolvedReferenceFixLocation> _expandedFixGroups = [];
+    private IReadOnlyList<UnresolvedReferenceFix>? _shownFixes;
+
+    private string GridClass => ShowObjectCounts ? "jim-unresolved-fixes jim-unresolved-fixes-with-objects" : "jim-unresolved-fixes";
+
+    protected override void OnParametersSet()
+    {
+        // A new set of steps starts folded again; a re-render of the same set keeps what the reader expanded.
+        if (!ReferenceEquals(_shownFixes, Fixes))
+        {
+            _shownFixes = Fixes;
+            _expandedFixGroups.Clear();
+        }
+    }
+
+    private void ToggleFixGroup(UnresolvedReferenceFixLocation location)
+    {
+        if (!_expandedFixGroups.Remove(location))
+            _expandedFixGroups.Add(location);
+    }
+}

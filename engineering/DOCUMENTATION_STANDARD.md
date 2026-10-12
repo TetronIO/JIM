@@ -50,7 +50,7 @@ Every rule has one of four tiers. The [Rule index](#rule-index) gives each rule'
 | **Block** | Every finding fails the pull request. Used only where the defect class is proven and false positives are near zero. |
 | **Ratchet** | Findings are compared with the baseline, per rule and page. Exceeding the baseline fails. A new page has no allowance, so it is conformant from its first commit. |
 | **Warn** | Reported as an annotation on the pull request diff (for the pages it changes), never fails. |
-| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by an advisory rubric review once it exists (planned, Phase 2); never a merge gate. |
+| **Review** | Judgement a machine cannot make reliably. Checked by the reviewer, and by the advisory rubric review (`.github/workflows/docs-review.yml`): one summary comment, citing rule IDs, on a pull request that changes customer pages, when it opens or is marked ready and again whenever the `docs-review` label is added. Never a merge gate. |
 
 ### The baseline only shrinks
 
@@ -124,7 +124,7 @@ audience: implementer
 
 | ID | Tier | Rule |
 |----|------|------|
-| **STR-1** | Block | The front matter is valid. Quote any value containing `: ` or ` #`, or starting with a YAML indicator character: MkDocs drops an invalid block without a warning, and the page loses its description. Only the keys `title`, `description`, `type`, `audience`, `template`, `hide` and `scenario` are allowed; `type` and `audience` take the values above; the `description` is one sentence of 50 to 160 characters saying what the page is for. |
+| **STR-1** | Block | The front matter is valid. Quote any value containing `: ` or ` #`, or starting with a YAML indicator character: MkDocs drops an invalid block without a warning, and the page loses its description. Only the keys `title`, `description`, `type`, `audience`, `template`, `hide`, `scenario` and `validated` are allowed; `type` and `audience` take the values above; the `description` is one sentence of 50 to 160 characters saying what the page is for. |
 | **STR-2** | Ratchet | The front matter declares `title`, `description`, `type` and `audience`. |
 | **STR-3** | Block | One name for the page: the `title` equals the H1, and the nav label equals that name or drops its leading words (the nav section already says them: "Keycloak" under SSO Setup for "SSO Setup: Keycloak"). |
 | **STR-4** | Block | Exactly one H1 (a page with a `template` has none), and no heading skips a level. |
@@ -187,7 +187,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 |----|------|------|------------|
 | **ACC-1** | Block | A PowerShell example invokes a cmdlet with each parameter's real name, never a declared alias. An alias reads like a different parameter: `Get-JIMRunProfile -Id 42` means "every Run Profile on Connected System 42". | `Lint-DocExamples.ps1` |
 | **ACC-2** | Block | Every JIM cmdlet a page names exists, and every parameter an example passes binds: declared, a common parameter, or `-WhatIf`/`-Confirm` where the cmdlet supports them; never abbreviated. | `Lint-DocExamples.ps1` |
-| **ACC-3** | Planned (Phase 2) | Every REST route in an example exists in the OpenAPI document. | |
+| **ACC-3** | Block | Every REST route a page gives exists in the OpenAPI document, and takes the method given with it. Write routes in full, as the API reference names them: `/connected-systems/{id}/clear` fails, naming `/api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`. A path given without a method names a resource rather than a call, so it may stop short of a whole route (`/api/v1/metaverse`). | `Test-DocsCoverage.ps1`, in `build-and-test`, which builds the OpenAPI document it reads |
 | **ACC-4** | Review | Every factual claim is a claim about source, so check it there. Parameter names, property names, setting keys, defaults, file paths, endpoint routes, counts and limits are all verifiable, and none is verified by the build. State a default alongside the setting key that carries it, so a reader who finds the default has drifted can find what to change. | |
 | **LNK-1** | Block | Every link and anchor in the Markdown resolves. Grep the target file for the heading rather than inferring the slug: `#passwords` and `#password-synchronisation` look equally plausible. | `Test-DocsSite.ps1` (strict MkDocs build) |
 | **LNK-2** | Block | Every link in the built site resolves, including links into the generated API reference and links written in raw HTML. | `Test-DocsSite.ps1` (lychee) |
@@ -225,22 +225,30 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
 | ID | Tier | Rule |
 |----|------|------|
-| **PRI-1** | Planned (Phase 3) | Each priority page records the release it was last checked against (`validated: vX.Y.Z`), and `/release` lists every page due for re-validation; the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. |
+| **PRI-1** | Block | Each conformant priority page records the release it was last checked against (`validated: vX.Y.Z`, no later than `VERSION`), and no other page records one. `/release` lists every priority page due for re-validation (`scripts/Get-DocsDueForValidation.ps1`); the release proceeds once each is re-validated or explicitly deferred, with a reason, in the release pull request. Validating means reading the page against the product as the release ships it (ACC-4), not re-running the scripts, which run on every pull request anyway. |
 | **PRI-2** | Planned (Phase 3) | On a priority page, the advisory review's findings arrive as review threads, each answered by a fix or a reply; the review still never blocks a merge the author has answered. |
-| **TUT-1** | Block (scenario named); Planned (execution, Phase 3) | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
+| **TUT-1** | Block | A tutorial is tested. Its front matter names the integration scenario that runs it (`scenario:`; TYP-1 checks the script exists), and the scenario executes the tutorial's PowerShell steps from the page itself and asserts each checkpoint it states, in the pre-release suite, so a release cannot ship while the tutorial is broken. Tutorials are few, and tested; never scarce for fear of breaking. |
+| **TUT-2** | Block | Every label a tutorial's Portal tab names in bold is one the portal shows: the check finds it in the portal's source (`PortalLabelSources` in `docs/.conformance/config.psd1`), ignoring case. A label the portal builds from data ("Project Users to the Metaverse?") is excused in place with a marker saying so. This proves the labels exist, not that the clicks work. |
+
+**Writing a tutorial.** Give each step's portal and PowerShell forms as content tabs (`=== "Portal"`, `=== "PowerShell"`), the portal form as numbered steps naming each control in bold. The scenario runs every fenced `powershell` block inside a PowerShell tab, in page order and in one session, so a block can use the variables an earlier one set; code anywhere else is not run, so the reader's own setup (`Connect-JIM` in **Before you begin**) and shell commands (copying a file onto the server) sit outside the PowerShell tabs, and the scenario does the same work itself. Mark each thing the page tells the reader to expect, immediately above the sentence that says it:
+
+- `<!-- checkpoint: <PowerShell that returns $true> -->`, run after the steps above it, such as `(Get-JIMPendingExport -ConnectedSystemId $directory.Id -Count) -eq 25`;
+- `<!-- checkpoint-file: /connector-files/<path> rows=<n> -->`, for a file in the connector files volume.
+
+Scope each checkpoint to the tutorial's own objects, since the pre-release suite runs other scenarios in the same environment. The tutorial's sample data is published with the page under `docs/assets/`, and the scenario reads that same file. `test/integration/utils/Tutorial-Helpers.Tests.ps1` reads every tutorial page on each pull request, so a marker that cannot be read, or a block that does not parse, fails there; the scenario runs at release time.
 
 ## Coverage
 
-"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`, all blocking; COV-3, COV-4, COV-5 and the connector settings of COV-6 are planned for Phase 2.
+"Complete coverage" is defined against inventories generated from source, never hand-maintained lists, and each is checked both ways: something that exists but is undocumented fails, and so does a name in the docs that no longer exists. COV-1, COV-2, COV-4, COV-5 and the expression functions of COV-6 are checked by `Test-DocsCoverage.ps1`, and TERM-1 by `Test-DocsConformance.ps1`. COV-3 and the Connector settings of COV-6 take their inventories from the compiled product, so NUnit tests in `test/JIM.Worker.Tests/Docs/` check them (`ServiceSettingDocsCoverageTests`, `ConnectorSettingDocsCoverageTests`), and `ServiceSettingSeedingCoverageTests` holds that every Service Setting key is seeded. All of these block.
 
 | ID | Inventory | Documented means |
 |----|-----------|------------------|
 | **COV-1** | Exported cmdlets (module manifest) | A heading, or a row in the first column of a table, on a `docs/powershell/` page |
 | **COV-2** | Environment variables the product and installer read: `Constants.Config` and `GetEnvironmentVariable` reads, the PowerShell module's `$env:` reads, the compose files, `.env.example`, and the variables the installer's header documents | A row in a settings table |
-| **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings reference |
-| **COV-4** | REST resource groups (OpenAPI tags) | An overview page under `docs/api/` that names the group |
-| **COV-5** | Portal pages (routable components) | The docs page each declares through `PageInfo` exists |
-| **COV-6** | Connector settings and expression functions | A row in the connector's or the function reference's table |
+| **COV-3** | Service Settings (`Constants.SettingKeys`, each one seeded) | A row in the Service Settings table of the Configuration Reference (`docs/administration/configuration.md`) |
+| **COV-4** | REST resource groups (OpenAPI tags) | A row in the Resource groups table on the API overview page (`docs/api/index.md`) |
+| **COV-5** | Portal pages (Razor components with an `@page` directive) | The page's `PageInfo` names the docs page that covers it (`DocsPage="configuration/connected-systems.md#the-connector-space"`), and that page and heading exist; where the value is an expression, every page it can choose is a literal and exists |
+| **COV-6** | Connector settings (each built-in Connector's `GetSettings()`) and expression functions | A row in a Setting table on the Connector's page (the page `docs/connectors/index.md` links under its name), naming the setting exactly as the settings form shows it; a row in the function reference's table |
 | **TERM-1** | Product nouns: the glossary's entries, and `docs/.conformance/vocabulary.psd1` (see "The product vocabulary" under Language) | A glossary entry with an anchor, a vocabulary entry, and a home page that exists (HOME-1) |
 
 "Documented" means a heading, the first column of a reference table, or a glossary entry with an anchor; a mention in running text does not count. Deliberate exclusions live in one allow-list (`docs/.conformance/coverage.psd1`) with a reason per entry, and an entry for something that no longer exists, or is now documented, fails.
@@ -281,7 +289,7 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | MNT-3 | An over-budget page cannot grow | Warn (Block from Phase 5) | `Test-DocsConformance.ps1` |
 | ACC-1 | Real parameter names, never aliases | Block | `Lint-DocExamples.ps1` |
 | ACC-2 | Cmdlets and parameters exist | Block | `Lint-DocExamples.ps1` |
-| ACC-3 | REST routes exist | Planned (Phase 2) | |
+| ACC-3 | REST routes exist | Block | `Test-DocsCoverage.ps1` |
 | ACC-4 | Claims checked against source | Review | |
 | LNK-1 | Markdown links and anchors resolve | Block | `Test-DocsSite.ps1` |
 | LNK-2 | Built-site links resolve | Block | `Test-DocsSite.ps1` |
@@ -290,10 +298,13 @@ Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
 | STY-1 to STY-3 | Style conventions | Review | |
-| PRI-1, PRI-2 | Priority pages | Planned (Phase 3) | |
-| TUT-1 | Tutorials are tested | Block (scenario named); Planned (execution) | `Test-DocsConformance.ps1` (TYP-1) |
-| COV-1, COV-2 | Cmdlets and environment variables are documented | Block | `Test-DocsCoverage.ps1` |
-| COV-6 | Expression functions are documented (connector settings: planned, Phase 2) | Block | `Test-DocsCoverage.ps1` |
-| COV-3 to COV-5 | Service Settings, REST resource groups, portal pages | Planned (Phase 2) | |
+| PRI-1 | Priority pages record their last validation | Block | `Test-DocsConformance.ps1`; listed for each release by `Get-DocsDueForValidation.ps1` |
+| PRI-2 | Advisory review findings on priority pages arrive as review threads | Planned (Phase 3) | |
+| TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |
+| TUT-2 | A tutorial names only labels the portal shows | Block | `Test-DocsConformance.ps1` |
+| COV-1, COV-2, COV-4 | Cmdlets, environment variables and REST resource groups are documented | Block | `Test-DocsCoverage.ps1` |
+| COV-3 | Service Settings are documented, and seeded | Block | `ServiceSettingDocsCoverageTests`, `ServiceSettingSeedingCoverageTests` |
+| COV-6 | Connector settings and expression functions are documented | Block | `ConnectorSettingDocsCoverageTests`; `Test-DocsCoverage.ps1` |
+| COV-5 | Portal pages link the docs page that covers them | Block | `Test-DocsCoverage.ps1` |
 | TERM-1 | The vocabulary and the glossary agree; every product noun has a home page | Block | `Test-DocsConformance.ps1` |
 | EXC-1 | Exception markers are well formed and in use | Block | `Test-DocsConformance.ps1` |

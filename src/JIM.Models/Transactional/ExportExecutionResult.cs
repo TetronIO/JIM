@@ -297,6 +297,12 @@ public class ProcessedExportItem
     public Guid? QueuedByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// Every synchronisation that staged the Pending Export, oldest first, copied from
+    /// <see cref="PendingExport.StagedByRunProfileExecutionItemIds"/>.
+    /// </summary>
+    public List<Guid> StagedByRunProfileExecutionItemIds { get; set; } = [];
+
+    /// <summary>
     /// The Synchronisation Rule whose provisioning decision produced this export, copied from
     /// <see cref="PendingExport.ProvisioningSyncRuleId"/>. Only ever set for a create.
     /// </summary>
@@ -319,6 +325,7 @@ public class ProcessedExportItem
         PendingExportId = export.Id;
         SourceMetaverseObjectId = export.SourceMetaverseObjectId;
         QueuedByRunProfileExecutionItemId = export.QueuedByRunProfileExecutionItemId;
+        StagedByRunProfileExecutionItemIds = [.. export.Stagers()];
         ProvisioningSyncRuleId = export.ProvisioningSyncRuleId;
         return this;
     }

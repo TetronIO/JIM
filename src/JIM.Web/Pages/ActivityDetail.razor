@@ -21,7 +21,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+    <PageInfo Title="Activity" DocsPage="configuration/activities.md">
+        An Activity records one thing JIM did: what started it, when, and how it ended. A Run Profile's Activity also lists what the run did to each object it touched.
+    </PageInfo>
+</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -295,6 +299,16 @@
             @foreach (var warningLine in _activity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@warningLine</MudText>
+            }
+            @* A run that left references unresolved under Warn says so here, and the objects are one click away (#959):
+               the Connector Space filtered to them, which shows the references as they stand now. *@
+            @if (_hasUnresolvedReferences && _activity.ConnectedSystemId is { } unresolvedConnectedSystemId)
+            {
+                <AlertButton Severity="Severity.Warning"
+                             Href="@UnresolvedReferenceDisplay.ConnectorSpaceHref(unresolvedConnectedSystemId)"
+                             Class="mt-3">
+                    View Affected Objects
+                </AlertButton>
             }
         </MudAlert>
     }
@@ -1193,6 +1207,7 @@
     /// Structured detail for a failure caused by a directory server's certificate, when the Activity carries it.
     /// </summary>
     private ServerCertificateDiagnostic? _serverCertificate;
+    private bool _hasUnresolvedReferences;
     private Activity? _parentActivity;
 
     // The preview that informed this change (#134), its Activity, and its verdict; empty where there is none.
@@ -1347,6 +1362,11 @@
         }
 
         _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
+
+        // Asked only where the answer can show: inside a warning, on a run against a Connected System.
+        _hasUnresolvedReferences = !string.IsNullOrEmpty(_activity.WarningMessage)
+                                   && _activity.ConnectedSystemId != null
+                                   && await jim.Activities.HasUnresolvedReferencesAsync(_activity.Id);
 
         // Seed the ETA sample window so the estimate appears as soon as a second sample lands.
         UpdateEtaEstimate(_activity);

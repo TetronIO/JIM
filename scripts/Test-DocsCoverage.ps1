@@ -31,6 +31,21 @@
              heading or anchor it names exists on it. Links built from a
              template ("#{anchor}") are left to the tests that fill them
              (GlossaryTermConsistencyTests)
+      ACC-3  every REST route the docs give exists in the OpenAPI document,
+             with the method they give it; and a route written short
+             ("POST /connected-systems/{id}/clear") is written in full, from
+             /api/v1/
+      COV-4  every resource group of the API (an OpenAPI tag) has a row in the
+             Resource groups table of the API overview, and every row names one
+      COV-5  every routable portal page (a .razor component with an @page
+             directive) names its docs page from its PageInfo
+             (DocsPage="configuration/connected-systems.md#the-connector-space"),
+             and every docs page and heading a DocsPage names exists; where the
+             value is an expression, every page it can choose is checked
+
+    ACC-3 and COV-4 read the OpenAPI document, which only a build of JIM.Web
+    can produce, so they run where one has been built (build-and-test) and are
+    skipped, saying so, without -OpenApiPath.
 
     "Documented" means a heading or the first column of a table; a mention in
     running text does not count. Deliberate exceptions live in the allow-list
@@ -53,18 +68,30 @@
     are, and the allow-list. Relative to RepositoryRoot. Defaults to
     docs/.conformance/coverage.psd1.
 
+.PARAMETER OpenApiPath
+    The OpenAPI document ACC-3 and COV-4 check against, as
+    scripts/Generate-OpenApiDoc.ps1 writes it. Without it, those two rules are
+    skipped.
+
+.PARAMETER Rule
+    Run only these rules, comma-separated (for example ACC-3,COV-4). Defaults to
+    all of them.
+
 .EXAMPLE
     pwsh -File ./scripts/Test-DocsCoverage.ps1
     Checks every inventory; lists each gap with the file and line to fix.
 #>
-[CmdletBinding()]
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$RepositoryRoot = '.',
-    [string]$ConfigPath = 'docs/.conformance/coverage.psd1'
+    [string]$ConfigPath = 'docs/.conformance/coverage.psd1',
+    [string]$OpenApiPath,
+    [string[]]$Rule
 )
 
 $ErrorActionPreference = 'Stop'
-$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3')
+$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3', 'COV-5', 'ACC-3', 'COV-4')
+$script:HttpMethods = @('get', 'post', 'put', 'patch', 'delete')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
 
 # ---------------------------------------------------------------------------
@@ -269,6 +296,46 @@ function Get-DocsLink {
     }
 }
 
+# The portal's Razor components: whether each is a routable page (and the line of its first @page), and every
+# DocsPage it gives, with the docs pages each can name. A DocsPage written as an expression
+# (DocsPage="@(x ? "a.md" : "b.md")") names every string literal inside it.
+function Get-PortalComponent {
+    param([string]$Root, $Config)
+    foreach ($file in Get-RepoFile -Root $Root -Paths $Config.PortalSources -Extensions @('.razor')) {
+        $text = [System.IO.File]::ReadAllText($file.FullName)
+        $lineOf = { param([int]$Index) ([regex]::Matches($text.Substring(0, $Index), "`n")).Count + 1 }
+        $pageMatch = [regex]::Match($text, '(?m)^\s*@page\s+"')
+        $docsPages = foreach ($m in [regex]::Matches($text, '\bDocsPage\s*=\s*"')) {
+            $start = $m.Index + $m.Length
+            $value = $null
+            if ($start + 1 -lt $text.Length -and $text[$start] -eq '@' -and $text[$start + 1] -eq '(') {
+                # An expression: read to its matching parenthesis, skipping the strings inside it.
+                $depth = 0; $inString = $false
+                for ($i = $start + 1; $i -lt $text.Length; $i++) {
+                    $c = $text[$i]
+                    if ($inString) { if ($c -eq '\') { $i++ } elseif ($c -eq '"') { $inString = $false }; continue }
+                    if ($c -eq '"') { $inString = $true }
+                    elseif ($c -eq '(') { $depth++ }
+                    elseif ($c -eq ')') { $depth--; if ($depth -eq 0) { $value = $text.Substring($start, $i - $start + 1); break } }
+                }
+                $targets = @([regex]::Matches([string]$value, '"(?<t>[^"]*)"') | ForEach-Object { $_.Groups['t'].Value })
+            }
+            else {
+                $end = $text.IndexOf('"', $start)
+                $value = $text.Substring($start, [Math]::Max(0, $end - $start))
+                $targets = @($value)
+            }
+            [pscustomobject]@{ Line = (& $lineOf $m.Index); Targets = $targets }
+        }
+        [pscustomobject]@{
+            Path      = (Get-RelativePath $Root $file.FullName)
+            Routable  = $pageMatch.Success
+            PageLine  = if ($pageMatch.Success) { & $lineOf $pageMatch.Index } else { 0 }
+            DocsPages = @($docsPages)
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -279,15 +346,19 @@ try {
     if (-not (Test-Path -LiteralPath $configFull)) { throw "Configuration file not found at '$ConfigPath'." }
     $config = Import-PowerShellDataFile -LiteralPath $configFull
     foreach ($key in 'ModuleManifest', 'CmdletDocs', 'Constants', 'CodeSources', 'PowerShellSources', 'ComposeFiles', 'EnvExample', 'Installer',
-        'ExpressionEvaluator', 'ExpressionDocs', 'LinkSources', 'DocsBaseUrl', 'DocsPath', 'DocsExclude', 'Allow') {
+        'ExpressionEvaluator', 'ExpressionDocs', 'LinkSources', 'DocsBaseUrl', 'DocsPath', 'DocsExclude', 'ApiIndex', 'PortalSources', 'Allow') {
         if (-not $config.ContainsKey($key)) { throw "Configuration '$ConfigPath' has no '$key'." }
     }
-    foreach ($key in 'Cmdlets', 'EnvironmentVariables', 'ExpressionFunctions', 'DocsLinks') {
+    foreach ($key in 'Cmdlets', 'EnvironmentVariables', 'ExpressionFunctions', 'DocsLinks', 'ApiRoutes', 'ApiResourceGroups', 'PortalPages') {
         if (-not $config.Allow.ContainsKey($key)) { throw "Configuration '$ConfigPath' has no Allow.$key." }
     }
     foreach ($key in 'ModuleManifest', 'ExpressionEvaluator', 'ExpressionDocs') {
         if (-not (Test-Path -LiteralPath (Join-Path $root $config[$key]) -PathType Leaf)) { throw "$key '$($config[$key])' does not exist." }
     }
+    foreach ($r in @($Rule -split ',' | ForEach-Object { $_.Trim() })) {
+        if ($r -and $r -notin $script:Rules) { throw "-Rule names '$r', which is not one of $($script:Rules -join ', ')." }
+    }
+    if ($OpenApiPath -and -not (Test-Path -LiteralPath $OpenApiPath -PathType Leaf)) { throw "The OpenAPI document '$OpenApiPath' does not exist." }
 }
 catch {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
@@ -297,6 +368,13 @@ catch {
 $findings = [System.Collections.Generic.List[object]]::new()
 $counts = [ordered]@{}
 $allowPath = $ConfigPath
+
+$selected = if ($Rule) { @($Rule -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { $script:Rules }
+$apiNote = $null
+if (-not $OpenApiPath -and ('ACC-3' -in $selected -or 'COV-4' -in $selected)) {
+    $selected = @($selected | Where-Object { $_ -notin 'ACC-3', 'COV-4' })
+    $apiNote = 'ACC-3 and COV-4 skipped: they need the OpenAPI document (-OpenApiPath), which build-and-test generates and checks.'
+}
 
 # The docs pages the checks read.
 $docsRoot = Join-Path $root $config.DocsPath
@@ -341,78 +419,270 @@ function Compare-Inventory {
 }
 
 # --- COV-1: cmdlets ---
-$cmdlets = @(Get-ExportedCmdlet -Root $root -Config $config)
-$counts['cmdlets'] = $cmdlets.Count
-$cmdletPattern = '(?<![\w-])(?<name>[A-Z][a-z]+-JIM[A-Za-z0-9]*)(?![\w-])'
-$cmdletDocs = foreach ($page in $docPages | Where-Object { (Get-RelativePath $root $_.FullName).StartsWith($config.CmdletDocs.TrimEnd('/') + '/') }) {
-    foreach ($e in $pageEntries[$page.FullName]) {
-        foreach ($m in [regex]::Matches($e.Text, $cmdletPattern)) {
-            [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = (Get-RelativePath $root $page.FullName); Line = $e.Line }
+if ('COV-1' -in $selected) {
+    $cmdlets = @(Get-ExportedCmdlet -Root $root -Config $config)
+    $counts['cmdlets'] = $cmdlets.Count
+    $cmdletPattern = '(?<![\w-])(?<name>[A-Z][a-z]+-JIM[A-Za-z0-9]*)(?![\w-])'
+    $cmdletDocs = foreach ($page in $docPages | Where-Object { (Get-RelativePath $root $_.FullName).StartsWith($config.CmdletDocs.TrimEnd('/') + '/') }) {
+        foreach ($e in $pageEntries[$page.FullName]) {
+            foreach ($m in [regex]::Matches($e.Text, $cmdletPattern)) {
+                [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = (Get-RelativePath $root $page.FullName); Line = $e.Line }
+            }
         }
     }
+    Compare-Inventory -Rule 'COV-1' -Inventory $cmdlets -Documented @($cmdletDocs) -Allow $config.Allow.Cmdlets -Noun 'cmdlet' `
+        -Where "a heading, or a row in the first column of a table, on a $($config.CmdletDocs)/ page" `
+        -GoneMessage "names '{0}', which the PowerShell module does not export; remove it, or rename it to the cmdlet that replaced it." |
+        ForEach-Object { $findings.Add($_) }
 }
-Compare-Inventory -Rule 'COV-1' -Inventory $cmdlets -Documented @($cmdletDocs) -Allow $config.Allow.Cmdlets -Noun 'cmdlet' `
-    -Where "a heading, or a row in the first column of a table, on a $($config.CmdletDocs)/ page" `
-    -GoneMessage "names '{0}', which the PowerShell module does not export; remove it, or rename it to the cmdlet that replaced it." |
-    ForEach-Object { $findings.Add($_) }
 
 # --- COV-2: environment variables ---
-$variables = @(Get-EnvironmentVariableRead -Root $root -Config $config)
-$counts['environment variables'] = @($variables.Name | Sort-Object -Unique).Count
-$variableDocs = foreach ($page in $docPages) {
-    foreach ($e in $pageEntries[$page.FullName]) {
-        foreach ($m in [regex]::Matches($e.Text, '\b(?<name>JIM_[A-Z0-9_]+)\b')) {
-            [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = (Get-RelativePath $root $page.FullName); Line = $e.Line }
+if ('COV-2' -in $selected) {
+    $variables = @(Get-EnvironmentVariableRead -Root $root -Config $config)
+    $counts['environment variables'] = @($variables.Name | Sort-Object -Unique).Count
+    $variableDocs = foreach ($page in $docPages) {
+        foreach ($e in $pageEntries[$page.FullName]) {
+            foreach ($m in [regex]::Matches($e.Text, '\b(?<name>JIM_[A-Z0-9_]+)\b')) {
+                [pscustomobject]@{ Name = $m.Groups['name'].Value; Path = (Get-RelativePath $root $page.FullName); Line = $e.Line }
+            }
         }
     }
+    Compare-Inventory -Rule 'COV-2' -Inventory $variables -Documented @($variableDocs) -Allow $config.Allow.EnvironmentVariables -Noun 'environment variable' `
+        -Where 'a row in a settings table' `
+        -GoneMessage "documents '{0}', which nothing reads; remove the row, or correct the name." |
+        ForEach-Object { $findings.Add($_) }
 }
-Compare-Inventory -Rule 'COV-2' -Inventory $variables -Documented @($variableDocs) -Allow $config.Allow.EnvironmentVariables -Noun 'environment variable' `
-    -Where 'a row in a settings table' `
-    -GoneMessage "documents '{0}', which nothing reads; remove the row, or correct the name." |
-    ForEach-Object { $findings.Add($_) }
 
 # --- COV-6: expression functions ---
-$functions = @(Get-ExpressionFunction -Root $root -Config $config)
-$counts['expression functions'] = $functions.Count
-$expressionPage = Join-Path $root $config.ExpressionDocs
-$functionDocs = foreach ($e in @(Get-DocumentedEntry -FullPath $expressionPage) | Where-Object { $_.Kind -eq 'Row' -and $_.Header -match '^Function' }) {
-    if ($e.Text -match '^`?(?<name>[A-Za-z_]\w*)\s*\(') {
-        [pscustomobject]@{ Name = $Matches['name']; Path = $config.ExpressionDocs; Line = $e.Line }
+if ('COV-6' -in $selected) {
+    $functions = @(Get-ExpressionFunction -Root $root -Config $config)
+    $counts['expression functions'] = $functions.Count
+    $expressionPage = Join-Path $root $config.ExpressionDocs
+    $functionDocs = foreach ($e in @(Get-DocumentedEntry -FullPath $expressionPage) | Where-Object { $_.Kind -eq 'Row' -and $_.Header -match '^Function' }) {
+        if ($e.Text -match '^`?(?<name>[A-Za-z_]\w*)\s*\(') {
+            [pscustomobject]@{ Name = $Matches['name']; Path = $config.ExpressionDocs; Line = $e.Line }
+        }
     }
+    Compare-Inventory -Rule 'COV-6' -Inventory $functions -Documented @($functionDocs) -Allow $config.Allow.ExpressionFunctions -Noun 'expression function' `
+        -Where "a row in a Function table on $($config.ExpressionDocs)" `
+        -GoneMessage "documents '{0}', which the expression evaluator does not register; remove the row, or correct the name." |
+        ForEach-Object { $findings.Add($_) }
 }
-Compare-Inventory -Rule 'COV-6' -Inventory $functions -Documented @($functionDocs) -Allow $config.Allow.ExpressionFunctions -Noun 'expression function' `
-    -Where "a row in a Function table on $($config.ExpressionDocs)" `
-    -GoneMessage "documents '{0}', which the expression evaluator does not register; remove the row, or correct the name." |
-    ForEach-Object { $findings.Add($_) }
 
 # --- LNK-3: links from the product into the docs ---
-$links = @(Get-DocsLink -Root $root -Config $config)
-$counts['links into the docs'] = $links.Count
-$anchorCache = @{}
-foreach ($link in $links) {
-    if ($config.Allow.DocsLinks.ContainsKey($link.Url)) { continue }
-    $pathPart, $anchor = $link.Target -split '#', 2
-    $pathPart = $pathPart.Trim('/')
-    $candidates = if ($pathPart) { @("$pathPart.md", "$pathPart/index.md") } else { @('index.md') }
-    $page = $candidates | ForEach-Object { Join-Path $docsRoot $_ } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-    if (-not $page) {
-        $findings.Add((New-Finding 'LNK-3' $link.Path $link.Line "links to '$($link.Url)', but no docs page is published at '/$pathPart/'; point it at the page that now covers this, or restore the page."))
-        continue
+if ('LNK-3' -in $selected) {
+    $links = @(Get-DocsLink -Root $root -Config $config)
+    $counts['links into the docs'] = $links.Count
+    $anchorCache = @{}
+    foreach ($link in $links) {
+        if ($config.Allow.DocsLinks.ContainsKey($link.Url)) { continue }
+        $pathPart, $anchor = $link.Target -split '#', 2
+        $pathPart = $pathPart.Trim('/')
+        $candidates = if ($pathPart) { @("$pathPart.md", "$pathPart/index.md") } else { @('index.md') }
+        $page = $candidates | ForEach-Object { Join-Path $docsRoot $_ } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $page) {
+            $findings.Add((New-Finding 'LNK-3' $link.Path $link.Line "links to '$($link.Url)', but no docs page is published at '/$pathPart/'; point it at the page that now covers this, or restore the page."))
+            continue
+        }
+        if ($anchor) {
+            if (-not $anchorCache.ContainsKey($page)) { $anchorCache[$page] = Get-PageAnchor -FullPath $page }
+            if (-not $anchorCache[$page].Contains($anchor)) {
+                $findings.Add((New-Finding 'LNK-3' $link.Path $link.Line "links to '#$anchor' on $(Get-RelativePath $root $page), which has no such heading or anchor; link to the heading that now covers it, or give that heading an explicit { #$anchor }."))
+            }
+        }
     }
-    if ($anchor) {
-        if (-not $anchorCache.ContainsKey($page)) { $anchorCache[$page] = Get-PageAnchor -FullPath $page }
-        if (-not $anchorCache[$page].Contains($anchor)) {
-            $findings.Add((New-Finding 'LNK-3' $link.Path $link.Line "links to '#$anchor' on $(Get-RelativePath $root $page), which has no such heading or anchor; link to the heading that now covers it, or give that heading an explicit { #$anchor }."))
+    foreach ($url in $config.Allow.DocsLinks.Keys) {
+        if ([string]::IsNullOrWhiteSpace($config.Allow.DocsLinks[$url])) {
+            $findings.Add((New-Finding 'LNK-3' $allowPath 1 "the allow-list entry for '$url' gives no reason; say why the link need not resolve."))
+        }
+        elseif (-not ($links | Where-Object Url -eq $url)) {
+            $findings.Add((New-Finding 'LNK-3' $allowPath 1 "the allow-list entry for '$url' names a link the product no longer has; remove it."))
         }
     }
 }
-foreach ($url in $config.Allow.DocsLinks.Keys) {
-    if ([string]::IsNullOrWhiteSpace($config.Allow.DocsLinks[$url])) {
-        $findings.Add((New-Finding 'LNK-3' $allowPath 1 "the allow-list entry for '$url' gives no reason; say why the link need not resolve."))
+
+# --- COV-5: portal pages name their docs page ---
+if ('COV-5' -in $selected) {
+    $components = @(Get-PortalComponent -Root $root -Config $config)
+    $pages = @($components | Where-Object Routable)
+    $counts['portal pages'] = $pages.Count
+    $anchorCache5 = @{}
+    foreach ($page in $pages) {
+        if ($page.DocsPages.Count -gt 0 -or $config.Allow.PortalPages.ContainsKey($page.Path)) { continue }
+        $findings.Add((New-Finding 'COV-5' $page.Path $page.PageLine "the portal page names no docs page; give its PageInfo a DocsPage (DocsPage=`"configuration/connected-systems.md#the-connector-space`"), or add it to the allow-list in $allowPath with the reason it has none."))
     }
-    elseif (-not ($links | Where-Object Url -eq $url)) {
-        $findings.Add((New-Finding 'LNK-3' $allowPath 1 "the allow-list entry for '$url' names a link the product no longer has; remove it."))
+    foreach ($component in $components) {
+        foreach ($docsPage in $component.DocsPages) {
+            if ($docsPage.Targets.Count -eq 0) {
+                $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "the DocsPage expression names no docs page, so there is nothing to check; write each page it can choose as a string literal (DocsPage=`"@(x ? `"a.md`" : `"b.md`")`")."))
+            }
+            foreach ($target in $docsPage.Targets) {
+                $pathPart, $anchor = $target -split '#', 2
+                if (-not $pathPart.EndsWith('.md')) {
+                    $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage '$target' is not a docs page; name the Markdown page under $($config.DocsPath)/, for example 'configuration/connected-systems.md#the-connector-space'."))
+                    continue
+                }
+                $full = Join-Path $docsRoot $pathPart
+                if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+                    $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage names '$pathPart', which is not a page under $($config.DocsPath)/; name the page that covers this one."))
+                    continue
+                }
+                if ($anchor) {
+                    if (-not $anchorCache5.ContainsKey($full)) { $anchorCache5[$full] = Get-PageAnchor -FullPath $full }
+                    if (-not $anchorCache5[$full].Contains($anchor)) {
+                        $findings.Add((New-Finding 'COV-5' $component.Path $docsPage.Line "DocsPage names '#$anchor' on $pathPart, which has no such heading or anchor; name the heading that covers this page."))
+                    }
+                }
+            }
+        }
     }
+    foreach ($path in $config.Allow.PortalPages.Keys) {
+        $page = $pages | Where-Object Path -eq $path | Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($config.Allow.PortalPages[$path])) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' gives no reason; say why the page names no docs page."))
+        }
+        elseif (-not $page) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' names a page that no longer exists; remove it."))
+        }
+        elseif ($page.DocsPages.Count -gt 0) {
+            $findings.Add((New-Finding 'COV-5' $allowPath 1 "the allow-list entry for '$path' is no longer needed: the page names its docs page; remove it."))
+        }
+    }
+}
+
+# --- ACC-3 and COV-4: the REST API, from its OpenAPI document ---
+
+# Whether a route written in the docs matches a template from the OpenAPI document, segment by segment. A
+# template's {parameter} matches anything the docs put there: {id}, <id>, a real id.
+function Test-RouteMatch {
+    param([string[]]$Written, [string[]]$Template)
+    if ($Written.Count -ne $Template.Count) { return $false }
+    for ($i = 0; $i -lt $Written.Count; $i++) {
+        if ($Template[$i].StartsWith('{')) { continue }
+        if ($Written[$i] -ne $Template[$i]) { return $false }
+    }
+    return $true
+}
+
+if ('ACC-3' -in $selected -or 'COV-4' -in $selected) {
+    $openApi = Get-Content -LiteralPath $OpenApiPath -Raw | ConvertFrom-Json -AsHashtable
+    $templates = foreach ($path in $openApi.paths.Keys) {
+        $methods = @($openApi.paths[$path].Keys | Where-Object { $_ -in $script:HttpMethods })
+        if (-not $methods) { continue }
+        [pscustomobject]@{
+            Path     = $path
+            Segments = @($path.Trim('/') -split '/')
+            Methods  = @($methods | ForEach-Object { $_.ToUpperInvariant() })
+            Tags     = @($methods | ForEach-Object { $openApi.paths[$path][$_].tags } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+    }
+}
+
+if ('ACC-3' -in $selected) {
+    $methodPattern = '(?<![\w/-])(?<method>GET|POST|PUT|PATCH|DELETE)\s+(?<path>(?:\.\.\.|…)?/[^\s`''"()<>\[\]|,]*)'
+    $barePattern = '(?<path>/api/v\d+/[^\s`''"()<>\[\]|,]*)'
+    $routesSeen = @{}
+    $routeCount = 0
+    foreach ($page in $docPages) {
+        $relative = Get-RelativePath $root $page.FullName
+        $lines = [System.IO.File]::ReadAllLines($page.FullName)
+        $start = 0
+        if ($lines.Count -gt 0 -and $lines[0].Trim() -eq '---') {
+            for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq '---') { $start = $i + 1; break } }
+        }
+        for ($i = $start; $i -lt $lines.Count; $i++) {
+            $routes = [System.Collections.Generic.List[object]]::new()
+            $taken = [System.Collections.Generic.List[int]]::new()
+            foreach ($m in [regex]::Matches($lines[$i], $methodPattern)) {
+                $routes.Add([pscustomobject]@{ Text = $m.Value; Method = $m.Groups['method'].Value; Path = $m.Groups['path'].Value })
+                $taken.Add($m.Groups['path'].Index)
+            }
+            foreach ($m in [regex]::Matches($lines[$i], $barePattern)) {
+                if ($taken | Where-Object { $m.Index -ge $_ -and $m.Index -le $_ + 8 }) { continue }
+                $routes.Add([pscustomobject]@{ Text = $m.Value; Method = $null; Path = $m.Value })
+            }
+            foreach ($route in $routes) {
+                $routesSeen[$route.Text] = $true
+                if ($config.Allow.ApiRoutes.ContainsKey($route.Text)) { continue }
+                $clean = ($route.Path -replace '[?#].*$', '').TrimEnd('.', ',', ';', ':', '/')
+                $abbreviated = $clean -match '^(\.\.\.|…)' -or -not $clean.StartsWith('/api/')
+                $written = @(($clean -replace '^(\.\.\.|…)', '').Trim('/') -split '/' | Where-Object { $_ })
+                # The version prefix alone ("everything is under /api/v1/") names no route.
+                if (-not $written -or (-not $abbreviated -and $written.Count -le 2)) { continue }
+
+                if ($abbreviated) {
+                    # A JIM route only if it is the tail of one: anything else (an identity provider's /token) is not ours.
+                    $candidates = @($templates | Where-Object {
+                            $_.Segments.Count -gt $written.Count -and
+                            (Test-RouteMatch -Written $written -Template @($_.Segments[($_.Segments.Count - $written.Count)..($_.Segments.Count - 1)]))
+                        } | Where-Object { -not $route.Method -or $route.Method -in $_.Methods })
+                    # Prefer the routes whose fixed segments the text matches: "decisions/summary" is the summary
+                    # route, though "decisions/{id}" would take it too.
+                    if ($candidates) {
+                        $scored = foreach ($c in $candidates) {
+                            $tail = @($c.Segments[($c.Segments.Count - $written.Count)..($c.Segments.Count - 1)])
+                            [pscustomobject]@{ Template = $c; Fixed = @($tail | Where-Object { -not $_.StartsWith('{') }).Count }
+                        }
+                        $best = ($scored | Measure-Object Fixed -Maximum).Maximum
+                        $candidates = @($scored | Where-Object Fixed -eq $best | ForEach-Object Template)
+                    }
+                    if ($candidates) {
+                        $routeCount++
+                        $full = ($candidates | ForEach-Object { "'/$($_.Path.Trim('/'))'" } | Sort-Object -Unique) -join ' or '
+                        $findings.Add((New-Finding 'ACC-3' $relative ($i + 1) "the route '$($route.Text)' is abbreviated; write it in full, as the API reference names it: $full."))
+                    }
+                    continue
+                }
+
+                $routeCount++
+                $matched = @($templates | Where-Object { Test-RouteMatch -Written $written -Template $_.Segments })
+                # A path given without a method names a resource ("Connected Systems live under
+                # /api/v1/synchronisation/connected-systems"), so the start of a route is enough. With a method it is
+                # a call, which must be a whole route.
+                if (-not $matched -and -not $route.Method) {
+                    $matched = @($templates | Where-Object {
+                            $_.Segments.Count -gt $written.Count -and
+                            (Test-RouteMatch -Written $written -Template @($_.Segments[0..($written.Count - 1)]))
+                        })
+                    if ($matched) { continue }
+                }
+                if (-not $matched) {
+                    $findings.Add((New-Finding 'ACC-3' $relative ($i + 1) "the route '$clean' is not in the OpenAPI document; correct it from the API reference, or remove it."))
+                }
+                elseif ($route.Method -and -not ($matched | Where-Object { $route.Method -in $_.Methods })) {
+                    $takes = ($matched.Methods | Sort-Object -Unique) -join ', '
+                    $findings.Add((New-Finding 'ACC-3' $relative ($i + 1) "the route '$clean' does not take $($route.Method); it takes $takes."))
+                }
+            }
+        }
+    }
+    $counts['REST routes in the docs'] = $routeCount
+    foreach ($text in $config.Allow.ApiRoutes.Keys) {
+        if ([string]::IsNullOrWhiteSpace($config.Allow.ApiRoutes[$text])) {
+            $findings.Add((New-Finding 'ACC-3' $allowPath 1 "the allow-list entry for '$text' gives no reason; say why the route is right as written."))
+        }
+        elseif (-not $routesSeen.ContainsKey($text)) {
+            $findings.Add((New-Finding 'ACC-3' $allowPath 1 "the allow-list entry for '$text' names a route no page gives any more; remove it."))
+        }
+    }
+}
+
+if ('COV-4' -in $selected) {
+    $apiIndex = Join-Path $root $config.ApiIndex
+    $groupRows = @(if (Test-Path -LiteralPath $apiIndex) { Get-DocumentedEntry -FullPath $apiIndex | Where-Object { $_.Kind -eq 'Row' -and $_.Header -match '^Resource group' } })
+    $tableLine = if ($groupRows) { $groupRows[0].Line - 2 } else { 1 }
+    $groups = foreach ($tag in @($templates.Tags | Sort-Object -Unique)) {
+        [pscustomobject]@{ Name = $tag; Path = $config.ApiIndex; Line = $tableLine }
+    }
+    $counts['API resource groups'] = @($groups).Count
+    $groupDocs = foreach ($row in $groupRows) {
+        $name = ($row.Text -replace '\[([^\]]*)\]\([^)]*\)', '$1' -replace '`', '').Trim()
+        [pscustomobject]@{ Name = $name; Path = $config.ApiIndex; Line = $row.Line }
+    }
+    Compare-Inventory -Rule 'COV-4' -Inventory @($groups) -Documented @($groupDocs) -Allow $config.Allow.ApiResourceGroups -Noun 'resource group' `
+        -Where "a row in the Resource groups table on $($config.ApiIndex)" `
+        -GoneMessage "names '{0}', which is not a resource group of the API; remove the row, or correct the name." |
+        ForEach-Object { $findings.Add($_) }
 }
 
 # ---------------------------------------------------------------------------
@@ -432,17 +702,19 @@ if ($env:GITHUB_STEP_SUMMARY) {
     $summary = [System.Collections.Generic.List[string]]::new()
     $summary.Add('## Docs coverage')
     $summary.Add('')
-    $summary.Add("Checked $checked against the docs, both ways (``$script:StandardPath``, Coverage).")
+    $summary.Add("Checked $checked, against source and the OpenAPI document (``$script:StandardPath``, Coverage, ACC-3, LNK-3).")
     $summary.Add('')
     $summary.Add('| Rule | Errors |')
     $summary.Add('|------|-------:|')
-    foreach ($r in $script:Rules) { $summary.Add("| $r | $(@($findings | Where-Object Rule -eq $r).Count) |") }
+    foreach ($r in $selected) { $summary.Add("| $r | $(@($findings | Where-Object Rule -eq $r).Count) |") }
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($summary -join "`n") -Encoding utf8
 }
+
+if ($apiNote) { Write-Host $apiNote }
 
 if ($findings.Count -gt 0) {
     Write-Host "`nDocs coverage FAILED: $($findings.Count) gap(s). Each names its rule; the rules are defined in $script:StandardPath." -ForegroundColor Red
     exit 1
 }
-Write-Host "`nDocs coverage passed: checked $checked against the docs, both ways." -ForegroundColor Green
+Write-Host "`nDocs coverage passed: checked $checked." -ForegroundColor Green
 exit 0

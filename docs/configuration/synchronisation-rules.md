@@ -333,7 +333,9 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 
 - **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every Connected System Object](#one-password-for-every-connected-system-object). The first two generate a different password per object: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
-- **Enable the Connected System Object once the password is set**<br /> On by default. A provisioned Connected System Object nobody can sign in to is rarely what was wanted, and directories that refuse to enable an object without a policy-compliant password need the enable to follow the password rather than accompany the create.
+- **Enable the Connected System Object once the password is set**<br /> On by default. A provisioned Connected System Object nobody can sign in to is rarely what was wanted, and directories that refuse to enable an object without a policy-compliant password need the enable to follow the password rather than accompany the create. On Active Directory and Samba AD it enables every account the rule provisions, including one your Attribute Flow creates disabled, such as a pre-hire's. With [Enforce State](#export-outbound) on, as it is by default, the next import, synchronisation and export disable that account again; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Meanwhile, anyone who knows a [shared static password](#one-password-for-every-connected-system-object) can sign in with it. Where that matters, switch this off or scope the rule to active people; [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled) weighs the two.
+
+**An Attribute Flow that enables accounts can stay.** Active Directory refuses to create an enabled account with no password, so a `userAccountControl` Attribute Flow writing `512` on provisioning is refused there unless an Initial Password follows. With one switched on, JIM creates the account disabled (`512` is sent as `514`), the password's delivery enables it, and the confirming import waits for the password rather than reporting the interim value as unconfirmed; the flow goes on enabling and disabling the account from source data afterwards. The value JIM sends is unchanged for an account the flow creates disabled (`514`), but the delivery enables that account too while **Enable the Connected System Object once the password is set** is on, as the setting above says. How this works, what happens while a password is retrying, parked or expired, and how to keep a pre-hire's account disabled, is described under [Enabling new Active Directory accounts](../connectors/jim-ldap-connector.md#enabling-new-active-directory-accounts).
 
 **No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
 
@@ -419,6 +421,8 @@ An expression mapping applies a transformation using the JIM [expression languag
 | `mv["First Name"] + " " + mv["Last Name"]` | `displayName` |
 | `IIF(Eq(mv["Employee Status"], "Active"), 512, 514)` | `userAccountControl` |
 
+On an export rule that provisions to Active Directory, an enabled value such as `512` needs an [Initial Password](#initial-password) on the same rule: Active Directory refuses to create an enabled account that has no password, and with an Initial Password JIM creates the account disabled and enables it once the password is set. With that Initial Password's **Enable the Connected System Object once the password is set** on, the delivery enables the accounts this expression creates disabled (`514`) as well. With [Enforce State](#export-outbound) on, the next import, synchronisation and export disable them again; with it off, an account an import had already confirmed disabled before its password landed stays enabled. Anyone who knows such an account's password can sign in while it is enabled, so switch that setting off, or scope provisioning to active people, where that matters (see [Accounts your Attribute Flow creates disabled](../connectors/jim-ldap-connector.md#accounts-your-attribute-flow-creates-disabled)).
+
 #### Missing Input Behaviour
 
 An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
@@ -434,7 +438,7 @@ JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the exp
 
 #### Changing a mapping after it is created
 
-A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, a [generated value](#generated-values)'s settings, and whether the mapping is enabled at all. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, a [generated value](#generated-values)'s settings, and whether the mapping is enabled at all. Use the portal, `PATCH /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
 
 #### Disabling a single mapping
 
@@ -602,7 +606,7 @@ The refused value is [retired](#retired-values) when the flow never reuses value
 - JIM cannot tell whether another target holds it, because that Connected System's connector space was cleared and no Full Import has completed since; or
 - JIM has already corrected the value five times and the target keeps refusing, which points at something a further rename will not fix.
 
-The export is then **parked**: it is not sent again, the Connected System's **Retry failed exports** leaves it alone, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, or switching **Keep unique** on or off for a value built from it, releases the parked export for the next export run to try again under the new settings.
+The export is then **parked**: it is not sent again, and the export run's Activity records a **Needs a Decision** error naming the refusing Connected System, the value, and the system that already holds it. Changing the Attribute Flow's generation settings, including switching Collision Remediation on or off, or switching **Keep unique** on or off for a value built from it, releases the parked export for the next export run to try again under the new settings.
 
 **Acting on a held value.** Three answers are open to you:
 
@@ -618,12 +622,12 @@ In PowerShell, `Get-JIMGeneratedValueDecision` lists what is held (with why, sin
 
 | Request | What it does |
 |---|---|
-| `GET /generated-values/decisions` | The held values, newest first, paged; narrowed by `connectedSystemId` (the system that refused the value, the one anchoring it, or any system the value is exported to and checked in), `syncRuleId`, `status` (`NeedsDecision` or `RenameAllowed`) and `metaverseObjectId` |
-| `GET /generated-values/decisions/summary` | How many need a decision, how many renames are allowed and waiting, and how many values were corrected in the last seven days |
-| `GET /generated-values/decisions/{id}` | One value, whatever its state |
-| `POST /generated-values/{id}/allow-rename` | Allows the rename; answers with the value as it now stands |
-| `POST /generated-values/{id}/try-again` | Tries again; answers with the value as it now stands |
-| `POST /generated-values/decisions/try-again` | Tries again every held value matching `connectedSystemId`, `syncRuleId`, `metaverseObjectId` or `ids` in the body; a body naming none of these must set `applyToAllDecisions` |
+| `GET /api/v1/generated-values/decisions` | The held values, newest first, paged; narrowed by `connectedSystemId` (the system that refused the value, the one anchoring it, or any system the value is exported to and checked in), `syncRuleId`, `status` (`NeedsDecision` or `RenameAllowed`) and `metaverseObjectId` |
+| `GET /api/v1/generated-values/decisions/summary` | How many need a decision, how many renames are allowed and waiting, and how many values were corrected in the last seven days |
+| `GET /api/v1/generated-values/decisions/{id}` | One value, whatever its state |
+| `POST /api/v1/generated-values/{id}/allow-rename` | Allows the rename; answers with the value as it now stands |
+| `POST /api/v1/generated-values/{id}/try-again` | Tries again; answers with the value as it now stands |
+| `POST /api/v1/generated-values/decisions/try-again` | Tries again every held value matching `connectedSystemId`, `syncRuleId`, `metaverseObjectId` or `ids` in the body; a body naming none of these must set `applyToAllDecisions` |
 
 Both actions take effect at once (they release the export for the next export run), so they answer `200` rather than queueing work; a value that is not waiting on a decision answers `409`.
 
@@ -683,7 +687,7 @@ The REST API and PowerShell report the stored reason.
 - On the Synchronisation Rule's **Attribute Flow** tab, a generated row shows an **N retired** chip once its attribute has any, and every generated row has a **View retired values** action. The list is per attribute, not per flow: two flows generating Account Name share one list, because neither may reissue the other's values. It is read-only and searchable by value or by the name of the object that held it; **Held by** links to the Metaverse Object while it still exists, and shows its last name, greyed, once it has been deleted.
 - On a Metaverse Object's **Changes** tab, a retirement is an event in the timeline: the attribute, the retired value struck through, why, and the synchronisation that caused it. A deleted object's retirements are only in the list, since the object and its timeline are gone.
 - A synchronisation that retires values records it on the object's summary in the Activity, under the change that caused it.
-- In PowerShell, `Get-JIMRetiredGeneratedValue` (see [Metaverse cmdlets](../powershell/metaverse.md#get-jimretiredgeneratedvalue)); on the REST API, `GET /metaverse/attributes/{id}/retired-generated-values` for an import flow's attribute and `GET /synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}/retired-generated-values` for an export flow's, both with search and paging. A generated mapping's `generation` object on the mapping endpoints carries `retiredValueCount`.
+- In PowerShell, `Get-JIMRetiredGeneratedValue` (see [Metaverse cmdlets](../powershell/metaverse.md#get-jimretiredgeneratedvalue)); on the REST API, `GET /api/v1/metaverse/attributes/{id}/retired-generated-values` for an import flow's attribute and `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}/retired-generated-values` for an export flow's, both with search and paging. A generated mapping's `generation` object on the mapping endpoints carries `retiredValueCount`.
 
 **Number attributes.** A generated value can target a Text or a Number attribute. A Number attribute accepts only a sequence or a Digits random token, with no base expression, no separator and no padding, because a prefix or leading zeros would make the value text. The editor disables the incompatible choices and says why; the REST API and PowerShell refuse the same configurations with the same reasons.
 
@@ -697,7 +701,7 @@ Generated values work on export mappings too: the value is generated for, and ke
 
 An export-mode generated value is drift-checked like any export Attribute Flow. When the Synchronisation Rule [enforces state](#export-outbound) and the value is changed in the target system outside JIM, the target system's next synchronisation corrects it back to the value JIM generated for that object (not a freshly evaluated base expression), and a change of letter case alone counts as a change, exactly as it does for any other Attribute Flow. Mark the mapping [Initial Export Only](#initial-export-only-outbound) to have the value written once, when the object is provisioned, and then left alone. An object JIM has not yet generated a value for is not checked; the value is generated and exported instead.
 
-Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
+Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /api/v1/metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings/{mappingId}/generation/restart`).
 
 A value a target system rejects as already in use is corrected or held for a decision, as described in [When a target rejects a value](#when-a-target-rejects-a-value). A generated value cannot yet be changed by hand.
 
@@ -756,7 +760,7 @@ The **Preview Attribute Flow Impact** button, which appears beside the editor's 
 
 The evaluation is the synchronisation engine's own, run twice per object (once against the saved configuration and once against the proposal) and compared, so [Attribute Priority](#attribute-priority), Missing Input Behaviour and Expression evaluation are answered by the engine rather than approximated.
 
-Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the object holds in the target Connected System today, including where the saved configuration would write nothing because the target is already correct, which is exactly the case a domain cutover is.
+Both directions state a true before-and-after. An **import** mapping's old value is what the Metaverse Object holds in the metaverse today; an **export** mapping's is what the saved configuration leaves the object holding in the target Connected System, including where it writes nothing because the target is already correct, which is exactly the case a domain cutover is.
 
 Three answers are deliberately negative rather than reassuring:
 

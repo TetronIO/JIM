@@ -6,14 +6,15 @@ using JIM.Models.Staging;
 namespace JIM.Application.Services;
 
 /// <summary>
-/// Run Profile Safeguards (#1618): validates a Run Profile's Max creates/updates/deletes limits.
+/// Run Profile Safeguards (#1618): validates a Run Profile's Max creates/updates/deletes and detected-deletion
+/// limits, and Allow Object Type Changes (#2049).
 /// Mirrors the existing Verification Mode rule (<c>VerifyImportContentHashes</c>): a value that only
 /// makes sense on one Run Type is rejected on every surface with a message naming the field.
 /// </summary>
 public static class RunProfileSafeguardsValidator
 {
     /// <summary>
-    /// Validates the export limits set on <paramref name="runProfile"/>.
+    /// Validates the Run-Type-specific limits and settings on <paramref name="runProfile"/>.
     /// </summary>
     /// <returns>
     /// Null when the Run Profile's limits are valid; otherwise a message naming the first offending
@@ -27,8 +28,18 @@ public static class RunProfileSafeguardsValidator
             ?? ValidateField(nameof(runProfile.MaxUpdates), runProfile.MaxUpdates, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
             ?? ValidateField(nameof(runProfile.MaxDeletes), runProfile.MaxDeletes, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
             ?? ValidateField(nameof(runProfile.MaxDetectedDeletions), runProfile.MaxDetectedDeletions, runProfile.RunType, ConnectedSystemRunType.FullImport, "a Full Import")
-            ?? ValidatePercentField(runProfile.MaxDetectedDeletionsPercent, runProfile.RunType);
+            ?? ValidatePercentField(runProfile.MaxDetectedDeletionsPercent, runProfile.RunType)
+            ?? ValidateAllowObjectTypeChanges(runProfile.AllowObjectTypeChanges, runProfile.RunType);
     }
+
+    /// <summary>
+    /// Allow Object Type Changes (#2049) is a Full Import setting: its effect, retiring an object of the old Object
+    /// Type, comes from the Full Import's deletion detection, which no other run performs.
+    /// </summary>
+    private static string? ValidateAllowObjectTypeChanges(bool allowObjectTypeChanges, ConnectedSystemRunType runType) =>
+        allowObjectTypeChanges && runType != ConnectedSystemRunType.FullImport
+            ? $"{nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)} can only be enabled on a Full Import Run Profile."
+            : null;
 
     private static string? ValidateField(string fieldName, int? value, ConnectedSystemRunType runType, ConnectedSystemRunType requiredRunType, string requiredRunTypeArticleAndName)
     {

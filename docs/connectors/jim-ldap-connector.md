@@ -32,15 +32,36 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
+- **Overlapping Object Types**<br /> An entry carrying more than one selected structural class imports as the most specific of them: with both `user` and `computer` selected, an Active Directory computer imports as `computer`, and on an RFC 4512 directory with both `person` and `inetOrgPerson` selected, an `inetOrgPerson` entry imports as `inetOrgPerson`. Schema discovery records which classes each Object Type inherits from, so this holds whatever order the directory lists an entry's classes in. Object Types discovered before JIM recorded inheritance resolve by the order instead, read from where the entry lists `top` (first on Active Directory and Samba AD, often last in an RFC 4512 directory); refresh the schema of any Connected System with overlapping Object Types selected to record inheritance. Because of this rule, selecting or deselecting an overlapping Object Type changes the Object Type that entries JIM already holds import as; JIM refuses that change by default and keeps the existing objects, as [When an object changes Object Type](../configuration/connected-systems.md#when-an-object-changes-object-type) explains.
 
 ### Export
 
 - **Create, update, and delete**<br /> Operations on directory objects.
 - **Configurable delete behaviour**<br /> Choose between deleting objects outright or disabling them (e.g. via userAccountControl for Active Directory).
-- **Configurable concurrency**<br /> Parallel batch export support with 1-64 concurrent LDAP operations.
+- **New Active Directory accounts enabled by their Initial Password**<br /> Active Directory refuses to create an enabled user account that has no password. When the provisioning Synchronisation Rule has an [Initial Password](../configuration/synchronisation-rules.md#initial-password), JIM creates the account disabled and the password's delivery enables it, so a `userAccountControl` Attribute Flow that enables accounts keeps working. See [Enabling new Active Directory accounts](#enabling-new-active-directory-accounts).
+- **Configurable concurrency**<br /> Parallel batch export support with 1-64 concurrent LDAP operations; a cancelled export run finishes its current batch.
 - **Batched multi-valued modifications**<br /> Large attribute changes (e.g. group membership) are automatically split into configurable batches to avoid exceeding directory server limits.
+- **Values already in place**<br /> Adding a value the directory already holds (a member already in the group) or removing one it no longer holds counts as done, and every other change in the same export is still applied. See [Values already in place](#values-already-in-place).
 - **Container provisioning**<br /> Optionally create organisational units (OUs) on demand when provisioning objects to new locations.
 - **Group placeholder members**<br /> Automatic handling of the `groupOfNames` MUST member constraint for OpenLDAP directories.
+
+### Values already in place
+
+An export asks the directory for a state, so adding a member who is already in the group, or removing one who has already left, is a change that is already done. A directory sees it differently: an LDAP modify is all or nothing, so a directory that finds one value already present (or already absent) refuses the whole request, along with every other change it carried. JIM makes sure those other changes still land:
+
+- **Where the directory offers Permissive Modify**<br /> When JIM opens the export connection it reads the directory's rootDSE, and where the directory advertises the Permissive Modify control (`1.2.840.113556.1.4.1413`), JIM attaches it to every modify that adds or removes values, including the extra modifies that carry a large group's members beyond the Modify Batch Size. The directory then accepts a value already in place as a success. Active Directory and Samba AD advertise it. JIM never sends the control to a directory that does not advertise it, because a directory that does not understand it refuses the whole modify.
+- **Where it does not, or the directory refuses anyway**<br /> JIM applies the refused modify again in parts: any object classes being added first, then the attributes being replaced (together, in one request), then any value removed and added again under a different case (see below), then the other values being added, then those being removed, then any change to a single-valued attribute, then any object classes being removed. Each attribute's adds go as one request, and its removals as another. Where the directory refuses a part because a value in it is already in place, JIM splits that part in half and sends each half, splitting again only the halves the directory refuses again, until each value it refuses stands alone; that value counts as done, and every other value is applied. OpenLDAP and 389 Directory Server do not advertise the control, and Samba AD still refuses to remove a member the group does not hold even with it, so for those this is the path.
+
+Halving keeps the cost down on large groups. One member already in place among the Modify Batch Size's 1,000 takes about 20 requests rather than 1,000, and only about 10 of them change the group. That matters most on OpenLDAP with the accesslog recording old values (`logold`), where every change to a group rewrites the whole entry and logs its entire member list.
+
+Two kinds of add need more than the directory's "already present" before JIM counts them as done:
+
+- **A value removed and added again under a different case**<br /> Active Directory compares some attributes without regard to case, `proxyAddresses` among them, so when an address changes from primary (`SMTP:jane.doe@example.com`) to alias (`smtp:jane.doe@example.com`), JIM removes one spelling and adds the other. Added first, the new spelling would be skipped as already present, or accepted where the old one has already gone, and the removal would then take the address away. So JIM sends the removal and the add in one request, removal first, whether the Modify Batch Size divides the change or a modify is applied in parts. If the directory refuses that request because a value in it is already in place, JIM sends the removal, then the add. Any other add the directory reports as already present while removals of that attribute are still to come is sent again after them, and counts as done only if reported present again.
+- **An add to a single-valued attribute**<br /> Where an Attribute Flow takes a multi-valued Metaverse attribute to a single-valued attribute, JIM changes the value by removing the old one and adding the new one in one request, removal first, as for a value under a different case. Active Directory and Samba AD report an add to one holding any value as "already present", which does not say which value is held, so JIM never counts it as done: the export fails with the directory's message. JIM reads a Generic directory the same way. OpenLDAP and 389 Directory Server report it only for that very value (a different one is a constraint violation), so there the add counts as done.
+
+Nothing is lost either way, and JIM never reports a refused modify as a success. If the directory refuses any value for another reason (insufficient access rights, say), the export fails with the directory's own message and JIM retries the Pending Export on later export runs, as with any failed export; values already applied by then count as done on the retry. The worker log records each modify applied in parts, with how many requests it took and how many of its value changes were already in place, and the end of each export run records the total.
+
+JIM recognises "already present" from attributeOrValueExists (20) and "already absent" from noSuchAttribute (16) on every directory. Active Directory and Samba AD report group membership differently, so on those JIM also recognises entryAlreadyExists (68) when adding a member, and unwillingToPerform (53) when removing one, but only where the directory says the member is not in the group (Active Directory's `00000561` code, or Samba AD's "doesn't exist for target GUID" or, for a member the group held once, "already deleted for target GUID"). unwillingToPerform for any other reason, such as removing a member from its primary group, still fails the export.
 
 ### Probing for values already in use
 
@@ -96,7 +117,7 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 
 These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
-Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
+Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
 ## Auxiliary Object Classes
 
@@ -176,11 +197,11 @@ Every control above is available to the REST API and PowerShell:
 
 | Task | REST | PowerShell |
 |------|------|------------|
-| List the classes on offer | `GET /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
-| Set which classes are merged | `PUT /connected-systems/{id}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
-| Set the Structural Carrier Class | `PUT /connected-systems/{id}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
-| Start a discovery run | `POST /connected-systems/{id}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
-| Read the last discovery run | `GET /connected-systems/{id}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| List the classes on offer | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Get-JIMConnectedSystemAuxiliaryClass` |
+| Set which classes are merged | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/auxiliary-classes` | `Set-JIMConnectedSystemAuxiliaryClass` |
+| Set the Structural Carrier Class | `PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/structural-carrier` | `Set-JIMConnectedSystemStructuralCarrierClass` |
+| Start a discovery run | `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Start-JIMConnectedSystemAuxiliaryClassDiscovery` |
+| Read the last discovery run | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/auxiliary-class-discovery` | `Get-JIMConnectedSystemAuxiliaryClassDiscovery` |
 
 Setting the merged classes replaces the whole set, so read the current one first if you mean to add to it:
 
@@ -361,7 +382,7 @@ Automation sees the same default. `Get-JIMConnectedSystemObjectType` omits inter
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Skip Hidden Partitions | Skip Configuration, Schema, and DNS zone partitions when refreshing the hierarchy. Improves performance significantly. | `true` |
-| Create Containers as Needed | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
+| Create containers as needed? | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
 
 A naming context or crossRef partition the service account cannot read (a least-privilege account bound against an OpenLDAP server hosting several suffixes, say) is skipped rather than failing the whole hierarchy import, and named in the Worker log alongside the LDAP result code so you can tell which partition to grant access to. Only every naming context being unreadable fails the import outright.
 
@@ -476,6 +497,48 @@ Active Directory and Samba AD use `unicodePwd`, which the Connector encodes corr
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
 
+#### Enabling new Active Directory accounts
+
+Active Directory refuses to create a user account enabled while it has no password, and JIM can only set a password once the account exists. A Synchronisation Rule whose `userAccountControl` Attribute Flow asks for an enabled account, such as `512`, therefore needs an [Initial Password](../configuration/synchronisation-rules.md#initial-password) on Active Directory. With one, JIM handles the order for you:
+
+1. **The account is created disabled.**<br /> When the `userAccountControl` value a Create carries is a single number with ACCOUNTDISABLE (`0x2`) clear, JIM sends it with ACCOUNTDISABLE added: `512` is sent as `514`, and `66048` as `66050`. Only the value sent to the directory changes. The Pending Export keeps the value your Attribute Flow asked for, and that is what the account is checked against. Until the confirming import reports what the account holds, the Connected System Object shows no `userAccountControl` value from the export, because the directory was not given the value your flow asked for.
+2. **The Initial Password enables it.**<br /> The [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) sets the password and, with **Enable the Connected System Object once the password is set** switched on, enables the account, typically within seconds of it being created.
+3. **The confirming import waits for the password.**<br /> An import that still finds the account disabled while its password is owed (queued, being delivered, or parked) holds the change: it is not retried, no "not confirmed" warning is raised, [Enforce State](../configuration/synchronisation-rules.md#export-outbound) does not correct the account in the meantime, and a synchronisation preview proposes no correction for it either. Once the password is delivered, the next import that returns the account confirms the value your Attribute Flow asked for, provided the delivery left exactly that value (see the next paragraph).
+
+**Keep the password's expiry and your Attribute Flow in agreement.** The delivery also sets DONT_EXPIRE_PASSWORD (`0x10000`) for **Never expires** under **After the password is set**, and clears it for either of the other choices. Where that leaves a different value from the one your Attribute Flow asked for, the import stops waiting anyway, because no password is owed any more, and the export after it writes your flow's value as an ordinary update: your flow's value is the one the account ends with. A flow asking for `66048` (enabled, password never expires) under any choice but **Never expires** is left at `512` by the delivery, then set to `66048` by that export. A flow asking for `512` under **Never expires** is left at `66048`, then set back to `512`, which clears the flag the expiry choice set. Pair `66048` with **Never expires**, and `512` with either of the others, and the import confirms the account straight away.
+
+Your `userAccountControl` Attribute Flow stays exactly as it is, and goes on enabling and disabling the account from source data once it exists; the one exception is the password's own delivery, described under [Accounts your Attribute Flow creates disabled](#accounts-your-attribute-flow-creates-disabled). A change to the person while the account waits is exported as usual. JIM decides whether an Initial Password follows from the provisioning Synchronisation Rule's settings at the moment each batch of Creates is sent.
+
+**If the person leaves while the account waits, the waiting enabled value never reaches the account.** Before the confirming import, the disabled value your flow now asks for replaces the waiting enabled one, as any different `userAccountControl` value does. Once that import has seen the account created disabled, the account already holds what your flow now asks for, so the next synchronisation withdraws the waiting enabled value and exports nothing. The password's delivery is separate, though: a password still owed is delivered as usual, and with **Enable the Connected System Object once the password is set** on it enables the account. Once an import has confirmed the account disabled, nothing your flow asked for is left to be confirmed, so only [Enforce State](../configuration/synchronisation-rules.md#export-outbound) disables it again: with it on, as it is by default, the synchronisation after the next import stages the correction and the export after it applies it; with it off, the account stays enabled, and anyone who knows a [shared static password](../configuration/synchronisation-rules.md#one-password-for-every-connected-system-object) can sign in as the person who left. If the person's password is still waiting, cancel it under **Operations > Passwords**; the cancelled change stays listed there, and the account stays disabled with no password.
+
+JIM changes the value it sends only for a Create to Active Directory that carries an enabled `userAccountControl` value while an Initial Password follows. A Create that carries no `userAccountControl` value (Active Directory creates that account disabled on its own), one your Attribute Flow already creates disabled, and every Update are sent exactly as your flow asks. Samba AD accepts an enabled account with no password, so JIM sends it the value unchanged, as it does on every other directory.
+
+If **Enable the Connected System Object once the password is set** is off, the password is still set and the account left disabled. The next import of the Connected System, Full or Delta, stops waiting, since no password is owed any more, and the export after it writes your Attribute Flow's enabled value, which Active Directory now accepts because the account has a password. The import does not need to return the account: one that skips it as unchanged, or has nothing new to report for it, stops waiting all the same.
+
+**When the password cannot be delivered, the account stays disabled; nothing is lost.**
+
+| Password | What happens to the account | What you do |
+|----------|-----------------------------|-------------|
+| Retrying (the directory could not be reached) | Waits, disabled | Nothing; JIM retries on the Connected System's [Password Synchronisation](../concepts/passwords.md#password-synchronisation) schedule. |
+| Parked (the directory refused the password) | Waits, disabled; nothing is retried or reported against the export meanwhile | Correct the Synchronisation Rule's Initial Password settings, which releases it, or retry it from **Operations > Passwords**. Once it is delivered, the account carries on as in the steps above. |
+| Expired, cancelled, or never queued | The next import of the Connected System stops waiting, whether or not it returns the account, and the export after it writes your flow's enabled value, which Active Directory refuses: the export reports ["Active Directory will not enable an account that has no password"](#active-directory-will-not-enable-an-account-that-has-no-password) | Set a password on the account with the [set-password action](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object), enabling it there, and the export's next attempt succeeds. |
+
+An expired or cancelled password changes nothing in Active Directory, so a Delta Import has nothing to report for the account; JIM stops waiting at the next import all the same, Delta or Full.
+
+##### Accounts your Attribute Flow creates disabled
+
+**The value JIM sends is unchanged for an account your Attribute Flow creates disabled, but the password's delivery still enables it.** With **Enable the Connected System Object once the password is set** on, as it is by default, delivering the Initial Password enables every account the Synchronisation Rule provisions, including one your flow deliberately creates disabled: a pre-hire who has not started yet, say, or a person whose status is archived. This applies on Samba AD as well as on Active Directory. What disables it again depends on when the password lands:
+
+- **Before an import has confirmed the account**<br /> The usual case, since the password typically lands within seconds. The next import reports your flow's disabled value as not confirmed, and the export after it disables the account again.
+- **After an import has confirmed the account**<br /> A password that was retrying or parked, say. Only [Enforce State](../configuration/synchronisation-rules.md#export-outbound) disables the account again: with it on, as it is by default, the synchronisation after the next import stages the correction and the export after it applies it; with it off, the account stays enabled.
+
+The risk is the time the account is enabled: an account enabled for somebody who should not have one yet, or any more, holding the Initial Password. A generated password is known to nobody, but a [shared static password](../configuration/synchronisation-rules.md#one-password-for-every-connected-system-object) lets anyone who knows it sign in as that person.
+
+Where that matters, do one of these:
+
+- **Switch the enable setting off**<br /> Turn **Enable the Connected System Object once the password is set** off in the Synchronisation Rule's Initial Password settings. The password is still set and the account left disabled, so your Attribute Flow alone decides when the account is enabled. The cost is time: an account your flow asks to be enabled is enabled by the export after the next import, as described above, rather than within seconds of being created. This suits Active Directory. On Samba AD, which is sent your flow's enabled value unchanged, the setting off has the delivery disable an account your flow created enabled, which only the same two routes above put back; scope provisioning there instead.
+- **Scope provisioning to active people**<br /> [Scoping criteria](../configuration/synchronisation-rules.md#scoping-criteria) such as `mv["Employee Status"] = "Active"` on the provisioning Synchronisation Rule stop JIM creating the account until the person is active, so no account is created disabled. Scope decides more than provisioning, though: a person who later falls out of it is handled by the rule's [Deprovisioning Action](../configuration/synchronisation-rules.md#deprovisioning-action) rather than disabled by your flow.
+
 ### Password policy discovery
 
 Whenever JIM retrieves or refreshes the schema, and again when the Password Channel preflight runs, the Connector reads the directory's password policy so a generated password satisfies it. [Passwords](../concepts/passwords.md#discovering-the-targets-rules) explains what the figures mean and how to read a blank one; this section says where each directory type keeps its policy, what JIM reads from it, and how it decides that some objects may be governed by a different policy. Discovery never fails a schema refresh: where a search is refused or returns nothing, the Connector records why and the panel says so.
@@ -493,7 +556,7 @@ The LDAP service account used by JIM should follow the principle of least privil
 
 - **For import only**<br /> Grant read access to the containers and attributes that JIM needs to import.
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
-- **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
+- **For container provisioning**<br /> If **Create containers as needed?** is enabled, the service account must have permission to create organisational units.
 - **For delta import**<br /> The service account needs read access to where the directory keeps its record of changes: the `uSNChanged` attribute for Active Directory and Samba AD (ordinary read access covers it), `cn=accesslog` for OpenLDAP (the access-control rule under [OpenLDAP](#openldap) below), and the changelog for 389 Directory Server and generic directories (`cn=changelog`, or the DN the root DSE's `changelog` attribute names; on 389 Directory Server the changelog and plug-in rules under [389 Directory Server](#389-directory-server) below, the second of which is what lets JIM confirm that deletions are being recorded). JIM checks this read at Schema Discovery, where a missing right is a warning, and before every Delta Import, where it is a refusal rather than a run that imports nothing.
 - **For importing deletions (Active Directory)**<br /> A Delta Import finds deletions by searching `CN=Deleted Objects,<domain DN>` with the Show Deleted Objects control, so the service account needs **List Contents**, **Read Property** and **Read Permissions** over that container. No delegation on an OU reaches it: its permissions are protected from inheritance and its owner is SYSTEM, so even a domain administrator has to take ownership before granting anything. Withholding this read is not refused by the directory: the search succeeds and returns nothing. JIM does not take that silence at face value: it reads the container's own permissions at Schema Discovery and before every Delta Import, and Read Permissions is what lets that check give a definite answer rather than could not tell. See [Active Directory](#active-directory) below for what JIM does with the answer and for the grant.
 - **For probing generated values**<br /> Read access to each attribute JIM probes (for example `sAMAccountName`, `userPrincipalName`, `uid` or `mail`) across the whole partition, not only the containers JIM imports: a probe searches from the partition root, and an account the service account cannot see is an account the probe cannot find. Where a forest-wide attribute is searched through a Global Catalog, the account needs to read it there too, which authenticated users can by default. JIM detects a probe it cannot trust, because a value it already holds fails to come back, and reports it on the synchronisation's Activity; it then checks that directory against its own records only. See [Probing for values already in use](#probing-for-values-already-in-use).
@@ -535,7 +598,7 @@ dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;o
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:CA;Reset Password;user"
 ```
 
-Leave the `organizationalUnit` lines out unless "Create Containers as Needed" is switched on.
+Leave the `organizationalUnit` lines out unless **Create containers as needed?** is switched on.
 
 The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon".
 
@@ -564,7 +627,7 @@ Apply the access-control files bound as the configuration administrator (`cn=adm
 --8<-- "test/integration/docker/openldap/acl/jim-service-account-access.ldif"
 ```
 
-Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
+Rule `{3}` is what lets JIM create organisational units when **Create containers as needed?** is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
 
 A service account is also subject to the database's search limits, which the rootDN it replaces was not. OpenLDAP applies `olcSizeLimit` (default 500 entries) across a paged search as a whole, so an import of a container holding more than 500 objects stops at the limit with "The size limit was exceeded", whatever page size the Run Profile uses. Exempt the group from the size and time limits on each suffix; every other client keeps the limits you have set:
 
@@ -618,7 +681,7 @@ The suffix rules cover import (read across the suffix), export (add, delete and 
 --8<-- "test/integration/docker/dirsrv/aci/jim-suffix-access.ldif"
 ```
 
-The commented-out rule at the end of the file is the counterpart of the OpenLDAP recipe's rule `{3}`, for "Create Containers as Needed". The ACI language has no one-level scope, so it lets JIM add an organisational unit anywhere in the suffix; leave it out if you create target OUs by hand.
+The commented-out rule at the end of the file is the counterpart of the OpenLDAP recipe's rule `{3}`, for **Create containers as needed?**. The ACI language has no one-level scope, so it lets JIM add an organisational unit anywhere in the suffix; leave it out if you create target OUs by hand.
 
 Delta Import reads `cn=changelog`, which the Retro Changelog plug-in creates with no access control at all, so out of the box only the Directory Manager reads it and a Delta Import as anyone else is refused (see [Delta Import change source checks](../configuration/activities.md#delta-import-change-source-checks)). One changelog serves every suffix on the server, so the rule names every suffix's group:
 
@@ -681,6 +744,12 @@ If authentication fails with "invalid credentials":
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
 
+### Sign-in refused because the directory requires LDAP signing or encryption
+
+A domain controller that enforces LDAP signing refuses a simple bind over plain LDAP, and Windows Server 2025 domain controllers enforce it by default. JIM reports the refusal with the remedy rather than the directory's bare "Strong authentication is required for this operation": turn on "Use Secure Connection (LDAPS)?" on the Connected System and set the port to 636 (or wherever the directory listens for LDAPS), adding the directory's certificate authority under Admin > Certificates first if it is a private one. Do not relax the domain controller's signing policy to suit JIM; LDAPS protects the service account's credentials, which a plain LDAP bind sends unencrypted.
+
+If the same refusal arrives over LDAPS, encryption is not the problem: the domain controller wants more than a simple bind provides, most often because it enforces LDAP channel binding. JIM's message says so; check the directory's signing and channel binding policy for the account JIM connects as.
+
 ### Import fails with "The directory stopped the import ... at its search limit"
 
 The account JIM binds as is subject to the directory's search limits, and the container being imported holds more objects than they allow. The run ends as **Failed with error** before importing anything from that container, because continuing would import a truncated container and a Full Import would then treat every object past the limit as gone. The message names the container, the object type and the account, for example:
@@ -731,3 +800,17 @@ If exports fail with LDAP errors:
 - For "insufficient access rights" errors, verify the service account has write permissions on the target container.
 - For "constraint violation" errors on multi-valued attributes, try reducing the Modify Batch Size setting.
 - For group membership operations, ensure the Group Placeholder Member DN setting is appropriate for your directory.
+- A member who is already in the group, or already out of it, is not the cause of a failure: JIM treats those as done and applies the rest of the change (see [Values already in place](#values-already-in-place)). If the worker log shows a modify applied in parts and the export still failed, the directory refused a value for the reason in the error message.
+
+#### "Active Directory will not enable an account that has no password"
+
+Active Directory refuses to create a user account enabled, or to enable an existing one, while the account has no password, answering `0000052D` (WILL_NOT_PERFORM). JIM never sends a password with the account itself: passwords travel on their own channel once the account exists (see [Setting Passwords](#setting-passwords)). So a Synchronisation Rule that provisions accounts with an enabled `userAccountControl` value, such as `512`, and gives them no password is refused on every Create. JIM reports the refusal on the export's execution item with the remedies named, and the directory's own words after them, rather than as a bare directory error. Samba AD accepts an enabled account with no password, which is why a configuration that works against a Samba AD lab can be refused by Windows Server.
+
+Either remedy works:
+
+- **Give the provisioning Synchronisation Rule an [Initial Password](../configuration/synchronisation-rules.md#initial-password).**<br /> On Active Directory, JIM then creates the account disabled, adding ACCOUNTDISABLE to the `userAccountControl` value the Attribute Flow sends, and enables it once the password is set. Your `userAccountControl` Attribute Flow stays as it is, so enabling and disabling accounts from source data keeps working once the account exists. While **Enable the Connected System Object once the password is set** is on, though, the password's delivery also enables an account your flow creates disabled, and whether JIM disables it again can depend on [Enforce State](../configuration/synchronisation-rules.md#export-outbound); see [Accounts your Attribute Flow creates disabled](#accounts-your-attribute-flow-creates-disabled), and [Enabling new Active Directory accounts](#enabling-new-active-directory-accounts) for the whole sequence.
+- **Create the account disabled.**<br /> Have the Attribute Flow write `userAccountControl` with ACCOUNTDISABLE (`0x2`) set, such as `514`, until the account has a password.
+
+If the Synchronisation Rule already has an Initial Password, the account's password will not now be delivered: it expired or was cancelled before it could be set, and **Operations > Passwords** shows which. At the next import of the Connected System, Full or Delta, JIM stops waiting for a password, since none is owed any more, and the export after it writes your Attribute Flow's enabled value, which Active Directory refuses for the same reason. Set a password on the account with the [set-password action](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object), enabling it there. A password that is merely parked does not cause this error: the account waits, disabled, until the password is delivered.
+
+Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is retried on later export runs with a growing delay between attempts, up to the ordinary retry limit, and the Metaverse Object is untouched.

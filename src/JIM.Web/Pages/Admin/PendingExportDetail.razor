@@ -21,6 +21,9 @@
         <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
             @_pendingExport.ChangeType
         </MudChip>
+        <PageInfo Title="Pending Export" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
+            A Pending Export is a change JIM has queued for a Connected System and not yet confirmed: the object it applies to, the attribute changes it carries, and how its attempts have gone.
+        </PageInfo>
     </MudText>
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 

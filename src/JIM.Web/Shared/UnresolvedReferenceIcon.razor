@@ -1,0 +1,30 @@
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The broken-link icon beside an unresolved reference, carrying its likely cause and next step on hover (#959) where
+   a row has no room for the cause chip beside the value: a nested value table, whose rows must stay one line. *@
+
+@if (Diagnosis == null)
+{
+    <MudIcon Icon="@Icons.Material.Filled.LinkOff" />
+}
+else
+{
+    <MudTooltip Arrow="true" Placement="Placement.Top">
+        <TooltipContent>
+            <TooltipText Text="@($"Likely cause: {UnresolvedReferenceDisplay.CauseLabel(Diagnosis.Cause)}. {Diagnosis.Finding} {Diagnosis.Remedy}")" />
+        </TooltipContent>
+        <ChildContent>
+            <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="jim-explained" />
+        </ChildContent>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>The value's diagnosis; null shows the icon alone.</summary>
+    [Parameter]
+    public ConnectedSystemObjectUnresolvedReference? Diagnosis { get; set; }
+}

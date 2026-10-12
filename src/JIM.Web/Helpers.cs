@@ -339,10 +339,16 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
             [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged] = "Import Rejected",
 
             // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
             // true here, and saying either sends an administrator hunting for a problem that does not exist.
             [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
+
+            // Raised on an object that otherwise imported or exported (#959): only the reference values that could not
+            // be linked are affected, so "Failed" would overstate it. Raised by import and export alike (#1398), so
+            // the heading names the condition rather than a phase.
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Reference Unresolved",
 
             // Import-phase diagnostics: the object imported and its changes were applied.
             [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
@@ -354,7 +360,6 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
-            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
             // One error type covering two outcomes: Fail this mapping costs the object one attribute and nothing
@@ -376,6 +381,9 @@ public static class Helpers
             // The Connected System refused the export because another object there holds the value; the heading
             // names the conflict, since that is what an administrator has to resolve.
             [ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse] = "Value Already in Use",
+            // Active Directory will not enable an account with no password (#2039); the heading names what the
+            // account is missing, since that is what the message's remedies supply.
+            [ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount] = "Password Required",
 
             // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
             // synchronisation (generation) or export (Collision Remediation), but named for what happened

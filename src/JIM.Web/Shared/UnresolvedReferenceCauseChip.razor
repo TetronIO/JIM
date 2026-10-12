@@ -1,0 +1,33 @@
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An unresolved reference's likely cause (#959), with its next step on hover. One component for the Unresolved
+   References table and the chip beside an unresolved value in an attribute table, so the two always read alike.
+   Renders nothing without a diagnosis, so a call site can place it unconditionally. *@
+
+@if (Diagnosis != null)
+{
+    <MudTooltip Arrow="true" Placement="Placement.Top">
+        <TooltipContent>
+            <TooltipText Text="@($"{Diagnosis.Finding} {Diagnosis.Remedy}")" />
+        </TooltipContent>
+        <ChildContent>
+            <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.CauseColour(Diagnosis.FixLocation)" Class="@Class">
+                @UnresolvedReferenceDisplay.CauseLabel(Diagnosis.Cause)
+            </MudChip>
+        </ChildContent>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>The value's diagnosis; null renders nothing.</summary>
+    [Parameter]
+    public ConnectedSystemObjectUnresolvedReference? Diagnosis { get; set; }
+
+    /// <summary>The call site's spacing classes.</summary>
+    [Parameter]
+    public string Class { get; set; } = "ma-0";
+}

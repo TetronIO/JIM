@@ -153,6 +153,8 @@ nav:
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
       - Troubleshooting: administration/troubleshooting.md
+      - Troubleshooting Synchronisation: administration/troubleshooting-synchronisation.md
+      - Troubleshooting Podman: administration/troubleshooting-podman.md
   - Connectors:
       - connectors/index.md
       - JIM File Connector: connectors/jim-file-connector.md

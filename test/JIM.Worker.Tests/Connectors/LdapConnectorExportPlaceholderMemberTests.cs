@@ -138,7 +138,7 @@ public class LdapConnectorExportPlaceholderMemberTests
         var dn = "cn=emptygroup,ou=groups,dc=test,dc=local";
         var pendingExport = CreateGroupOfNamesCreatePendingExport(dn, memberCount: 0);
 
-        var (addRequest, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, _, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
 
         var memberAttr = GetDirectoryAttribute(addRequest, "member");
         Assert.That(memberAttr, Is.Not.Null, "member attribute should be present on the AddRequest");
@@ -153,7 +153,7 @@ public class LdapConnectorExportPlaceholderMemberTests
         var dn = "cn=fullgroup,ou=groups,dc=test,dc=local";
         var pendingExport = CreateGroupOfNamesCreatePendingExport(dn, memberCount: 3);
 
-        var (addRequest, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, _, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
 
         var memberAttr = GetDirectoryAttribute(addRequest, "member");
         Assert.That(memberAttr, Is.Not.Null);
@@ -172,7 +172,7 @@ public class LdapConnectorExportPlaceholderMemberTests
         var dn = "cn=emptygroup,ou=groups,dc=test,dc=local";
         var pendingExport = CreateGroupOfNamesCreatePendingExport(dn, memberCount: 0);
 
-        var (addRequest, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, _, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
 
         var memberAttr = GetDirectoryAttribute(addRequest, "member");
         Assert.That(memberAttr, Is.Not.Null);
@@ -187,7 +187,7 @@ public class LdapConnectorExportPlaceholderMemberTests
         var dn = "CN=EmptyGroup,OU=Groups,DC=test,DC=local";
         var pendingExport = CreateAdGroupCreatePendingExport(dn, memberCount: 0);
 
-        var (addRequest, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, _, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
 
         var memberAttr = GetDirectoryAttribute(addRequest, "member");
         Assert.That(memberAttr, Is.Null, "AD groups should not get a placeholder member");
@@ -200,7 +200,7 @@ public class LdapConnectorExportPlaceholderMemberTests
         var dn = "cn=emptygroup,ou=groups,dc=test,dc=local";
         var pendingExport = CreateGroupCreatePendingExportWithObjectClass(dn, "groupOfUniqueNames", memberCount: 0);
 
-        var (addRequest, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
+        var (addRequest, _, _) = export.BuildAddRequestWithOverflow(pendingExport, dn);
 
         var memberAttr = GetDirectoryAttribute(addRequest, "uniqueMember");
         Assert.That(memberAttr, Is.Not.Null, "uniqueMember attribute should be present on the AddRequest");

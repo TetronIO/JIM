@@ -3357,19 +3357,14 @@ public abstract class SyncTaskProcessorBase
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
                     ?? new Dictionary<int, string>();
 
-                // Build CSO type name lookup from export rules (the provisioning CSO doesn't have the Type nav property loaded)
-                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-                    ?? new Dictionary<int, string>();
+                // Type names from the export rules (the provisioning CSO doesn't have the Type nav property loaded)
+                var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
                     // Store CS integer ID and CSO type name in DetailMessage for hyperlinking in the UI
                     // Format: "csId|csoTypeName" (e.g. "4|person")
-                    csoTypeNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csoTypeName);
+                    var csoTypeName = typeNames.ForObjectType(provisioningCso.TypeId);
                     var detailMessage = provisioningCso.ConnectedSystemId > 0
                         ? SyncOutcomeBuilder.FormatCsoLinkDetailMessage(provisioningCso.ConnectedSystemId, csoTypeName)
                         : null;
@@ -3411,8 +3406,7 @@ public abstract class SyncTaskProcessorBase
                     var peCsId = pendingExport.ConnectedSystemId;
                     // The target CSO's own type, where known, so the causality panel can name it "type: name"
                     // exactly as a Provisioned outcome's target already does.
-                    var peCsoTypeName = pendingExport.ConnectedSystemObject?.Type?.Name
-                        ?? (csoTypeNameLookup.TryGetValue(peCsId, out var lookedUpCsoTypeName) ? lookedUpCsoTypeName : null);
+                    var peCsoTypeName = typeNames.ForPendingExport(pendingExport, metaverseObjectTypeId: mvo.Type?.Id);
                     var peDetailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(peCsId, peCsoTypeName);
 
                     ActivityRunProfileExecutionItemSyncOutcome peOutcome;
@@ -3473,18 +3467,13 @@ public abstract class SyncTaskProcessorBase
                         syncRuleName: provisioningSyncRule?.Name);
                 }
 
-                // Standard mode builds no shared csoTypeNameLookup of its own (the Detailed-mode one above is
-                // scoped to that branch), so it is rebuilt here from the same export evaluation cache.
-                var standardCsoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+                // The Detailed-mode type names above are scoped to that branch, so Standard mode builds its own
+                // from the same export evaluation cache.
+                var standardTypeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var pe in result.PendingExports)
                 {
-                    var peCsoTypeName = pe.ConnectedSystemObject?.Type?.Name
-                        ?? standardCsoTypeNameLookup.GetValueOrDefault(pe.ConnectedSystemId);
+                    var peCsoTypeName = standardTypeNames.ForPendingExport(pe, metaverseObjectTypeId: mvo.Type?.Id);
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
@@ -3549,16 +3538,13 @@ public abstract class SyncTaskProcessorBase
                     .Where(sr => sr.ConnectedSystem != null)
                     .GroupBy(sr => sr.ConnectedSystemId)
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name);
-                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-                    .SelectMany(rules => rules)
-                    .Where(sr => sr.ConnectedSystemObjectType != null)
-                    .GroupBy(sr => sr.ConnectedSystemId)
-                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+                var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
                 foreach (var cancellation in outOfScopeWorkingSet.CancelledProvisionings)
                 {
                     csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
-                    csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+                    var cancelledCsoTypeName = typeNames.Resolve(cancellation.ConnectedSystemId,
+                        objectTypeId: cancellation.ConnectedSystemObjectTypeId, metaverseObjectTypeId: mvo.Type?.Id);
                     SyncOutcomeBuilder.AddRootOutcome(scopeOutRpei,
                         ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                         targetEntityDescription: targetSystemName,
@@ -3611,26 +3597,29 @@ public abstract class SyncTaskProcessorBase
             item.Id = Guid.NewGuid();
         foreach (var delete in deletes)
         {
-            delete.QueuedByRunProfileExecutionItemId = item.Id;
+            delete.RecordStager(item.Id);
             _scopeExitQueueingStamps.Add((delete.Id, item.Id));
         }
 
         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             return;
 
-        // The first export rule per target system names it and its object type, as the provisioning outcomes do.
+        // The first export rule per target system names the system, as the provisioning outcomes do. The object's type
+        // is named by the rule that acted on it: a system can export more than one type.
         var exportRuleBySystem = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
             .SelectMany(rules => rules)
             .GroupBy(rule => rule.ConnectedSystemId)
             .ToDictionary(group => group.Key, group => group.First());
+        var typeNames = ExportTargetTypeNames.From(_exportEvaluationCache);
 
         foreach (var delete in deletes)
         {
             exportRuleBySystem.TryGetValue(delete.ConnectedSystemId, out var exportRule);
             var targetSystemName = exportRule?.ConnectedSystem?.Name;
-            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
             // The rule whose Deprovisioning Action queued the Delete, which the system-naming rule above need not be.
             workingSet.TryGetDeprovisioningRule(delete.ConnectedSystemObjectId!.Value, out var deprovisioningRule);
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(delete.ConnectedSystemId,
+                typeNames.ForPendingExport(delete, syncRuleId: deprovisioningRule?.Id));
 
             var outcome = _syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null
                 ? SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, SyncOutcomeTypes.ForPendingExport(delete),
@@ -3657,7 +3646,8 @@ public abstract class SyncTaskProcessorBase
         {
             exportRuleBySystem.TryGetValue(disconnection.ConnectedSystemId, out var exportRule);
             var targetSystemName = exportRule?.ConnectedSystem?.Name;
-            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId, exportRule?.ConnectedSystemObjectType?.Name);
+            var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(disconnection.ConnectedSystemId,
+                typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId));
 
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null)
             {
@@ -4728,7 +4718,7 @@ public abstract class SyncTaskProcessorBase
             queueingItem.Id = Guid.NewGuid();
 
         foreach (var pendingExport in pendingExports)
-            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
+            pendingExport.RecordStager(queueingItem.Id);
     }
 
     /// <summary>
@@ -5555,15 +5545,9 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
 
-        // Connected System id to CSO type name, the approximate ("first exporting rule's type per system")
-        // fallback used everywhere else in this file; the standalone branch below prefers the exact type off
-        // the CSO's own display snapshot where it has already paid for one.
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        // The target object's type, named by the rule whose Deprovisioning Action queued the Delete; the standalone
+        // branch below prefers the type off the CSO's own display snapshot where it has already paid for one.
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         // Only needed for the standalone fallback items, which must stay self-describing once the target
         // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
@@ -5590,8 +5574,9 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
-            csoTypeNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var cascadeCsoTypeName);
             workingSet.TryGetDeprovisioningRule(csoId, out var deprovisioningRule);
+            var cascadeCsoTypeName = typeNames.ForPendingExport(pendingExport,
+                syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: deletedMvo?.Type?.Id);
 
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
@@ -5609,7 +5594,7 @@ public abstract class SyncTaskProcessorBase
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
                     mvoDeletedNode.Rpei.Id = Guid.NewGuid();
-                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
@@ -5659,7 +5644,7 @@ public abstract class SyncTaskProcessorBase
                         .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
-            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            pendingExport.RecordStager(cascadeRpei.Id);
             queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
@@ -5702,12 +5687,7 @@ public abstract class SyncTaskProcessorBase
             .GroupBy(sr => sr.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         var reportedCount = 0;
         foreach (var cancellation in workingSet.CancelledProvisionings)
@@ -5726,7 +5706,8 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
-            csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+            var cancelledCsoTypeName = typeNames.Resolve(cancellation.ConnectedSystemId,
+                objectTypeId: cancellation.ConnectedSystemObjectTypeId);
             SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                 targetEntityDescription: targetSystemName,
@@ -5764,12 +5745,7 @@ public abstract class SyncTaskProcessorBase
             .GroupBy(sr => sr.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
-        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
-            .SelectMany(rules => rules)
-            .Where(sr => sr.ConnectedSystemObjectType != null)
-            .GroupBy(sr => sr.ConnectedSystemId)
-            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
-            ?? new Dictionary<int, string>();
+        var typeNames = ExportTargetTypeNames.From(_recallExportEvaluationCache);
 
         var reportedCount = 0;
         foreach (var disconnection in workingSet.Disconnections)
@@ -5787,7 +5763,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var targetSystemName);
-            csoTypeNameLookup.TryGetValue(disconnection.ConnectedSystemId, out var disconnectedCsoTypeName);
+            var disconnectedCsoTypeName = typeNames.Resolve(disconnection.ConnectedSystemId, syncRuleId: disconnection.SyncRuleId);
             SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected,
                 targetEntityId: disconnection.ConnectedSystemObjectId,
@@ -6018,7 +5994,7 @@ public abstract class SyncTaskProcessorBase
             // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
             // fix-up below rather than a pre-persist stamp.
             recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
-            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
+            stagedPendingExport.RecordStager(recallRpei.Id);
 
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
@@ -7161,12 +7137,43 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
+            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
                 EvaluateDriftAndEnforceState(cso, mvo);
+
+            if (heldConnectedSystemObjectIds.Count > 0)
+            {
+                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
+                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
+            }
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
+    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
+    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
+    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
+    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
+    /// partial index on the flag, and none at all when this run detects no drift.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+            return new HashSet<Guid>();
+
+        var connectedSystemObjectIds = _pendingDriftEvaluations
+            .Select(pending => pending.Cso.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (connectedSystemObjectIds.Count == 0)
+            return new HashSet<Guid>();
+
+        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7264,7 +7271,7 @@ public abstract class SyncTaskProcessorBase
             if (runProfileExecutionItem.Id == Guid.Empty)
                 runProfileExecutionItem.Id = Guid.NewGuid();
             foreach (var correctiveExport in result.CorrectiveExports)
-                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
+                correctiveExport.RecordStager(runProfileExecutionItem.Id);
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

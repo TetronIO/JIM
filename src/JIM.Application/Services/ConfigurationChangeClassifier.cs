@@ -197,6 +197,23 @@ public static class ConfigurationChangeClassifier
         ["pageSize"] = C,
         ["filePath"] = B,
         ["partitionId"] = B,
+        // Allow Object Type Changes (#2049). Switched on, the Full Import retires the held Connected System Object and
+        // imports a new one of the new Object Type instead of refusing the change, so the run's outcome changes. Not
+        // Class A: saving it deletes nothing, the retired object is disconnected by a later synchronisation under the
+        // Deletion Rules (themselves Class A), and how many objects it touches depends on what a future import
+        // returns, so no count could be stated at save time.
+        ["allowObjectTypeChanges"] = B,
+        // Verification Mode (SPEC-1082 D10): the Full Import skips nothing and reports any change a content-hash skip
+        // would have missed. It changes how the import reads and what it reports, not what it imports.
+        ["verifyImportContentHashes"] = C,
+        // Run Profile Safeguards (#1618). A limit decides whether a run goes ahead with what it was going to do:
+        // relaxing one lets through a mass export or a mass detected deletion that it would have stopped, the same
+        // shape as relaxing Partition Validation Mode, and tightening one can stop a run's changes altogether.
+        ["maxCreates"] = B,
+        ["maxUpdates"] = B,
+        ["maxDeletes"] = B,
+        ["maxDetectedDeletions"] = B,
+        ["maxDetectedDeletionsPercent"] = B,
 
         // Connected System schema. Deselecting an Object Type removes its Connected System Objects.
         ["objectTypes"] = B,
@@ -361,8 +378,6 @@ public static class ConfigurationChangeClassifier
         // When a preview asks before capping its drill-down rows. Summary counts are exact whatever the answer, so
         // this moves how much of a preview can be inspected and how much storage it uses, never what it reports.
         [Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold] = C,
-        [Constants.SettingKeys.VerboseNoChangeRecording] = C,
-        [Constants.SettingKeys.MaintenanceMode] = C,
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,
         [Constants.SettingKeys.ConfigurationChangeRetentionPeriod] = C,
         [Constants.SettingKeys.SecurityEventRetentionPeriod] = C,
@@ -378,20 +393,18 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.SsoApiScope] = C,
         [Constants.SettingKeys.SsoClaimType] = C,
         [Constants.SettingKeys.SsoMvAttribute] = C,
-        [Constants.SettingKeys.SsoUniqueIdentifierClaimType] = C,
         [Constants.SettingKeys.SsoEnableLogOut] = C,
-        [Constants.SettingKeys.CredentialEncryptionEnabled] = C,
         [Constants.SettingKeys.EncryptionKeyPath] = C,
         [Constants.SettingKeys.RateLimitingEnabled] = C,
         [Constants.SettingKeys.RateLimitingAuthenticatedRequestsPerMinute] = C,
         [Constants.SettingKeys.RateLimitingUnauthenticatedRequestsPerMinute] = C,
         [Constants.SettingKeys.ProgressUpdateInterval] = C,
         [Constants.SettingKeys.ServiceName] = C,
+        [Constants.SettingKeys.StaleTaskTimeout] = C,
 
         // Internal settings, not surfaced for administrators to edit, but classified so the
         // completeness test covers every key Constants.SettingKeys declares.
         [Constants.SettingKeys.ConfigurationChangeHashKey] = C,
-        [Constants.SettingKeys.StaleTaskTimeout] = C,
         [Constants.SettingKeys.ServiceId] = C
     };
 

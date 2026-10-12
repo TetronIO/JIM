@@ -1,11 +1,14 @@
 ---
 title: Prerequisites
 description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
+type: reference
+audience: implementer
+validated: v0.16.0
 ---
 
 # Prerequisites
 
-Before deploying JIM, ensure you have the following in place.
+JIM needs a container runtime, an OpenID Connect identity provider, a TLS certificate, a PostgreSQL database and a host to run them on. Have each in place before you deploy.
 
 ## Container Runtime
 
@@ -27,18 +30,13 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need 
 
 Before deploying, configure your identity provider with a client registration for JIM. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
 
-!!! tip "Developer environments"
-    If you are using the devcontainer for development, a bundled Keycloak instance is included with pre-configured test users. No external identity provider is needed; sign in with `admin` / `admin`.
-
 ## TLS Certificate
 
 JIM serves HTTPS, which browsers need in order to sign in. Use a certificate for JIM's host name from your organisation's certificate authority, or let the setup script create one; creating one needs OpenSSL on the JIM host. See [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
 
 ## Hardware Requirements
 
-For detailed hardware sizing and production deployment guidance, see the [Deployment Guide](../administration/deployment.md).
-
-As a general guideline, JIM's resource requirements are modest. A small deployment (a few Connected Systems with thousands of objects) runs comfortably on a single host with 2 CPU cores and 4 GB of RAM.
+The minimum is a single host with 2 CPU cores and 4 GB of RAM, enough for a few Connected Systems with thousands of objects. The [Deployment Guide](../administration/deployment.md#hardware-requirements) sizes larger deployments by the number of objects they synchronise.
 
 ## Database
 
@@ -47,13 +45,6 @@ JIM uses PostgreSQL as its database. You have two options:
 - **Bundled PostgreSQL:** A PostgreSQL container is included with JIM, on Docker or Podman, for simple deployments. No additional setup is required.
 - **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`). Create JIM's user and its database on the server first, as [Before You Install](../administration/deployment.md#before-you-install) shows.
 
-## For Developers
+## Building on JIM
 
-If you are contributing to JIM or building custom connectors, the development environment is fully self-contained:
-
-- **GitHub Codespaces:** One-click setup with everything pre-configured (.NET 10.0, PostgreSQL, shell aliases, VS Code extensions).
-- **Local devcontainer:** Clone the repository and open it in VS Code with the Dev Containers extension. The devcontainer will set up the full environment automatically.
-
-No additional prerequisites are needed when using the devcontainer; it includes all build tools, a PostgreSQL instance, and a bundled Keycloak identity provider for testing.
-
-See the [Developer Guide](../developer/index.md) for the full development setup.
+Contributing to JIM, or building a Connector of your own, needs none of the above: the development environment brings its own database and identity provider. The [Developer Guide](../developer/index.md) sets it up.
