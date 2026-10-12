@@ -2640,7 +2640,7 @@ set_aside_upgrade_files() {
     local install_dir="$1"
     local aside="${install_dir}/.before-upgrade"
     [ ! -e "$aside" ] \
-        || fatal "${aside} holds files from before an earlier upgrade, which stopped without putting them back. Move them back into ${install_dir}, replacing the ones there, or delete ${aside} if the installation is as you want it, then run this again."
+        || fatal "${aside} holds the files an earlier upgrade set aside, and that upgrade stopped without putting them back. If JIM still runs the version it ran before that upgrade, put the previous files back first, as the stopped upgrade would have (cd ${install_dir} && for f in ${SHIPPED_COMPOSE_FILES[*]} .env; do cp -p \"\$f.previous\" \"\$f\"; done), then move the files in ${aside} back into ${install_dir}, replacing the ones there, and delete ${aside}. If JIM runs the new version, delete ${aside}. Then run this again."
     (umask 077 && mkdir "$aside")
     UPGRADE_ASIDE="$aside"
     local name
