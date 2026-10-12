@@ -77,7 +77,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
 5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
 
-Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and removes the files the upgrade added, putting back any `.previous` files and `.env.example` an earlier upgrade left. While it runs, it keeps those in `.before-upgrade`; if the upgrade is stopped so abruptly that it cannot put them back (the server losing power, say), the next upgrade refuses to start until you move them back into the installation folder and delete `.before-upgrade`. Then carry on at [Check it worked](#verifying).
+Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and an earlier upgrade's `.previous` files intact. Then carry on at [Check it worked](#verifying).
 
 ## 🔄 Upgrading a connected deployment
 
