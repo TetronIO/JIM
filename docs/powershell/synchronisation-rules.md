@@ -1528,7 +1528,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
 | `ObjectTypeId` | `int` | Yes | | The Connected System Object Type ID |
 | `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type ID to match against |
 | `SourceAttributeId` | `int` | Yes (Attribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on, reading the Connected System Object only (`cs["attributeName"]`). See [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
+| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1585,7 +1585,7 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
 | `MetaverseObjectTypeId` | `int` | No | | New Metaverse Object Type ID |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceExpression` | `string` | No | | New source expression, reading the Connected System Object only |
+| `SourceExpression` | `string` | No | | New source expression; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 
@@ -1710,7 +1710,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 |------|------|----------|---------|-------------|
 | `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
 | `SourceAttributeId` | `int` | Yes (Attribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on, reading the Connected System Object only (`cs["attributeName"]`). See [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
+| `SourceExpression` | `string` | Yes (Expression set) | | An expression computing the value to match on; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1767,7 +1767,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 | `Order` | `int` | No | | New evaluation order |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceExpression` | `string` | No | | New source expression, reading the Connected System Object only |
+| `SourceExpression` | `string` | No | | New source expression; see [Matching on an expression](../configuration/object-matching-rules.md#matching-on-an-expression) |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 

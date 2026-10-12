@@ -9,7 +9,7 @@ audience: administrator
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Each rule compares one source, a Connected System attribute or an expression over the Connected System Object, with one Metaverse attribute:
 
-| Matches on | Metaverse Object Attribute | Description |
+| Connected System attribute or expression | Metaverse Object Attribute | Description |
 |---------------|---------------|-------------|
 | `employeeId` | `Employee ID` | Match on employee identifier |
 | `mail` | `Email Address` | Match on email address |
@@ -19,7 +19,7 @@ JIM tries the matching rules in order; a rule with no value, or no match, passes
 
 1. First, try to match on `employeeId` (most reliable)
 2. If no match, try `mail` (secondary)
-3. If no match, try an expression combining first and last name, against a Metaverse attribute derived the same way (least reliable)
+3. If no match, try an expression joining first and last name, matched against a Metaverse attribute that holds the same joined value; see [Deriving Metaverse Attributes](derived-attributes.md) (least reliable)
 
 A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on **Case sensitive** only where a system treats them as different objects; see [Case Sensitivity](../concepts/case-sensitivity.md#object-matching-rules).
 
@@ -57,14 +57,13 @@ How the expression is read:
   [derive a Metaverse attribute](derived-attributes.md) that holds the normalised value, and match on that.
 - **Its result is converted to the Metaverse attribute's type**, as an Attribute Flow's would be. A result that will
   not convert (text where a number is expected) stops the object with an **Object Matching Rule Failed** error rather
-  than letting it match nothing.
+  than letting it match nothing. Correct the expression or the source value, then synchronise again.
 - **A list of text values is matched value by value**, as every value of a multi-valued attribute is.
-- **No value** (null, empty or whitespace) passes the object to the next rule.
+- **No value** (missing, empty or only whitespace) passes the object to the next rule.
 
-A rule compares for equality, and only equality. Each value is looked up in the Metaverse by an index, which is what
-lets a rule find one identity among millions; "starts with" or "contains" would match many identities and could not
-be looked up that way. Put the normalising in the expression instead, so the value it computes is exactly the value
-the Metaverse holds.
+A rule compares for equality, and only equality. "Starts with" or "contains" could match many identities, so JIM does
+not offer them. Put the normalising in the expression instead, so the value it computes is exactly the value the
+Metaverse holds.
 
 **Try it**, under the editor, shows what the rule would match on for an object holding values you type, worked out
 exactly as a synchronisation would. Leave a value empty to see what happens to an object that has none.
@@ -74,10 +73,10 @@ attribute the Object Type does not have, or calls a function that returns a diff
 (`Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `Guid.NewGuid()`): each would match a different
 identity, or none, on every run. The editor shows the same reason before you save.
 
-Before provisioning, the rule works the other way round: JIM works out the expression once per run for each Connected
-System Object of the type not yet joined, and compares the Metaverse Object's value with the results. Where the
-expression could not be worked out for some of those objects, a Metaverse Object that finds no match stops with an
-**Object Matching Rule Failed** error naming one of them, rather than provisioning an account that may already exist.
+When JIM checks, before provisioning, whether a matching account already exists, it applies the expression to each
+unjoined Connected System Object of that type. If it cannot do so for some of them, a Metaverse Object that finds no
+match stops with an **Object Matching Rule Failed** error naming one of those objects, rather than provisioning an
+account that may already exist. Correct that object's value, or the expression, then synchronise again.
 
 ## Simple vs advanced matching mode
 
