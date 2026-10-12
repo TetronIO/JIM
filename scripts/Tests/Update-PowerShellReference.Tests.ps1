@@ -460,11 +460,99 @@ Describe 'Update-PowerShellReference: generating a block' {
         $list | Should -Match '\[-Name <string>\]'
         $list | Should -Match '\[-PageSize <int>\]'
         $list | Should -Not -Match '-Id'
-        (Get-SyntaxLines $script:RemoveBlock) | Should -Contain 'Remove-JIMWidget -Id <int[]> [-Force] [-PassThru]'
+        (Get-SyntaxLines $script:RemoveBlock) | Should -Contain 'Remove-JIMWidget -Id <int[]> [-Force] [-PassThru] [-WhatIf] [-Confirm]'
     }
 
-    It 'leaves out the common parameters, -WhatIf and -Confirm' {
-        $script:RemoveBlock | Should -Not -MatchExactly '-(WhatIf|Confirm|Verbose|ErrorAction)\b|`(WhatIf|Confirm|Verbose|ErrorAction)`'
+    It 'leaves out the common parameters' {
+        $script:RemoveBlock | Should -Not -MatchExactly '-(Verbose|ErrorAction)\b|`(Verbose|ErrorAction|WhatIf|Confirm)`'
+    }
+
+    It 'ends the syntax of a cmdlet that supports ShouldProcess with -WhatIf and -Confirm, and lists neither as a parameter' {
+        Get-SyntaxLines $script:RemoveBlock | Should -Be @('Remove-JIMWidget -Id <int[]> [-Force] [-PassThru] [-WhatIf] [-Confirm]')
+        Get-SyntaxLines $script:GetBlock | Should -Not -Match 'WhatIf|Confirm'
+    }
+
+    It 'says a cmdlet whose confirmation impact is High asks before it acts, and no other' {
+        $remove = @'
+function Remove-JIMGadget {
+    <#
+    .SYNOPSIS
+        Removes a Gadget.
+
+    .PARAMETER Id
+        The Gadget to remove.
+    #>
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$Id
+    )
+}
+'@
+        $fixture = New-Fixture -Functions @($remove) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMGadget') }
+        Invoke-Generator $fixture | Out-Null
+        $syntax = Get-Subsection (Get-Block (Get-Page $fixture) 'Remove-JIMGadget') 'Syntax'
+        $syntax | Should -Match 'asks for confirmation before it acts'
+        $syntax | Should -Not -Match '-Force'
+        Get-Subsection $script:RemoveBlock 'Syntax' | Should -Not -Match 'asks for confirmation'
+    }
+
+    It 'names -Force as a way past the prompt where the cmdlet has one' {
+        $remove = @'
+function Remove-JIMGadget {
+    <#
+    .SYNOPSIS
+        Removes a Gadget.
+
+    .PARAMETER Id
+        The Gadget to remove.
+
+    .PARAMETER Force
+        Skips the confirmation prompt.
+    #>
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$Id,
+
+        [switch]$Force
+    )
+}
+'@
+        $fixture = New-Fixture -Functions @($remove) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMGadget') }
+        Invoke-Generator $fixture | Out-Null
+        Get-Subsection (Get-Block (Get-Page $fixture) 'Remove-JIMGadget') 'Syntax' | Should -Match '`-Force` or `-Confirm:\$false` skips the prompt'
+    }
+
+    It 'labels a parameter set named Default once' {
+        $disconnect = @'
+function Disconnect-JIMWidget {
+    <#
+    .SYNOPSIS
+        Disconnects.
+
+    .PARAMETER Url
+        Where from.
+
+    .PARAMETER All
+        From everywhere.
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'Default')]
+    [OutputType([void])]
+    param(
+        [Parameter(ParameterSetName = 'Default')]
+        [string]$Url,
+
+        [Parameter(Mandatory, ParameterSetName = 'All')]
+        [switch]$All
+    )
+}
+'@
+        $fixture = New-Fixture -Functions @($disconnect) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Disconnect-JIMWidget') }
+        Invoke-Generator $fixture | Out-Null
+        (Get-SyntaxLines (Get-Block (Get-Page $fixture) 'Disconnect-JIMWidget') | Where-Object { $_ -match '^#' }) | Should -Be @('# Default', '# All')
     }
 
     It 'lists each parameter with its type, where it is required, its default and its help' {

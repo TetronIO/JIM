@@ -95,6 +95,37 @@ public class SyncImportTaskProcessor
     /// </summary>
     private int _hashSkippedCount;
 
+    // The outcome of each object the run read, for the Activity's message (#2129). Each object read lands in one of
+    // created (the create list), updated, unchanged (these plus _hashSkippedCount), a reported deletion, or none of them
+    // because it was rejected with an error. Each is counted where its outcome is decided, at the end of that branch, so
+    // an object whose processing throws first is reported by its error alone. The update list cannot stand in for these:
+    // it holds every existing object compared, changed or not, for reference resolution and reconciliation.
+
+    /// <summary>
+    /// Existing objects this run changed: at least one attribute value, or an object JIM provisioned now confirmed as
+    /// present in the Connected System: the objects whose comparison gave their execution item an Update.
+    /// </summary>
+    private int _updatedObjectCount;
+
+    /// <summary>
+    /// Objects this run read and left as they were, other than those skipped by their content hash
+    /// (<see cref="_hashSkippedCount"/>): compared and found unchanged, or a delete the Connector reported for an object
+    /// JIM no longer held or already held as deleted.
+    /// </summary>
+    private int _unchangedObjectCount;
+
+    /// <summary>
+    /// Deletes the Connector reported, in any import type, for objects JIM held, which this run marked as deleted.
+    /// </summary>
+    private int _connectorReportedDeletionCount;
+
+    /// <summary>
+    /// Objects a Full Import's deletion detection newly marked as deleted because it no longer found them. These are not
+    /// among the objects the run read. An object retired by an allowed Object Type change is not one of them: the run
+    /// read it under its new type and counted it as created.
+    /// </summary>
+    private int _detectedDeletionCount;
+
     /// <summary>
     /// How many objects of each Object Type (by id) arrived this run with an External ID the Connector could not read
     /// (#2066). Deletion detection holds those types back; see <see cref="HoldBackObjectTypesWithUnreadableExternalIds"/>.
@@ -1046,8 +1077,9 @@ public class SyncImportTaskProcessor
         // shape, average throughput included, so the three run types read alike on the Activity list.
         _activity.ObjectsToProcess = totalObjectsImported;
         _activity.ObjectsProcessed = totalObjectsImported;
-        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, connectedSystemObjectsToBeUpdated.Count,
-            _hashSkippedCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
+        var unchangedCount = _hashSkippedCount + _unchangedObjectCount;
+        _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount,
+            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
@@ -1058,6 +1090,19 @@ public class SyncImportTaskProcessor
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
                 _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
+        }
+
+        // #2129: what became of each object read. Every object read is created, updated, unchanged, a reported deletion,
+        // or rejected with an error, so the rejected figure is what is left; detected deletions were not read and stand
+        // apart. A negative remainder means an object was counted twice, which is a counting fault, not a data fault.
+        var rejectedCount = totalObjectsImported - createdCount - _updatedObjectCount - unchangedCount - _connectorReportedDeletionCount;
+        Log.Information("PerformImportAsync: Outcome summary: Objects read: {TotalObjects}, Created: {Created}, Updated: {Updated}, Unchanged: {Unchanged} ({SkippedByHash} by content hash, {OtherUnchanged} compared or already deleted), Deleted: {ReportedDeletions} reported by the Connector and {DetectedDeletions} detected, Rejected: {Rejected}, Errors: {Errors}",
+            totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount, _hashSkippedCount, _unchangedObjectCount,
+            _connectorReportedDeletionCount, _detectedDeletionCount, rejectedCount, _activity.TotalErrors);
+        if (rejectedCount < 0)
+        {
+            Log.Warning("PerformImportAsync: The outcome counts exceed the {TotalObjects} objects read by {Excess}, so at least one object was counted twice. The Activity's message over-reports by that many; the objects themselves were processed as their execution items record.",
+                totalObjectsImported, -rejectedCount);
         }
 
         if (_objectTypeChangesRefusedCount > 0)
@@ -1074,6 +1119,10 @@ public class SyncImportTaskProcessor
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
         importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
+        importSpan.SetTag("objectsChanged", _updatedObjectCount);
+        importSpan.SetTag("objectsUnchanged", unchangedCount);
+        importSpan.SetTag("objectsDeletedByConnector", _connectorReportedDeletionCount);
+        importSpan.SetTag("objectsDeletionDetected", _detectedDeletionCount);
         importSpan.SetTag("objectTypeChangesRefused", _objectTypeChangesRefusedCount);
         importSpan.SetTag("objectTypeChangesAllowed", _objectTypeChangesAllowedCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
@@ -1331,6 +1380,10 @@ public class SyncImportTaskProcessor
 
         foreach (var cso in candidates.NewlyMarked)
             await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+
+        // The Activity's message reports these as no longer found (#2129), so it counts what the limits count: an object
+        // retired by an Object Type change was found, under its new type, and is already counted once, as created.
+        _detectedDeletionCount = newlyMarkedCount;
 
         if (candidates.NewlyMarked.Count > 0 || candidates.AlreadyObsolete.Count > 0)
         {
@@ -2583,6 +2636,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for CSO {CsoId}, which is already Obsolete and awaiting a synchronisation run. Nothing to report.",
                             connectedSystemObject.Id);
+                        _unchangedObjectCount++;
                     }
                     else if (connectedSystemObject != null)
                     {
@@ -2605,6 +2659,7 @@ public class SyncImportTaskProcessor
 
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
+                        _connectorReportedDeletionCount++;
                     }
                     else
                     {
@@ -2612,6 +2667,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for object type '{ObjectType}' but no matching CSO found. Ignoring.",
                             importObject.ObjectType);
+                        _unchangedObjectCount++;
                     }
                     continue;
                 }
@@ -2857,6 +2913,8 @@ public class SyncImportTaskProcessor
                                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated,
                                 detailCount: attrChangeCount > 0 ? attrChangeCount : null);
                         }
+
+                        _updatedObjectCount++;
                     }
                     else if (activityRunProfileExecutionItem.ErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet)
                     {
@@ -2866,6 +2924,7 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
+                        _unchangedObjectCount++;
                     }
                     else
                     {
@@ -2873,6 +2932,7 @@ public class SyncImportTaskProcessor
                         _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: No attribute changes for CSO {CsoId}. Skipping RPEI creation.",
                             connectedSystemObject.Id);
+                        _unchangedObjectCount++;
                     }
                 }
             }
@@ -3584,6 +3644,7 @@ public class SyncImportTaskProcessor
         // An attribute the Connector found an unreadable value on is passed over (#2066): the source holds a value JIM
         // could not read, which is not the same as holding none, so the stored values stay exactly as they were.
         var unreadableAttributeNames = UnreadableAttributeNames(connectedSystemImportObject);
+        RemoveValuesHeldUnderAnotherDataType(connectedSystemImportObject, connectedSystemObject, connectedSystemObjectType, unreadableAttributeNames);
         foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name).Where(name => !unreadableAttributeNames.Contains(name)))
         {
             // is there a matching attribute in the import object?
@@ -3681,7 +3742,7 @@ public class SyncImportTaskProcessor
 
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
-                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
+                        var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.DateTime));
                         if (existingCsoDateTimeAttributeValue == null)
                         {
                             // we don't have a CSO value for this attribute. set the initial value
@@ -3869,7 +3930,7 @@ public class SyncImportTaskProcessor
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
                         // todo (#872): consider having the ability to update values instead of replacing.
-                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
+                        var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && !av.IsHeldUnderAnotherDataType(AttributeDataType.Boolean));
                         if (csoBooleanAttributeValue == null)
                         {
                             // set initial value
@@ -3896,6 +3957,36 @@ public class SyncImportTaskProcessor
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }
+    }
+
+    /// <summary>
+    /// Removes what an attribute holds under a data type it no longer has (#2128). A schema refresh can redefine an
+    /// attribute whose Connected System Objects already hold values (Active Directory's Enumeration attributes were
+    /// discovered as Boolean, and are Number), and it keeps the attribute, so those values stay in the column the old type
+    /// used. <see cref="UpdateConnectedSystemObjectFromImportObject"/> compares only the column of the attribute's current
+    /// type, so without this the value read under the new type is added beside the old one instead of replacing it, and a
+    /// single-valued attribute holds two values for good: every single-valued Attribute Flow from it then fails. An
+    /// import that carries the attribute says what it holds, so anything held in another type's column goes. One it could
+    /// not read says nothing (#2066), and one it does not carry has all its values removed already.
+    /// </summary>
+    private static void RemoveValuesHeldUnderAnotherDataType(
+        ConnectedSystemImportObject importObject,
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType objectType,
+        HashSet<string> unreadableAttributeNames)
+    {
+        var importedAttributeNames = importObject.Attributes.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var importedAttributeTypes = new Dictionary<int, AttributeDataType>();
+        foreach (var attribute in objectType.Attributes.Where(a => importedAttributeNames.Contains(a.Name) && !unreadableAttributeNames.Contains(a.Name)))
+            importedAttributeTypes.TryAdd(attribute.Id, attribute.Type);
+
+        if (importedAttributeTypes.Count == 0)
+            return;
+
+        connectedSystemObject.PendingAttributeValueRemovals.AddRange(connectedSystemObject.AttributeValues.Where(av =>
+            (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) is { } attributeId &&
+            importedAttributeTypes.TryGetValue(attributeId, out var type) &&
+            av.IsHeldUnderAnotherDataType(type)));
     }
 
     /// <summary>

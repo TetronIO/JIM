@@ -83,8 +83,8 @@ The list returns one record per change, newest first. -Version returns that chan
 | Property | Type | Description |
 |----------|------|-------------|
 | `ObjectType` | `string` | The configuration object type, e.g. "SynchronisationRule" or "ConnectedSystem". |
-| `ObjectId` | `int` | The integer database identifier of the configuration object; zero for Guid-keyed objects (see ObjectGuidId). |
-| `ObjectGuidId` | `guid` | The Guid database identifier of the configuration object, for Guid-keyed objects (e.g. a Schedule); null otherwise. |
+| `ObjectId` | `int` | The configuration object's numeric ID; zero for an object identified by a GUID (see `ObjectGuidId`). |
+| `ObjectGuidId` | `guid` | The configuration object's GUID, for an object identified by one (a Schedule, for example); null otherwise. |
 | `ObjectName` | `string` | The display name of the configuration object (from the newer snapshot). |
 | `OldVersion` | `int` | The per-object version of the older snapshot, or null when comparing against nothing (a creation). |
 | `NewVersion` | `int` | The per-object version of the newer snapshot, when known. |

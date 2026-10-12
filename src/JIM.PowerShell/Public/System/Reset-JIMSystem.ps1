@@ -103,7 +103,7 @@ function Reset-JIMSystem {
             "Factory reset: wipe ALL data and configuration (administrators preserved)"
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($target, $scope)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action $scope -Force:$Force) {
             Write-Verbose "Initiating factory reset against $target (IncludeAdministrators=$IncludeAdministrators)"
 
             $body = @{

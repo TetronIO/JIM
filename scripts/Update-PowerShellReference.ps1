@@ -239,6 +239,8 @@ function Get-CmdletReference {
         NamedSets   = $named
         Parameters  = @($parameters)
         DeclaresPositions = $declaresPositions
+        SupportsShouldProcess = $Command.Parameters.ContainsKey('WhatIf')
+        ConfirmImpact = @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } | ForEach-Object ConfirmImpact | Select-Object -First 1)
         Outputs     = @(if ($help) { $help.Outputs | ForEach-Object { ConvertTo-Paragraphs $_ } })
         OutputTypes = $outputTypes
     }
@@ -252,7 +254,7 @@ function Format-Syntax {
     foreach ($set in $Reference.Sets) {
         if ($labelled) {
             if ($lines.Count -gt 0) { $lines.Add('') }
-            $lines.Add('# ' + $set.Name + $(if ($set.IsDefault) { ' (default)' }))
+            $lines.Add('# ' + $set.Name + $(if ($set.IsDefault -and $set.Name -ne 'Default') { ' (default)' }))
         }
         $inSet = @($Reference.Parameters | Where-Object { @($_.Sets | ForEach-Object Name) -contains $set.Name })
         $positionOf = @{}
@@ -275,9 +277,20 @@ function Format-Syntax {
         foreach ($parameter in $optional) {
             $tokens += if ($parameter.IsSwitch) { "[-$($parameter.Name)]" } else { "[-$($parameter.Name) <$(Get-FriendlyTypeName $parameter.Type)>]" }
         }
+        # -WhatIf and -Confirm close the line, as Get-Command -Syntax puts them; the other common parameters
+        # are left out, since every cmdlet has them.
+        if ($Reference.SupportsShouldProcess) { $tokens += '[-WhatIf]', '[-Confirm]' }
         $lines.Add($tokens -join ' ')
     }
-    "### Syntax`n`n" + '```powershell' + "`n" + ($lines -join "`n") + "`n" + '```'
+    $text = "### Syntax`n`n" + '```powershell' + "`n" + ($lines -join "`n") + "`n" + '```'
+    # Whether it prompts by default: with the default $ConfirmPreference, only a High impact does.
+    if ($Reference.SupportsShouldProcess -and "$($Reference.ConfirmImpact)" -eq 'High') {
+        # Every such cmdlet with a -Force has it skip the prompt and never -WhatIf (Confirm-JIMAction, and a
+        # Pester guard in the module's tests).
+        $skip = if ($Reference.Parameters | Where-Object Name -eq 'Force') { '`-Force` or `-Confirm:$false`' } else { '`-Confirm:$false`' }
+        $text += "`n`nIt asks for confirmation before it acts: ``-WhatIf`` shows what it would do, and $skip skips the prompt."
+    }
+    $text
 }
 
 # Yes or No, and the sets, where a parameter is not in every set or is required in only some.

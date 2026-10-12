@@ -38,6 +38,8 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
+- **Reading values as their attribute's type**<br /> Each value is read as its attribute's data type, in the forms [How values are read](#how-values-are-read) lists.
+- **Values JIM cannot read**<br /> A value that does not fit its attribute's type is reported with the entry's distinguished name, never guessed at, as [Values a Connector could not read](../configuration/activity-execution-items.md#values-a-connector-could-not-read) describes.
 - **Overlapping Object Types**<br /> An entry carrying more than one selected structural class imports as the most specific of them: with both `user` and `computer` selected, an Active Directory computer imports as `computer`, and on an RFC 4512 directory with both `person` and `inetOrgPerson` selected, an `inetOrgPerson` entry imports as `inetOrgPerson`. Schema discovery records which classes each Object Type inherits from, so this holds whatever order the directory lists an entry's classes in. Object Types discovered before JIM recorded inheritance resolve by the order instead, read from where the entry lists `top` (first on Active Directory and Samba AD, often last in an RFC 4512 directory); refresh the schema of any Connected System with overlapping Object Types selected to record inheritance. Because of this rule, selecting or deselecting an overlapping Object Type changes the Object Type that entries JIM already holds import as; JIM refuses that change by default and keeps the existing objects, as [When an object changes Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type) explains.
 
 ### Export
@@ -54,11 +56,25 @@ JIM automatically detects the directory type during schema discovery by inspecti
 ### Schema Discovery
 
 - **Automatic RFC 4512 schema parsing**<br /> Object classes and attributes are discovered directly from the directory's subschema subentry.
+- **Data types from the directory's schema**<br /> Each attribute's data type comes from its syntax, and cannot be overridden. Active Directory's Enumeration attributes (omSyntax 10), such as `sAMAccountType` and `instanceType`, are whole numbers and are discovered as Number attributes.
 - **Structural and auxiliary class support**<br /> Optionally include auxiliary classes in schema discovery.
 - **Auxiliary class merging**<br /> Merge an auxiliary class's attributes into a structural Object Type so JIM can import and export them, with JIM composing each entry's `objectClass` itself. See [Auxiliary Object Classes](jim-ldap-connector-auxiliary-classes.md) below.
 - **Internal class classification**<br /> Classes the directory keeps for its own configuration or operation are marked internal, and the schema screen puts them out of the way. See [Internal object types](#internal-object-types) below.
 - **Partition discovery**<br /> Automatically enumerates naming contexts and organisational units.
 - **Hidden partition filtering**<br /> Skip Configuration, Schema, and DNS partitions for improved performance.
+
+### How values are read
+
+| Data type | Read from | Reported as unreadable |
+|---|---|---|
+| Boolean | `TRUE` or `FALSE`, in any case | Anything else, such as `yes` or `1` |
+| Number | A whole number with an optional sign that fits 32 bits | Letters, or a number too large for the type |
+| Long Number | A whole number with an optional sign that fits 64 bits | Letters, or a number too large for the type |
+| DateTime | `GeneralizedTime` (minutes, seconds and a fraction optional; no time zone means UTC), `UTCTime` (years 50 to 99 are 19xx), or ISO 8601 with a time of day | A date that does not exist, text after the time zone, a date with no time, or a date that can be read two ways (below) |
+| Guid (Active Directory `objectGUID`) | 16 bytes | Any other length, given as hexadecimal |
+| Text, Reference, Binary | As the directory returns them | Never |
+
+A date of ten or twelve digits with a time zone can be either a `GeneralizedTime` or a `UTCTime`. JIM reads it as the one that gives a year from 1950 to 2049. If both do, as `200805121430Z` does (12 May 2008 14:30, or 5 August 2020 12:14:30), JIM does not guess and reports the value.
 
 ### Security and Connectivity
 

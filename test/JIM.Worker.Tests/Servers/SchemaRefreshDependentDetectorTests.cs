@@ -162,6 +162,40 @@ public class SchemaRefreshDependentDetectorTests
     }
 
     [Test]
+    public void Detect_ImportExpressionConsumingARetypedAttribute_IsInvalidatedWithTheChangeNamed()
+    {
+        // An Expression written against the old type receives the new one (a Boolean comparison handed a number,
+        // #2128), so it is as invalidated as a mapping reading the attribute directly, and must be disabled with it.
+        var result = new SchemaRefreshResult { Success = true };
+        result.AddChangedAttribute("user", new SchemaAttributeDefinitionChange
+        {
+            AttributeName = "employeeNumber",
+            Aspect = SchemaAttributeChangeAspect.DataType,
+            OldValue = "Number",
+            NewValue = "Text"
+        });
+        var rule = ImportRule(17, "HR Users Inbound", _userType);
+        var expressionMapping = new SyncRuleMapping
+        {
+            Id = 108,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 902, Name = "Payroll Reference", Type = AttributeDataType.Text }
+        };
+        expressionMapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "\"P\" + cs[\"employeeNumber\"]" });
+        rule.AttributeFlowRules.Add(expressionMapping);
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EqualTo(new[] { 108 }));
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.ViaExpression), Is.EqualTo(new[] { true }));
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.Reason).FirstOrDefault(),
+                Does.Contain("Expression").And.Contain("employeeNumber").And.Contain("Number").And.Contain("Text"));
+        }
+    }
+
+    [Test]
     public void Detect_ObjectMatchingRuleReferencingARemovedAttribute_IsReportedForDisplay()
     {
         var result = new SchemaRefreshResult { Success = true };

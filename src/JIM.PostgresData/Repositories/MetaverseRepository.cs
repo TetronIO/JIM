@@ -4181,6 +4181,8 @@ public class MetaverseRepository : IMetaverseRepository
 
         // If we have the MVO ID, find ALL change records using DeletedMetaverseObjectId
         // (set on prior records by raw SQL) OR MetaverseObjectId (set on deletion record by EF Core).
+        // Both branches load each reference value's Type: the Deleted Objects page builds the reference's
+        // /t/{plural}/v/{id} link and its type chip from it (#2146).
         if (mvoId.HasValue && mvoId.Value != Guid.Empty)
         {
             return await Repository.Database.MetaverseObjectChanges
@@ -4194,6 +4196,7 @@ public class MetaverseRepository : IMetaverseRepository
                 .Include(c => c.AttributeChanges)
                 .ThenInclude(ac => ac.ValueChanges)
                 .ThenInclude(vc => vc.ReferenceValue)
+                .ThenInclude(rv => rv!.Type)
                 .ToListAsync();
         }
 
@@ -4206,6 +4209,7 @@ public class MetaverseRepository : IMetaverseRepository
             .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.ValueChanges)
             .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
             .ToListAsync();
     }
 

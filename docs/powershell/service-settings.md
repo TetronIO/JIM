@@ -80,7 +80,7 @@ Updates a service setting value. Read-only settings cannot be modified; attempti
 ### Syntax
 
 ```powershell
-Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>] [-PassThru]
+Set-JIMServiceSetting [-Key] <string> [-Value] <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -133,7 +133,7 @@ Reverts a service setting to its default value by clearing the administrator ove
 ### Syntax
 
 ```powershell
-Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru]
+Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters

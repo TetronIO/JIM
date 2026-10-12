@@ -291,13 +291,12 @@ internal class FileConnectorImport
                     // multi-valued attribute is only part of what the file holds, and JIM leaves an attribute with an
                     // unreadable value as it already held it rather than reading it as the whole set (#2066). The object
                     // is still returned, so every other attribute imports.
-                    var reason = UnreadableValueReason(attribute.Type);
                     importObject.SourceLocation ??= $"{_reader.FileName}, row {_reader.CsvReader.Context.Parser?.Row ?? 0:N0}";
                     foreach (var unreadableValue in unreadableValues)
                     {
                         _logger.Warning("Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
                             attribute.Name, attribute.Type, _reader.CsvReader.Context.Parser?.Row ?? 0, LogSanitiser.Sanitise(unreadableValue));
-                        importObject.AddAttributeValueError(attribute.Name, unreadableValue, reason);
+                        importObject.AddAttributeValueError(attribute.Name, unreadableValue, UnreadableValueReasons.For(attribute.Type, unreadableValue));
                     }
 
                     if (_stopOnFirstError)
@@ -329,20 +328,6 @@ internal class FileConnectorImport
 
         return FinaliseResult(result, stopwatch);
     }
-
-    /// <summary>
-    /// Why a value would not parse, for the administrator (#2066). Worded from the attribute's type rather than the
-    /// parser's exception, whose text (CsvHelper's in particular) is written for developers and runs to several lines.
-    /// </summary>
-    private static string UnreadableValueReason(AttributeDataType type) => type switch
-    {
-        AttributeDataType.Number or AttributeDataType.LongNumber => "Not a valid whole number.",
-        AttributeDataType.Decimal => "Not a valid decimal number.",
-        AttributeDataType.DateTime => "Not a valid date and time.",
-        AttributeDataType.Boolean => "Not a valid true or false value.",
-        AttributeDataType.Guid => "Not a valid GUID.",
-        _ => $"Not a valid {type} value."
-    };
 
     /// <summary>
     /// Helper to cleanly finalise the import result, stopping the timer and disposing the reader.

@@ -58,42 +58,42 @@ Get-JIMPendingPasswordChange -Summary
 
 ### Output
 
-One object per queued change, one row per Metaverse Object per Connected System, or with -Summary one object of counts. No password is returned, in any form.
+One object per queued change, one entry per Metaverse Object per Connected System, or with -Summary one object of counts. No password is returned, in any form.
 
 **`PendingPasswordChangeResponse`** (List, ListAll):
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Id` | `guid` | The unique identifier of the queued change, as passed back to the retry and cancel endpoints. |
-| `MetaverseObjectId` | `guid` | The identity whose password this is, and its display name. |
-| `MetaverseObjectDisplayName` | `string` | The identity whose password this is, and its display name. |
-| `MetaverseObjectTypePluralName` | `string` | The plural name of the identity's Metaverse Object Type, which is what a link to that identity is built from. Carried so a caller rendering a list does not need a read per row to make one. |
-| `ConnectedSystemId` | `int` | The Connected System the change is queued for, and its name. |
-| `ConnectedSystemName` | `string` | The Connected System the change is queued for, and its name. |
+| `Id` | `guid` | The queued change's ID, which identifies it when retrying or cancelling it. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object whose password this is. |
+| `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name. |
+| `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
+| `ConnectedSystemId` | `int` | The Connected System the change is queued for. |
+| `ConnectedSystemName` | `string` | That Connected System's name. |
 | `Status` | `PendingPasswordChangeStatus` | Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or Cancelled (an administrator stopped it). |
 | `Origin` | `PendingPasswordChangeOrigin` | Where the change came from: `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). |
-| `SyncRuleId` | `int` | The Synchronisation Rule a PendingPasswordChangeOrigin.Provisioned row generates its password from at each delivery attempt, or null for every other origin. |
-| `Due` | `bool` | Whether a delivery pass would attempt this change right now. Distinguishes a change waiting out a retry backoff from one that is due but not yet reached, which Status alone cannot. Never true while Held is: a pass steps over a system that is switched off. |
+| `SyncRuleId` | `int` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt, or null for every other origin. |
+| `Due` | `bool` | Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff from one that is due but not yet reached, which `Status` alone cannot. It is never true for a held change, whose Connected System is switched off. |
 | `Held` | `bool` | Whether the change is waiting on somebody switching Password Synchronisation back on for its Connected System, rather than on JIM. A configured system that is switched off accumulates queued changes instead of discarding them, and enabling it delivers what accumulated; until then nothing is attempted, so the remedy is a person's rather than a retry's. |
-| `FailureReason` | `PasswordSetFailureReason` | How the last attempt failed, and the target's own words, which is what says where the remedy lives. Both null for a change that has not been attempted. |
-| `TargetMessage` | `string` | How the last attempt failed, and the target's own words, which is what says where the remedy lives. Both null for a change that has not been attempted. |
+| `FailureReason` | `PasswordSetFailureReason` | How the last attempt failed; null for a change that has not been attempted. |
+| `TargetMessage` | `string` | The target's own words for why the last attempt failed, which say where the remedy lies; null for a change that has not been attempted. |
 | `AttemptCount` | `int` | How many delivery attempts have been made. |
 | `NextRetryAt` | `datetime` | When the next attempt falls due, or null for a change that is due now or is no longer being attempted. |
 | `CreatedAt` | `datetime` | When the change was queued. |
 | `LastAttemptedAt` | `datetime` | When delivery was last attempted, or null where it never has been. |
 | `ExpiresAt` | `datetime` | When the change stops being deliverable, whether or not it has been delivered by then. |
-| `CancelledAt` | `datetime` | When an administrator cancelled the change, and who, or null where nobody has. The name is null for a cancellation made with an API key, which has no person behind it. |
-| `CancelledByName` | `string` | When an administrator cancelled the change, and who, or null where nobody has. The name is null for a cancellation made with an API key, which has no person behind it. |
+| `CancelledAt` | `datetime` | When an administrator cancelled the change, or null where nobody has. |
+| `CancelledByName` | `string` | Who cancelled the change; null where nobody has, and for a cancellation made with an API key, which has no person behind it. |
 
 **`PasswordQueueSummary`** (Summary):
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `WaitingCount` | `int` | Changes JIM still intends to deliver, whether due now or waiting out a backoff. |
-| `DueCount` | `int` | The subset of WaitingCount a delivery pass would attempt right now. Reported separately because the two answer different questions: a large waiting count with nothing due is a queue working through its backoffs, while a large due count is a queue that is not being drained. A change queued for a Connected System that is switched off is waiting but not due: it is held until somebody enables the system, and a pass would step over it. Counting those here would make the ordinary state of a deployment with one system switched off look like a queue nothing is draining. |
+| `DueCount` | `int` | How many of the waiting changes a delivery pass would attempt right now. A large waiting count with nothing due is a queue working through its backoffs; a large due count is a queue that is not being drained. A change queued for a Connected System that is switched off is waiting but not due: it is held until somebody enables the system. |
 | `ParkedCount` | `int` | Changes the target refused, or that ran out of attempts. JIM has stopped trying, so these wait on a person. |
 | `ExpiredCount` | `int` | Changes that outlived their Connected System's time to live. Nothing can deliver these now: the password they carried is gone. |
-| `CancelledCount` | `int` | Changes an administrator stopped. Counted rather than hidden, because the identity's password is still divergent on that system and the count is the only thing that says so. |
+| `CancelledCount` | `int` | Changes an administrator stopped. Counted rather than hidden, because the Metaverse Object's password is still divergent on that system and the count is the only thing that says so. |
 <!-- END GENERATED: Get-JIMPendingPasswordChange -->
 
 ### Examples
@@ -142,7 +142,7 @@ Run it once the reason a Connected System was refusing passwords has been dealt 
 ### Syntax
 
 ```powershell
-Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force]
+Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -205,8 +205,10 @@ Applies to `Pending` and `Parked` changes. An `Expired` or already `Cancelled` c
 ### Syntax
 
 ```powershell
-Stop-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force]
+Stop-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
 ```
+
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

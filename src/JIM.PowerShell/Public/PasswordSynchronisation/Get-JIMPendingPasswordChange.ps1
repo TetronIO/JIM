@@ -72,8 +72,8 @@ function Get-JIMPendingPasswordChange {
         Returns the queue's counts by state instead of its changes.
 
     .OUTPUTS
-        One object per queued change, one row per Metaverse Object per Connected System, or with -Summary one object
-        of counts. No password is returned, in any form.
+        One object per queued change, one entry per Metaverse Object per Connected System, or with -Summary one
+        object of counts. No password is returned, in any form.
 
     .EXAMPLE
         Get-JIMPendingPasswordChange -Summary

@@ -188,7 +188,7 @@ function Remove-JIMSyncRule {
             }
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, $confirmAction)) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action $confirmAction -Force:$Force) {
             Write-Verbose "Deleting Synchronisation Rule: $ruleId"
 
             # The reason and the keep choice are supplied as query parameters because HTTP DELETE bodies are

@@ -297,7 +297,7 @@ function Set-JIMMetaverseObjectPassword {
             $action = "Set the password on every Connected System configured for Password Synchronisation"
         }
 
-        if (-not ($Force -or $PSCmdlet.ShouldProcess($target, $action))) {
+        if (-not (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $target -Action $action -Force:$Force)) {
             return
         }
 
