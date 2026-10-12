@@ -4,7 +4,7 @@
 >
 > Issue [#1454](https://github.com/TetronIO/JIM/issues/1454). Design and evidence: [`PRD_PUBLIC_DOCUMENTATION_STANDARD.md`](prd/doing/PRD_PUBLIC_DOCUMENTATION_STANDARD.md), [`notes/docs-audit-2026-10/`](notes/docs-audit-2026-10/README.md). Site mechanics (diagrams, the lightbox, MkDocs dependencies) stay in `docs/CLAUDE.md`.
 
-The standard applies to every page under `docs/` except the contributor pages under `docs/developer/` (which leave the public site; PRD Decision 3) and `docs/reference/changelog.md` (a one-line include of `CHANGELOG.md`).
+The standard applies to every page under `docs/` except `docs/reference/changelog.md` (a one-line include of `CHANGELOG.md`). Contributor material is not public documentation: it lives in `engineering/`, the contributor guides and process diagrams in `engineering/developer/` (PRD Decision 3).
 
 ## Contents
 

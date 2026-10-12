@@ -1,7 +1,3 @@
----
-title: Development Environment
----
-
 # Development Environment
 
 JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies (.NET 10.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases) are pre-installed and ready to use.
@@ -17,8 +13,10 @@ The fastest way to get started. Everything is pre-configured in the cloud; no lo
 
 The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak instance; sign in with `admin` / `admin`.
 
-!!! info "Codespace machine type"
-    The devcontainer configuration requests 8 cores, 32 GB RAM, and 120 GB storage via `hostRequirements`. GitHub Codespaces selects the closest matching preset, typically 8 cores and 32 GB RAM, but only 64 GB storage (the 120 GB request is not available as a Codespace preset). Verify the machine type in the selector before creating. This is sufficient for day-to-day development, but integration tests with larger template sizes are resource-intensive and may perform better in a [local devcontainer](#local-devcontainer) where Docker has direct access to host resources without virtualisation overhead.
+> [!NOTE]
+> **Codespace machine type**
+>
+> The devcontainer configuration requests 8 cores, 32 GB RAM, and 120 GB storage via `hostRequirements`. GitHub Codespaces selects the closest matching preset, typically 8 cores and 32 GB RAM, but only 64 GB storage (the 120 GB request is not available as a Codespace preset). Verify the machine type in the selector before creating. This is sufficient for day-to-day development, but integration tests with larger template sizes are resource-intensive and may perform better in a [local devcontainer](#local-devcontainer) where Docker has direct access to host resources without virtualisation overhead.
 
 ### Custom Environment Variables in Codespaces
 
@@ -36,10 +34,12 @@ Recommended for integration testing and large-scale development work where you n
 
 The devcontainer provides the same environment as Codespaces; all dependencies, extensions, and shell aliases are configured automatically.
 
-!!! tip "Allocating resources"
-    Integration tests with large template sizes (10,000+ objects) are memory and CPU intensive. Allocate as much as your host machine can spare: 24–32 GB RAM, 4 GB+ swap, and as many cores as possible. PostgreSQL tuning is applied automatically during setup and can be re-run with `jim-postgres-tune` after changing resource allocations.
-
-    Since host machine performance varies between developers, integration test timings and throughput figures are only directly comparable when run on the same configuration.
+> [!TIP]
+> **Allocating resources**
+>
+> Integration tests with large template sizes (10,000+ objects) are memory and CPU intensive. Allocate as much as your host machine can spare: 24–32 GB RAM, 4 GB+ swap, and as many cores as possible. PostgreSQL tuning is applied automatically during setup and can be re-run with `jim-postgres-tune` after changing resource allocations.
+>
+> Since host machine performance varies between developers, integration test timings and throughput figures are only directly comparable when run on the same configuration.
 
 ## Bundled Keycloak
 
@@ -70,8 +70,10 @@ Three environment variables in [docker-compose.override.yml](https://github.com/
 | `KC_HOSTNAME_STRICT` | `false` | Accept requests whose `Host` header doesn't match `KC_HOSTNAME`, so back-channel calls from inside the Docker network are not rejected. |
 | `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` | `true` | Derive back-channel endpoint URLs (token, userinfo, JWKS) from each request's `Host` header, so JIM.Web in the Docker network receives `jim.keycloak:8080` endpoints while the browser receives `localhost:8181` endpoints. |
 
-!!! warning "Do not change these without reading the comment block"
-    The three `KC_HOSTNAME*` variables work as a set. Removing or changing any of them in isolation will break sign-in or sign-out (or both) in at least one of the three supported dev scenarios: Codespaces, devcontainer native debugging (`jim-build-light`), and devcontainer Docker stack (`jim-build`). See the inline comment in [docker-compose.override.yml](https://github.com/TetronIO/JIM/blob/main/docker-compose.override.yml) for the full rationale.
+> [!WARNING]
+> **Do not change these without reading the comment block**
+>
+> The three `KC_HOSTNAME*` variables work as a set. Removing or changing any of them in isolation will break sign-in or sign-out (or both) in at least one of the three supported dev scenarios: Codespaces, devcontainer native debugging (`jim-build-light`), and devcontainer Docker stack (`jim-build`). See the inline comment in [docker-compose.override.yml](https://github.com/TetronIO/JIM/blob/main/docker-compose.override.yml) for the full rationale.
 
 ## Shell Aliases
 
@@ -142,8 +144,10 @@ Best for integration testing or a production-like environment.
 1. Start all services: `jim-stack`
 2. Access JIM at `http://localhost:5200`, API reference at `/api/reference`
 
-!!! note "Rebuilding after code changes"
-    When running the Docker stack, compiled code changes require a container rebuild. Use `jim-build-web`, `jim-build-worker`, or `jim-build-scheduler` to rebuild affected services. Simply refreshing the browser is not sufficient.
+> [!NOTE]
+> **Rebuilding after code changes**
+>
+> When running the Docker stack, compiled code changes require a container rebuild. Use `jim-build-web`, `jim-build-worker`, or `jim-build-scheduler` to rebuild affected services. Simply refreshing the browser is not sufficient.
 
 ## Development URLs
 
@@ -190,7 +194,7 @@ git config --global commit.gpgsign true
 git config --global user.signingkey "key::ssh-ed25519 AAAA... your-comment"
 ```
 
-!!! tip
-    Use the `key::` prefix for `user.signingkey` so the key is stored as a literal string rather than a file path. File paths from the host will not exist inside the container.
+> [!TIP]
+> Use the `key::` prefix for `user.signingkey` so the key is stored as a literal string rather than a file path. File paths from the host will not exist inside the container.
 
 VS Code automatically forwards the SSH agent into the container, so SSH authentication for `git push` and `git pull` works without copying keys. VS Code also injects a credential helper that forwards HTTPS credential requests back to the host.

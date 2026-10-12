@@ -36,7 +36,7 @@
 
     # The docs the checks read: the public site, less what leaves it.
     DocsPath            = 'docs'
-    DocsExclude         = @('CLAUDE.md', 'developer/**', 'reference/changelog.md')
+    DocsExclude         = @('CLAUDE.md', 'reference/changelog.md')
 
     # Deliberate exceptions, each with the reason it is not documented. An entry that no longer
     # applies (the thing is gone, or now documented) fails the check, so remove it then.

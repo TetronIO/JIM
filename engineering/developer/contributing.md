@@ -1,7 +1,3 @@
----
-title: Contributing
----
-
 # Contributing
 
 JIM is a source-available project. This page covers the guidelines and expectations for contributors.
