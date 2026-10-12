@@ -101,7 +101,8 @@ public class PasswordSynchronisationQueueDatabaseTests
             CancelledByName = "Ada Lovelace",
             ClaimedAt = createdAt.AddMinutes(3),
             ClaimedBy = "worker-1a2b3c4d",
-            SyncRuleId = syncRuleId
+            SyncRuleId = syncRuleId,
+            EnabledStateSetByAttributeFlow = true
         };
 
         await using (var write = NewContext())
@@ -132,6 +133,7 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.ClaimedAt, Is.EqualTo(change.ClaimedAt));
             Assert.That(stored.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
             Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
+            Assert.That(stored.EnabledStateSetByAttributeFlow, Is.True);
         }
     }
 
@@ -146,6 +148,7 @@ public class PasswordSynchronisationQueueDatabaseTests
         var syncRuleId = await SeedSyncRuleAsync(systemId);
 
         var provisioned = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+        provisioned.EnabledStateSetByAttributeFlow = true;
         await using (var write = NewContext())
             await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([provisioned]);
 
@@ -172,6 +175,8 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
             Assert.That(stored.SyncRuleId, Is.Null, "The administrator's own password has nothing left to generate from.");
             Assert.That(stored.EncryptedPassword, Is.EqualTo("$JIMPW$v1$administrator-set"));
+            Assert.That(stored.EnabledStateSetByAttributeFlow, Is.False,
+                "The administrator's set carries no export's answer about the enabled state (#2064).");
         }
     }
 
@@ -873,7 +878,8 @@ public class PasswordSynchronisationQueueDatabaseTests
             SyncRuleId = syncRuleId,
             CreatedAt = createdAt,
             ExpiresAt = createdAt.AddDays(7),
-            ActivityId = Guid.NewGuid()
+            ActivityId = Guid.NewGuid(),
+            EnabledStateSetByAttributeFlow = true
         };
 
         List<ProvisionedPasswordStagingOutcome> outcomes;
@@ -900,6 +906,63 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.CreatedAt, Is.EqualTo(createdAt));
             Assert.That(stored.ExpiresAt, Is.EqualTo(change.ExpiresAt));
             Assert.That(stored.ActivityId, Is.EqualTo(change.ActivityId));
+            Assert.That(stored.EnabledStateSetByAttributeFlow, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A later export that writes the enabled state of an account whose first password is still on the queue (#2064),
+    /// a leaver disabled or an account disabled on deprovisioning, marks that account's Provisioned row whatever its
+    /// status: a Cancelled one comes back to Pending on a Retry, so leaving it unmarked would let a late delivery
+    /// re-enable the account. Not an administrator's or a propagated password, and not another account's.
+    /// </summary>
+    [Test]
+    public async Task MarkOwedInitialPasswordsAsSetByAttributeFlowAsync_MarksEveryProvisionedRowForThoseAccountsAsync()
+    {
+        var (systemId, pendingMvoId, pendingCsoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var now = DateTime.UtcNow;
+
+        var parkedMvoId = await SeedIdentityAsync();
+        var parkedCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+        var expiredMvoId = await SeedIdentityAsync();
+        var expiredCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+        var cancelledMvoId = await SeedIdentityAsync();
+        var cancelledCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+        var explicitMvoId = await SeedIdentityAsync();
+        var explicitCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+        var unlistedMvoId = await SeedIdentityAsync();
+        var unlistedCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+
+        var pending = NewProvisionedChange(pendingMvoId, systemId, pendingCsoId, syncRuleId, Guid.NewGuid(), now);
+        var parked = NewProvisionedChange(parkedMvoId, systemId, parkedCsoId, syncRuleId, Guid.NewGuid(), now);
+        parked.Status = PendingPasswordChangeStatus.Parked;
+        var expired = NewProvisionedChange(expiredMvoId, systemId, expiredCsoId, syncRuleId, Guid.NewGuid(), now);
+        expired.Status = PendingPasswordChangeStatus.Expired;
+        var cancelled = NewProvisionedChange(cancelledMvoId, systemId, cancelledCsoId, syncRuleId, Guid.NewGuid(), now);
+        cancelled.Status = PendingPasswordChangeStatus.Cancelled;
+        var unlisted = NewProvisionedChange(unlistedMvoId, systemId, unlistedCsoId, syncRuleId, Guid.NewGuid(), now);
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([pending, parked, expired, cancelled, unlisted]);
+        var explicitId = await SeedChangeAsync(systemId, explicitMvoId, explicitCsoId, c => c.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        int marked;
+        await using (var write = NewContext())
+            marked = await new PostgresDataRepository(write).Sync.MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(
+                systemId, [pendingCsoId, parkedCsoId, expiredCsoId, cancelledCsoId, explicitCsoId]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.EnabledStateSetByAttributeFlow);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(marked, Is.EqualTo(4));
+            Assert.That(stored[pending.Id], Is.True, "A Pending first password is still owed.");
+            Assert.That(stored[parked.Id], Is.True, "A Parked first password is delivered once a person retries it.");
+            Assert.That(stored[cancelled.Id], Is.True, "A Cancelled first password comes back on a Retry.");
+            Assert.That(stored[expired.Id], Is.True, "Marking a row that can never be delivered is harmless, and keeps the rule simple.");
+            Assert.That(stored[explicitId], Is.False, "An administrator's set reads its own enable decision, not this flag.");
+            Assert.That(stored[unlisted.Id], Is.False, "No export wrote that account's enabled state.");
         }
     }
 

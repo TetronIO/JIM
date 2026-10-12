@@ -343,11 +343,11 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
+            return CreateSucceeded(externalId, dn, attributesAwaitingInitialPassword, addRequest);
         }
 
         // External ID not available, return success without it
-        return ConnectedSystemExportResult.Succeeded(null, dn, attributesAwaitingInitialPassword);
+        return CreateSucceeded(null, dn, attributesAwaitingInitialPassword, addRequest);
     }
 
     /// <summary>
@@ -435,7 +435,7 @@ internal class LdapConnectorExport
             }
         }
 
-        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests.Count);
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests);
     }
 
     /// <summary>
@@ -474,16 +474,14 @@ internal class LdapConnectorExport
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
-        if (deleteBehaviour == LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            ProcessDisable(pendingExport, dn);
-        }
-        else
+        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
         {
             ProcessHardDelete(dn);
+            return ConnectedSystemExportResult.Succeeded();
         }
 
-        return ConnectedSystemExportResult.Succeeded();
+        var disabledThrough = ProcessDisable(pendingExport, dn);
+        return DisableSucceeded(disabledThrough);
     }
 
     private void ProcessHardDelete(string dn)
@@ -516,7 +514,10 @@ internal class LdapConnectorExport
         }
     }
 
-    private void ProcessDisable(PendingExport pendingExport, string dn)
+    /// <summary>
+    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// </summary>
+    private string ProcessDisable(PendingExport pendingExport, string dn)
     {
         _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -544,6 +545,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisable: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
+        return disableAttribute;
     }
 
     private void DisableUsingUserAccountControl(string dn)
@@ -818,10 +820,10 @@ internal class LdapConnectorExport
         if (externalId != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
-            return ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
+            return CreateSucceeded(externalId, dn, attributesAwaitingInitialPassword, addRequest);
         }
 
-        return ConnectedSystemExportResult.Succeeded(null, dn, attributesAwaitingInitialPassword);
+        return CreateSucceeded(null, dn, attributesAwaitingInitialPassword, addRequest);
     }
 
     private async Task<string?> FetchExternalIdAsync(string dn, LdapConnectorRootDse rootDse)
@@ -894,7 +896,7 @@ internal class LdapConnectorExport
             await SendModifyAsync(request, workingDn, singleValuedAttributes);
         }
 
-        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests.Count);
+        return UpdateSucceeded(workingDn, wasRenamed, modifyRequests);
     }
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
@@ -929,16 +931,14 @@ internal class LdapConnectorExport
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
-        if (deleteBehaviour == LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            await ProcessDisableAsync(pendingExport, dn);
-        }
-        else
+        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
         {
             await ProcessHardDeleteAsync(dn);
+            return ConnectedSystemExportResult.Succeeded();
         }
 
-        return ConnectedSystemExportResult.Succeeded();
+        var disabledThrough = await ProcessDisableAsync(pendingExport, dn);
+        return DisableSucceeded(disabledThrough);
     }
 
     private async Task ProcessHardDeleteAsync(string dn)
@@ -969,7 +969,10 @@ internal class LdapConnectorExport
         }
     }
 
-    private async Task ProcessDisableAsync(PendingExport pendingExport, string dn)
+    /// <summary>
+    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// </summary>
+    private async Task<string> ProcessDisableAsync(PendingExport pendingExport, string dn)
     {
         _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
@@ -994,6 +997,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
+        return disableAttribute;
     }
 
     private async Task DisableUsingUserAccountControlAsync(string dn)
@@ -1786,13 +1790,48 @@ internal class LdapConnectorExport
     /// The result of an update whose modify requests have all reached the state they asked for. A renamed object
     /// reports its new Distinguished Name, so JIM records where the object now lives.
     /// </summary>
-    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, int modifyRequestCount)
+    private ConnectedSystemExportResult UpdateSucceeded(string workingDn, bool wasRenamed, List<ModifyRequest> modifyRequests)
     {
         _logger.Debug("LdapConnectorExport: Successfully updated object at '{Dn}' with {Count} modify requests",
-            LogSanitiser.Sanitise(workingDn), modifyRequestCount);
+            LogSanitiser.Sanitise(workingDn), modifyRequests.Count);
 
-        return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
+        var result = wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
+        result.SetsAccountEnabledState = WritesAccountEnabledState(modifyRequests
+            .SelectMany(request => request.Modifications.Cast<DirectoryAttributeModification>())
+            .Select(modification => modification.Name));
+        return result;
     }
+
+    /// <summary>
+    /// The result of a create the directory accepted, saying which attributes carry an interim value until an Initial
+    /// Password is delivered (#2039) and whether the add wrote the account's enabled state (#2064).
+    /// </summary>
+    private ConnectedSystemExportResult CreateSucceeded(string? externalId, string dn, IReadOnlyList<string>? attributesAwaitingInitialPassword, AddRequest addRequest)
+    {
+        var result = ConnectedSystemExportResult.Succeeded(externalId, dn, attributesAwaitingInitialPassword);
+        result.SetsAccountEnabledState = WritesAccountEnabledState(addRequest.Attributes.Cast<DirectoryAttribute>().Select(attribute => attribute.Name));
+        return result;
+    }
+
+    /// <summary>
+    /// The result of a delete performed as a disable, saying whether the disable wrote the account's enabled state
+    /// (#2064), so an Initial Password still owed to the account never re-enables it.
+    /// </summary>
+    private ConnectedSystemExportResult DisableSucceeded(string disabledThrough)
+    {
+        var result = ConnectedSystemExportResult.Succeeded();
+        result.SetsAccountEnabledState = WritesAccountEnabledState([disabledThrough]);
+        return result;
+    }
+
+    /// <summary>
+    /// Whether a request writing these attributes writes the account's enabled state (#2064): <c>userAccountControl</c>,
+    /// on the Active Directory family only. Elsewhere a password delivery's Enable Account means nothing, so there is no
+    /// enabled state for an Attribute Flow to take over from it.
+    /// </summary>
+    private bool WritesAccountEnabledState(IEnumerable<string> attributeNames) =>
+        _directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
+        && attributeNames.Any(name => name.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase));
 
     #region Modify requests: Permissive Modify and the fallback in parts
 

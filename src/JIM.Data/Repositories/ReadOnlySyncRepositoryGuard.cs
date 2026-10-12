@@ -275,6 +275,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, connectedSystemObjectIds);
 
+    public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+        => _inner.GetAccountEnablementFactsAsync(connectedSystemId, pendingPasswordChangeId, connectedSystemObjectId);
+
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)
         => _inner.GetInitialPasswordHoldSummariesAsync(connectedSystemId);
 
@@ -520,6 +523,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(StageProvisionedPasswordChangesAsync));
+
+    public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(MarkOwedInitialPasswordsAsSetByAttributeFlowAsync));
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
         => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));

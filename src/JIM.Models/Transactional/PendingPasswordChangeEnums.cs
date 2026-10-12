@@ -90,7 +90,8 @@ public enum PendingPasswordChangeOrigin
     /// <summary>
     /// The password changed somewhere and JIM is carrying it to every Connected System configured to receive
     /// synchronised passwords. The account is resolved on each attempt from the system's configuration; the
-    /// account is never enabled as a side effect; a paused system holds the change until it is switched back on.
+    /// delivery enables the account only to complete an enable JIM withheld until a new account had a password
+    /// (#2039, #2064); a paused system holds the change until it is switched back on.
     /// </summary>
     Propagated = 0,
 
@@ -176,4 +177,43 @@ public enum PasswordDeliveryDisposition
     /// wrong; the work simply stopped being needed.
     /// </summary>
     Withdrawn = 2
+}
+
+/// <summary>
+/// Why delivering a password enabled, disabled or left an account alone (#2064): the row of
+/// <c>PasswordEnablementPolicy</c>'s precedence table that decided it. Stated on the delivery's Activity, so an
+/// account left disabled, or enabled, is never left unexplained.
+/// </summary>
+public enum AccountEnablementBasis
+{
+    /// <summary>
+    /// The account's enabled state was left as it was: a propagated password, or an administrator's set with no
+    /// enable decision, changes it only to complete a withheld enable (<c>CompletesWithheldEnable</c>).
+    /// </summary>
+    LeftAsIs = 0,
+
+    /// <summary>
+    /// An administrator named the account and chose to enable or disable it with the password. That choice is
+    /// applied whatever the Attribute Flows say; Enforce State reverts it where a flow disagrees.
+    /// </summary>
+    AdministratorChoice = 1,
+
+    /// <summary>
+    /// JIM created the account disabled only because Active Directory refuses an enabled account with no password,
+    /// and held back the enabled value the Attribute Flow asked for (#2039). The password now exists, so the
+    /// delivery enables the account, which is what the flow asked for.
+    /// </summary>
+    CompletesWithheldEnable = 2,
+
+    /// <summary>
+    /// An export wrote the attribute through which the account is enabled or disabled, so the Attribute Flow
+    /// decides that state and the delivery leaves it alone.
+    /// </summary>
+    LeftToAttributeFlow = 3,
+
+    /// <summary>
+    /// Nothing sets the account's enabled state, so the provisioning Synchronisation Rule's Enable Account
+    /// decides: on enables the account, off leaves it as it was created.
+    /// </summary>
+    SyncRuleSetting = 4
 }

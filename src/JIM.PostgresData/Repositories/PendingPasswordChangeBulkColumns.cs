@@ -20,7 +20,8 @@ internal static class PendingPasswordChangeBulkColumns
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
         "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount", "SyncRuleId"
+        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount", "SyncRuleId",
+        "EnabledStateSetByAttributeFlow"
     ];
 
     /// <summary>
@@ -48,13 +49,18 @@ internal static class PendingPasswordChangeBulkColumns
     /// SyncRuleId goes with them for the same reason: it describes the password the row carries, like Origin, so
     /// a newer row's value (a rule for a provisioned row, or null for anything else) must replace the older one's.
     /// </para>
+    /// <para>
+    /// EnabledStateSetByAttributeFlow goes too (#2064): it says whether an export wrote the enabled state of the
+    /// account a provisioned row was staged for, so a re-provisioned account's row carries its own Create's answer,
+    /// and anything other than a provisioned row carries false.
+    /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
         "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
         "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount",
-        "SyncRuleId"
+        "SyncRuleId", "EnabledStateSetByAttributeFlow"
     ];
 
     /// <summary>

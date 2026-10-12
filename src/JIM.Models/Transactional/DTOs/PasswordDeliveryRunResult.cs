@@ -46,6 +46,21 @@ public class PasswordDeliveryRunResult
     public int WithdrawnCount { get; set; }
 
     /// <summary>
+    /// Passwords delivered to an account whose enabled state an export wrote (#2064), leaving that state to the
+    /// Attribute Flow rather than applying the provisioning Synchronisation Rule's Enable Account. Counted so the lane's
+    /// summary says how often the flow, not the rule, decided; each delivery's Activity says so too. Included in
+    /// <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int EnabledStateLeftToAttributeFlowCount { get; set; }
+
+    /// <summary>
+    /// Passwords whose delivery completed an enable JIM withheld until a password existed (#2039, #2064): the account
+    /// was created disabled only because Active Directory refuses an enabled account with no password, and its
+    /// Attribute Flow still asks for it enabled. Included in <see cref="DeliveredCount"/>.
+    /// </summary>
+    public int WithheldEnablesCompletedCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.
