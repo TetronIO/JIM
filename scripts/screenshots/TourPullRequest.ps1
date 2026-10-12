@@ -162,3 +162,175 @@ function Open-TourPullRequest {
         -Body @{ title = $Title; head = $Branch; base = $BaseBranch; body = $Body }
     return $created.html_url
 }
+
+<#
+.SYNOPSIS
+    True once JIM's release for the version is published: a release exists for the tag and is not a draft.
+#>
+function Test-JimReleasePublished {
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Token,
+        [string]$Repository = 'TetronIO/JIM'
+    )
+
+    try {
+        $release = Invoke-GitHubApi -Method GET -Path "repos/$Repository/releases/tags/$Version" -Token $Token
+    }
+    catch [GitHubApiNotFoundException] {
+        return $false
+    }
+    return -not $release.draft
+}
+
+<#
+.SYNOPSIS
+    Merges the branch's open screenshot pull request once its checks have passed, then deletes the branch.
+.DESCRIPTION
+    How a release publishes its screenshots (#582): the release workflow calls this when the release is published,
+    and the screenshots job calls it when it opens a pull request after the release already was, so whichever finishes
+    last merges. The other side then finds the pull request already merged, which is reported, not treated as failure.
+
+    The checks are read through the pull request's mergeable state, which needs only Pull requests read access: GitHub
+    reports it clean once every check on the head commit has passed (tetron.io builds a preview of the change), and
+    unstable while one is still running or has failed. So a failed check is waited on until the timeout rather than
+    refused at once. A pull request opened moments ago is given a minute for its checks to appear before clean is
+    believed. The merge names the commit seen clean, so anything pushed afterwards is not merged unseen, and uses the
+    first method the repository allows: squash, then a merge commit, then rebase.
+.OUTPUTS
+    An object whose Status is Merged, AlreadyMerged or NotOpen (no pull request for the branch yet), with its Url.
+#>
+function Merge-ScreenshotPullRequest {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][string]$Branch,
+        [Parameter(Mandatory)][string]$Token,
+        [int]$CheckTimeoutSeconds = 900,
+        [int]$PollSeconds = 20
+    )
+
+    $owner = $Repository.Split('/')[0]
+    $pulls = Invoke-GitHubApi -Method GET -Path "repos/$Repository/pulls?head=${owner}:$Branch&state=open" -Token $Token
+    $open = @($pulls)
+    if ($open.Count -eq 0) {
+        $closed = Invoke-GitHubApi -Method GET -Path "repos/$Repository/pulls?head=${owner}:$Branch&state=closed" -Token $Token
+        $merged = @(@($closed) | Where-Object { $_.merged_at })
+        if ($merged.Count -gt 0) { return [pscustomobject]@{ Status = 'AlreadyMerged'; Url = $merged[0].html_url } }
+        return [pscustomobject]@{ Status = 'NotOpen'; Url = $null }
+    }
+    $pull = $open[0]
+    $alreadyMerged = [pscustomobject]@{ Status = 'AlreadyMerged'; Url = $pull.html_url }
+
+    # Invoke-RestMethod may already have turned the timestamp into a date; a cast reads either.
+    $age = (Get-Date).ToUniversalTime() - ([datetime]$pull.created_at).ToUniversalTime()
+    if ($age.TotalSeconds -lt 60) { Start-Sleep -Seconds ([int](60 - $age.TotalSeconds)) }
+
+    $deadline = (Get-Date).AddSeconds($CheckTimeoutSeconds)
+    while ($true) {
+        $now = Invoke-GitHubApi -Method GET -Path "repos/$Repository/pulls/$($pull.number)" -Token $Token
+        if ($now.merged) { return $alreadyMerged }
+        if ($now.state -ne 'open') { throw "Not merging $($pull.html_url): it was closed." }
+        $state = $now.mergeable_state
+        if ($state -in 'clean', 'has_hooks') { break }
+        # Unknown while GitHub works it out; unstable while a check is running or has failed.
+        if ($state -notin 'unknown', 'unstable') { throw "Not merging $($pull.html_url): GitHub reports it as $state." }
+        if ((Get-Date) -ge $deadline) {
+            throw "Not merging $($pull.html_url): its checks had not all passed after $CheckTimeoutSeconds seconds (GitHub reports it as $state)."
+        }
+        Start-Sleep -Seconds $PollSeconds
+    }
+    $sha = $now.head.sha
+
+    $refusals = [System.Collections.Generic.List[string]]::new()
+    $done = $false
+    foreach ($method in 'squash', 'merge', 'rebase') {
+        try {
+            Invoke-GitHubApi -Method PUT -Path "repos/$Repository/pulls/$($pull.number)/merge" -Token $Token `
+                -Body @{ merge_method = $method; sha = $sha } | Out-Null
+            $done = $true
+            break
+        }
+        catch [GitHubApiNotFoundException] {
+            throw
+        }
+        catch {
+            $refusals.Add("$method`: $_")
+            # A method the repository does not allow answers 405, so the next is tried; anything else ends the attempt.
+            if ("$_" -notmatch '\(405\)') { break }
+        }
+    }
+    if (-not $done) {
+        # The other side may have merged it while this one waited on the checks, and every method then refuses.
+        $after = Invoke-GitHubApi -Method GET -Path "repos/$Repository/pulls/$($pull.number)" -Token $Token
+        if ($after.merged) { return $alreadyMerged }
+        throw "Not merging $($pull.html_url): $($refusals -join ' | ')"
+    }
+
+    try {
+        Invoke-GitHubApi -Method DELETE -Path "repos/$Repository/git/refs/heads/$Branch" -Token $Token | Out-Null
+    }
+    catch [GitHubApiNotFoundException] {
+        # Already gone: the repository deletes merged branches itself.
+    }
+    catch {
+        # The merge is what publishes; a branch left behind is only untidy.
+        Write-Warning "Merged $($pull.html_url), but the branch $Branch was not deleted: $_"
+    }
+    return [pscustomobject]@{ Status = 'Merged'; Url = $pull.html_url }
+}
+
+<#
+.SYNOPSIS
+    Merges a screenshot pull request just opened, if JIM's release for the version is already published.
+.DESCRIPTION
+    The screenshots job's half of publishing: when the release came out while the job was still capturing, nothing
+    else will merge the pull request, so the job does. Otherwise the release workflow merges it when the release is
+    published.
+.OUTPUTS
+    Merge-ScreenshotPullRequest's result, or nothing when the release is not out yet.
+#>
+function Invoke-ScreenshotMergeIfReleased {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][string]$Branch,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$ReleaseToken
+    )
+
+    if (-not (Test-JimReleasePublished -Version $Version -Token $ReleaseToken)) {
+        Write-Host "JIM $Version is not published yet; the release workflow merges the pull request when it is."
+        return
+    }
+    $result = Merge-ScreenshotPullRequest -Repository $Repository -Branch $Branch -Token $Token
+    Write-Host "JIM $Version is already published, so the pull request is merged ($($result.Status)): $($result.Url)"
+    return $result
+}
+
+<#
+.SYNOPSIS
+    Merges each site's screenshot pull request for a release just published (#582), carrying on past a failure.
+.DESCRIPTION
+    The release workflow's half of publishing, run once the GitHub release exists. One site's failure (a check that
+    failed, a pull request nothing can merge) does not keep the other's screenshots back.
+.OUTPUTS
+    One object per repository: Repository; Status, which is Merged, AlreadyMerged, NotOpen or Failed; Url; and
+    Message, why it failed.
+#>
+function Invoke-ReleaseScreenshotMerge {
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string[]]$Repository,
+        [Parameter(Mandatory)][string]$Token
+    )
+
+    foreach ($site in $Repository) {
+        try {
+            $result = Merge-ScreenshotPullRequest -Repository $site -Branch "screenshots/$Version" -Token $Token
+            [pscustomobject]@{ Repository = $site; Status = $result.Status; Url = $result.Url; Message = $null }
+        }
+        catch {
+            [pscustomobject]@{ Repository = $site; Status = 'Failed'; Url = $null; Message = "$_" }
+        }
+    }
+}

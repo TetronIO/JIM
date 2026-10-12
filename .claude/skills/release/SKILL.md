@@ -170,7 +170,7 @@ The prompt should:
 - Group suggestions by area (features, connectors, architecture, deployment, visuals, removals) so the site agent can prioritise
 - For each suggestion, include: **what area it relates to**, **what changed in JIM** (with a brief technical reason or pointer to the changelog entry), **what the site currently says or shows** (if you observed it during the fetch), and **a suggestion for what could be added/changed/removed** — phrased as "consider …", "you may want to …", or "this might be worth refreshing because …", never as "change X to Y"
 - Highlight any deprecations or removals that the site might still be advertising
-- Close with a note that the product tour's screenshots are out of scope of this prompt: JIM's `jim-screenshots` job opens their pull request on junctional.io (branch `screenshots/v<version>`) once the pre-release suite passes, so the site agent should leave the images and `imageVersion` to it, though it may suggest alt text changes where a step's image has visibly changed
+- Close with a note that the product tour's screenshots are out of scope of this prompt: JIM's `jim-screenshots` job opens their pull request on junctional.io (branch `screenshots/v<version>`) once the pre-release suite passes, and it merges itself when the release is published, so the site agent should leave the images and `imageVersion` to it, though it may suggest alt text changes where a step's image has visibly changed
 
 After writing the file, tell the user the absolute path to the prompt and remind them it is intentionally outside the repo and should be handed to the junctional.io site agent. Do NOT stage or commit the file.
 
@@ -401,6 +401,7 @@ The tag-push triggers the release workflow which:
 4. Creates an air-gapped deployment bundle
 5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, and `.env.example` published as `default.env.example`)
 6. Creates a GitHub Release with all assets
+7. Merges the release's screenshot pull requests on junctional.io and tetron.io (stable releases only)
 
 ## Step 9: Post-Release Verification
 
@@ -409,7 +410,8 @@ Tell the user to verify after the workflow completes:
 - [ ] Docker images are available: `ghcr.io/tetronio/jim-web:<version>`, etc.
 - [ ] PowerShell module is available on PSGallery: `Install-Module JIM -RequiredVersion <version>`
 - [ ] The `setup.sh` installer detects the new release
-- [ ] The product tour's screenshots: the `jim-screenshots` job in the release commit's `jim-pre-release` run opens a junctional.io pull request, `Product tour screenshots for JIM v<version>`, and a tetron.io one, `JIM screenshot for JIM v<version>`. Look through the junctional.io images and each step's alt text, and the tetron.io preview deployment, and merge both now the release is published. If the job failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
+- [ ] The screenshots are live: junctional.io's product tour and tetron.io's homepage show the v<version> images. The `jim-screenshots` job (in the release commit's `jim-pre-release` run) opened a pull request on each site, and the release run's `publish-screenshots` job merges them, or `jim-screenshots` does if it finished after the release. Nothing needs merging by hand unless a run shows a warning naming why a pull request was not merged; fix that, then re-run the job that warned, or merge the pull request. If `jim-screenshots` failed, its run says why; re-run that job alone. (`engineering/RELEASE_PROCESS.md` > Product Tour Screenshots)
+- [ ] Not blocking: if this release changed what a tour image shows, check that step's alt text on junctional.io still describes it, in both dictionaries. Alt text is not updated automatically.
 
 Provide the Actions URL for monitoring:
 ```

@@ -8,6 +8,7 @@
 # 3. Publishes PowerShell module to PSGallery
 # 4. Creates an air-gapped release bundle
 # 5. Creates a GitHub Release with all assets
+# 6. Publishes the release's screenshots to junctional.io and tetron.io (stable releases only)
 
 name: Release
 
@@ -858,3 +859,48 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           repository: ${{ github.repository_owner }}/junctional.io
           event-type: jim-release
+
+  # The release's screenshots on junctional.io and tetron.io (#582). pre-release.yml's jim-screenshots job captured them
+  # and opened a pull request on each site; merging them here means the sites change the moment the release is
+  # published, and never before. That job may still be capturing: a site with no pull request yet is left to it, since
+  # it merges its own pull requests when it finds the release already out. Non-fatal, like notify-site: the release
+  # is published by now, so a pull request that cannot be merged is a warning naming why, not a failed release.
+  publish-screenshots:
+    name: Publish screenshots
+    runs-on: self-hosted
+    needs: create-release
+    if: ${{ !contains(github.ref, '-') }}
+
+    # This job authenticates to the sites with the app installation token, not GITHUB_TOKEN.
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Mint a token for the sites
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            junctional.io
+            tetron.io
+
+      - name: Merge the screenshot pull requests
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION_TAG: ${{ github.ref_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          pwsh -File ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
+            -Repository "$env:OWNER/junctional.io", "$env:OWNER/tetron.io"
+          exit $LASTEXITCODE
