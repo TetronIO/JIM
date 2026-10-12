@@ -123,8 +123,9 @@ public class PendingPasswordChange
     /// <summary>
     /// Whether an export to this row's account wrote the attribute through which the Connected System enables or
     /// disables it (#2064): <c>userAccountControl</c> on Active Directory and Samba AD. Where it did, that Attribute
-    /// Flow decides whether the account is enabled, and delivering the first password leaves it alone rather than
-    /// applying the provisioning Synchronisation Rule's Enable Account.
+    /// Flow decides whether the account is enabled: delivering the first password does not apply the provisioning
+    /// Synchronisation Rule's Enable Account, and changes the enabled state only to complete an enable JIM withheld
+    /// until the password existed (#2039).
     /// <para>
     /// Meaningful only for a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Set when the row is staged,
     /// from the Create that provisioned the account, and set again by any later export that writes the enabled state

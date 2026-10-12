@@ -188,7 +188,7 @@ public enum AccountEnablementBasis
 {
     /// <summary>
     /// The account's enabled state was left as it was: a propagated password, or an administrator's set with no
-    /// enable decision, never changes it.
+    /// enable decision, changes it only to complete a withheld enable (<c>CompletesWithheldEnable</c>).
     /// </summary>
     LeftAsIs = 0,
 

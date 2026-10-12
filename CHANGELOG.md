@@ -69,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
 - 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
 - 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
-- 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no Attribute Flow sets the enabled state, and off leaves the account as created rather than disabling it. (#2064)
+- 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 
@@ -158,7 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's: where an Attribute Flow sets whether an account is enabled, the flow decides. (#2064)
+- 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 
 ### Performance
 

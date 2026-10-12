@@ -37,7 +37,7 @@ function Get-JIMSyncRuleInitialPassword {
         - source               [string]  Discovered, Custom or Static
         - customPolicy         [object]  The generator settings used when source is Custom
         - expiryBehaviour      [string]  What happens to the password once it is set
-        - enableAccount        [bool]    Whether the account is enabled once the password is set, where no export has written its enabled state
+        - enableAccount        [bool]    Whether the account is enabled once the password is set, where no export has written its enabled state by the time the password is delivered
         - staticPasswordSet    [bool]    Whether one password is stored for every account this rule provisions
         - staticPasswordSetAt  [datetime] When that password last changed, or null where none is set
         - parkedAccountCount   [int]     Accounts waiting on a change to these settings
