@@ -1215,7 +1215,7 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 | `Password` | `securestring` | Yes (unless `-Generate`) | | The password. Encrypted before JIM stores it and held only until delivered. |
 | `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate the password. With `-ConnectedSystemId`, against the named systems' policies; without, against every system the Metaverse Object has a Connected System Object in. |
 | `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` with `-ConnectedSystemId`; `ExpiresAccordingToTargetPolicy` without | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. The defaults follow who chose the password: you did when naming Connected System Objects; the person did otherwise. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the named Connected System Objects as part of setting the password. Only available with `-ConnectedSystemId`: a propagated password never enables a Connected System Object, because it reaches objects an administrator may have disabled on purpose. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the named Connected System Objects as part of setting the password. Only available with `-ConnectedSystemId`: a propagated password never chooses to enable a Connected System Object, because it reaches objects an administrator may have disabled on purpose. |
 | `Wait` | `int` | No | `10` with `-ConnectedSystemId`; `0` without | Seconds, 0 to 30, to wait for the systems to answer. The wait ends early once every target has settled. A script that needs to watch for longer should poll `Get-JIMPendingPasswordChange -MetaverseObjectId` instead. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
 

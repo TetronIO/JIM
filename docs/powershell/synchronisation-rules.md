@@ -1812,7 +1812,7 @@ Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
 | `Source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every Connected System Object) |
 | `CustomPolicy` | `object` | The generator settings used when `Source` is `Custom` |
 | `ExpiryBehaviour` | `string` | What happens to the password once it is set |
-| `EnableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set |
+| `EnableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set, where no Attribute Flow sets its enabled state; off leaves it as it was created |
 | `StaticPasswordSet` | `bool` | Whether one password is stored for every Connected System Object this rule provisions |
 | `StaticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
 | `ParkedAccountCount` | `int` | Connected System Objects waiting on a change to these settings |

@@ -105,9 +105,9 @@ function Set-JIMSyncRuleInitialPassword {
         A Connector that cannot honour the choice records what it applied instead, per account.
 
     .PARAMETER EnableAccount
-        Whether the account is enabled once the password is set. Directories that refuse to enable an account
-        without a compliant password need the password first, which is why this belongs here rather than in an
-        Attribute Flow.
+        Whether the account is enabled once the password is set. Applies only where no Attribute Flow sets the
+        account's enabled state (such as userAccountControl): where one does, the flow decides and the password's
+        delivery leaves the enabled state alone. $false leaves the account as it was created.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.

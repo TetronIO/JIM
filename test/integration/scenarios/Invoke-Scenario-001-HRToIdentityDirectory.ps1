@@ -30,12 +30,13 @@
     generated for them. Test 1 asserts the generated and derived values, including two same-named
     joiners receiving different suffixes.
 
-    On the Active Directory lab only, the provisioning Synchronisation Rule also carries an Initial
-    Password (Setup-Scenario-001.ps1 -InitialPassword, #2039), and the userAccountControl Attribute Flow
-    stays as it is. Real Active Directory refuses to create an enabled account with no password, so JIM
-    creates each joiner disabled and the password's delivery enables it; Test 1 waits for the deliveries
-    and asserts the account then holds userAccountControl 512. Samba AD, OpenLDAP and 389 Directory
-    Server run without one.
+    On the Active Directory and Samba AD labs, the provisioning Synchronisation Rule also carries an Initial
+    Password (Setup-Scenario-001.ps1 -InitialPassword), and the userAccountControl Attribute Flow stays as it
+    is. Real Active Directory refuses to create an enabled account with no password, so JIM creates each
+    joiner disabled and the password's delivery enables it (#2039). Test 1 waits for the deliveries, asserts
+    an active joiner's account holds userAccountControl 512, and asserts the HR data's Archived joiner, whose
+    account the flow creates disabled, is still disabled (#2064). OpenLDAP and 389 Directory Server run
+    without one.
 
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
@@ -405,13 +406,15 @@ function Assert-GeneratedIdentity {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Initial Password on the Active Directory lab (#2039)
+# Initial Password on the Active Directory and Samba AD labs (#2039, #2064)
 #
 # Real Active Directory refuses to create an enabled account that has no password (0000052D), and this
 # scenario's userAccountControl Attribute Flow asks for an enabled one (512). On the Active Directory lab the
 # provisioning Synchronisation Rule therefore carries an Initial Password (Get-IntegrationScenarioSetupParameters
-# passes -InitialPassword there and nowhere else): JIM creates each joiner disabled (514, the flow's value with
-# ACCOUNTDISABLE added), and the Password Delivery Service enables it once the password is set.
+# passes -InitialPassword there and on Samba AD): JIM creates each joiner disabled (514, the flow's value with
+# ACCOUNTDISABLE added), and the Password Delivery Service enables it once the password is set. An account the
+# flow itself creates disabled (an Archived joiner) is left disabled by the delivery on both directories, because
+# the flow, not the Initial Password, decides the enabled state.
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Wait-ForInitialPasswordDelivery {
@@ -465,11 +468,12 @@ function Wait-ForInitialPasswordDelivery {
 function Assert-AccountEnabledByInitialPassword {
     <#
     .SYNOPSIS
-        Asserts that an account provisioned with an Initial Password on Active Directory holds exactly the
-        userAccountControl value the Attribute Flow asks for (512), enabled, once its password has been delivered.
+        Asserts that an account provisioned with an Initial Password holds exactly the userAccountControl value the
+        Attribute Flow asks for (512), enabled, once its password has been delivered.
     .DESCRIPTION
-        JIM created the account disabled, and the Initial Password's delivery is what enables it. Any other value
-        means the delivery did not enable the account, or JIM no longer writes the flow's value once it has.
+        On Active Directory JIM created the account disabled, and the Initial Password's delivery is what enables
+        it; on Samba AD the account was created enabled and the delivery must leave it so. Any other value means the
+        delivery did not leave the account as the flow asks.
     #>
     param(
         [Parameter(Mandatory=$true)][string]$AccountName,
@@ -485,6 +489,32 @@ function Assert-AccountEnabledByInitialPassword {
         throw "$Label expected '$AccountName' to be enabled once its Initial Password was delivered (userAccountControl 512), but it holds $userAccountControl"
     }
     Write-Host "    OK '$AccountName' enabled once its Initial Password was delivered (userAccountControl 512)" -ForegroundColor Green
+}
+
+function Assert-AccountLeftDisabledByInitialPassword {
+    <#
+    .SYNOPSIS
+        Asserts that an account the Attribute Flow creates disabled is still disabled (ACCOUNTDISABLE set) once its
+        Initial Password has been delivered (#2064).
+    .DESCRIPTION
+        The flow, not the Initial Password, decides whether the account is enabled. A delivery that enabled it
+        would leave a person who should not have a working account yet, or any more, signing in with a password
+        JIM knows, and the confirming import would report the flow's disabled value as not confirmed.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$AccountName,
+        [Parameter(Mandatory=$true)][string]$Label
+    )
+
+    $entry = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$AccountName)" -Attributes @('userAccountControl') -AsText
+    if ($entry -notmatch '(?m)^userAccountControl: (\d+)\s*$') {
+        throw "$Label could not read userAccountControl for '$AccountName' from $($DirectoryConfig.ConnectedSystemName). Directory output: $entry"
+    }
+    $userAccountControl = [int]$Matches[1]
+    if (($userAccountControl -band 2) -eq 0) {
+        throw "$Label expected '$AccountName', whose Attribute Flow creates the account disabled, to stay disabled once its Initial Password was delivered, but it holds $userAccountControl"
+    }
+    Write-Host "    OK '$AccountName' left disabled once its Initial Password was delivered (userAccountControl $userAccountControl)" -ForegroundColor Green
 }
 
 function Add-HrCsvRow {
@@ -591,8 +621,9 @@ try {
     # it (-GenerateAccountName -DeriveFromAccountName). Get-IntegrationScenarioSetupParameters is the one place
     # that says so, for this script and -SetupOnly alike; the switches are not Setup-Scenario-001.ps1's default,
     # because the scenarios that compose that setup as a substrate (004, 005, 006, 007, 017, 020, 021, 022, 024
-    # and others) depend on its sourced identifiers. On the Active Directory lab it adds -InitialPassword, which
-    # real Active Directory needs before it will create an enabled account (#2039; see the section above).
+    # and others) depend on its sourced identifiers. On the Active Directory and Samba AD labs it adds
+    # -InitialPassword, which real Active Directory needs before it will create an enabled account (#2039), and
+    # which Samba AD runs to keep #2064 covered (see the section above).
     $scenarioSetupParams = Get-IntegrationScenarioSetupParameters -ScenarioNumber 1 -DirectoryType $DirectoryConfig.DirectoryType
     $initialPasswordConfigured = $scenarioSetupParams.ContainsKey('InitialPassword') -and $scenarioSetupParams.InitialPassword
     $config = & "$PSScriptRoot/../Setup-Scenario-001.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig @scenarioSetupParams
@@ -769,10 +800,10 @@ try {
         # Outcome graph: validate export outcomes (#363 Phase 4b)
         Assert-ActivityItemsHaveOutcomeSummary -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)" -ExpectedOutcomeType "Exported"
 
-        # With an Initial Password (the Active Directory lab), the export created every joiner disabled and queued its
-        # password. Wait for the deliveries, which enable the accounts, before the confirming import, so the import
-        # reads each account as the Attribute Flow asked for it and confirms it, rather than finding the interim
-        # disabled value and holding the change until a later import.
+        # With an Initial Password (the Active Directory and Samba AD labs), the export queued every joiner's password,
+        # and on Active Directory created the joiner disabled. Wait for the deliveries, which enable those accounts,
+        # before the confirming import, so the import reads each account as the Attribute Flow asked for it and
+        # confirms it, rather than finding the interim disabled value and holding the change until a later import.
         if ($initialPasswordConfigured) {
             Write-Host "Waiting for the Initial Passwords to be delivered (they enable the new accounts)..." -ForegroundColor Gray
             Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
@@ -962,11 +993,17 @@ try {
             Assert-GeneratedIdentity -Identity $testUserIdentity -FirstName $testUser.FirstName -LastName $testUser.LastName -Label "Joiner" | Out-Null
             Write-Host "  ✓ User '$($testUserIdentity.AccountName)' provisioned to $directoryName" -ForegroundColor Green
 
-            # Created disabled because Active Directory refuses an enabled account with no password, and enabled by
-            # the Initial Password's delivery, which Wait-ForInitialPasswordDelivery saw complete before the
-            # confirming import: the account must now hold the flow's 512, not the interim 514.
+            # On Active Directory, created disabled because it refuses an enabled account with no password, and
+            # enabled by the Initial Password's delivery, which Wait-ForInitialPasswordDelivery saw complete before the
+            # confirming import: the account must now hold the flow's 512, not the interim 514. The HR data's second
+            # person is always Archived, so the flow creates their account disabled (514), and the delivery must have
+            # left it so (#2064).
             if ($initialPasswordConfigured) {
                 Assert-AccountEnabledByInitialPassword -AccountName $testUserIdentity.AccountName -Label "Joiner"
+
+                $archivedJoiner = New-TestUser -Index 2
+                $archivedIdentity = Get-GeneratedIdentity -EmployeeId $archivedJoiner.EmployeeId -Label "Joiner (archived)"
+                Assert-AccountLeftDisabledByInitialPassword -AccountName $archivedIdentity.AccountName -Label "Joiner (archived)"
             }
 
             # Two joiners with the same name as each other, and as nobody else, in one batch: the first value is

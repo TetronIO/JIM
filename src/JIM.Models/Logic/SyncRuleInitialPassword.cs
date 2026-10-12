@@ -105,6 +105,11 @@ public class SyncRuleInitialPassword
     /// Active Directory refuses to enable an account that has no policy-compliant password, so the enable has to
     /// follow the password rather than accompany the create; the Connector owns that ordering.
     /// </para>
+    /// <para>
+    /// Applies only where no Attribute Flow sets the account's enabled state (#2064): where the export that created
+    /// the account wrote it, the flow decides and the delivery leaves it alone. Off leaves the account as it was
+    /// created rather than disabling it. <c>PasswordEnablementPolicy</c> holds the whole precedence.
+    /// </para>
     /// </summary>
     public bool EnableAccount { get; set; } = true;
 
