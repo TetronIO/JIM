@@ -71,7 +71,7 @@ function Remove-JIMExampleDataSet {
             # Continue with ID if we can't get the name
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($dataSetName, "Remove Example Data Set")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $dataSetName -Action "Remove Example Data Set" -Force:$Force) {
             Write-Verbose "Removing Example Data Set: $Id ($dataSetName)"
 
             try {

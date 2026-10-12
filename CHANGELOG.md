@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)
 - 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held: the attribute is left as it was, and the run item lists every such value. One such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
 - 🐛 An import no longer ends **Failed with error** when every object it recorded failed but the rest were unchanged: one bad value among a hundred unchanged objects completes with a warning. (#2066)
 - 🐛 An import's Activity message counts as updated only the objects that changed: objects compared and found unchanged count as unchanged, deletes as deleted, and objects a Full Import no longer found are reported apart from those it read. (#2129)

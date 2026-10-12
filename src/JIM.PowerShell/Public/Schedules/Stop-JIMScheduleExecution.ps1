@@ -55,7 +55,7 @@ function Stop-JIMScheduleExecution {
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($Id, "Stop Schedule Execution")) {
+        if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $Id -Action "Stop Schedule Execution" -Force:$Force) {
             Write-Verbose "Stopping Schedule Execution: $Id"
 
             try {
