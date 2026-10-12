@@ -139,10 +139,26 @@ function Join-Choices {
 }
 
 # What a parameter's attributes say, as sentences to follow its description.
+function Get-Ordinal {
+    param([int]$Position)
+    $words = 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'
+    if ($Position -lt $words.Count) { return $words[$Position] }
+    "number $($Position + 1)"
+}
+
 function Get-AttributeSentences {
-    param($Parameter, [object[]]$SetMetadata)
+    param($Parameter, [object[]]$SetMetadata, [switch]$DeclaresPositions)
 
     $sentences = [System.Collections.Generic.List[string]]::new()
+
+    # Only positions the cmdlet declares: PowerShell gives one to every parameter of a cmdlet that declares
+    # none, and those are an accident of declaration order, not an interface.
+    if ($DeclaresPositions) {
+        $positions = @($SetMetadata | Where-Object { $_.Position -ge 0 } | ForEach-Object Position | Sort-Object -Unique)
+        if ($positions.Count -gt 0) {
+            $sentences.Add("Can be given by position, as the $((@($positions | ForEach-Object { Get-Ordinal $_ })) -join ' or ') argument.")
+        }
+    }
 
     $byValue = @($SetMetadata | Where-Object ValueFromPipeline).Count -gt 0
     $byProperty = @($SetMetadata | Where-Object ValueFromPipelineByPropertyName).Count -gt 0
@@ -201,6 +217,12 @@ function Get-CmdletReference {
         }
     }
 
+    $declaresPositions = $null -ne $paramBlock -and $null -ne $paramBlock.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.NamedAttributeArgumentAst] -and $node.ArgumentName -eq 'Position' -and
+                $node.Parent.TypeName.Name -in 'Parameter', 'System.Management.Automation.Parameter', 'ParameterAttribute'
+        }, $true)
+
     $outputTypes = [ordered]@{}
     foreach ($attribute in @($Command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.OutputTypeAttribute] })) {
         foreach ($type in $attribute.Type) {
@@ -216,6 +238,7 @@ function Get-CmdletReference {
         Sets        = $sets
         NamedSets   = $named
         Parameters  = @($parameters)
+        DeclaresPositions = $declaresPositions
         Outputs     = @(if ($help) { $help.Outputs | ForEach-Object { ConvertTo-Paragraphs $_ } })
         OutputTypes = $outputTypes
     }
@@ -232,10 +255,20 @@ function Format-Syntax {
             $lines.Add('# ' + $set.Name + $(if ($set.IsDefault) { ' (default)' }))
         }
         $inSet = @($Reference.Parameters | Where-Object { @($_.Sets | ForEach-Object Name) -contains $set.Name })
+        $positionOf = @{}
+        if ($Reference.DeclaresPositions) {
+            foreach ($metadata in @($set.Parameters | Where-Object { $_.Position -ge 0 })) { $positionOf[$metadata.Name] = $metadata.Position }
+        }
+        $positional = @($inSet | Where-Object { $positionOf.ContainsKey($_.Name) } | Sort-Object { $positionOf[$_.Name] })
+        $inSet = @($inSet | Where-Object { -not $positionOf.ContainsKey($_.Name) })
         $mandatory = @($inSet | Where-Object { ($set.Parameters | Where-Object Name -eq $_.Name).IsMandatory })
         $mandatoryNames = @($mandatory | ForEach-Object Name)
         $optional = @($inSet | Where-Object { $mandatoryNames -notcontains $_.Name })
         $tokens = @($Reference.Name)
+        foreach ($parameter in $positional) {
+            $token = "[-$($parameter.Name)] <$(Get-FriendlyTypeName $parameter.Type)>"
+            $tokens += if (($set.Parameters | Where-Object Name -eq $parameter.Name).IsMandatory) { $token } else { "[$token]" }
+        }
         foreach ($parameter in $mandatory) {
             $tokens += if ($parameter.IsSwitch) { "-$($parameter.Name)" } else { "-$($parameter.Name) <$(Get-FriendlyTypeName $parameter.Type)>" }
         }
@@ -271,7 +304,7 @@ function Format-Parameters {
     if ($Reference.Parameters.Count -eq 0) { return "### Parameters`n`nNone." }
 
     $rows = foreach ($parameter in $Reference.Parameters) {
-        $sentences = @(Get-AttributeSentences -Parameter $parameter.Metadata -SetMetadata $parameter.SetMetadata)
+        $sentences = @(Get-AttributeSentences -Parameter $parameter.Metadata -SetMetadata $parameter.SetMetadata -DeclaresPositions:$Reference.DeclaresPositions)
         $description = $parameter.Description
         if ($sentences.Count -gt 0) {
             if ($description -and $description -notmatch '[.!?]$') { $description += '.' }

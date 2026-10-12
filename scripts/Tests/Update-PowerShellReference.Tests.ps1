@@ -204,6 +204,55 @@ function Get-JIMGadget {
 }
 '@
 
+    # Declares positions, so they are part of its interface: a mandatory one, an optional one, and a switch.
+    $script:SetWidgetName = @'
+function Set-JIMWidgetName {
+    <#
+    .SYNOPSIS
+        Renames a Widget.
+
+    .PARAMETER Id
+        The Widget to rename.
+
+    .PARAMETER Name
+        The new name.
+
+    .PARAMETER PassThru
+        Returns the renamed Widget.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetHeader')]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [int]$Id,
+
+        [Parameter(Position = 1)]
+        [string]$Name,
+
+        [switch]$PassThru
+    )
+}
+'@
+
+    # Declares no position, so PowerShell gives its parameter one nobody chose.
+    $script:GetWidgetCount = @'
+function Get-JIMWidgetCount {
+    <#
+    .SYNOPSIS
+        Counts a Widget's parts.
+
+    .PARAMETER Id
+        The Widget.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetSummary')]
+    param(
+        [Parameter(Mandatory)]
+        [int]$Id
+    )
+}
+'@
+
     # Returns a schema whose descriptions carry the text .NET renders for a <see cref> to a member.
     $script:GetReport = @'
 function Get-JIMWidgetReport {
@@ -503,6 +552,25 @@ Describe 'Update-PowerShellReference: generating a block' {
         $table = (Get-OutputTypes (Get-Block (Get-Page $fixture) 'Get-JIMWidgetReport'))[0].Table
         ($table | Where-Object Property -eq 'Worst').Description | Should -Be 'The worst status among Widgets; The WidgetReport.Widgets list stays.'
         ($table | Where-Object Property -eq 'Limit').Description | Should -Be 'Never ordered: the sentinel (MaxValue), unlike Worst.'
+    }
+
+    It 'shows the positions a cmdlet declares, in the syntax and in the parameter table' {
+        $fixture = New-Fixture -Functions @($script:SetWidgetName) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Set-JIMWidgetName') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Set-JIMWidgetName'
+        Get-SyntaxLines $block | Should -Be @('Set-JIMWidgetName [-Id] <int> [[-Name] <string>] [-PassThru]')
+        $rows = ConvertFrom-MarkdownTable (Get-Subsection $block 'Parameters')
+        ($rows | Where-Object Name -eq 'Id').Description | Should -Be 'The Widget to rename. Can be given by position, as the first argument.'
+        ($rows | Where-Object Name -eq 'Name').Description | Should -Be 'The new name. Can be given by position, as the second argument.'
+        ($rows | Where-Object Name -eq 'PassThru').Description | Should -Be 'Returns the renamed Widget.'
+    }
+
+    It 'says nothing of a position the cmdlet did not declare' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetCount) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetCount') }
+        Invoke-Generator $fixture | Out-Null
+        $block = Get-Block (Get-Page $fixture) 'Get-JIMWidgetCount'
+        Get-SyntaxLines $block | Should -Be @('Get-JIMWidgetCount -Id <int>')
+        (ConvertFrom-MarkdownTable (Get-Subsection $block 'Parameters') | Where-Object Name -eq 'Id').Description | Should -Be 'The Widget.'
     }
 
     It 'tables a type without a Description column when its schema describes none of its properties' {
