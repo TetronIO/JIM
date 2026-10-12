@@ -1,5 +1,8 @@
 ---
 title: Service Settings
+description: The settings that change how JIM runs, their defaults and overrides, read-only settings, and reverting one.
+type: object
+audience: administrator
 ---
 
 # Service Settings
@@ -46,7 +49,7 @@ Nearly every Service Setting is operational and saves in silence. The few that s
 
 ## Change history
 
-Every update and revert records a versioned entry in the setting's [configuration change history](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
+Every update and revert records a versioned entry in the setting's [Configuration Change History](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
 
 When you save or revert a setting in the admin portal, an optional "Reason for change" prompt lets you record why (a change ticket number, for example); automation can pass the same reason via `-ChangeReason` or the REST request. Encrypted setting values are never stored in the history: a changed secret is shown as changed, never by value.
 
@@ -76,6 +79,6 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 - **PowerShell**<br /> [Service Settings cmdlets](../powershell/service-settings.md) (`Get-JIMServiceSetting`, `Set-JIMServiceSetting`, etc.)
 - **REST API**<br /> Service Settings endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## Related
 
 - [Administration: Configuration Reference](../administration/configuration.md#service-settings): every Service Setting, what it does and its default

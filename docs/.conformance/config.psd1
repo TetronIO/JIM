@@ -111,7 +111,7 @@
     # Pages and folders migrated to the standard: no baseline, and Ratchet rules fail outright.
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
-    ConformantFolders       = @('getting-started', 'api', 'reference', 'administration')
+    ConformantFolders       = @('getting-started', 'api', 'reference', 'administration', 'configuration')
     ConformantPages         = @(
         'index.md'
         'concepts/index.md'

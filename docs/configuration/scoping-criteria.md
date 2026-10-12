@@ -37,7 +37,7 @@ Three rules decide outcomes that are easy to misread from the editor:
 - **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal*, except a comparison that requires no value. "Department does not equal Test" therefore excludes an object with no Department.
 - **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
 
-To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse.md#why-it-is-connected-and-why-it-is-not).
+To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
 
 ## Multi-valued attributes in scope
 
