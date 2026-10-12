@@ -104,8 +104,11 @@
                 </MudStack>
             }
 
-            <MudSpacer />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+        </MudStack>
+
+        @* Second row: what can be done with the object. None of them is the page's main action, so all are outlined. *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap mt-3" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
