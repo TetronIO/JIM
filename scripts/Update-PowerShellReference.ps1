@@ -19,13 +19,14 @@
 
     - Syntax: one line per parameter set, from Get-Command.
     - Parameters: name, type, where it is required, default and description. The description is the
-      parameter's .PARAMETER help, followed by what its attributes say (pipeline input, ValidateSet,
-      ValidateRange, SupportsWildcards).
+      parameter's .PARAMETER help, followed by what its attributes say (pipeline input and the property
+      names that bind it, other aliases, ValidateSet, ValidateRange, SupportsWildcards).
     - Output: the cmdlet's .OUTPUTS help, then each type it declares with
       [OutputType('JIM.<Schema>', ParameterSetName = '<Set>')], the sets that return it, and the
       properties of that schema in the OpenAPI document, in the PascalCase the module returns them in.
       A JIM type that is not an OpenAPI schema (a cmdlet that builds its own object) must be listed in
-      the config's NonApiOutputTypes with its reason, and its properties are left to the .OUTPUTS help;
+      the config's NonApiOutputTypes with its reason, and its properties are tabled from the list its
+      .OUTPUTS help gives (a paragraph whose first line is the type's name, then "Name (type): description");
       one the module names itself but whose properties are an API schema's is listed in
       OutputTypeSchemas with that schema, whose properties are tabled for it.
 
@@ -193,9 +194,18 @@ function Get-AttributeSentences {
 
     $byValue = @($SetMetadata | Where-Object ValueFromPipeline).Count -gt 0
     $byProperty = @($SetMetadata | Where-Object ValueFromPipelineByPropertyName).Count -gt 0
-    if ($byValue -and $byProperty) { $sentences.Add('Accepts pipeline input, by value or by property name.') }
+    # An alias on a parameter bound by property name is what lets a parent object pipe in (a Connected
+    # System carries Id, not ConnectedSystemId), so it is named as a property that binds, never offered as
+    # a spelling to type: on a child-noun cmdlet, -Id reads as the child's id. Any other alias is a spelling.
+    $aliases = @($Parameter.Aliases)
+    $properties = if ($aliases.Count -gt 0) { ', ' + ((@($Parameter.Name) + $aliases | ForEach-Object { "``$_``" }) -join ' or ') } else { '' }
+    if ($byValue -and $byProperty) { $sentences.Add("Accepts pipeline input, by value or by property name$properties.") }
     elseif ($byValue) { $sentences.Add('Accepts pipeline input.') }
-    elseif ($byProperty) { $sentences.Add('Accepts pipeline input by property name.') }
+    elseif ($byProperty) { $sentences.Add("Accepts pipeline input by property name$properties.") }
+    if ($aliases.Count -gt 0 -and -not $byProperty) {
+        $spellings = @($aliases | ForEach-Object { "``-$_``" }) -join ' or '
+        $sentences.Add("Also accepted as $spellings.")
+    }
 
     foreach ($attribute in $Parameter.Attributes) {
         if ($attribute -is [System.Management.Automation.ValidateSetAttribute]) {

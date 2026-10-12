@@ -201,7 +201,7 @@ Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
+| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name, `PredefinedSearchId` or `Id`. |
 
 ### Output
 
@@ -241,7 +241,7 @@ New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
+| `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name, `PredefinedSearchId` or `Id`. |
 | `ParentGroupId` | `int` | No |  | The ID of an existing group to nest this one in. A top-level group when omitted. |
 | `Type` | `string` | No | `'All'` | How the group combines what it holds: All (AND) or Any (OR). One of `All` or `Any`. |
 | `Position` | `int` | No | `0` | The group's place among its siblings. |
@@ -283,7 +283,7 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
-| `GroupId` | `int` | Yes |  | The ID of the criteria group to update. Accepts pipeline input by property name. |
+| `GroupId` | `int` | Yes |  | The ID of the criteria group to update. Accepts pipeline input by property name, `GroupId` or `Id`. |
 | `Type` | `string` | No |  | How the group combines what it holds: All (AND) or Any (OR). One of `All` or `Any`. |
 | `Position` | `int` | No |  | The group's place among its siblings. |
 | `ChangeReason` | `string` | No |  | Why the change was made, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
@@ -322,7 +322,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
-| `GroupId` | `int` | Yes |  | The ID of the criteria group to remove, with everything in it. Accepts pipeline input by property name. |
+| `GroupId` | `int` | Yes |  | The ID of the criteria group to remove, with everything in it. Accepts pipeline input by property name, `GroupId` or `Id`. |
 | `ChangeReason` | `string` | No |  | Why the group was removed, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 
 ### Output
@@ -447,7 +447,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -Crite
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the criteria group that holds the criterion. Accepts pipeline input by property name. |
-| `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name. |
+| `CriterionId` | `int` | Yes |  | The ID of the criterion to update. Accepts pipeline input by property name, `CriterionId` or `Id`. |
 | `MetaverseAttributeId` | `int` | Yes (ById) |  | The ID of the Metaverse Attribute to compare. |
 | `MetaverseAttributeName` | `string` | Yes (ByName) |  | The name of the Metaverse Attribute to compare, instead of its ID. |
 | `ComparisonType` | `string` | Yes |  | The comparison, which must suit the attribute's data type. Text takes Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains and NotContains; Number, LongNumber, Decimal and DateTime take Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan and GreaterThanOrEquals; Boolean and Guid take Equals and NotEquals. One of `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan` or `GreaterThanOrEquals`. |
@@ -501,7 +501,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 |------|------|----------|---------|-------------|
 | `PredefinedSearchId` | `int` | Yes |  | The ID of the Predefined Search. Accepts pipeline input by property name. |
 | `GroupId` | `int` | Yes |  | The ID of the criteria group that holds the criterion. Accepts pipeline input by property name. |
-| `CriterionId` | `int` | Yes |  | The ID of the criterion to remove. Accepts pipeline input by property name. |
+| `CriterionId` | `int` | Yes |  | The ID of the criterion to remove. Accepts pipeline input by property name, `CriterionId` or `Id`. |
 | `ChangeReason` | `string` | No |  | Why the criterion was removed, recorded on the audit Activity and shown in the Predefined Search's Configuration Change History. |
 
 ### Output

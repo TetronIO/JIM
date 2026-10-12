@@ -71,22 +71,12 @@ Describe 'Get-JIMRunProfile' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
 
-        It 'Should document the targetsDeselectedPartition output property' {
-            # An operator scripting against JIM has to be able to find the Run Profiles that partition
-            # deselection has left inoperable without executing them and reading the failure.
-            ($help.returnValues | Out-String) | Should -Match 'targetsDeselectedPartition'
-        }
-
-        It 'Should document the allowObjectTypeChanges output property' {
-            # A script auditing which Run Profiles carry Object Type changes out (#2049) filters on this property.
-            ($help.returnValues | Out-String) | Should -Match 'allowObjectTypeChanges'
-        }
-
-        It 'Should document every safeguards member, the deletion detection limits included' {
-            $outputs = $help.returnValues | Out-String
-            foreach ($member in @('maxCreates', 'maxUpdates', 'maxDeletes', 'maxDetectedDeletions', 'maxDetectedDeletionsPercent')) {
-                $outputs | Should -Match "\b$member\b"
-            }
+        It 'Should declare that it returns the API''s Run Profile, so the reference documents its properties' {
+            # Scripts filter on TargetsDeselectedPartition (Run Profiles that partition deselection left inoperable),
+            # AllowObjectTypeChanges (#2049) and the Safeguards. The reference tables every property of the declared
+            # schema from the DTO's own comments, and build-and-test fails when the page and the schema disagree
+            # (ACC-5), so the properties are documented there rather than listed by hand in .OUTPUTS.
+            (Get-Command Get-JIMRunProfile).OutputType.Name | Should -Be 'JIM.RunProfileDto'
         }
     }
 }

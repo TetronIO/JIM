@@ -255,6 +255,33 @@ function Set-JIMWidgetName {
 }
 '@
 
+    # A child-noun cmdlet that takes its parent from the pipeline: a piped Widget carries Id, not WidgetId, so
+    # the alias is what binds it. And an alias kept only so an old spelling still works.
+    $script:GetWidgetPart = @'
+function Get-JIMWidgetPart {
+    <#
+    .SYNOPSIS
+        Gets a Widget's parts.
+
+    .PARAMETER WidgetId
+        The Widget whose parts to get.
+
+    .PARAMETER Kind
+        The kind of part.
+    #>
+    [CmdletBinding()]
+    [OutputType('JIM.WidgetHeader')]
+    param(
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Alias('Id')]
+        [int]$WidgetId,
+
+        [Alias('PartKind')]
+        [string]$Kind
+    )
+}
+'@
+
     # Declares no position, so PowerShell gives its parameter one nobody chose.
     $script:GetWidgetCount = @'
 function Get-JIMWidgetCount {
@@ -610,6 +637,14 @@ function Disconnect-JIMWidget {
         $remove = ConvertFrom-MarkdownTable (Get-Subsection $script:RemoveBlock 'Parameters')
         ($remove | Where-Object Name -eq 'Id').Description | Should -Match 'pipeline input'
         ($remove | Where-Object Name -eq 'Id').Description | Should -Not -Match 'by property name'
+    }
+
+    It 'names the properties a parameter binds from the pipeline, and an alias that does not' {
+        $fixture = New-Fixture -Functions @($script:GetWidgetPart) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Get-JIMWidgetPart') }
+        Invoke-Generator $fixture | Out-Null
+        $rows = ConvertFrom-MarkdownTable (Get-Subsection (Get-Block (Get-Page $fixture) 'Get-JIMWidgetPart') 'Parameters')
+        ($rows | Where-Object Name -eq 'WidgetId').Description | Should -Match 'pipeline input by property name, WidgetId or Id\.'
+        ($rows | Where-Object Name -eq 'Kind').Description | Should -Match 'Also accepted as -PartKind\.'
     }
 
     It 'gives the .OUTPUTS help as prose' {

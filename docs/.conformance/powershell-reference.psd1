@@ -11,8 +11,10 @@
     # object returns a type the API does not have; list it here with the reason, and describe its
     # properties in the cmdlet's .OUTPUTS help instead. An entry no cmdlet declares fails the check.
     NonApiOutputTypes = @{
-        'JIM.Connection'       = 'Connect-JIM builds it from the connection it made and the health endpoint'
-        'JIM.ConnectionStatus' = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
+        'JIM.CauseCohort'       = 'Get-JIMActivityExecutionItem -Causes flattens the causes endpoint''s nested cohorts into one row per cohort'
+        'JIM.Connection'        = 'Connect-JIM builds it from the connection it made and the health endpoint'
+        'JIM.ConnectionStatus'  = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
+        'JIM.ConsequenceCohort' = 'Get-JIMActivityExecutionItem -Consequences flattens the consequences endpoint''s nested cohorts into one row per cohort'
     }
 
     # A cmdlet that gives the API's object a type name of its own (PSObject.TypeNames) declares that name;

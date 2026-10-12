@@ -215,6 +215,7 @@ nav:
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md
       - Activities: powershell/activities.md
+      - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md
       - Service Settings: powershell/service-settings.md

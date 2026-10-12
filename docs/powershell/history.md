@@ -259,7 +259,7 @@ Get-JIMHistoryCount -ConnectedSystemName <string>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById) |  | The ID of the Connected System. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes (ById) |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
 | `ConnectedSystemName` | `string` | Yes (ByName) |  | The name of the Connected System; it must match exactly. |
 
 ### Output
