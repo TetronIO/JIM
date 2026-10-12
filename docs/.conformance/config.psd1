@@ -93,6 +93,7 @@
         'concepts/synchronisation-pipeline.md'
         'getting-started/prerequisites.md'
         'administration/deployment.md'
+        'administration/tls-and-reverse-proxy.md'
         'getting-started/first-synchronisation.md'
         'configuration/connected-systems.md'
         'configuration/synchronisation-rules.md'
@@ -125,6 +126,8 @@
         'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
         'configuration/activities.md'
+        'administration/deployment.md'
+        'administration/tls-and-reverse-proxy.md'
     )
 
     # Where a tutorial's integration scenario lives, from its 'scenario' front matter value.

@@ -47,7 +47,7 @@ Getting JIM running involves three main steps:
 2. **Deploy JIM:** Use the installer, connected or air-gapped from a release bundle, or install by hand following the Deployment Guide.
 3. **Configure your first synchronisation:** Connect a source system, define Synchronisation Rules, and verify data flows correctly through the metaverse.
 
-Once deployed, JIM's web portal answers over HTTPS at `https://<JIM's name>`, from any machine; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy) for its certificate. You can also interact with JIM through its REST API or the cross-platform PowerShell module.
+Once deployed, JIM's web portal answers over HTTPS at `https://<JIM's name>`, from any machine; see [TLS and Reverse Proxy](../administration/tls-and-reverse-proxy.md) for its certificate. You can also interact with JIM through its REST API or the cross-platform PowerShell module.
 
 ## Stuck?
 

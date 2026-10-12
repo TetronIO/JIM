@@ -53,7 +53,7 @@ keeps the UI live) works identically whether JIM is reached over plain HTTP (loc
 
 ## Reverse proxies and corporate networks
 
-If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy)),
+If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](tls-and-reverse-proxy.md)),
 JIM's headers pass through unchanged unless your proxy is explicitly configured to strip or rewrite them. A
 corporate web proxy or browser security extension that inspects or blocks unrecognised `Content-Security-Policy`
 directives may need an allowance for JIM's origin; the policy above is the complete list of directives JIM sends,
