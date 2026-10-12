@@ -454,15 +454,10 @@ try
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
-    // Increase MaxDepth for the HTTP JSON options used by the OpenAPI schema generator.
-    // The default of 64 is insufficient for JIM's deep DTO graph; the schema exporter and
-    // its internal ResolveReferences expansion need headroom for recursive types.
-    // This only affects schema generation and minimal API endpoints; MVC controllers use
-    // separate JsonOptions. See: https://github.com/dotnet/aspnetcore/issues/63857
-    builder.Services.ConfigureHttpJsonOptions(options =>
-    {
-        options.SerializerOptions.MaxDepth = 256;
-    });
+    // The HTTP JSON options are the ones the OpenAPI schema generator reads (MVC controllers use the
+    // separate options configured above), so they carry the same policy, or the document would describe
+    // types differently from how the API serialises them. ApiJsonConfiguration.ConfigureHttp explains more.
+    builder.Services.ConfigureHttpJsonOptions(JIM.Web.ApiJsonConfiguration.ConfigureHttp);
 
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
