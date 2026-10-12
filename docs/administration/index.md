@@ -1,12 +1,13 @@
 ---
 title: Administration Guide
+description: Deploy, configure, secure, upgrade, back up and troubleshoot JIM in production, on Docker or Podman.
+type: landing
+audience: administrator
 ---
 
 # Administration Guide
 
-This section covers everything you need to deploy, configure, and maintain JIM in a production environment.
-
-## Sections
+These pages take JIM into production and keep it there: installing it on Docker or Podman, signing in through your identity provider, securing it, configuring it, and upgrading, backing up and troubleshooting it.
 
 <div class="grid cards" markdown>
 
@@ -20,13 +21,25 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    Hardware requirements, architecture overview, connected and air-gapped installation procedures on Docker or Podman, TLS configuration, health monitoring, and the production readiness checklist.
+    Installing JIM for production on Docker or Podman, connected or air-gapped: the architecture, the installer, health monitoring, and the production readiness checklist.
+
+-   **[TLS and Reverse Proxy](tls-and-reverse-proxy.md)**
+
+    ---
+
+    JIM's certificate, from the installer or your own certificate authority, renewing it, and running JIM behind a reverse proxy.
 
 -   **[Running on Podman](podman.md)**
 
     ---
 
-    JIM on Podman, the container engine Red Hat supports on RHEL: how it runs under systemd, rootful or rootless, day-to-day operation, firewall and SELinux, and installing by hand.
+    JIM on Podman, the container engine Red Hat supports on RHEL: how it runs under systemd, rootful or rootless, day-to-day operation, and firewall and SELinux.
+
+-   **[Installing on Podman by Hand](podman-by-hand.md)**
+
+    ---
+
+    What the installer does on Podman, step by step, for a policy that requires every step by hand.
 
 -   **[Deploying with Ansible](deploying-with-ansible.md)**
 
@@ -80,6 +93,18 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    Common issues and resolutions for deployment, authentication, synchronisation, and connectivity problems.
+    An installation that will not start, serve HTTPS or let you sign in, by the message it shows, with its cause and fix.
+
+-   **[Troubleshooting Synchronisation](troubleshooting-synchronisation.md)**
+
+    ---
+
+    What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
+
+-   **[Troubleshooting Podman](troubleshooting-podman.md)**
+
+    ---
+
+    A Podman installation that cannot be seen, started, reached or kept running, by the message it shows.
 
 </div>
