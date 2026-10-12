@@ -26,12 +26,7 @@ function Test-JIMExpression {
         Keys are attribute names, values are the attribute values.
 
     .OUTPUTS
-        PSCustomObject with properties:
-        - IsValid: Whether the expression is valid and evaluated successfully
-        - Result: The result of evaluating the expression
-        - ResultType: The type of the result (e.g., "String", "Int32", "Boolean")
-        - ErrorMessage: Error message if the expression is invalid or evaluation failed
-        - ErrorPosition: Position in the expression where an error occurred (if applicable)
+        The result of evaluating the expression against the sample values.
 
     .EXAMPLE
         Test-JIMExpression -Expression '"Hello, " + mv["Display Name"] + "!"' -MvAttributes @{ "Display Name" = "John Doe" }
@@ -68,7 +63,7 @@ function Test-JIMExpression {
         Get-JIMSyncRuleMapping
     #>
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.TestExpressionResponse')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string]$Expression,

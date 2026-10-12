@@ -5,7 +5,7 @@ namespace JIM.Models.Logic;
 
 /// <summary>
 /// Reports that saving a <see cref="SyncRuleMappingGeneration"/> whose <see cref="SyncRuleMappingGeneration.SequenceStart"/>
-/// stood above the target attribute's <see cref="GeneratedValueSequence"/> counter moved that counter forward
+/// stood above the target attribute's <see cref="JIM.Models.Transactional.GeneratedValueSequence"/> counter moved that counter forward
 /// (Unique Value Generation, #242, plan decision 3: "the save moves the counter forward and the response
 /// reports it"). A lower or equal start value has no effect and produces no instance of this type.
 /// </summary>

@@ -46,7 +46,7 @@ public abstract class MatchCandidateSnapshot
     /// <summary>This candidate's position in the list: candidates are ordered by display name, so every run lists them alike.</summary>
     public int Ordinal { get; set; }
 
-    /// <summary>How many candidates the match found in all, which can exceed the <see cref="MaxRecorded"/> listed.</summary>
+    /// <summary>How many candidates the match found in all, which can exceed the <see cref="ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded"/> listed.</summary>
     public int CandidateTotal { get; set; }
 
     /// <summary>

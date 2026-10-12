@@ -16,7 +16,7 @@ namespace JIM.Models.Preview;
 /// A surface is a KIND OF CHANGE, not an entity: one entity's settings can be several surfaces, because each is
 /// evaluated by a different adapter and exactly one adapter may serve a surface. A Synchronisation Rule alone has
 /// three (its Scoping Criteria, its Attribute Flow, and its deprovisioning actions), and they answer different
-/// questions from different data. Several surfaces therefore map to one <see cref="ActivityTargetType"/>, which is
+/// questions from different data. Several surfaces therefore map to one <see cref="JIM.Models.Activities.ActivityTargetType"/>, which is
 /// correct: the target type says which object a preview was about, and the surface says what about it.
 /// </remarks>
 public enum ConfigurationChangePreviewSurface

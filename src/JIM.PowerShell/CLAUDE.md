@@ -35,6 +35,22 @@ Rules:
 
 **Before adding `[Alias('Id')]`, ask whether the aliased parameter is the cmdlet's own noun.** `Start-JIMRunProfile` aliasing `-RunProfileId` is safe; `Get-JIMRunProfile` aliasing `-ConnectedSystemId` is the hazardous shape. Seven `Get-` cmdlets currently carry the hazardous form. Adding another is allowed when piping genuinely requires it, but say so in a comment at the declaration, as `Get-JIMScheduleExecution` does.
 
+## The reference is generated from the cmdlet
+
+Each cmdlet's Syntax, Parameters and Output on its `docs/powershell/` page are generated from the module by `scripts/Update-PowerShellReference.ps1`, between `<!-- BEGIN GENERATED: <cmdlet> -->` and `<!-- END GENERATED: <cmdlet> -->` (ACC-5 in `engineering/DOCUMENTATION_STANDARD.md`; #1083). `build-and-test` fails when a block and the module disagree. So the cmdlet is the source:
+
+- **A parameter's description is its `.PARAMETER` help.** Write it for both `Get-Help` and the site: one or two plain sentences, no Markdown links. Leave out what the attributes already say; the script adds pipeline input, `ValidateSet` values, `ValidateRange` limits and wildcard support itself, and the default comes from the `param` block.
+- **Declare what each parameter set returns** with `[OutputType('JIM.<Schema>', ParameterSetName = '<Set>')]`, naming the response schema in the OpenAPI document (the DTO's class name); one without `ParameterSetName` covers every set. The script tables that schema's properties, with each one's type and the description from the DTO's XML comment, so they cannot be written from memory; document a DTO property there, not in the cmdlet's help. `[OutputType([PSCustomObject])]` says nothing and fails the check, as does declaring nothing at all: a cmdlet that returns nothing says `[OutputType([void])]`. A cmdlet that builds its own object declares a `JIM.` name of its own, listed with its reason in `docs/.conformance/powershell-reference.psd1` (`NonApiOutputTypes`), and describes the properties in `.OUTPUTS`; one that only gives the API's object a name of its own (`Get-JIMServiceHealth`) maps that name to the schema under `OutputTypeSchemas` in the same file, and the schema's properties are tabled for it.
+- **`.OUTPUTS` is the prose above the generated table:** what comes back and when (`With -PassThru, ...; otherwise nothing.`), and what any property means where its name does not say.
+
+After changing a cmdlet with a block, regenerate (`-OpenApiPath` takes a document `Generate-OpenApiDoc.ps1` wrote earlier; without it, the script generates one, which builds the solution):
+
+```bash
+pwsh ./scripts/Update-PowerShellReference.ps1 -OpenApiPath /tmp/openapi-v1.json
+```
+
+The sections below still apply to every section that has no block yet; `-Check` lists them.
+
 ## Documenting output
 
 **Check every property name against the DTO before writing it.** An audit found eight of twenty pages in `docs/powershell/` naming properties that do not exist. The Output tables in particular had been written from memory.
@@ -45,7 +61,7 @@ Rules:
 |---|---|---|
 | `Get-JIMMetaverseObject` | `MetaverseObjectHeaderDto` (`Attributes`, a dictionary) | `MetaverseObjectDto` (`AttributeValues`, a list) |
 | `Get-JIMConnectedSystem` | `ConnectedSystemHeader` (`ConnectorId`) | `ConnectedSystemDto` (nested `Connector.Id`) |
-| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseObjectTypeName`) | the entity (`MetaverseObjectType.Name`) |
+| `Get-JIMPredefinedSearch` | `PredefinedSearchHeader` (`MetaverseAttributeCount`) | `PredefinedSearchDetailDto` (`Attributes`, `CriteriaGroups`) |
 | `Get-JIMExampleDataSet` | `ExampleDataSetHeader` (`ValueCount`) | the entity, with its values |
 
 State which shape an Output section describes, and never document a header's fields for the `-Id` form.

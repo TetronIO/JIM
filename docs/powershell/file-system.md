@@ -12,6 +12,7 @@ File System cmdlets let you browse the JIM Container's file system, used when co
 
 Lists files and directories within the JIM Container's allowed mount points.
 
+<!-- BEGIN GENERATED: Get-JIMFileSystemItem -->
 ### Syntax
 
 ```powershell
@@ -26,12 +27,27 @@ Get-JIMFileSystemItem -Roots
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Path` | `string` | No | | The directory path to list. Omit to list the allowed root directories. |
-| `Roots` | `switch` | No | `$false` | Returns the allowed root directory paths instead of listing a directory. |
+| `Path` | `string` | No (List) |  | The directory to list. Omit it to list the allowed root directories. |
+| `Roots` | `switch` | Yes (Roots) |  | Returns the allowed root directory paths instead of listing a directory. |
 
 ### Output
 
-A directory listing (path, entries, parent path), or a list of allowed root paths.
+Listing returns the directory's contents; -Roots returns each allowed root directory's path.
+
+**`FileSystemListResult`** (List):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Path` | `string` | The path that was listed. |
+| `Entries` | `FileSystemEntry[]` | The entries (files and directories) in the directory. |
+| `ParentPath` | `string` | The parent directory path, if navigating up is allowed. |
+| `IsRoot` | `bool` | Whether this is a root directory (cannot navigate up). |
+| `Error` | `string` | Error message if the operation failed. |
+| `IsAccessDenied` | `bool` | Whether access was denied due to security restrictions. |
+| `Success` | `bool` | Whether the operation was successful. |
+
+**`string`** (Roots)
+<!-- END GENERATED: Get-JIMFileSystemItem -->
 
 ### Examples
 
@@ -53,21 +69,25 @@ Get-JIMFileSystemItem -Roots
 
 Checks whether a file system path is within the JIM Container's allowed mount points.
 
+<!-- BEGIN GENERATED: Test-JIMFileSystemPath -->
 ### Syntax
 
 ```powershell
-Test-JIMFileSystemPath -Path <string>
+Test-JIMFileSystemPath [-Path] <string>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Path` | `string` | Yes | | The path to validate. Accepts pipeline input by property name. |
+| `Path` | `string` | Yes |  | The path to validate. Can be given by position, as the first argument. Accepts pipeline input by property name. |
 
 ### Output
 
-Boolean. `$true` if the path is within an allowed root, `$false` otherwise.
+$true if the path is within an allowed root directory; otherwise $false.
+
+**`bool`**
+<!-- END GENERATED: Test-JIMFileSystemPath -->
 
 ### Examples
 
