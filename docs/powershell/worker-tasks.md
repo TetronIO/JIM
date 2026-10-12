@@ -90,7 +90,7 @@ Cancels a queued or in-progress Worker Task. Cancellation completes asynchronous
 Stop-JIMWorkerTask -Id <guid> [-Force] [-WhatIf] [-Confirm]
 ```
 
-It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -113,10 +113,6 @@ Stop-JIMWorkerTask -Id "12345678-1234-1234-1234-123456789012"
 ```powershell title="Cancel every in-flight Worker Task without confirmation"
 Get-JIMWorkerTask | Stop-JIMWorkerTask -Force
 ```
-
-### Notes
-
-- Supports `ShouldProcess` (High impact): you are prompted to confirm unless you give `-Force`.
 
 ---
 

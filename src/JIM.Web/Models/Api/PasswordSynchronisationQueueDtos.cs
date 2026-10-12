@@ -19,7 +19,7 @@ namespace JIM.Web.Models.Api;
 public class PendingPasswordChangeResponse
 {
     /// <summary>
-    /// The queued change's ID, which retrying or cancelling it by ID takes.
+    /// The queued change's ID, which identifies it when retrying or cancelling it.
     /// </summary>
     public Guid Id { get; set; }
 
@@ -74,8 +74,8 @@ public class PendingPasswordChangeResponse
 
     /// <summary>
     /// Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff
-    /// from one that is due but not yet reached, which <c>Status</c> alone cannot. Never true while <c>Held</c> is:
-    /// a pass steps over a system that is switched off.
+    /// from one that is due but not yet reached, which <c>Status</c> alone cannot. It is never true for a held
+    /// change, whose Connected System is switched off.
     /// </summary>
     public bool Due { get; set; }
 

@@ -492,8 +492,38 @@ function Remove-JIMGadget {
 '@
         $fixture = New-Fixture -Functions @($remove) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMGadget') }
         Invoke-Generator $fixture | Out-Null
-        Get-Subsection (Get-Block (Get-Page $fixture) 'Remove-JIMGadget') 'Syntax' | Should -Match 'asks for confirmation before it acts'
+        $syntax = Get-Subsection (Get-Block (Get-Page $fixture) 'Remove-JIMGadget') 'Syntax'
+        $syntax | Should -Match 'asks for confirmation before it acts'
+        $syntax | Should -Not -Match '-Force'
         Get-Subsection $script:RemoveBlock 'Syntax' | Should -Not -Match 'asks for confirmation'
+    }
+
+    It 'names -Force as a way past the prompt where the cmdlet has one' {
+        $remove = @'
+function Remove-JIMGadget {
+    <#
+    .SYNOPSIS
+        Removes a Gadget.
+
+    .PARAMETER Id
+        The Gadget to remove.
+
+    .PARAMETER Force
+        Skips the confirmation prompt.
+    #>
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$Id,
+
+        [switch]$Force
+    )
+}
+'@
+        $fixture = New-Fixture -Functions @($remove) -Pages @{ 'widgets.md' = "# Widgets`n`n" + (New-Section 'Remove-JIMGadget') }
+        Invoke-Generator $fixture | Out-Null
+        Get-Subsection (Get-Block (Get-Page $fixture) 'Remove-JIMGadget') 'Syntax' | Should -Match '`-Force` or `-Confirm:\$false` skips the prompt'
     }
 
     It 'labels a parameter set named Default once' {

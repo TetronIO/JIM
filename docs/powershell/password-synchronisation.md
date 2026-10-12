@@ -64,7 +64,7 @@ One object per queued change, one entry per Metaverse Object per Connected Syste
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Id` | `guid` | The queued change's ID, which retrying or cancelling it by ID takes. |
+| `Id` | `guid` | The queued change's ID, which identifies it when retrying or cancelling it. |
 | `MetaverseObjectId` | `guid` | The Metaverse Object whose password this is. |
 | `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name. |
 | `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
@@ -73,7 +73,7 @@ One object per queued change, one entry per Metaverse Object per Connected Syste
 | `Status` | `PendingPasswordChangeStatus` | Where the change has got to: Pending (JIM still intends to deliver it), Parked (the target refused it, or it ran out of attempts, so it waits on a person), Expired (it outlived its time to live and can no longer be delivered), or Cancelled (an administrator stopped it). |
 | `Origin` | `PendingPasswordChangeOrigin` | Where the change came from: `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). |
 | `SyncRuleId` | `int` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt, or null for every other origin. |
-| `Due` | `bool` | Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff from one that is due but not yet reached, which `Status` alone cannot. Never true while `Held` is: a pass steps over a system that is switched off. |
+| `Due` | `bool` | Whether a delivery pass would attempt this change right now. It tells a change waiting out a retry backoff from one that is due but not yet reached, which `Status` alone cannot. It is never true for a held change, whose Connected System is switched off. |
 | `Held` | `bool` | Whether the change is waiting on somebody switching Password Synchronisation back on for its Connected System, rather than on JIM. A configured system that is switched off accumulates queued changes instead of discarding them, and enabling it delivers what accumulated; until then nothing is attempted, so the remedy is a person's rather than a retry's. |
 | `FailureReason` | `PasswordSetFailureReason` | How the last attempt failed; null for a change that has not been attempted. |
 | `TargetMessage` | `string` | The target's own words for why the last attempt failed, which say where the remedy lies; null for a change that has not been attempted. |
@@ -208,7 +208,7 @@ Applies to `Pending` and `Parked` changes. An `Expired` or already `Cancelled` c
 Stop-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Status <string>] [-FailureReason <string>] [-MetaverseObjectId <guid>] [-Search <string>] [-EntireQueue] [-Force] [-WhatIf] [-Confirm]
 ```
 
-It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

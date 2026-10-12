@@ -71,7 +71,7 @@ Get-JIMApiKey -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ## New-JIMApiKey
 
-Creates a new API key for non-interactive authentication. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Creates a new API key for non-interactive authentication.
 
 <!-- BEGIN GENERATED: New-JIMApiKey -->
 ### Syntax
@@ -138,7 +138,7 @@ $key.Key  # Full key value; store this securely
 
 ## Set-JIMApiKey
 
-Updates an existing API key's name, description, roles, expiry, or enabled status. The key value itself cannot be changed. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Updates an existing API key's name, description, roles, expiry, or enabled status. The key value itself cannot be changed.
 
 <!-- BEGIN GENERATED: Set-JIMApiKey -->
 ### Syntax
@@ -198,7 +198,7 @@ Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
 
 ## Remove-JIMApiKey
 
-Permanently deletes an API key. Any requests using this key will fail immediately after deletion. Supports `ShouldProcess` (High impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Permanently deletes an API key. Any requests using this key will fail immediately after deletion.
 
 <!-- BEGIN GENERATED: Remove-JIMApiKey -->
 ### Syntax
@@ -211,7 +211,7 @@ Remove-JIMApiKey -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-What
 Remove-JIMApiKey -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
-It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 
@@ -247,7 +247,6 @@ Get-JIMApiKey | Where-Object { $_.Name -like "temp-*" } | Remove-JIMApiKey -Forc
 ### Notes
 
 - Deletion is permanent and cannot be undone. A new key must be created if access is needed again.
-- Without `-Force`, you are prompted for confirmation before each deletion (High impact `ShouldProcess`).
 - Any active sessions or automation using the deleted key will fail immediately.
 
 ---

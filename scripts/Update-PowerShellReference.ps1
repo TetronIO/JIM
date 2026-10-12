@@ -285,7 +285,10 @@ function Format-Syntax {
     $text = "### Syntax`n`n" + '```powershell' + "`n" + ($lines -join "`n") + "`n" + '```'
     # Whether it prompts by default: with the default $ConfirmPreference, only a High impact does.
     if ($Reference.SupportsShouldProcess -and "$($Reference.ConfirmImpact)" -eq 'High') {
-        $text += "`n`nIt asks for confirmation before it acts: ``-WhatIf`` shows what it would do, and ``-Confirm:`$false`` skips the prompt."
+        # Every such cmdlet with a -Force has it skip the prompt and never -WhatIf (Confirm-JIMAction, and a
+        # Pester guard in the module's tests).
+        $skip = if ($Reference.Parameters | Where-Object Name -eq 'Force') { '`-Force` or `-Confirm:$false`' } else { '`-Confirm:$false`' }
+        $text += "`n`nIt asks for confirmation before it acts: ``-WhatIf`` shows what it would do, and $skip skips the prompt."
     }
     $text
 }

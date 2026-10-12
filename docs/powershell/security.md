@@ -247,7 +247,7 @@ Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeRe
 Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>] [-WhatIf] [-Confirm]
 ```
 
-It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Confirm:$false` skips the prompt.
+It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `-Force` or `-Confirm:$false` skips the prompt.
 
 ### Parameters
 

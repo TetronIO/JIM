@@ -105,7 +105,7 @@ Get-JIMPredefinedSearch | Where-Object { -not $_.IsEnabled }
 
 ## Set-JIMPredefinedSearch
 
-Applies a partial update to a Predefined Search. Only parameters explicitly provided are sent; omitted fields are left unchanged. Supports `ShouldProcess` (Medium impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Applies a partial update to a Predefined Search. Only parameters explicitly provided are sent; omitted fields are left unchanged.
 
 <!-- BEGIN GENERATED: Set-JIMPredefinedSearch -->
 ### Syntax
@@ -164,7 +164,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favou
 
 These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups nest to any depth for mixed logic).
 
-Each criteria group or criterion edit is captured as its own version rolled up into the owning Predefined Search's [Configuration Change History](history.md), and every write cmdlet accepts an optional `-ChangeReason` recorded against that version. All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
+Each criteria group or criterion edit is captured as its own version rolled up into the owning Predefined Search's [Configuration Change History](history.md), and every write cmdlet accepts an optional `-ChangeReason` recorded against that version.
 
 ### Examples
 
