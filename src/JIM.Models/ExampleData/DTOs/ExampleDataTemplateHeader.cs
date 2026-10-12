@@ -15,7 +15,7 @@ public class ExampleDataTemplateHeader
     public string? Name { get; set; }
 
     /// <summary>
-    /// Whether the Data Generation Template ships with JIM, as opposed to being created by an administrator.
+    /// Whether the Data Generation Template ships with JIM, rather than being created by an administrator.
     /// </summary>
     public bool BuiltIn { get; set; }
 

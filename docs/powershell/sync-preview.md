@@ -7,7 +7,7 @@ audience: automation-author
 
 # Sync Preview
 
-A Sync Preview answers what synchronising one object would do right now, with the configuration already saved. Unlike a [Configuration Change Preview](previews.md), it is synchronous and needs no Activity id: it evaluates one object against the Synchronisation Rules already saved and returns immediately. See [Sync Preview](../configuration/sync-preview.md) for what the outcome tree and the destructive cascade mean; the two cmdlets below are the PowerShell surface over its two REST endpoints.
+A Sync Preview answers what synchronising one object would do right now, with the configuration already saved. It changes nothing: it stages no exports and writes no objects. Unlike a [Configuration Change Preview](previews.md), it is synchronous and needs no Activity id: it evaluates one object against the Synchronisation Rules already saved and returns immediately. See [Sync Preview](../configuration/sync-preview.md) for what the outcome tree and the destructive cascade mean.
 
 Both return the same object, tabled under [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview). Check `HasBlockingErrors` before reading anything else: a preview that surfaced a blocking error describes a synchronisation that would fail, not one that would succeed as shown.
 
@@ -37,9 +37,9 @@ What synchronising the object would do, were the real synchronisation to run now
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `OutcomeTree` | `object[]` | The speculative causal outcome tree, in the same shape a really-recorded Run Profile Execution Item's outcomes render from. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `Ordinal` and `Children`. |
+| `OutcomeTree` | `object[]` | The outcomes the synchronisation would produce, as a tree, in the same shape as the outcomes recorded on a Run Profile Execution Item. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `Ordinal` and `Children`. |
 | `Inbound` | `object` | The inbound summary: would the object project or join, and what Attribute Flows would result. Empty for a Metaverse Object preview, which has no inbound chain. It has `WouldProject`, `ProjectedMetaverseObjectTypeId`, `ProjectedMetaverseObjectTypeName`, `WouldJoinMetaverseObjectId`, `WouldJoinObjectMatchingRuleId`, `WouldJoinObjectMatchingRuleDescription`, `WouldJoinMatchedValue`, `AlreadyJoinedMetaverseObjectId` and `AttributeFlowChanges`. |
-| `ProposedExports` | `object[]` | The Pending Exports that would be staged per target Connected System, were the real synchronisation to run. None of these are persisted. Each has `ConnectedSystemId`, `ChangeType`, `ConnectedSystemObjectId`, `SourceMetaverseObjectId` and `AttributeChanges`. |
+| `ProposedExports` | `object[]` | The Pending Exports that would be staged per target Connected System, were the real synchronisation to run. None of them is staged: the preview changes nothing. Each has `ConnectedSystemId`, `ChangeType`, `ConnectedSystemObjectId`, `SourceMetaverseObjectId` and `AttributeChanges`. |
 | `Errors` | `object[]` | Conditions that would prevent the real synchronisation. Distinct from Warnings so a caller can render blockers and advisories differently without parsing message text. Each has `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. |
 | `Warnings` | `object[]` | Advisory conditions that would not prevent the real synchronisation. Each has `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. |
 | `HasBlockingErrors` | `bool` | True when the preview surfaced at least one blocking condition (that is, Errors is non-empty). |
