@@ -147,7 +147,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
 - 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
 - 🐛 Deleting a Metaverse Object now reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**; previously the deletion recorded nothing about those accounts, so one JIM no longer manages looked untouched. (#1811)
-- 🐛 An Object Matching Rule that can't be worked out for an object now stops it with an **Object Matching Rule Failed** error naming the rule, instead of trying the next rule and, with none left, projecting a duplicate identity. (#2052)
+- 🐛 An Object Matching Rule that can't be worked out for an object now stops it with an **Object Matching Rule Failed** error naming the rule, instead of trying the next rule and, with none left, projecting a duplicate identity or provisioning a duplicate account. (#2052)
+- 🐛 When more than one existing account matches an identity before provisioning, JIM now reports an **Ambiguous Provisioning Match** listing them for you to resolve, instead of joining whichever was created first. (#2052)
+- 🐛 Matching before provisioning now looks up every value of a multi-valued attribute, so an existing account holding the second value is joined instead of duplicated. (#2052)
 - 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
 
 ### Performance

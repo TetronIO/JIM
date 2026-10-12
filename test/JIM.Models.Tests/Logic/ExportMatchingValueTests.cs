@@ -19,8 +19,8 @@ namespace JIM.Models.Tests.Logic;
 [TestFixture]
 public class ExportMatchingValueTests
 {
-    private static ConnectedSystemObjectTypeAttribute CreateConnectedSystemAttribute(string name = "employeeId")
-        => new() { Id = 1, Name = name, Type = AttributeDataType.Text };
+    private static ConnectedSystemObjectTypeAttribute CreateConnectedSystemAttribute(string name = "employeeId", AttributeDataType type = AttributeDataType.Text)
+        => new() { Id = 1, Name = name, Type = type };
 
     private static MetaverseAttribute CreateMetaverseAttribute(int id, AttributeDataType type)
         => new() { Id = id, Name = "Employee Id", Type = type };
@@ -134,7 +134,7 @@ public class ExportMatchingValueTests
     public void Resolve_NumberValueMissing_ReturnsNoMetaverseValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Number);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Number));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10 }]
@@ -149,7 +149,7 @@ public class ExportMatchingValueTests
     public void Resolve_LongNumberValueMissing_ReturnsNoMetaverseValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.LongNumber);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.LongNumber));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10 }]
@@ -164,7 +164,7 @@ public class ExportMatchingValueTests
     public void Resolve_DecimalValueMissing_ReturnsNoMetaverseValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Decimal);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Decimal));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10 }]
@@ -179,7 +179,7 @@ public class ExportMatchingValueTests
     public void Resolve_GuidValueMissing_ReturnsNoMetaverseValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Guid);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Guid));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10 }]
@@ -230,7 +230,7 @@ public class ExportMatchingValueTests
         {
             Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
             Assert.That(result.DataType, Is.EqualTo(AttributeDataType.Text));
-            Assert.That(result.Value, Is.EqualTo("E12345"));
+            Assert.That(result.Values, Is.EqualTo(new object[] { "E12345" }));
             Assert.That(result.ConnectedSystemAttributeName, Is.EqualTo("employeeId"));
             Assert.That(result.CaseSensitive, Is.True);
         }
@@ -240,7 +240,7 @@ public class ExportMatchingValueTests
     public void Resolve_NumberValuePresent_ReturnsResolvedWithIntValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Number);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Number));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10, IntValue = 42 }]
@@ -252,7 +252,7 @@ public class ExportMatchingValueTests
         {
             Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
             Assert.That(result.DataType, Is.EqualTo(AttributeDataType.Number));
-            Assert.That(result.Value, Is.EqualTo(42));
+            Assert.That(result.Values, Is.EqualTo(new object[] { 42 }));
         }
     }
 
@@ -260,7 +260,7 @@ public class ExportMatchingValueTests
     public void Resolve_LongNumberValuePresent_ReturnsResolvedWithLongValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.LongNumber);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.LongNumber));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10, LongValue = 9_000_000_000L }]
@@ -272,7 +272,7 @@ public class ExportMatchingValueTests
         {
             Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
             Assert.That(result.DataType, Is.EqualTo(AttributeDataType.LongNumber));
-            Assert.That(result.Value, Is.EqualTo(9_000_000_000L));
+            Assert.That(result.Values, Is.EqualTo(new object[] { 9_000_000_000L }));
         }
     }
 
@@ -280,7 +280,7 @@ public class ExportMatchingValueTests
     public void Resolve_DecimalValuePresent_ReturnsResolvedWithDecimalValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Decimal);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Decimal));
         var mvo = new MetaverseObject
         {
             AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10, DecimalValue = 5.00m }]
@@ -292,7 +292,7 @@ public class ExportMatchingValueTests
         {
             Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
             Assert.That(result.DataType, Is.EqualTo(AttributeDataType.Decimal));
-            Assert.That(result.Value, Is.EqualTo(5.00m));
+            Assert.That(result.Values, Is.EqualTo(new object[] { 5.00m }));
         }
     }
 
@@ -300,7 +300,7 @@ public class ExportMatchingValueTests
     public void Resolve_GuidValuePresent_ReturnsResolvedWithGuidValue()
     {
         var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Guid);
-        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute());
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Guid));
         var guid = Guid.NewGuid();
         var mvo = new MetaverseObject
         {
@@ -313,8 +313,97 @@ public class ExportMatchingValueTests
         {
             Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
             Assert.That(result.DataType, Is.EqualTo(AttributeDataType.Guid));
-            Assert.That(result.Value, Is.EqualTo(guid));
+            Assert.That(result.Values, Is.EqualTo(new object[] { guid }));
         }
+    }
+
+    [Test]
+    public void Resolve_MultiValuedAttribute_ReturnsEveryDistinctValueInOrder()
+    {
+        // #2052: every value is looked up, not whichever loaded first, so the outcome cannot depend on load order.
+        var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Text);
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute("mail"));
+        var mvo = new MetaverseObject
+        {
+            AttributeValues =
+            [
+                new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "a@corp.example" },
+                new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "b@corp.example" },
+                new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "a@corp.example" },
+                new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "" }
+            ]
+        };
+
+        var result = ExportMatchingValue.Resolve(mvo, rule);
+
+        Assert.That(result.Values, Is.EqualTo(new object[] { "a@corp.example", "b@corp.example" }));
+    }
+
+    #endregion
+
+    #region Shapes that cannot be compared
+
+    [Test]
+    public void Resolve_SourceAndTargetTypesDiffer_ReturnsSourceTypeMismatch()
+    {
+        var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Text);
+        var rule = CreateRule(targetAttribute, CreateConnectedSystemAttribute(type: AttributeDataType.Number));
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "E12345" }]
+        };
+
+        var result = ExportMatchingValue.Resolve(mvo, rule);
+
+        Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.SourceTypeMismatch));
+    }
+
+    [Test]
+    public void Resolve_ExpressionSource_ResolvesTheMetaverseValuesAndCarriesTheExpression()
+    {
+        // The expression is worked out per candidate object, so the Metaverse side is the rule's attribute as ever;
+        // there is no Connected System attribute to name.
+        var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Text);
+        var rule = CreateRule(targetAttribute, sourceAttribute: null);
+        rule.Sources[0].Expression = "Lower(cs[\"mail\"])";
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = [new MetaverseObjectAttributeValue { AttributeId = 10, StringValue = "jo@corp.example" }]
+        };
+
+        var result = ExportMatchingValue.Resolve(mvo, rule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
+            Assert.That(result.Expression, Is.EqualTo("Lower(cs[\"mail\"])"));
+            Assert.That(result.ConnectedSystemAttributeName, Is.Null);
+            Assert.That(result.Values, Is.EqualTo(new object[] { "jo@corp.example" }));
+        }
+    }
+
+    [Test]
+    public void Resolve_ExpressionSourceWithNoMetaverseValue_ReturnsNoMetaverseValue()
+    {
+        var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Text);
+        var rule = CreateRule(targetAttribute, sourceAttribute: null);
+        rule.Sources[0].Expression = "Lower(cs[\"mail\"])";
+
+        var result = ExportMatchingValue.Resolve(new MetaverseObject(), rule);
+
+        Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.NoMetaverseValue));
+    }
+
+    [Test]
+    public void Resolve_ExpressionSourceOnUnsupportedTargetType_ReturnsUnsupportedAttributeType()
+    {
+        var targetAttribute = CreateMetaverseAttribute(10, AttributeDataType.Boolean);
+        var rule = CreateRule(targetAttribute, sourceAttribute: null);
+        rule.Sources[0].Expression = "cs[\"enabled\"]";
+
+        var result = ExportMatchingValue.Resolve(new MetaverseObject(), rule);
+
+        Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.UnsupportedAttributeType));
     }
 
     #endregion
@@ -335,7 +424,7 @@ public class ExportMatchingValueTests
         var result = ExportMatchingValue.Resolve(mvo, rule);
 
         Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
-        Assert.That(result.Value, Is.EqualTo("value-by-scalar-id"));
+        Assert.That(result.Values, Is.EqualTo(new object[] { "value-by-scalar-id" }));
     }
 
     [Test]
@@ -362,7 +451,7 @@ public class ExportMatchingValueTests
         var result = ExportMatchingValue.Resolve(mvo, rule);
 
         Assert.That(result.Outcome, Is.EqualTo(ExportMatchingOutcome.Resolved));
-        Assert.That(result.Value, Is.EqualTo("value-by-navigation-id"));
+        Assert.That(result.Values, Is.EqualTo(new object[] { "value-by-navigation-id" }));
     }
 
     #endregion

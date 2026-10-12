@@ -286,7 +286,8 @@ internal static class FullSynchronisationPreviewDeltas
                 SyncPreviewMessageCode.ExpressionEvaluationError
                     or SyncPreviewMessageCode.MultiValuedToSingleValuedFlow
                     or SyncPreviewMessageCode.GeneratedValueWouldFail => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow,
-                SyncPreviewMessageCode.AmbiguousMatch => ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
+                SyncPreviewMessageCode.AmbiguousMatch
+                    or SyncPreviewMessageCode.AmbiguousProvisioningMatch => ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously,
                 _ => ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail
             },
             ObjectDisplayName: item.DisplayName,

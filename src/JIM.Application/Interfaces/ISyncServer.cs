@@ -89,15 +89,6 @@ public interface ISyncServer
     /// </summary>
     Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
 
-    /// <summary>
-    /// Finds a matching CSO for export provisioning using Object Matching Rules.
-    /// </summary>
-    Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules);
-
     #endregion
 
     #region Connected System Operations

@@ -53,11 +53,19 @@ public class ExportEvaluationCache
     /// Page-scoped export-matching candidates: populated by a per-page batch prefetch (one query per
     /// Object Matching Rule per page) so export evaluation can look up an unjoined Connected System
     /// Object without a per-object database round trip. Null means no prefetch has been performed for
-    /// the current page, so every export-matching lookup must fall back to the per-object query.
+    /// the current page, so every export-matching lookup must look its Metaverse Object's candidates up itself.
     /// The caller clears this (sets it back to null, or replaces it with a fresh instance) once the
     /// page's evaluation finishes; it must never be reused across pages.
     /// </summary>
     public ExportMatchCandidates? ExportMatchCandidates { get; set; }
+
+    /// <summary>
+    /// Run-scoped indexes of what expression-sourced Object Matching Rules compute for each unjoined object of a target
+    /// type (#2052), keyed by (Object Matching Rule, Connected System Object Type). Each is built on the first
+    /// provisioning decision that needs it and kept for the run, since building one evaluates the expression over
+    /// every unjoined object of the type; claims remove their objects as the run goes.
+    /// </summary>
+    public Dictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExpressionMatchValueIndex> ExpressionMatchIndexes { get; } = [];
 
     /// <summary>
     /// The newest Created or Last Updated stamp among the export Synchronisation Rules as this run read them, enabled

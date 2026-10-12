@@ -41,8 +41,9 @@ function Get-JIMActivityExecutionItem {
         Handling mode, so filter on it rather than on ErrorType to find every object an import left with
         unresolved references.
 
-        MatchCandidates is empty unless the item is an AmbiguousMatch. Then it lists up to 10 of the objects the
-        match found, ordered by display name, each with CandidateKind, CandidateId, DisplayNameSnapshot,
+        MatchCandidates is empty unless the item is an AmbiguousMatch (the Metaverse Objects a join found) or an
+        AmbiguousProvisioningMatch (the Connected System Objects matching found before provisioning). Then it lists
+        up to 10 of the objects the match found, ordered by display name, each with CandidateKind, CandidateId, DisplayNameSnapshot,
         TypeNameSnapshot, ConnectedSystemId, ConnectedSystemNameSnapshot, MatchedValue, ObjectMatchingRuleId,
         ObjectMatchingRuleDescriptionSnapshot, Ordinal, CandidateTotal (how many the match found in all), Exists,
         and JoinedObjects: the Connected System Objects joined to a Metaverse Object candidate now, each with

@@ -23,7 +23,7 @@ public class ActivityRunProfileExecutionItemMatchCandidate
     /// some.
     /// </summary>
     public static bool AreRecordedFor(ActivityRunProfileExecutionItemErrorType? errorType) =>
-        errorType == ActivityRunProfileExecutionItemErrorType.AmbiguousMatch;
+        errorType is ActivityRunProfileExecutionItemErrorType.AmbiguousMatch or ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch;
 
     /// <summary>Assigned in code so the raw-SQL insert does not round-trip database-generated keys.</summary>
     public Guid Id { get; set; }
