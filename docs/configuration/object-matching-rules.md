@@ -24,14 +24,12 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 
 ## Matching outcomes
 
-Before an export rule provisions, the same rules run the other way, looking for Connected System Objects in the target not yet joined. Every value of a multi-valued attribute counts in both directions.
-
 | Outcome | Description |
 |---------|-------------|
-| **Joined** | Exactly one object matches; the connection records the rule and value |
-| **No match** | No rule matches; projection, or provisioning, may create one |
-| **Ambiguous Match** | The rule's values match several Metaverse Objects; the Activity item lists them, and nothing joins or projects |
-| **Ambiguous Provisioning Match** | Before provisioning, the rule's values match several existing Connected System Objects; the Activity item lists them, and nothing joins or provisions for that export rule |
+| **Joined** | Exactly one Metaverse Object (or, before provisioning, one Connected System Object) matches; the connection records the rule and value |
+| **No match** | No rule matches; projection or provisioning creates one, if the Synchronisation Rule allows it |
+| **Ambiguous Match** | The rule's values, every value of a multi-valued attribute counting, match several Metaverse Objects; the Activity item lists them, and nothing joins or projects |
+| **Ambiguous Provisioning Match** | Before provisioning, the rule's values match several existing Connected System Objects; the Activity item lists them, and nothing joins or provisions for that export rule. See [Ambiguous Provisioning Match](../administration/troubleshooting-synchronisation.md) |
 | **Object Matching Rule Failed** | The rule cannot be worked out; nothing joins, projects or provisions, and no later rule is tried |
 
 ## Simple vs advanced matching mode
@@ -58,7 +56,7 @@ Switching the mode warns about anything it strands:
 
 - **To advanced mode**: the type-scoped rules are retained but no longer consulted (they resume effect on a switch
   back), and export Synchronisation Rules receive no copied rules, so export matching stops for them until rules
-  are added; provisioning proceeds as though no match existed.
+  are added: provisioning then creates an account even where the target already holds one for the identity.
 - **To simple mode**: where an object type already has rules, those take precedence and the Synchronisation Rules'
   own rules are discarded rather than migrated.
 

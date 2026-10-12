@@ -283,7 +283,7 @@ Returns a `PSCustomObject` describing the item:
 
 The snapshots record the object as it was when the item was recorded, so they still describe a Connected System Object that has since been deleted. For the object's current state, look it up by `ConnectedSystemObjectId` or `MetaverseObjectId`.
 
-An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name. Likewise, when matching before provisioning finds several existing Connected System Objects, the Metaverse Object is neither joined to one nor provisioned, and its `AmbiguousProvisioningMatch` item lists them:
+An object can join only one Metaverse Object, so when its Object Matching Rule finds several, the object is neither joined nor projected and the item lists up to 10 of them in `MatchCandidates`, ordered by display name. When matching before provisioning finds several existing Connected System Objects, JIM neither joins nor provisions the Metaverse Object, and its `AmbiguousProvisioningMatch` item lists them in `MatchCandidates`:
 
 | Property | Description |
 |----------|-------------|
@@ -352,7 +352,7 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
     }
 ```
 
-```powershell title="List the identities an ambiguous match found"
+```powershell title="List the objects an ambiguous match found"
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
     Select-Object DisplayNameSnapshot, MatchedValue, Exists,
         @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
