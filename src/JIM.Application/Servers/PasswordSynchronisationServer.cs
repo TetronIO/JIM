@@ -386,6 +386,13 @@ public class PasswordSynchronisationServer
     public static readonly TimeSpan ClaimLease = PendingPasswordChange.ClaimLease;
 
     /// <summary>
+    /// How long a delivery that would enable an account waits for an export to that account to finish before it tries
+    /// again (#2173). Short, because an export batch is seconds rather than minutes, and the wait costs nothing: the
+    /// change is not attempted, so no attempt is counted against it.
+    /// </summary>
+    public static readonly TimeSpan ExportInFlightWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// Delivers the password changes due on a Connected System, expiring anything that has outlived its window
     /// first: one lane of the Password Delivery Service (#1635).
     /// <para>
@@ -539,9 +546,10 @@ public class PasswordSynchronisationServer
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information(
             "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered ({LeftToFlow} leaving the enabled state to an Attribute Flow, " +
-            "{WithheldEnables} completing an enable withheld until the password), {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Released} released unattempted.",
+            "{WithheldEnables} completing an enable withheld until the password), {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, " +
+            "{Postponed} waiting for an export to the account to finish, {Released} released unattempted.",
             connectedSystem.Id, result.DeliveredCount, result.EnabledStateLeftToAttributeFlowCount, result.WithheldEnablesCompletedCount,
-            result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.ReleasedCount);
+            result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.PostponedCount, result.ReleasedCount);
 
         return result;
     }
@@ -624,6 +632,13 @@ public class PasswordSynchronisationServer
                         // send either, and the child Activity already recorded why.
                         delivered.Add(change.Id);
                         result.WithdrawnCount++;
+                        break;
+
+                    case PasswordDeliveryDisposition.Postponed:
+                        // Written back through the attempt write, which is guarded on the claim, though nothing was
+                        // attempted: the row carries its new retry time and an unchanged attempt count (#2173).
+                        attempted.Add(change);
+                        result.PostponedCount++;
                         break;
 
                     default:
@@ -787,9 +802,11 @@ public class PasswordSynchronisationServer
         // accounts an administrator may have disabled on purpose, and re-enabling one would undo that silently, as a
         // side effect of somebody changing their password elsewhere. The one enable any delivery completes is the
         // one JIM withheld until a password existed (#2039), because the Attribute Flow asked for it (#2064).
-        var enablement = await DecideAccountEnablementAsync(connectedSystem, change, account, ruleEnableAccount: false);
+        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, ruleEnableAccount: false);
         if (enablement == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
+        if (exportInFlight && PasswordEnablementPolicy.WaitsForAnExportInFlight(enablement))
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
@@ -871,9 +888,11 @@ public class PasswordSynchronisationServer
 
         // Where an export wrote the account's enabled state, the Attribute Flow decides it and the rule's Enable
         // Account does not apply (#2064); an enable JIM withheld until a password existed is completed (#2039).
-        var enablement = await DecideAccountEnablementAsync(connectedSystem, change, account, initialPasswordConfiguration.EnableAccount);
+        var (enablement, exportInFlight) = await DecideAccountEnablementAsync(connectedSystem, change, account, initialPasswordConfiguration.EnableAccount);
         if (enablement == null)
             return await KeepUndecidedAsync(connectedSystem, change, configuration, asOf);
+        if (exportInFlight && PasswordEnablementPolicy.WaitsForAnExportInFlight(enablement))
+            return PostponeForExportInFlight(connectedSystem, change, account, asOf);
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
         // change is kept and one target's fault never stops the lane reaching the others.
@@ -898,15 +917,16 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Decides what delivering this change does to the account's enabled state (#2064). The two facts the decision
-    /// turns on are read afresh at the attempt, not taken from the claimed row: whether the account holds an enable JIM
-    /// withheld until a password existed (#2039), and whether an export has written the account's enabled state. An
-    /// export can mark a claimed row, a leaver disabled moments ago, while the lane works through the accounts ahead of
-    /// it. Returns null when those facts cannot be read: the caller keeps the change rather than guess, because
-    /// guessing "not held" could leave an account disabled the flow asks to be enabled, and guessing "not marked" could
-    /// enable one the flow has disabled.
+    /// Decides what delivering this change does to the account's enabled state (#2064), and says whether an export to
+    /// the account is in flight (#2173). The facts the decision turns on are read afresh at the attempt, not taken from
+    /// the claimed row: whether the account holds an enable JIM withheld until a password existed (#2039), and whether
+    /// an export has written the account's enabled state. An export can mark a claimed row, a leaver disabled moments
+    /// ago, while the lane works through the accounts ahead of it; and one still being sent has not marked it yet,
+    /// which is why the caller waits for it before enabling. Returns a null decision when those facts cannot be read:
+    /// the caller keeps the change rather than guess, because guessing "not held" could leave an account disabled the
+    /// flow asks to be enabled, and guessing "not marked" could enable one the flow has disabled.
     /// </summary>
-    private async Task<AccountEnablementDecision?> DecideAccountEnablementAsync(
+    private async Task<(AccountEnablementDecision? Decision, bool ExportInFlight)> DecideAccountEnablementAsync(
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemObject account,
@@ -917,8 +937,11 @@ public class PasswordSynchronisationServer
         var dependsOnHold = PasswordEnablementPolicy.DependsOnWithheldEnable(change.Origin, change.EnableAccount);
         var dependsOnMark = change.IsProvisioned && !change.EnabledStateSetByAttributeFlow;
 
+        // Only an administrator's decision skips the read, and an administrator's decision never waits for an export
+        // in flight either, so nothing that could wait goes unread.
         var holdsWithheldEnable = false;
         var enabledStateSetByAttributeFlow = change.EnabledStateSetByAttributeFlow;
+        var exportInFlight = false;
         if (dependsOnHold || dependsOnMark)
         {
             try
@@ -926,18 +949,40 @@ public class PasswordSynchronisationServer
                 var facts = await _syncRepo.GetAccountEnablementFactsAsync(connectedSystem.Id, change.Id, account.Id);
                 holdsWithheldEnable = dependsOnHold && facts.HoldsWithheldEnable;
                 enabledStateSetByAttributeFlow |= facts.EnabledStateSetByAttributeFlow;
+                exportInFlight = facts.ExportInFlight;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log.Warning(ex, "DeliverDuePasswordChangesAsync: Could not read whether account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} " +
                     "holds an enable awaiting its password, or has had its enabled state written by an export; the change is kept and tried again",
                     account.Id, connectedSystem.Id);
-                return null;
+                return (null, false);
             }
         }
 
-        return PasswordEnablementPolicy.Decide(change.Origin, change.EnableAccount, enabledStateSetByAttributeFlow,
+        var decision = PasswordEnablementPolicy.Decide(change.Origin, change.EnableAccount, enabledStateSetByAttributeFlow,
             ruleEnableAccount, holdsWithheldEnable);
+        return (decision, exportInFlight);
+    }
+
+    /// <summary>
+    /// Gives the change back unattempted because delivering it would enable an account an export is being sent to
+    /// right now (#2173). That export may be disabling the account (a leaver, say), and records that it wrote the
+    /// enabled state only once its batch has come back, so the delivery waits for it rather than enable the leaver
+    /// with a password JIM set. Nothing was sent and nothing failed, so no attempt is counted and no Activity is
+    /// recorded; the lane's summary counts the wait.
+    /// </summary>
+    private static (PasswordDeliveryDisposition Disposition, AccountEnablementBasis? Enablement) PostponeForExportInFlight(
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        ConnectedSystemObject account,
+        DateTime asOf)
+    {
+        change.Postpone(asOf + ExportInFlightWait);
+        Log.Debug("DeliverDuePasswordChangesAsync: An export to account {ConnectedSystemObjectId} on Connected System {ConnectedSystemId} is in flight, " +
+            "and delivering password change {PendingPasswordChangeId} would enable the account; it waits until {NextRetryAt}",
+            account.Id, connectedSystem.Id, change.Id, change.NextRetryAt);
+        return (PasswordDeliveryDisposition.Postponed, null);
     }
 
     /// <summary>

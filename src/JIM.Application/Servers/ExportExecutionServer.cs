@@ -1993,6 +1993,20 @@ public class ExportExecutionServer
                 provisionedAccounts.Add(export);
         }
 
+        // #2064: an export other than the Create that wrote an account's enabled state (a leaver disabled, or an
+        // account disabled on deprovisioning) while its first password is still owed. The Creates' own rows are marked
+        // as they are staged below. Written BEFORE the batch's Pending Exports leave Executing (#2173): a delivery waits
+        // while an export to its account is in flight, so the mark has to be in place by the time the export stops
+        // counting as in flight, or a delivery in between reads neither and enables the leaver.
+        // A set of its own: staging reads the full set afterwards to mark the Creates' rows.
+        var owedAccountsWithEnabledStateWritten = accountsWithEnabledStateWritten
+            .Except(provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id))
+            .ToHashSet();
+        if (owedAccountsWithEnabledStateWritten.Count > 0)
+        {
+            await MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(batch[0].ConnectedSystemId, owedAccountsWithEnabledStateWritten, result, repository);
+        }
+
         // Batch update all Pending Exports
         if (exportsToUpdate.Count > 0)
         {
@@ -2026,15 +2040,6 @@ public class ExportExecutionServer
         {
             await StageInitialPasswordsForBatchAsync(provisionedAccounts, initialPasswordRuleIds, accountsWithEnabledStateWritten,
                 result, repository, initialPasswordTimeToLive, connectedSystemName);
-        }
-
-        // #2064: an export other than the Create that wrote an account's enabled state (a leaver disabled, or an
-        // account disabled on deprovisioning) while its first password is still owed. The Creates' own rows were
-        // marked as they were staged just above.
-        accountsWithEnabledStateWritten.ExceptWith(provisionedAccounts.Select(pe => pe.ConnectedSystemObject!.Id));
-        if (accountsWithEnabledStateWritten.Count > 0)
-        {
-            await MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(batch[0].ConnectedSystemId, accountsWithEnabledStateWritten, result, repository);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,

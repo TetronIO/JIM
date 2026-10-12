@@ -537,6 +537,67 @@ public class PendingPasswordChangeTests
         }
     }
 
+    /// <summary>
+    /// A delivery that would enable an account while an export to it is still in flight waits for that export
+    /// (#2173): nothing is sent, so nothing is counted against the change, and what earlier attempts recorded stays.
+    /// </summary>
+    [Test]
+    public void Postpone_PutsTheChangeBackToPendingUntilThenWithNothingCounted()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(7);
+        change.AttemptCount = 2;
+        change.FailureReason = PasswordSetFailureReason.Transient;
+        change.TargetMessage = "The server is unavailable.";
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Postpone(now.AddSeconds(15));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(change.NextRetryAt, Is.EqualTo(now.AddSeconds(15)));
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+            Assert.That(change.AttemptCount, Is.EqualTo(2), "a wait is not an attempt");
+            Assert.That(change.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
+            Assert.That(change.TargetMessage, Is.EqualTo("The server is unavailable."));
+            Assert.That(change.IsDue(now), Is.False);
+            Assert.That(change.IsDue(now.AddSeconds(15)), Is.True);
+        }
+    }
+
+    [Test]
+    public void Postpone_NeverPastTheExpiry()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddSeconds(5);
+        change.Claim("worker-1a2b3c4d", now);
+
+        change.Postpone(now.AddSeconds(15));
+
+        Assert.That(change.NextRetryAt, Is.EqualTo(change.ExpiresAt));
+    }
+
+    [Test]
+    public void Postpone_OnAnUnclaimedChange_ChangesNothing()
+    {
+        var now = new DateTime(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.ExpiresAt = now.AddDays(7);
+        change.Status = PendingPasswordChangeStatus.Parked;
+
+        change.Postpone(now.AddSeconds(15));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(change.NextRetryAt, Is.Null);
+        }
+    }
+
     [Test]
     public void ReleaseClaim_OnAnUnclaimedChange_ChangesNothing()
     {

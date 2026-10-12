@@ -292,6 +292,24 @@ public class PendingPasswordChange
     }
 
     /// <summary>
+    /// Gives a claimed change back unattempted, to be tried again at <paramref name="until"/> (#2173): delivering it
+    /// would enable an account an export is being sent to right now, and that export may be disabling it. Nothing was
+    /// sent, so nothing is counted against the change and what earlier attempts recorded stays. Unlike
+    /// <see cref="ReleaseClaim"/> the change is not due again at once, so the lane does not claim it straight back
+    /// while the export runs; and never later than <see cref="ExpiresAt"/>, so a long export cannot keep a change
+    /// waiting past its time to live.
+    /// </summary>
+    public void Postpone(DateTime until)
+    {
+        if (Status != PendingPasswordChangeStatus.Delivering)
+            return;
+
+        Status = PendingPasswordChangeStatus.Pending;
+        NextRetryAt = until > ExpiresAt ? ExpiresAt : until;
+        ClearClaim();
+    }
+
+    /// <summary>
     /// Whether this change has outlived its time to live and should be expired rather than attempted.
     /// <para>
     /// Only a pending change expires. An expired one stays as it is rather than being re-expired on every pass,

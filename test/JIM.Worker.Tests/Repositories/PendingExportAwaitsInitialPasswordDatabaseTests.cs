@@ -244,10 +244,42 @@ public class PendingExportAwaitsInitialPasswordDatabaseTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(heldAndUnmarked, Is.EqualTo(new AccountEnablementFacts(true, false)));
-            Assert.That(markedAndNotHeld, Is.EqualTo(new AccountEnablementFacts(false, true)));
-            Assert.That(changeGone, Is.EqualTo(new AccountEnablementFacts(false, false)));
+            Assert.That(heldAndUnmarked, Is.EqualTo(new AccountEnablementFacts(true, false, false)));
+            Assert.That(markedAndNotHeld, Is.EqualTo(new AccountEnablementFacts(false, true, false)));
+            Assert.That(changeGone, Is.EqualTo(new AccountEnablementFacts(false, false, false)));
             Assert.That(otherSystem.HoldsWithheldEnable, Is.False, "a hold on another Connected System is not this account's");
+        }
+    }
+
+    /// <summary>
+    /// The third fact (#2173): whether an export to the account is being sent right now. Only a Pending Export in
+    /// Executing counts; one waiting to be sent, or sent and awaiting confirmation, has nothing in flight.
+    /// </summary>
+    [Test]
+    public async Task GetAccountEnablementFactsAsync_ReadsWhetherAnExportToTheAccountIsInFlightAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 3, metaverseObjectCount: 1);
+        var executing = NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId);
+        executing.Status = PendingExportStatus.Executing;
+        var waiting = NewPendingExport(s.SystemId, s.CsoIds[1], s.AttributeId);
+        var exported = NewPendingExport(s.SystemId, s.CsoIds[2], s.AttributeId);
+        exported.Status = PendingExportStatus.Exported;
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreatePendingExportsAsync([executing, waiting, exported]);
+
+        await using var read = NewContext();
+        var sync = new PostgresDataRepository(read).Sync;
+        var inFlight = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[0]);
+        var notYetSent = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[1]);
+        var alreadySent = await sync.GetAccountEnablementFactsAsync(s.SystemId, Guid.NewGuid(), s.CsoIds[2]);
+        var otherSystem = await sync.GetAccountEnablementFactsAsync(s.SystemId + 1000, Guid.NewGuid(), s.CsoIds[0]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inFlight.ExportInFlight, Is.True);
+            Assert.That(notYetSent.ExportInFlight, Is.False);
+            Assert.That(alreadySent.ExportInFlight, Is.False);
+            Assert.That(otherSystem.ExportInFlight, Is.False, "an export on another Connected System is not this account's");
         }
     }
 

@@ -176,7 +176,14 @@ public enum PasswordDeliveryDisposition
     /// it no longer sets one. The child Activity records why, completed rather than failed, since nothing went
     /// wrong; the work simply stopped being needed.
     /// </summary>
-    Withdrawn = 2
+    Withdrawn = 2,
+
+    /// <summary>
+    /// The row goes back to the queue unattempted, to be tried again shortly (#2173): delivering it would have enabled
+    /// an account an export is being sent to right now, and that export may be disabling it. Nothing was sent and
+    /// nothing failed, so no attempt is counted and no Activity is recorded.
+    /// </summary>
+    Postponed = 3
 }
 
 /// <summary>

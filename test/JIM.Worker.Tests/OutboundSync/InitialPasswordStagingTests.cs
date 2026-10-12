@@ -603,6 +603,38 @@ public class InitialPasswordStagingTests
         }
     }
 
+    /// <summary>
+    /// A delivery waits while the account has an export in flight (#2173), so the mark has to be written while the
+    /// export still is in flight: written after its Pending Export left <see cref="PendingExportStatus.Executing"/>, it
+    /// leaves a moment where the delivery reads neither the export nor the mark and enables the leaver.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportingItWroteTheEnabledState_MarksBeforeTheExportLeavesExecutingAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+        var writes = new List<string>();
+        SyncRepo.OnMarkingOwedInitialPasswords = () => writes.Add("mark");
+        SyncRepo.OnPendingExportsUpdated = ids =>
+        {
+            if (ids.Contains(export.Id))
+                writes.Add("export status");
+        };
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(writes, Does.Contain("mark"));
+            Assert.That(writes, Does.Contain("export status"));
+            Assert.That(writes.IndexOf("mark"), Is.LessThan(writes.IndexOf("export status")),
+                "the mark must be in place before the export stops counting as in flight");
+        }
+    }
+
     private static ConnectedSystemExportResult SucceededWritingTheEnabledState()
     {
         var result = ConnectedSystemExportResult.Succeeded();

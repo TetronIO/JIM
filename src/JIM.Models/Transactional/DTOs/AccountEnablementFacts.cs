@@ -4,7 +4,7 @@
 namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
-/// The two facts a password delivery's enabled-state decision reads at the attempt (#2064), as they stand in the
+/// The facts a password delivery's enabled-state decision reads at the attempt (#2064, #2173), as they stand in the
 /// database then rather than when the change was claimed: an export can mark a claimed change, or withdraw a held
 /// enable, while the delivery lane is busy with the accounts ahead of it.
 /// </summary>
@@ -16,4 +16,9 @@ namespace JIM.Models.Transactional.DTOs;
 /// Whether an export has written the account's enabled state, as recorded on the queued change
 /// (<see cref="PendingPasswordChange.EnabledStateSetByAttributeFlow"/>). False where the change no longer exists.
 /// </param>
-public sealed record AccountEnablementFacts(bool HoldsWithheldEnable, bool EnabledStateSetByAttributeFlow);
+/// <param name="ExportInFlight">
+/// Whether an export to the account is being sent to the Connected System right now: its Pending Export is
+/// <see cref="PendingExportStatus.Executing"/> (#2173). Such an export may be writing the enabled state, and records
+/// that it did only once its batch has come back, so JIM's own decision to enable the account waits for it.
+/// </param>
+public sealed record AccountEnablementFacts(bool HoldsWithheldEnable, bool EnabledStateSetByAttributeFlow, bool ExportInFlight);
