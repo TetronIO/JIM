@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261012094006_RepairApiKeyInitiatorsRecordedAsUser")]
+    [Migration("20261012112941_RepairApiKeyInitiatorsRecordedAsUser")]
     partial class RepairApiKeyInitiatorsRecordedAsUser
     {
         /// <inheritdoc />
@@ -2316,6 +2316,56 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
 
                     b.ToTable("ConfigurationChangePreviewDeltas");
+                });
+
+            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewDeltaMatchCandidate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CandidateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CandidateKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CandidateTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ConfigurationChangePreviewDeltaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConnectedSystemNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DisplayNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MatchedValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObjectMatchingRuleDescriptionSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ObjectMatchingRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TypeNameSnapshot")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfigurationChangePreviewDeltaId")
+                        .HasDatabaseName("IX_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltaId");
+
+                    b.ToTable("ConfigurationChangePreviewDeltaMatchCandidates");
                 });
 
             modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>
@@ -5593,6 +5643,18 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Preview");
                 });
 
+            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewDeltaMatchCandidate", b =>
+                {
+                    b.HasOne("JIM.Models.Preview.ConfigurationChangePreviewDelta", "ConfigurationChangePreviewDelta")
+                        .WithMany("MatchCandidates")
+                        .HasForeignKey("ConfigurationChangePreviewDeltaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_PreviewDeltaMatchCandidates_ConfigurationChangePreviewDeltas");
+
+                    b.Navigation("ConfigurationChangePreviewDelta");
+                });
+
             modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>
                 {
                     b.HasOne("JIM.Models.Preview.ConfigurationChangePreview", "Preview")
@@ -6425,6 +6487,11 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Deltas");
 
                     b.Navigation("Groups");
+                });
+
+            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewDelta", b =>
+                {
+                    b.Navigation("MatchCandidates");
                 });
 
             modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>

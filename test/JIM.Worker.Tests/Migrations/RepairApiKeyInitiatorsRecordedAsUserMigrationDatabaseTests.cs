@@ -36,7 +36,7 @@ namespace JIM.Worker.Tests.Migrations;
 public class RepairApiKeyInitiatorsRecordedAsUserMigrationDatabaseTests
 {
     private const string ScratchDatabaseName = "jim_2066_initiator_repair_test";
-    private const string PreviousMigrationId = "20261012035931_AddRpeiAttributeValueErrors";
+    private const string PreviousMigrationId = "20261012092508_AddConfigurationChangePreviewDeltaMatchCandidates";
 
     private const string LiveKeyName = "ci-key";
     private const string UserName = "Alice";
