@@ -292,6 +292,7 @@ internal class FileConnectorImport
                     // unreadable value as it already held it rather than reading it as the whole set (#2066). The object
                     // is still returned, so every other attribute imports.
                     var reason = UnreadableValueReason(attribute.Type);
+                    importObject.SourceLocation ??= $"{_reader.FileName}, row {_reader.CsvReader.Context.Parser?.Row ?? 0:N0}";
                     foreach (var unreadableValue in unreadableValues)
                     {
                         _logger.Warning("Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",

@@ -53,6 +53,13 @@ public class ConnectedSystemImportObject
     public List<ConnectedSystemImportObjectAttributeValueError>? AttributeValueErrors { get; set; }
 
     /// <summary>
+    /// Where in the Connected System the object was read from, in words an administrator can follow to find it, such as
+    /// <c>hr-users.csv, row 4,182</c> (#2066). Optional; JIM shows it beside any error the object carries, so it is
+    /// worth setting at least on an object you flag. Leave it null where the External ID already says all there is.
+    /// </summary>
+    public string? SourceLocation { get; set; }
+
+    /// <summary>
     /// Records a value the Connector could not read, and marks the object as carrying an attribute value error.
     /// Call it once for every unreadable value, not once per attribute, and carry on reading the object's other values.
     /// </summary>

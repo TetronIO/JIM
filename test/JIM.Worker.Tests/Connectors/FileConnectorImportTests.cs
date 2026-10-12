@@ -285,6 +285,9 @@ public class FileConnectorImportTests
             Assert.That(first.Attributes.Select(a => a.Name), Is.EquivalentTo(new[] { "Id", "Name", "IsActive" }),
                 "Every value that could be read is still imported.");
             Assert.That(result.ImportObjects[1].AttributeValueErrors, Is.Null);
+            Assert.That(first.SourceLocation, Is.EqualTo("unreadable_values.csv, row 2"),
+                "The row as a spreadsheet numbers it, header included, so the administrator can go straight to it.");
+            Assert.That(result.ImportObjects[1].SourceLocation, Is.Null, "A row that read cleanly needs no location.");
         }
     }
 

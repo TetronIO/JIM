@@ -410,6 +410,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("AttributeFlowCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AttributeValueErrorsJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");
 
@@ -448,6 +451,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("PendingExportId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SourceLocation")
+                        .HasColumnType("text");
 
                     b.Property<int?>("UnresolvedReferenceCount")
                         .HasColumnType("integer");

@@ -11,6 +11,7 @@ using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
 using JIM.Data;
+using JIM.Models.Core;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -1000,6 +1001,59 @@ public class ActivitiesControllerTests
 
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.UnresolvedReferenceCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithUnreadableValues_ReturnsEachValueAndWhereItWasReadAsync()
+    {
+        // #2066: what the portal lists under Attribute Values Not Imported, so a script can see it too.
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+            AttributeValueErrorsJson = new ImportedAttributeValueErrors
+            {
+                Total = 3,
+                Values =
+                [
+                    new ImportedAttributeValueError { AttributeName = "startDate", AttributeType = AttributeDataType.DateTime, Value = "31/02/2026", Reason = "Not a valid date and time." },
+                    new ImportedAttributeValueError { AttributeName = "contractedHours", AttributeType = AttributeDataType.Number, Value = "37.5h", Reason = "Not a valid whole number." }
+                ]
+            }.ToJson(),
+            SourceLocation = "hr-users.csv, row 4,182"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.AttributeValueErrors.Select(v => (v.AttributeName, v.AttributeType, v.Value, v.Reason)), Is.EqualTo(new[]
+            {
+                ("startDate", (AttributeDataType?)AttributeDataType.DateTime, (string?)"31/02/2026", "Not a valid date and time."),
+                ("contractedHours", (AttributeDataType?)AttributeDataType.Number, (string?)"37.5h", "Not a valid whole number.")
+            }));
+            Assert.That(dto!.AttributeValueErrorTotal, Is.EqualTo(3), "The total says when more values failed than the item keeps.");
+            Assert.That(dto!.SourceLocation, Is.EqualTo("hr-users.csv, row 4,182"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithNoUnreadableValues_ReturnsAnEmptyListAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Added };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.AttributeValueErrors, Is.Empty);
+            Assert.That(dto!.AttributeValueErrorTotal, Is.Null);
+        }
     }
 
     [Test]

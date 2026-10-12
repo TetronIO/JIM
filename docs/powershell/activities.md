@@ -275,6 +275,9 @@ Returns a `PSCustomObject` describing the item:
 | `ErrorStackTrace` | The stack trace, when the failure came from an exception. |
 | `AttributeFlowCount` | How many Metaverse attributes changed alongside a join, projection or disconnection. |
 | `UnresolvedReferenceCount` | How many of the object's reference values the import could not resolve to a Connected System Object; empty when none. Set whatever `ErrorType` the item carries and under every [Unresolved Reference Handling](../configuration/unresolved-references.md) mode. The values themselves are on the Connected System Object. |
+| `AttributeValueErrors` | Every value the import found on the object but could not read as its attribute's type, each with `AttributeName`, `AttributeType`, `Value` (as received) and `Reason`; empty when there were none. JIM left each attribute as it already held it. |
+| `AttributeValueErrorTotal` | How many values could not be read; more than `AttributeValueErrors` holds where the item keeps only the first thousand. Empty when there were none. |
+| `SourceLocation` | Where in the Connected System the object was read from, such as a file and row, where the Connector says. |
 | `OutcomeSummary` | The item's outcomes with counts, for example `Projected:1,AttributeFlow:12`. |
 | `MatchCandidates` | For an `AmbiguousMatch`, the objects the match found; empty otherwise. See below. |
 
@@ -337,6 +340,17 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 ```
 
 This finds objects whose item carries a different error as well, which filtering on `ErrorType` would miss.
+
+```powershell title="List every value an import could not read, and where"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+    Where-Object { $_.ErrorType -eq 'ImportAttributeValueError' } |
+    Get-JIMActivityExecutionItem |
+    ForEach-Object {
+        $item = $_
+        $item.AttributeValueErrors | Select-Object @{ Name = 'Object'; Expression = { $item.DisplayNameSnapshot } },
+            @{ Name = 'Source'; Expression = { $item.SourceLocation } }, AttributeName, Value, Reason
+    }
+```
 
 ```powershell title="List the identities an ambiguous match found"
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
