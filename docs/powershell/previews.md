@@ -92,41 +92,41 @@ New-JIMConfigurationChangePreview -SyncRuleId <int> [-OutboundDeprovisionAction 
 
 Without `-Wait`, the result of starting the preview: its Activity id, and what validation found. With `-Wait`, the finished preview, as `Get-JIMConfigurationChangePreview` returns it; or the start result, at once, where the proposal was blocked or validation failed, since nothing further will run.
 
-**`ConfigurationChangePreviewStartResponse`**:
+**Without `-Wait`, or where the proposal was blocked or validation failed**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ActivityId` | `guid` | The preview's Activity, which is also the preview's identifier. Read the preview back from `GET /api/v1/previews/{activityId}` and its drill-down rows from `GET /api/v1/previews/{activityId}/deltas`. |
-| `ValidationFindings` | `PreviewValidationFinding[]` | What stage 1 found about the proposal itself, in the order the adapter reported it. |
+| `ValidationFindings` | `object[]` | What stage 1 found about the proposal itself, in the order the adapter reported it. Each has `Severity`, `Message`, `PropertyName` and `MetaverseAttributeName`. |
 | `IsBlocked` | `bool` | True when the proposal cannot be applied. The remaining stages are recorded as not applicable rather than run; read the findings instead of waiting for results that will never arrive. |
 | `Failed` | `bool` | True when stage 1 itself errored, as opposed to finding something wrong with the proposal. The Activity carries the error; nothing further ran. |
 | `EstimatedAffectedObjects` | `int` | How many objects the change is expected to touch. Empty when the proposal was blocked or stage 1 failed, in which case no estimate was taken. |
 | `EstimatedDeltaRows` | `long` | How many drill-down rows the change is expected to produce. Empty when the proposal was blocked or stage 1 failed, in which case no estimate was taken. |
 | `EstimatedDuration` | `string` | How long the preview is expected to take to evaluate, where the surface can say. A Full Synchronisation preview estimates it from the number of objects and how fast this system last synchronised, never faster than a conservative reference rate; other surfaces leave it empty. Use it to decide how long to wait for the result. |
 
-**`ConfigurationChangePreviewResponse`**:
+**With `-Wait`, once the preview finishes**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `ActivityId` | `guid` | The preview's Activity, which is also its identifier. |
-| `Surface` | `ConfigurationChangePreviewSurface` | The configuration surface previewed. |
-| `ActivityStatus` | `ActivityStatus` | The Activity's own status. Read this before the stage statuses: a preview that failed, or was cancelled, says so here first. |
+| `Surface` | `string` | The configuration surface previewed. One of `NotSet`, `SynchronisationRule`, `ConnectedSystem`, `MetaverseObjectType`, `MetaverseAttribute`, `SynchronisationRuleScope`, `SynchronisationRuleAttributeFlow`, `ObjectMatching`, `SynchronisationRuleBehaviour`, `ConnectedSystemSchema`, `ConnectedSystemDeletion` or `ConnectedSystemFullSynchronisation`. |
+| `ActivityStatus` | `string` | The Activity's own status. Read this before the stage statuses: a preview that failed, or was cancelled, says so here first. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
 | `Message` | `string` | What the preview is currently doing, or what it finished doing. |
 | `ErrorMessage` | `string` | Why the preview failed, when it did. Never contains attribute values. |
 | `ObjectsProcessed` | `int` | How many drill-down rows the preview has evaluated so far; its progress. |
 | `ObjectsToProcess` | `int` | How many drill-down rows the preview expects to evaluate. |
-| `ValidationStatus` | `ConfigurationChangePreviewStageStatus` | How far stage 1, validating the proposal itself, has got. |
-| `ImpactCountsStatus` | `ConfigurationChangePreviewStageStatus` | How far stage 2, counting the objects each transition would affect, has got. |
-| `SummaryStatus` | `ConfigurationChangePreviewStageStatus` | How far stage 3, grouping the affected objects into the summary groups, has got. |
-| `DeltasStatus` | `ConfigurationChangePreviewStageStatus` | How far stage 4, keeping the drill-down rows, has got. `NotApplicable` for a preview that only counts. |
+| `ValidationStatus` | `string` | How far stage 1, validating the proposal itself, has got. One of `NotStarted`, `InProgress`, `Complete`, `Failed`, `NotApplicable` or `Cancelled`. |
+| `ImpactCountsStatus` | `string` | How far stage 2, counting the objects each transition would affect, has got. One of `NotStarted`, `InProgress`, `Complete`, `Failed`, `NotApplicable` or `Cancelled`. |
+| `SummaryStatus` | `string` | How far stage 3, grouping the affected objects into the summary groups, has got. One of `NotStarted`, `InProgress`, `Complete`, `Failed`, `NotApplicable` or `Cancelled`. |
+| `DeltasStatus` | `string` | How far stage 4, keeping the drill-down rows, has got. `NotApplicable` for a preview that only counts. One of `NotStarted`, `InProgress`, `Complete`, `Failed`, `NotApplicable` or `Cancelled`. |
 | `IsComplete` | `bool` | True when every stage that was going to run has finished successfully. |
 | `HasFailed` | `bool` | True when any stage failed. Nothing in this response should be read as authoritative when it is: a preview that failed part-way has seen an arbitrary subset of the population. |
-| `ValidationFindings` | `PreviewValidationFinding[]` | What stage 1 found about the proposal itself. |
-| `ImpactCounts` | `PreviewImpactCount[]` | Stage 2's per-transition counts, from set-based SQL over the whole population. Distinct from the summary groups below, which come from the evaluated delta stream; an adapter may produce one and not the other. |
-| `Groups` | `ConfigurationChangePreviewGroupResponse[]` | The summary groups, largest first. Counts here are exact even where drill-down rows were capped. |
+| `ValidationFindings` | `object[]` | What stage 1 found about the proposal itself. Each has `Severity`, `Message`, `PropertyName` and `MetaverseAttributeName`. |
+| `ImpactCounts` | `object[]` | Stage 2's per-transition counts, from set-based SQL over the whole population. Distinct from the summary groups below, which come from the evaluated delta stream; an adapter may produce one and not the other. Each has `TransitionType`, `ObjectCount`, `ConnectedSystemId` and `MetaverseObjectTypeId`. |
+| `Groups` | `object[]` | The summary groups, largest first. Counts here are exact even where drill-down rows were capped. Each has `Id`, `TransitionType`, `MetaverseObjectTypeId`, `MetaverseObjectTypeName`, `ConnectedSystemId`, `ConnectedSystemName`, `AttributeName`, `OldValue`, `NewValue`, `PatternKey`, `ObjectCount` and `DeltasSampled`. |
 | `EstimatedAffectedObjects` | `int` | How many objects the change was expected to touch, estimated before evaluation began. |
 | `EstimatedDeltaRows` | `long` | How many drill-down rows the change was expected to produce, estimated before evaluation began. |
-| `DeltaPersistence` | `ConfigurationChangePreviewDeltaPersistence` | Whether drill-down rows were kept in full or capped per group. Group counts are exact either way; this says only how much can be drilled into. |
+| `DeltaPersistence` | `string` | Whether drill-down rows were kept in full or capped per group. Group counts are exact either way; this says only how much can be drilled into. One of `Full` or `Capped`. |
 | `DispatchedToWorker` | `bool` | Whether the evaluation ran in JIM.Worker. Diagnostic only; both paths produce identical results. |
 | `StalenessBaseline` | `datetime` | The most recent import or synchronisation across the systems the preview depends on, sampled when it ran. A later import moves the real answer, which is how a caller knows to treat a result as stale. |
 <!-- END GENERATED: New-JIMConfigurationChangePreview -->
@@ -298,7 +298,7 @@ Get-JIMConfigurationChangePreview -ActivityId <guid>
 
 The preview, with each stage's results as far as it has got; it is safe to read while the preview runs. IsComplete means every stage that was going to run has finished: an empty summary means nothing would change only once it is `$true`.
 
-**`ConfigurationChangePreviewResponse`**: as under [New-JIMConfigurationChangePreview](#new-jimconfigurationchangepreview).
+Properties as under [New-JIMConfigurationChangePreview](#new-jimconfigurationchangepreview).
 <!-- END GENERATED: Get-JIMConfigurationChangePreview -->
 
 ### Examples
@@ -361,13 +361,11 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId <guid> -All [-GroupId <guid>]
 
 Each row: what the proposed change would do to one object. PatternKey takes the same values as on a summary group (see `Get-JIMConfigurationChangePreview`). MatchCandidates is empty unless the row is WouldMatchAmbiguously.
 
-**`ConfigurationChangePreviewDeltaResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` | The row's unique identifier. |
 | `GroupId` | `guid` | The summary group this delta was counted in. |
-| `TransitionType` | `ActivityRunProfileExecutionItemSyncOutcomeType` | What would happen to this object. |
+| `TransitionType` | `string` | What would happen to this object. One of `CsoAdded`, `CsoUpdated`, `CsoDeleted`, `DeletionDetected`, `ExportConfirmed`, `ExportFailed`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `MvoDeleted`, `DriftCorrection`, `Provisioned`, `PendingExportCreated`, `Exported`, `Deprovisioned`, `MvoDeletionScheduled`, `AssertedNull`, `NoContributor`, `WouldFallInScope`, `WouldFallOutOfScope`, `WouldBecomeDeletionEligible`, `WouldCeaseToBeDeletionEligible`, `WouldChangeDeletionEligibleDate`, `DeprovisionQueued`, `WouldDisconnectFromMetaverseObject`, `WouldStageDeleteExport`, `WouldRemainJoined`, `WouldChangeDeprovisionAction`, `WouldFailAttributeFlow`, `WouldJoinDifferentMetaverseObject`, `WouldJoinInsteadOfProject`, `WouldProjectInsteadOfJoin`, `WouldMatchAmbiguously`, `WouldStopProjecting`, `WouldStopProvisioning`, `WouldStopCorrectingDrift`, `WouldStopBeingImported`, `WouldResumeBeingImported`, `WouldWithdrawContributedValues`, `WouldRetainContributedValues`, `ValuesPreserved`, `MvoDeletionCancelled`, `WouldLeaveExportScope`, `WouldEnterExportScope`, `ProvisioningCancelled`, `GeneratedValueAssigned`, `GeneratedValueAdopted`, `GeneratedValueRetired`, `GeneratedValueRemediated`, `OutOfScopeRetainJoin`, `WouldTakeOverContributedValue`, `WouldTakeOverSameValue`, `WouldStageUpdateExport`, `TargetDisconnected`, `WouldNotChange`, `WouldFail`, `PendingExportChangesWithdrawn`, `GeneratedValueWaiting` or `GeneratedValueCandidatesSkipped`. |
 | `MetaverseObjectId` | `guid` | The Metaverse Object concerned, where the transition names one: a deletion eligibility change does, and so does an Attribute Flow change. |
 | `ConnectedSystemObjectId` | `guid` | The Connected System Object concerned, where the transition names one: a scope change does, and so does an Attribute Flow change. |
 | `ConnectedSystemId` | `int` | The Connected System the Connected System Object belongs to, where there is one. |
@@ -377,7 +375,7 @@ Each row: what the proposed change would do to one object. PatternKey takes the 
 | `OldValue` | `string` | The attribute's value before the change, for an Attribute Flow change; empty where it has none. |
 | `NewValue` | `string` | The attribute's value after the change, for an Attribute Flow change; empty where it would have none. |
 | `PatternKey` | `string` | What kind of edit this row describes, taking the same values as a group's own key. Per row, so a group that covers a mixture of edits can still be read by the kind each object makes. Empty where nothing recognised it. |
-| `MatchCandidates` | `MatchCandidateDto[]` | For a row predicting an ambiguous match, the objects it would find, in recorded order: at most ten, each carrying the full count in `candidateTotal`. Empty for every other row. The same shape as an Activity item's `matchCandidates`. |
+| `MatchCandidates` | `object[]` | For a row predicting an ambiguous match, the objects it would find, in recorded order: at most ten, each carrying the full count in `candidateTotal`. Empty for every other row. The same shape as an Activity item's `matchCandidates`. Each has `CandidateKind`, `CandidateId`, `DisplayNameSnapshot`, `TypeNameSnapshot`, `ConnectedSystemId`, `ConnectedSystemNameSnapshot`, `MatchedValue`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `Ordinal` and `CandidateTotal`. |
 <!-- END GENERATED: Get-JIMConfigurationChangePreviewDelta -->
 
 !!! warning "These rows may be a sample"

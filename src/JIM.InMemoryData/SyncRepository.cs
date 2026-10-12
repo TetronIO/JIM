@@ -2407,6 +2407,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
     }
 
+    public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
+    {
+        return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
+    }
+
     public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
     {
         (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)

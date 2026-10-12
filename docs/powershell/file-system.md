@@ -34,19 +34,19 @@ Get-JIMFileSystemItem -Roots
 
 Listing returns the directory's contents; `-Roots` returns each allowed root directory's path.
 
-**`FileSystemListResult`** (List):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Path` | `string` | The path that was listed. |
-| `Entries` | `FileSystemEntry[]` | The entries (files and directories) in the directory. |
+| `Entries` | `object[]` | The entries (files and directories) in the directory. Each has `Name`, `FullPath` and `IsDirectory`. |
 | `ParentPath` | `string` | The parent directory path, if navigating up is allowed. |
 | `IsRoot` | `bool` | Whether this is a root directory (cannot navigate up). |
 | `Error` | `string` | Error message if the operation failed. |
 | `IsAccessDenied` | `bool` | Whether access was denied due to security restrictions. |
 | `Success` | `bool` | Whether the operation was successful. |
 
-**`string`** (Roots)
+**With `-Roots`**: a `string`.
 <!-- END GENERATED: Get-JIMFileSystemItem -->
 
 ### Examples
@@ -86,7 +86,7 @@ Test-JIMFileSystemPath [-Path] <string>
 
 `$true` if the path is within an allowed root directory; otherwise `$false`.
 
-**`bool`**
+Returns a `bool`.
 <!-- END GENERATED: Test-JIMFileSystemPath -->
 
 ### Examples

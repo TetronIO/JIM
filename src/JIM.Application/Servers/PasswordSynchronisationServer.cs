@@ -142,14 +142,25 @@ public class PasswordSynchronisationServer
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// The password is empty, the target list is empty, or a target is not one of this person's accounts, is in a
-    /// system whose Connector cannot set passwords, or shares a Connected System with another target.
+    /// The password is empty, the request asks to disable the account (#2162), the target list is empty, or a target is
+    /// not one of this person's accounts, is in a system whose Connector cannot set passwords, or shares a Connected
+    /// System with another target.
     /// </exception>
     public async Task<PasswordQueueResult> SetPasswordAsync(SetPasswordRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrEmpty(request.Password))
             throw new ArgumentException("A password is required.", nameof(request));
+
+        // Setting a password enables an account or leaves it as it is; it never disables one (#2162). A disable here
+        // would override the account's Attribute Flows as a side effect of a password reset, and nothing that sets a
+        // password asks for one: the portal and PowerShell offer enable or nothing. Refused rather than carried to the
+        // Connector. No parameter name, because the message goes to API callers as it is.
+        if (request.EnableAccount == false)
+        {
+            throw new ArgumentException(
+                "enableAccount accepts true, to enable the account as its password is set, or can be left out to leave the account's enabled state as it is. Setting a password never disables an account.");
+        }
 
         var plan = request.Targets == null
             ? await PlanPropagatedChangeAsync(request.MetaverseObjectId)

@@ -41,8 +41,6 @@ Get-JIMHealth [[-Url] <string>] -Live
 
 One object with the probe's Status and Timestamp. A readiness check that fails is reported as an error rather than returned.
 
-**`HealthStatusResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Status` | `string` | The probe's verdict: healthy (the web tier answered), ready (it can serve requests: the database is reachable and JIM is not in maintenance mode) or alive (the process is running). |
@@ -103,13 +101,13 @@ Get-JIMServiceHealth -Summary
 
 One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to empty. With `-Summary`, one object whose Services holds those three.
 
-**`ServiceHealth`** (Services):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Service` | `JimService` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. |
-| `Status` | `ServiceHealthStatus` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). |
-| `Condition` | `ServiceHealthCondition` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. |
+| `Service` | `string` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. One of `WorkerSync`, `WorkerDelivery` or `Scheduler`. |
+| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
+| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted`. |
 | `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
 | `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or empty when the service has never reported. |
 | `HostName` | `string` | The host the reporting instance runs on, or empty when the service has never reported. |
@@ -121,14 +119,14 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or empty when idle, never seen, or when the service cannot tell progress apart from liveness. |
 | `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or empty. |
 
-**`ServiceHealthSummary`** (Summary):
+**With `-Summary`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Overall` | `ServiceHealthStatus` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. |
+| `Overall` | `string` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. One of `Healthy`, `Degraded` or `Unhealthy`. |
 | `WebVersion` | `string` | The version of the web tier that answered, for comparison with each service's own version; a mismatch means a partial upgrade. |
 | `GeneratedAt` | `datetime` | When (UTC) the verdicts were derived. Every "last seen n seconds ago" reason is relative to this moment. |
-| `Services` | `ServiceHealthEntryResponse[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. |
+| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt` and `Detail`. |
 <!-- END GENERATED: Get-JIMServiceHealth -->
 
 ### Examples
@@ -189,8 +187,6 @@ Get-JIMVersion [[-Url] <string>]
 
 One object with Product and Version.
 
-**`VersionResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Product` | `string` | The product's name: always JIM. |
@@ -235,8 +231,6 @@ Get-JIMAuthConfig [[-Url] <string>]
 
 The settings a client needs to start a sign-in.
 
-**`AuthConfigResponse`**:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `Authority` | `string` | The OIDC authority URL (e.g., https://login.microsoftonline.com/{tenant}/v2.0). |
@@ -280,8 +274,6 @@ None.
 ### Output
 
 One object saying who the caller is to JIM. A caller with no JIM identity is answered rather than refused: Authorised is `$false` and Message says what to do.
-
-**`UserInfoResponse`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -346,8 +338,6 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 ### Output
 
 One object counting what the reset removed, and how many administrators it kept or removed.
-
-**`SystemResetResult`**:
 
 | Property | Type | Description |
 |----------|------|-------------|

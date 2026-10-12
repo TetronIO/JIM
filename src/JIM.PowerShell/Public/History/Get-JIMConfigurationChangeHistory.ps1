@@ -61,6 +61,12 @@ function Get-JIMConfigurationChangeHistory {
         with -CompareTo the diff between two versions; with -AsDiff, either is rendered as lines of text instead. A
         secret is never returned: a changed secret is reported only as changed.
 
+        JIM.ConfigurationChangeDetail: With -Version
+
+        JIM.ConfigurationDiff: With -CompareFrom and -CompareTo
+
+        System.String: With -AsDiff
+
     .EXAMPLE
         Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 5
 

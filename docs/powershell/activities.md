@@ -58,27 +58,27 @@ Get-JIMActivity -Id <guid>
 
 A list returns each Activity's header, and `-Id` the Activity in full. `-ExecutionItems` returns each of the Activity's Run Profile Execution Items. `-Follow` shows progress while it follows, then returns the Activity in full.
 
-**`ActivityHeader`** (List):
+**By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `guid` | The unique identifier of the Activity. |
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
-| `Status` | `ActivityStatus` | The current status of the Activity. |
-| `TargetType` | `ActivityTargetType` | The type of target this Activity operates on. |
-| `TargetOperationType` | `ActivityTargetOperationType` | The operation being performed. |
+| `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
+| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject` or `PasswordSynchronisation`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
-| `InitiatedByType` | `ActivityInitiatorType` | The type of security principal that initiated this Activity. |
+| `InitiatedByType` | `string` | The type of security principal that initiated this Activity. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The unique identifier of the security principal that initiated this Activity. |
 | `InitiatedByName` | `string` | Name of the user or API key that initiated this Activity. |
 | `ObjectsToProcess` | `int` | Number of objects to process (for progress tracking). |
 | `ObjectsProcessed` | `int` | Number of objects processed so far (for progress tracking). |
 | `ExecutionTime` | `string` | How long the Activity took to execute (once complete). |
 | `TotalActivityTime` | `string` | Total time from creation to completion. |
-| `ConnectedSystemRunType` | `ConnectedSystemRunType` | The run type, for a Run Profile execution. |
+| `ConnectedSystemRunType` | `string` | The run type, for a Run Profile execution. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
 | `TotalAdded` | `int` | Count of new Connected System Objects added to the Connector Space during import. |
 | `TotalUpdated` | `int` | Count of existing Connected System Objects updated during import. |
 | `TotalDeleted` | `int` | Count of Connected System Objects marked as deleted (source system deletion detected). |
@@ -101,7 +101,7 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
 | `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Empty when no Schedule produced this Activity. |
 
-**`ActivityDetailDto`** (Follow, ById):
+**With `-Id` or `-Follow`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -109,13 +109,13 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ParentActivityId` | `guid` | Parent Activity ID if this was triggered by another Activity. |
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
-| `Status` | `ActivityStatus` | The current status of the Activity. |
-| `TargetType` | `ActivityTargetType` | The type of target this Activity operates on. |
-| `TargetOperationType` | `ActivityTargetOperationType` | The operation being performed. |
+| `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
+| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject` or `PasswordSynchronisation`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
-| `InitiatedByType` | `ActivityInitiatorType` | The type of security principal that initiated this Activity. |
+| `InitiatedByType` | `string` | The type of security principal that initiated this Activity. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The unique identifier of the security principal that initiated this Activity. |
 | `InitiatedByName` | `string` | Name of the user or API key that initiated this Activity. |
 | `ObjectsToProcess` | `int` | Number of objects to process (for progress tracking). |
@@ -126,21 +126,21 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ErrorMessage` | `string` | Error message if the Activity failed. |
 | `ErrorStackTrace` | `string` | Error stack trace if the Activity failed. |
 | `ErrorDetail` | `string` | Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the message. An LDAPS connection refused because of the directory server's certificate records that certificate here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check it failed. Empty for failures with no structured detail. |
-| `ConnectedSystemRunType` | `ConnectedSystemRunType` | The run type, for a Run Profile execution. |
+| `ConnectedSystemRunType` | `string` | The run type, for a Run Profile execution. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
 | `ConnectedSystemId` | `int` | The Connected System ID if applicable. |
 | `ConnectedSystemRunProfileId` | `int` | The Run Profile ID if applicable. |
 | `SyncRuleId` | `int` | The Synchronisation Rule ID if applicable. |
 | `MetaverseObjectId` | `guid` | The Metaverse Object ID if applicable. |
 | `ExampleDataTemplateId` | `int` | The data generation template ID if applicable. |
-| `ExecutionStats` | `ActivityRunProfileExecutionStatsDto` | Execution statistics for Run Profile Activities. |
-| `Phases` | `ActivityPhaseDto[]` | The steps the Run Profile execution moved through, in run order, each with how it turned out and how long it took. This is what answers "where did the four hours go?" on a run that finished days ago. Empty for other Activity types, and for runs that predate phase recording. |
+| `ExecutionStats` | `object` | Execution statistics for Run Profile Activities. It has `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, `TotalObjectTypes`, `TotalCsoAdds`, `TotalCsoUpdates`, `TotalCsoDeletes`, `TotalProjections`, `TotalJoins`, `TotalAttributeFlows`, `TotalDisconnections`, `TotalDisconnectedOutOfScope`, `TotalOutOfScopeRetainJoin`, `TotalDriftCorrections`, `TotalProvisioned`, `TotalGeneratedValues`, `TotalGeneratedValueFailures`, `TotalGeneratedValuesRemediated`, `TotalGeneratedValuesNeedingDecision`, `TotalGeneratedValuesWaiting`, `TotalExported`, `TotalDeprovisioned`, `TotalPendingExports`, `TotalPendingExportsConfirmed`, `TotalPendingExportsRetrying`, `TotalPendingExportsFailed`, `TotalCreated`, `EntriesDiscardedByExcludedContainer` and `TotalEntriesDiscardedByExclusion`. |
+| `Phases` | `object[]` | The steps the Run Profile execution moved through, in run order, each with how it turned out and how long it took. This is what answers "where did the four hours go?" on a run that finished days ago. Empty for other Activity types, and for runs that predate phase recording. Each has `Key`, `Name`, `ParentKey`, `Order`, `Status`, `Started`, `Ended` and `DurationSeconds`. |
 | `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Empty otherwise. |
 | `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
 | `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
 | `ScheduledByScheduleName` | `string` | The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads correctly after the Schedule has been renamed or deleted. Empty when no Schedule produced this Activity. |
 | `ChangeReason` | `string` | For a configuration-change Activity, the optional reason supplied for the change. |
 | `ConfigurationChangeVersion` | `int` | For a configuration-change Activity, the per-object version number this change produced. |
-| `ConfigurationChangeSnapshot` | `ConfigurationSnapshot` | For a configuration-change Activity, the redacted snapshot of the object's state at this change; empty otherwise. |
+| `ConfigurationChangeSnapshot` | `object` | For a configuration-change Activity, the redacted snapshot of the object's state at this change; empty otherwise. It has `SchemaVersion`, `ObjectType`, `ObjectId`, `ObjectGuidId`, `ObjectKey`, `ObjectName` and `Root`. |
 | `PreviewActivityId` | `guid` | For a change made after reading a Configuration Change Preview, the preview's Activity id, as recorded by the change's `previewActivityId`; read it with `GET /api/v1/previews/{activityId}`. Empty when no preview informed the change, and for every other kind of Activity. |
 | `PreviewOvertakenAt` | `datetime` | When the preview in `PreviewActivityId` had been overtaken by the time the change was made: the latest run or configuration change recorded after the preview started that could change its answer. Empty when the preview was current, or when no preview informed the change. |
 | `PreviewOvertakenBy` | `string` | What had overtaken the preview in `PreviewActivityId` by the time the change was made, for example "Run Profile 'Delta Import' ran on Connected System 'HR Import'". Empty when `PreviewOvertakenAt` is. |
@@ -152,7 +152,7 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ExportDeletesWithheld` | `int` | How many deletes the Run Profile's Max deletes limit withheld this run; they stay pending for a later Export run. Populated (zero when nothing was withheld) on every Export Activity; empty otherwise. |
 | `DetectedDeletionsWithheld` | `int` | How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero when nothing was withheld) on every Full Import Activity that ran deletion detection; empty on every other Activity, including a Full Import that imported zero objects and so skipped detection entirely. |
 
-**`ActivityRunProfileExecutionItemHeader`** (ExecutionItems):
+**With `-ExecutionItems`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -160,8 +160,8 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ExternalIdValue` | `string` | The object's external ID: its Connected System Object's current value, or the value recorded with the item where that object no longer exists. |
 | `DisplayName` | `string` | The object's display name: its Connected System Object's current value, or the name recorded with the item where that object no longer exists. |
 | `ConnectedSystemObjectType` | `string` | The object's type: its Connected System Object's current type, or the type recorded with the item where that object no longer exists. |
-| `ObjectChangeType` | `ObjectChangeType` | What happened to the object. |
-| `ErrorType` | `ActivityRunProfileExecutionItemErrorType` | The kind of failure; `NotSet` or empty when the object did not fail. |
+| `ObjectChangeType` | `string` | What happened to the object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `ErrorType` | `string` | The kind of failure; `NotSet` or empty when the object did not fail. One of `NotSet`, `AmbiguousMatch`, `CouldNotMatchObjectType`, `CouldNotJoinDueToExistingJoin`, `DuplicateImportedAttributes`, `MissingExternalIdAttributeValue`, `UnexpectedAttribute`, `UnresolvedReference`, `UnsupportedExternalIdAttributeType`, `ExportNotConfirmed`, `ExportConfirmationFailed`, `CsoCreationFailed`, `DuplicateObject`, `InvalidGeneratedExternalId`, `UnhandledError`, `ExpressionEvaluationError`, `ExpressionMissingInput`, `MultiValuedToSingleValued`, `DeltaImportFallbackToFullImport`, `ImportHashVerificationFailed`, `ImportAttributeValueError`, `ConnectorConfigurationError`, `CouldNotExportDueToExistingConnectedSystemObject`, `ClassMembershipRequirementsNotMet`, `GeneratedValueExhausted`, `GeneratedValueWidthExceeded`, `GeneratedValueCollisionUnresolved`, `UniqueValueAlreadyInUse`, `ObjectMatchingRuleFailed`, `ObjectTypeChanged`, `PasswordRequiredToEnableAccount` or `AmbiguousProvisioningMatch`. |
 | `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export scope review). Empty otherwise. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12,PendingExportCreated:2`. Empty for an item recorded before outcomes were tracked, or when outcome tracking is disabled. |
 <!-- END GENERATED: Get-JIMActivity -->
@@ -256,8 +256,6 @@ Get-JIMActivityStats -Id <guid>
 ### Output
 
 The Run Profile execution's statistics.
-
-**`ActivityRunProfileExecutionStatsDto`**:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -356,7 +354,7 @@ Get-JIMActivityChildren -Id <guid> -All [-Force] [-PageSize <int>]
 
 Each child Activity's header.
 
-**`ActivityHeader`**: as under [Get-JIMActivity](#get-jimactivity).
+Properties as under [Get-JIMActivity](#get-jimactivity).
 <!-- END GENERATED: Get-JIMActivityChildren -->
 
 ### Examples

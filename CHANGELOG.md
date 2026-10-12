@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
+- 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 
 ### Removed
 
@@ -88,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute can't hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
 - 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one, and Drift Detection no longer clears an export target when its expression fails. (#2179)
 - 🐛 An attribute now exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, a target is no longer cleared in error or left with stray values, and a SQL related table no longer accumulates rows. (#2182)
+- 🐛 Sync Preview now shows that an object with no import Synchronisation Rule would join through its Object Type's Object Matching Rules in simple mode, and no longer predicts such joins in advanced mode, where the synchronisation ignores those rules. (#2176)
+- 🐛 The REST API reference lists each enumerated field's values by name, as the API sends and accepts them, rather than describing the field as an integer.
+- 🐛 Setting a password through the REST API with `enableAccount: false` is now refused rather than disabling the account: setting a password enables an account or leaves it as it is. (#2162)
 - 🐛 Sync Preview now shows an object that would join or project with no attribute flowing, instead of saying no changes are needed when the synchronisation would join or project it.
 - 🐛 An upgrade with the installer that fails partway on Docker no longer leaves its `.previous` files and `.env.example` behind, where they replaced those an earlier upgrade left for rolling back to the release before. (#2155)
 - 🐛 PowerShell's `-WhatIf` now always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem` and `Remove-JIMConnectedSystem`, giving both carried the action out instead. (#2167)

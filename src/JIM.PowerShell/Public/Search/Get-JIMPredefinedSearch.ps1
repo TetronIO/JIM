@@ -26,6 +26,10 @@ function Get-JIMPredefinedSearch {
         The list and a wildcard -Uri return a header per search; -Id and a literal -Uri return the search in full,
         with its attributes and criteria groups.
 
+        JIM.PredefinedSearchHeader: By default, or with a wildcard -Uri
+
+        JIM.PredefinedSearchDetailDto: With -Id, or a literal -Uri
+
     .EXAMPLE
         Get-JIMPredefinedSearch
 

@@ -17,7 +17,7 @@ function Test-JIMConnection {
     .OUTPUTS
         The connection's status; with -Quiet, $true if connected and otherwise $false.
 
-        JIM.ConnectionStatus
+        JIM.ConnectionStatus: By default
         Connected (bool): Whether a connection exists and JIM answered.
         Url (string): The JIM instance's address.
         AuthMethod (string): How the connection authenticated: ApiKey or OAuth.
@@ -25,6 +25,8 @@ function Test-JIMConnection {
         Status (string): JIM's health status.
         Message (string): A sentence describing the result.
         TokenExpiresAt (datetime): When the access token expires; OAuth only.
+
+        System.Boolean: With -Quiet
 
     .EXAMPLE
         Test-JIMConnection

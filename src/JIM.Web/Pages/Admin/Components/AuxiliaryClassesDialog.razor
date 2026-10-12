@@ -105,7 +105,7 @@
                                         </ChildContent>
                                     </MudTooltip>
                                 }
-                                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="ms-auto"
+                                <MudButton Variant="Variant.Text" Class="ms-auto"
                                            EndIcon="@(isExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                            OnClick="@(() => ToggleExpanded(offer))"
                                            data-testid="jim-aux-attrs-toggle">
@@ -162,7 +162,7 @@
                     </MudChip>
                     <MudText Class="mud-text-secondary">@DescribeRun(LatestDiscoveryRun)</MudText>
                 }
-                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="ms-auto"
+                <MudButton Variant="Variant.Text" Class="ms-auto"
                            Disabled="DiscoveryInProgress"
                            EndIcon="@(_discoveryOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                            OnClick="@(() => _discoveryOpen = !_discoveryOpen)"
@@ -210,7 +210,7 @@
                                          Style="max-width: 20rem;" />
                     }
 
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-3"
+                    <MudButton Variant="Variant.Outlined" Class="mt-3"
                                Disabled="@(_startingDiscovery || !CanStartDiscovery())"
                                OnClick="HandleRunDiscoveryAsync"
                                data-testid="jim-aux-discovery-run">
