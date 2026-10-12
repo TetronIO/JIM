@@ -19,10 +19,12 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>The Run Profile Activity the item belongs to.</summary>
     public Guid ActivityId { get; set; }
 
-    /// <summary>What happened to the object. Serialised as the enum member name.</summary>
+    /// <summary>What happened to the object.</summary>
+    /// <remarks>Serialised as the enum member name.</remarks>
     public ObjectChangeType ObjectChangeType { get; set; }
 
-    /// <summary>Why nothing changed, when nothing did. Serialised as the enum member name.</summary>
+    /// <summary>Why nothing changed, when nothing did.</summary>
+    /// <remarks>Serialised as the enum member name.</remarks>
     public NoChangeReason? NoChangeReason { get; set; }
 
     /// <summary>The Connected System Object the item is about, when it still exists.</summary>
@@ -43,7 +45,8 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>The object's type name when the item was recorded.</summary>
     public string? ObjectTypeSnapshot { get; set; }
 
-    /// <summary>The kind of failure; <c>NotSet</c> or null when the object did not fail. Serialised as the enum member name.</summary>
+    /// <summary>The kind of failure; <c>NotSet</c> or null when the object did not fail.</summary>
+    /// <remarks>Serialised as the enum member name.</remarks>
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
 
     /// <summary>What went wrong, in words; null when the object did not fail.</summary>
@@ -86,6 +89,25 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// for a Metaverse Object, what is joined to it now. Empty for any other item.
     /// </summary>
     public List<MatchCandidateDetailDto> MatchCandidates { get; set; } = [];
+
+    /// <summary>
+    /// For an object joined to an existing Metaverse Object by matching, the id of the Object Matching Rule that found
+    /// it; null for any other item. The rule may since have been changed or deleted; the description below records
+    /// what it compared at the time.
+    /// </summary>
+    public int? JoinObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// For an object joined by matching, what the Object Matching Rule compared when the join was made, for example
+    /// <c>Employee ID equals employeeId</c>; null for any other item.
+    /// </summary>
+    public string? JoinObjectMatchingRuleDescriptionSnapshot { get; set; }
+
+    /// <summary>
+    /// For an object joined by matching, the value the join matched on: what the rule computed from the object, with
+    /// several separated by commas for a multi-valued source. Null for any other item.
+    /// </summary>
+    public string? JoinMatchedValue { get; set; }
 
     /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.

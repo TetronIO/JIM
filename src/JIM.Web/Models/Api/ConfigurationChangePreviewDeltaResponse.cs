@@ -15,6 +15,7 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class ConfigurationChangePreviewDeltaResponse
 {
+    /// <summary>The row's unique identifier.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The summary group this delta was counted in.</summary>
@@ -23,25 +24,41 @@ public class ConfigurationChangePreviewDeltaResponse
     /// <summary>What would happen to this object.</summary>
     public ActivityRunProfileExecutionItemSyncOutcomeType TransitionType { get; set; }
 
+    /// <summary>
+    /// The Metaverse Object concerned, where the transition names one: a deletion eligibility change does, and so
+    /// does an Attribute Flow change.
+    /// </summary>
     public Guid? MetaverseObjectId { get; set; }
 
+    /// <summary>
+    /// The Connected System Object concerned, where the transition names one: a scope change does, and so does an
+    /// Attribute Flow change.
+    /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
 
+    /// <summary>The Connected System the Connected System Object belongs to, where there is one.</summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The object's display name and type name as they were when the preview ran. Snapshotted deliberately: a
-    /// preview often concerns objects that are about to be deleted or disconnected, and a joined view would render
-    /// blank rows for exactly the objects most worth seeing.
+    /// The object's display name as it was when the preview ran, so it still reads correctly for an object about
+    /// to be deleted or disconnected.
     /// </summary>
+    /// <remarks>
+    /// Snapshotted deliberately: a preview often concerns objects that are about to be deleted or disconnected, and
+    /// a joined view would render blank rows for exactly the objects most worth seeing.
+    /// </remarks>
     public string? ObjectDisplayName { get; set; }
 
+    /// <summary>The object's type name as it was when the preview ran.</summary>
     public string? ObjectTypeName { get; set; }
 
+    /// <summary>The attribute whose value would change, for an Attribute Flow change; null otherwise.</summary>
     public string? AttributeName { get; set; }
 
+    /// <summary>The attribute's value before the change, for an Attribute Flow change; null where it has none.</summary>
     public string? OldValue { get; set; }
 
+    /// <summary>The attribute's value after the change, for an Attribute Flow change; null where it would have none.</summary>
     public string? NewValue { get; set; }
 
     /// <summary>

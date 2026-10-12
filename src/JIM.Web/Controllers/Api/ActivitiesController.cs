@@ -5,6 +5,7 @@ using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using JIM.Utilities;
 using JIM.Web.Models;
 using JIM.Web.Models.Api;
@@ -326,6 +327,14 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             dto.MatchCandidates = (await _application.Activities.GetMatchCandidatesAsync(id))
                 .Select(MatchCandidateDetailDto.FromModel)
                 .ToList();
+        }
+
+        if (item.ObjectChangeType == ObjectChangeType.Joined
+            && await _application.Activities.GetJoinedOutcomeAsync(id) is { } joined)
+        {
+            dto.JoinObjectMatchingRuleId = joined.ObjectMatchingRuleId;
+            dto.JoinObjectMatchingRuleDescriptionSnapshot = joined.ObjectMatchingRuleDescriptionSnapshot;
+            dto.JoinMatchedValue = joined.MatchedValue;
         }
 
         return Ok(dto);

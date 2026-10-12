@@ -23,6 +23,8 @@ Each panel names the Connected System whose Full Synchronisation is being previe
 
 Every statement in the preview is conditional: "would project", "would join", "would be deprovisioned from Target". Nothing has happened. If the preview surfaces a blocking error, for example an Attribute Flow that could not be evaluated, the panel says so plainly: the synchronisation it describes would fail, not succeed as shown.
 
+A predicted join through an [Object Matching Rule](object-matching-rules.md) also says what it would rest on: the value it would match on and what the rule compares, for example `Would match on "E1007", where Employee ID equals "E" + Trim(cs["employeeId"])`.
+
 The panel offers the same **Timeline** and **Table** views documented for a recorded [Run Profile Execution Item](activity-execution-items.md) (the Lineage view is not offered, since a preview has no recorded object graph to draw). On the Table view, the current-state and would-be columns read **Current** and **Would be** rather than **Before** and **After**.
 
 ## Which exports it shows
@@ -80,8 +82,8 @@ Sync Preview is available over every surface:
 
 | Object | REST | PowerShell |
 |---|---|---|
-| Connected System Object | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{id}/sync-preview` | [`Get-JIMConnectedSystemObjectSyncPreview`](../powershell/previews.md#get-jimconnectedsystemobjectsyncpreview) |
-| Metaverse Object | `GET /api/v1/metaverse/objects/{id}/sync-preview` | [`Get-JIMMetaverseObjectSyncPreview`](../powershell/previews.md#get-jimmetaverseobjectsyncpreview) |
+| Connected System Object | `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{id}/sync-preview` | [`Get-JIMConnectedSystemObjectSyncPreview`](../powershell/sync-preview.md#get-jimconnectedsystemobjectsyncpreview) |
+| Metaverse Object | `GET /api/v1/metaverse/objects/{id}/sync-preview` | [`Get-JIMMetaverseObjectSyncPreview`](../powershell/sync-preview.md#get-jimmetaverseobjectsyncpreview) |
 
 Both require the Administrator role. Full endpoint detail is in the [interactive API reference](../../api/reference/).
 
@@ -91,4 +93,4 @@ Both require the Administrator role. Full endpoint detail is in the [interactive
 - [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): what import, sync and export actually do when they run for real
 - [Deletion behaviour](metaverse.md#deletion-behaviour): Deletion Rules, grace periods, and provisioned targets as connectors
 - [Deprovisioning Action](deprovisioning.md): what happens to a downstream target object when its Metaverse Object is deleted
-- [Preview cmdlets](../powershell/previews.md): `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview`
+- [Sync Preview cmdlets](../powershell/sync-preview.md): `Get-JIMConnectedSystemObjectSyncPreview` and `Get-JIMMetaverseObjectSyncPreview`

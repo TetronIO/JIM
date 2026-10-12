@@ -77,14 +77,16 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 12 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
-| [Activities](activities.md) | 4 | Monitor operation history, statistics, and execution items |
+| [Activities](activities.md) | 3 | Monitor operation history, a run's statistics, and child Activities |
+| [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Previews](previews.md) | 6 | Preview a configuration change before saving it, and preview what synchronising one object would do |
+| [Previews](previews.md) | 4 | Preview a configuration change before saving it |
+| [Sync Preview](sync-preview.md) | 2 | Preview what synchronising one object would do |
 | [Example Data](example-data.md) | 10 | Generate sample data for testing and evaluation, create, update, and remove reusable Example Data Sets, and build Data Generation Templates including their per-attribute generation configuration |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 | [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |

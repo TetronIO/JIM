@@ -1146,12 +1146,16 @@ public partial class SyncRepository
             new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
     }
 
-    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
     {
-        // Raw SQL, asked once per delivery attempt (#2064). The hold is the same probe as
+        // Raw SQL, asked once per delivery attempt (#2064, #2173). The hold is the same probe as
         // GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync, led by the partial index on the flag, so it is
-        // near-free where nothing awaits a password; the mark is a primary-key read of the queued change. A read-side
-        // projection, so exempt from the bulk column list rule.
+        // near-free where nothing awaits a password; the mark is a primary-key read of the queued change; the export in
+        // flight and the stranded one read the account's one Pending Export through the unique index on its object.
+        // LastAttemptedAt is when MarkPendingExportsAsExecutingAsync took the export into Executing; a missing one is
+        // read as in flight, never stranded, because waiting is the safe side of not knowing. A read-side projection,
+        // so exempt from the bulk column list rule.
         const string sql = """
             SELECT
                 EXISTS (
@@ -1162,7 +1166,20 @@ public partial class SyncRepository
                       AND avc."Status" = @awaitingConfirmation
                       AND pe."ConnectedSystemId" = @connectedSystemId
                       AND pe."ConnectedSystemObjectId" = @connectedSystemObjectId),
-                COALESCE((SELECT ppc."EnabledStateSetByAttributeFlow" FROM "PendingPasswordChanges" ppc WHERE ppc."Id" = @pendingPasswordChangeId), FALSE)
+                COALESCE((SELECT ppc."EnabledStateSetByAttributeFlow" FROM "PendingPasswordChanges" ppc WHERE ppc."Id" = @pendingPasswordChangeId), FALSE),
+                EXISTS (
+                    SELECT 1
+                    FROM "PendingExports" pe
+                    WHERE pe."ConnectedSystemObjectId" = @connectedSystemObjectId
+                      AND pe."ConnectedSystemId" = @connectedSystemId
+                      AND pe."Status" = @executing
+                      AND (pe."LastAttemptedAt" IS NULL OR pe."LastAttemptedAt" >= @exportsInFlightSince)),
+                (SELECT pe."Id"
+                    FROM "PendingExports" pe
+                    WHERE pe."ConnectedSystemObjectId" = @connectedSystemObjectId
+                      AND pe."ConnectedSystemId" = @connectedSystemId
+                      AND pe."Status" = @executing
+                      AND pe."LastAttemptedAt" < @exportsInFlightSince)
             """;
 
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
@@ -1172,10 +1189,13 @@ public partial class SyncRepository
         command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
         command.Parameters.Add(new NpgsqlParameter("connectedSystemObjectId", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectId });
         command.Parameters.Add(new NpgsqlParameter("pendingPasswordChangeId", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = pendingPasswordChangeId });
+        command.Parameters.Add(new NpgsqlParameter("executing", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Executing });
+        command.Parameters.Add(new NpgsqlParameter("exportsInFlightSince", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = exportsInFlightSince });
 
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
-        return new AccountEnablementFacts(reader.GetBoolean(0), reader.GetBoolean(1));
+        return new AccountEnablementFacts(reader.GetBoolean(0), reader.GetBoolean(1), reader.GetBoolean(2),
+            reader.IsDBNull(3) ? null : reader.GetGuid(3));
     }
 
     public async Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)

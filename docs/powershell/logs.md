@@ -41,7 +41,7 @@ Get-JIMLogEntry -ListServices
 
 ### Output
 
-Each log entry; -ListLevels and -ListServices return each name as a string.
+Each log entry; `-ListLevels` and `-ListServices` return each name as a string.
 
 **`LogEntryDto`** (Entries):
 

@@ -17,7 +17,7 @@ public class ConfigurationChangePreviewStartResponse
 {
     /// <summary>
     /// The preview's Activity, which is also the preview's identifier. Read the preview back from
-    /// <c>GET /previews/{activityId}</c> and its drill-down rows from <c>GET /previews/{activityId}/deltas</c>.
+    /// <c>GET /api/v1/previews/{activityId}</c> and its drill-down rows from <c>GET /api/v1/previews/{activityId}/deltas</c>.
     /// </summary>
     public Guid ActivityId { get; set; }
 
@@ -37,11 +37,15 @@ public class ConfigurationChangePreviewStartResponse
     public bool Failed { get; set; }
 
     /// <summary>
-    /// How many objects the adapter expects the change to touch, and how many drill-down rows that implies. Null
-    /// when the proposal was blocked or stage 1 failed, in which case no estimate was taken.
+    /// How many objects the change is expected to touch. Null when the proposal was blocked or stage 1 failed, in
+    /// which case no estimate was taken.
     /// </summary>
     public int? EstimatedAffectedObjects { get; set; }
 
+    /// <summary>
+    /// How many drill-down rows the change is expected to produce. Null when the proposal was blocked or stage 1
+    /// failed, in which case no estimate was taken.
+    /// </summary>
     public long? EstimatedDeltaRows { get; set; }
 
     /// <summary>

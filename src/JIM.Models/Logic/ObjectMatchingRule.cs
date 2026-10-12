@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
@@ -145,6 +146,25 @@ public class ObjectMatchingRule : IAuditable
             return "An Advanced mode Object Matching Rule takes the Metaverse Object Type from the Synchronisation Rule that owns it, so it must not name one of its own.";
 
         return DescribeComparisonInvalidity();
+    }
+
+    /// <summary>
+    /// What this rule compares, for example <c>Employee ID equals employeeId</c>, or the expression in place of the
+    /// attribute name when the rule computes its value.
+    /// </summary>
+    /// <remarks>
+    /// Used where a rule has to be named after the fact: the candidates of an ambiguous match, and the Joined outcome
+    /// a matching join records (#2052). An attribute that has not been loaded is named by its id, so the description
+    /// never leaves a side blank.
+    /// </remarks>
+    public string DescribeComparison()
+    {
+        var source = Sources.OrderBy(s => s.Order).FirstOrDefault();
+        var sourceText = string.IsNullOrWhiteSpace(source?.Expression)
+            ? source?.ConnectedSystemAttribute?.Name ?? source?.ConnectedSystemAttributeId?.ToString(CultureInfo.InvariantCulture)
+            : source.Expression;
+        var target = TargetMetaverseAttribute?.Name ?? TargetMetaverseAttributeId?.ToString(CultureInfo.InvariantCulture);
+        return $"{target} equals {sourceText}";
     }
 
     /// <summary>

@@ -20,7 +20,7 @@ public class SyncPreviewResponse
     public List<SyncOutcomeNodeDto> OutcomeTree { get; set; } = [];
 
     /// <summary>
-    /// The inbound summary: would the object project or join, and what attribute flows would result. Null
+    /// The inbound summary: would the object project or join, and what Attribute Flows would result. Null
     /// for a Metaverse Object preview, which has no inbound chain.
     /// </summary>
     public SyncPreviewInboundSummaryDto? Inbound { get; set; }

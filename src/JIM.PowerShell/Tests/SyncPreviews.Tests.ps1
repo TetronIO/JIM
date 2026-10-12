@@ -110,6 +110,34 @@ Describe 'Get-JIMConnectedSystemObjectSyncPreview' {
         }
     }
 
+    It 'Returns every property the API reports, generated value probes included, with Outcomes added' {
+        # The cmdlet once rebuilt the response from a fixed list of properties, so GeneratedValueProbes, which the API
+        # added later, never reached PowerShell. It now returns the API's own object.
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    OutcomeTree          = @()
+                    Inbound              = $null
+                    ProposedExports      = @()
+                    Errors               = @()
+                    Warnings             = @()
+                    HasBlockingErrors    = $false
+                    AffectedSyncRules    = @()
+                    GeneratedValueProbes = @([PSCustomObject]@{ AttributeName = 'mail'; Value = 'jsmith@example.com' })
+                    AddedLater           = 'kept'
+                }
+            }
+
+            $result = Get-JIMConnectedSystemObjectSyncPreview -ConnectedSystemId 1 -Id ([guid]::NewGuid())
+
+            @($result.GeneratedValueProbes).Count | Should -Be 1
+            $result.GeneratedValueProbes[0].Value | Should -Be 'jsmith@example.com'
+            $result.AddedLater | Should -Be 'kept'
+            $result.PSObject.Properties.Name | Should -Contain 'Outcomes'
+        }
+    }
+
     It 'Accepts ConnectedSystemId and Id from the pipeline by property name' {
         $command = Get-Command Get-JIMConnectedSystemObjectSyncPreview
         foreach ($name in @('ConnectedSystemId', 'Id')) {
@@ -190,6 +218,34 @@ Describe 'Get-JIMMetaverseObjectSyncPreview' {
         }
     }
 
+    It 'Returns every property the API reports, generated value probes included, with Outcomes added' {
+        # The cmdlet once rebuilt the response from a fixed list of properties, so GeneratedValueProbes, which the API
+        # added later, never reached PowerShell. It now returns the API's own object.
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    OutcomeTree          = @()
+                    Inbound              = $null
+                    ProposedExports      = @()
+                    Errors               = @()
+                    Warnings             = @()
+                    HasBlockingErrors    = $false
+                    AffectedSyncRules    = @()
+                    GeneratedValueProbes = @([PSCustomObject]@{ AttributeName = 'mail'; Value = 'jsmith@example.com' })
+                    AddedLater           = 'kept'
+                }
+            }
+
+            $result = Get-JIMMetaverseObjectSyncPreview -Id ([guid]::NewGuid())
+
+            @($result.GeneratedValueProbes).Count | Should -Be 1
+            $result.GeneratedValueProbes[0].Value | Should -Be 'jsmith@example.com'
+            $result.AddedLater | Should -Be 'kept'
+            $result.PSObject.Properties.Name | Should -Contain 'Outcomes'
+        }
+    }
+
     It 'Accepts Id from the pipeline by property name' {
         $parameter = (Get-Command Get-JIMMetaverseObjectSyncPreview).Parameters['Id']
         ($parameter.Attributes | Where-Object {
@@ -224,6 +280,40 @@ Describe 'ConvertTo-JIMSyncPreviewOutcomeRows' {
 
             $rows[0].Target | Should -Be $mvoId
             $rows[0].SyncRule | Should -Be 7
+        }
+    }
+
+    It 'Carries the Object Matching Rule and value a predicted join would match on' {
+        InModuleScope JIM {
+            $node = [PSCustomObject]@{
+                OutcomeType                           = 'Joined'
+                TargetEntityId                        = [guid]::NewGuid()
+                TargetEntityDescription               = 'Ann Bloggs'
+                ObjectMatchingRuleId                  = 12
+                ObjectMatchingRuleDescriptionSnapshot = 'Employee ID equals employeeId'
+                MatchedValue                          = 'E123'
+                Ordinal                               = 0
+                Children                              = @()
+            }
+
+            $rows = @(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes @($node))
+
+            $rows[0].ObjectMatchingRule | Should -Be 'Employee ID equals employeeId'
+            $rows[0].MatchedValue | Should -Be 'E123'
+        }
+    }
+
+    It 'Falls back to the Object Matching Rule id when no description was captured' {
+        InModuleScope JIM {
+            $node = [PSCustomObject]@{
+                OutcomeType                           = 'Joined'
+                ObjectMatchingRuleId                  = 12
+                ObjectMatchingRuleDescriptionSnapshot = $null
+                MatchedValue                          = 'E123'
+                Children                              = @()
+            }
+
+            (@(ConvertTo-JIMSyncPreviewOutcomeRows -Nodes @($node)))[0].ObjectMatchingRule | Should -Be 12
         }
     }
 }

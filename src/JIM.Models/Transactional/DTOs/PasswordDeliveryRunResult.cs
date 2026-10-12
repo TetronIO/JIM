@@ -61,6 +61,13 @@ public class PasswordDeliveryRunResult
     public int WithheldEnablesCompletedCount { get; set; }
 
     /// <summary>
+    /// Changes given back unattempted because delivering them would have enabled an account an export was being sent
+    /// to (#2173): that export may be disabling it, so the delivery waits for it and tries again shortly. Nothing is
+    /// counted against them, and they are neither retrying nor delivered.
+    /// </summary>
+    public int PostponedCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.
@@ -91,6 +98,6 @@ public class PasswordDeliveryRunResult
     /// </summary>
     public bool HasSomethingToReport =>
         DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || WithdrawnCount > 0
-        || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
+        || PostponedCount > 0 || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
         || ConnectorCouldNotBeResolved;
 }

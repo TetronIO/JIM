@@ -22,41 +22,64 @@ function Get-JIMActivityExecutionItem {
         Item ids come from Get-JIMActivity -ExecutionItems, whose rows can be piped straight in.
 
     .PARAMETER Id
-        The unique identifier (GUID) of the execution item.
+        The execution item to get. The rows of Get-JIMActivity -ExecutionItems can be piped straight in.
 
     .PARAMETER Causes
-        Return what caused the item, one row per cohort of causes.
+        Return what caused the item instead, one row per cohort of causes.
 
     .PARAMETER Consequences
-        Return what the item went on to cause, one row per cohort of consequences.
+        Return what the item went on to cause instead, one row per cohort of consequences.
 
     .OUTPUTS
-        Without a switch: PSCustomObject with Id, ActivityId, ObjectChangeType, NoChangeReason,
-        ConnectedSystemObjectId, MetaverseObjectId, PendingExportId, ExternalIdSnapshot, DisplayNameSnapshot,
-        ObjectTypeSnapshot, ErrorType, ErrorMessage, ErrorStackTrace, AttributeFlowCount, UnresolvedReferenceCount,
-        OutcomeSummary and MatchCandidates.
+        Without a switch, the item. With -Causes, what caused it, and with -Consequences what it went on to cause,
+        in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row
+        with a Count), with Level 1 for the nearest and one more per step.
 
-        UnresolvedReferenceCount is how many of the object's reference values the import could not resolve to a
-        Connected System Object. It is set whatever ErrorType the item carries and under every Unresolved Reference
-        Handling mode, so filter on it rather than on ErrorType to find every object an import left with
-        unresolved references.
+        JIM.CauseCohort
+        ExecutionItemId (guid): The execution item the walk started from.
+        Level (int): How many steps back from the item: 1 for its direct causes.
+        EdgeType (CausalEdgeType): The recorded cause; empty for a step to the import that fed a synchronisation, or
+            to the Metaverse Object's creation.
+        SourceImportChangeType (ObjectChangeType): For the step to the import that fed a synchronisation, what that
+            import did: Added, Updated or Deleted.
+        MetaverseChangeType (ObjectChangeType): For the step to the Metaverse Object's creation: Projected, Joined
+            or Created.
+        ReasonCode (CausalReasonCode): Why the cause produced its effect; NotSet where no reason was recorded.
+        Count (int): How many causes the cohort holds.
+        ObjectType (string): The causes' object type, plural where there are several.
+        Attribute (string): The reference attribute the causes acted through, where one applies.
+        ConnectedSystem (string): The Connected System the causes are attributed to, as named when recorded.
+        SyncRule (string): The Synchronisation Rule responsible, as named when recorded.
+        Members (string[]): The causes' names, as recorded.
+        Resolution (string): Why the walk stopped at these causes, for example CauseNotRetained; empty where each
+            carries on to the next level.
 
-        MatchCandidates is empty unless the item is an AmbiguousMatch (the Metaverse Objects a join found) or an
-        AmbiguousProvisioningMatch (the Connected System Objects matching found before provisioning). Then it lists
-        up to 10 of the objects the match found, ordered by display name, each with CandidateKind, CandidateId, DisplayNameSnapshot,
-        TypeNameSnapshot, ConnectedSystemId, ConnectedSystemNameSnapshot, MatchedValue, ObjectMatchingRuleId,
-        ObjectMatchingRuleDescriptionSnapshot, Ordinal, CandidateTotal (how many the match found in all), Exists,
-        and JoinedObjects: the Connected System Objects joined to a Metaverse Object candidate now, each with
-        ConnectedSystemObjectId, ConnectedSystemId, ConnectedSystemName, TypeName, DisplayName and ExternalId.
-
-        With -Causes: PSCustomObject with ExecutionItemId, Level, EdgeType, SourceImportChangeType,
-        MetaverseChangeType, ReasonCode, Count, ObjectType, Attribute, ConnectedSystem, SyncRule, Members and
-        Resolution.
-
-        With -Consequences: PSCustomObject with ExecutionItemId, Level, HopKind, EdgeType, ReasonCode, Count,
-        ObjectType, Attribute, ConnectedSystem, SyncRule, OutcomeSummary, PendingExportStatus, Ending,
-        FirstOccurred, LastOccurred, DueAt, Members and CohortKey. A Level 0 row gives the item's own ending when it
-        caused nothing.
+        JIM.ConsequenceCohort
+        ExecutionItemId (guid): The execution item the walk started from.
+        Level (int): How many steps on from the item: 1 for what it directly caused. A Level 0 row gives the item's
+            own ending where it caused nothing.
+        HopKind (CausalConsequenceHopKind): How the consequences were reached: Edge (a recorded cause), Confirmation
+            (the import confirming an export), NextSynchronisation (the synchronisation after an import),
+            OutstandingPendingExport or ScheduledDeletion.
+        EdgeType (CausalEdgeType): The recorded cause, for an Edge or Confirmation hop.
+        ReasonCode (CausalReasonCode): Why the cause produced these consequences; NotSet for any other hop.
+        Count (int): How many consequences the cohort holds, counted exactly.
+        ObjectType (string): The consequences' object type, plural where there are several.
+        Attribute (string): The reference attribute a removal acted through, where one applies.
+        ConnectedSystem (string): The Connected System the consequences are attributed to.
+        SyncRule (string): The Synchronisation Rule the cause names, where it names one.
+        OutcomeSummary (string): The outcomes the consequences share.
+        PendingExportStatus (PendingExportStatus): For outstanding Pending Exports, their live status.
+        Ending (string): Where the branch stops: the cohort's own ending (Confirmed, WaitingForExport,
+            WaitingForRetry, NeedsAttention, WaitingForConfirmingImport or DeletionScheduled), else how many
+            consequences led nowhere further and why, for example "NoFurtherConsequences (2)", else FurtherThanShown
+            where the walk reached its bound. Empty where every consequence carries on.
+        FirstOccurred (datetime): When the earliest consequence happened, in UTC.
+        LastOccurred (datetime): When the latest consequence happened, in UTC.
+        DueAt (datetime): When the soonest outstanding work is due, in UTC: a retry, or a deletion becoming
+            eligible.
+        Members (string[]): The first consequences' names; Get-JIMCausalCohortMember pages through them all.
+        CohortKey (string): The cohort's key, which Get-JIMCausalCohortMember pages its members with.
 
     .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901"
@@ -88,6 +111,15 @@ function Get-JIMActivityExecutionItem {
         Lists the identities an ambiguous match found, the value each matched on, and where each is connected.
 
     .EXAMPLE
+        Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
+            Where-Object ObjectChangeType -eq 'Joined' |
+            Get-JIMActivityExecutionItem |
+            Select-Object DisplayNameSnapshot, JoinMatchedValue, JoinObjectMatchingRuleDescriptionSnapshot
+
+        Lists each object a synchronisation joined, with the value it matched on and the Object Matching Rule that
+        made the join.
+
+    .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
             Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
 
@@ -106,7 +138,9 @@ function Get-JIMActivityExecutionItem {
         Get-JIMCausalCohortMember
     #>
     [CmdletBinding(DefaultParameterSetName = 'Item')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ActivityRunProfileExecutionItemDetailDto', ParameterSetName = 'Item')]
+    [OutputType('JIM.CauseCohort', ParameterSetName = 'Causes')]
+    [OutputType('JIM.ConsequenceCohort', ParameterSetName = 'Consequences')]
     param(
         # No ActivityId alias: an item's id is not its Activity's, and an object carrying both must bind the item's.
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'Item')]

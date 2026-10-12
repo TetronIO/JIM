@@ -26,30 +26,21 @@ function Get-JIMConfigurationChangePreviewDelta {
         Restrict the rows to those matching this text across the columns the detail carries.
 
     .PARAMETER Page
-        The page of rows to return. Defaults to 1.
+        The page of rows to return.
 
     .PARAMETER PageSize
-        Rows per page, up to 100. Defaults to 50.
+        How many rows per page.
 
     .PARAMETER All
         Fetch every page. Prefer -GroupId or -Search first: a full preview can carry a great many rows.
 
     .PARAMETER Force
-        Lift the client-side page cap that -All otherwise stops at.
+        With -All, fetches every page however many there are.
 
     .OUTPUTS
-        PSCustomObject per row, with ObjectDisplayName, ObjectTypeName, AttributeName, OldValue,
-        NewValue, TransitionType, PatternKey, MatchCandidates and the identifiers of the objects concerned.
-
-        MatchCandidates is empty unless the row is WouldMatchAmbiguously, where it lists up to 10 of the
-        objects the match would find, in the same shape as an Activity item's MatchCandidates (see
-        Get-JIMActivityExecutionItem): CandidateKind, CandidateId, DisplayNameSnapshot, TypeNameSnapshot,
-        ConnectedSystemId, ConnectedSystemNameSnapshot, MatchedValue, ObjectMatchingRuleId,
-        ObjectMatchingRuleDescriptionSnapshot, Ordinal and CandidateTotal (the full count).
-
-        PatternKey names what kind of change the row describes (EmailDomainChanged, ContainerChanged,
-        CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded, SuffixRemoved), and is empty where no
-        pattern was recognised. Useful for sorting a collapsed group's rows by the kind of edit they make.
+        Each row: what the proposed change would do to one object. PatternKey takes the same values as on a summary
+        group (see Get-JIMConfigurationChangePreview). MatchCandidates is empty unless the row is
+        WouldMatchAmbiguously.
 
     .EXAMPLE
         Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId
@@ -76,7 +67,7 @@ function Get-JIMConfigurationChangePreviewDelta {
         Get-JIMConfigurationChangePreview
     #>
     [CmdletBinding(DefaultParameterSetName = 'Page')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ConfigurationChangePreviewDeltaResponse')]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [guid]$ActivityId,

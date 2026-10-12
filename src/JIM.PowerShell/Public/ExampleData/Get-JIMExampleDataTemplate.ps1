@@ -12,19 +12,20 @@ function Get-JIMExampleDataTemplate {
         of each.
 
     .PARAMETER Id
-        The unique identifier of a specific template to retrieve.
+        The Data Generation Template to get, in full.
 
     .PARAMETER Name
-        The name of a specific template to retrieve.
+        The name of the Data Generation Template to get, in full.
 
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        The page of Data Generation Templates to return.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100.
+        How many Data Generation Templates per page.
 
     .OUTPUTS
-        PSCustomObject representing template(s).
+        A list returns each Data Generation Template's header; -Id and -Name return the template in full, with its
+        Object Types and their attribute configuration.
 
     .EXAMPLE
         Get-JIMExampleDataTemplate
@@ -51,7 +52,9 @@ function Get-JIMExampleDataTemplate {
         Invoke-JIMExampleDataTemplate
     #>
     [CmdletBinding(DefaultParameterSetName = 'List')]
-    [OutputType([PSCustomObject])]
+    [OutputType('JIM.ExampleDataTemplateHeader', ParameterSetName = 'List')]
+    [OutputType('JIM.ExampleDataTemplateDto', ParameterSetName = 'ById')]
+    [OutputType('JIM.ExampleDataTemplateDto', ParameterSetName = 'ByName')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

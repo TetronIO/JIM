@@ -537,6 +537,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DetailMessage")
                         .HasColumnType("text");
 
+                    b.Property<string>("MatchedValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObjectMatchingRuleDescriptionSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ObjectMatchingRuleId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer");
 

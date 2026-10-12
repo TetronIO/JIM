@@ -31,6 +31,24 @@ public class SyncPreviewInboundSummary
     public Guid? WouldJoinMetaverseObjectId { get; set; }
 
     /// <summary>
+    /// When the object would join, the id of the Object Matching Rule that would find the Metaverse Object; null
+    /// otherwise.
+    /// </summary>
+    public int? WouldJoinObjectMatchingRuleId { get; set; }
+
+    /// <summary>
+    /// When the object would join, what that Object Matching Rule compares, for example
+    /// <c>Employee ID equals "E" + Trim(cs["employeeId"])</c>; null otherwise.
+    /// </summary>
+    public string? WouldJoinObjectMatchingRuleDescription { get; set; }
+
+    /// <summary>
+    /// When the object would join, the value it would match on: what the rule computes from the object. Null
+    /// otherwise.
+    /// </summary>
+    public string? WouldJoinMatchedValue { get; set; }
+
+    /// <summary>
     /// The Metaverse Object the CSO is already joined to, when it is; the preview then evaluates flows and
     /// the outbound chain against it.
     /// </summary>

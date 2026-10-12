@@ -15,10 +15,16 @@ function Test-JIMConnection {
         Returns only $true or $false instead of the connection's status.
 
     .OUTPUTS
-        The connection's status: Connected, whether a connection exists and JIM answered; Url, the JIM
-        instance's address; AuthMethod, ApiKey or OAuth; ServerVersion, the JIM version it reported; Status,
-        JIM's health status; Message, a sentence describing the result; and TokenExpiresAt, when the access
-        token expires, for OAuth only. With -Quiet, $true if connected; otherwise $false.
+        The connection's status; with -Quiet, $true if connected and otherwise $false.
+
+        JIM.ConnectionStatus
+        Connected (bool): Whether a connection exists and JIM answered.
+        Url (string): The JIM instance's address.
+        AuthMethod (string): How the connection authenticated: ApiKey or OAuth.
+        ServerVersion (string): The JIM version the instance reported.
+        Status (string): JIM's health status.
+        Message (string): A sentence describing the result.
+        TokenExpiresAt (datetime): When the access token expires; OAuth only.
 
     .EXAMPLE
         Test-JIMConnection

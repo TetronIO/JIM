@@ -33,7 +33,7 @@ Get-JIMWorkerTask -Id <guid>
 
 ### Output
 
-Each Worker Task's header, with one property the module adds: StepDisplay, the step the run is on as one sentence, such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Queue, and the one Start-JIMRunProfile -Wait shows live, so a run reads the same wherever it is watched from. It is empty for a task that is not a Run Profile execution, since those record no steps.
+Each Worker Task's header, with one property the module adds: StepDisplay, the step the run is on as one sentence, such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Queue, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. It is empty for a task that is not a Run Profile execution, since those record no steps.
 
 **`WorkerTaskHeader`**:
 
@@ -51,7 +51,7 @@ Each Worker Task's header, with one property the module adds: StepDisplay, the s
 | `ObjectsToProcess` | `int` | The total number of objects to process (from the associated Activity). |
 | `ObjectsProcessed` | `int` | The number of objects processed so far (from the associated Activity). |
 | `ProgressMessage` | `string` | The current progress message (from the associated Activity). |
-| `Steps` | `RunPhaseSummary` | The run's steps and the one running now, or null where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. |
+| `Steps` | `RunPhaseSummary` | The run's steps and the one running now, or empty where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. |
 | `ScheduleExecutionId` | `guid` | If this task is part of a schedule execution, the execution ID for UI grouping. |
 | `ScheduleExecutionName` | `string` | The schedule name at execution time, for display in the queue UI. |
 | `ScheduleStepIndex` | `int` | The step index within the schedule, for ordering within the group. |
