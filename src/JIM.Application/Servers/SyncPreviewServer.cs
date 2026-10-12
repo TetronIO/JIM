@@ -708,10 +708,14 @@ public class SyncPreviewServer
         var generatedValueBuiltValues = GeneratedValueBuiltValues.Create(allSyncRules, derivedFlowGraph);
         var allImportRules = allSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import && rule.Enabled).ToList();
 
+        // Which Object Matching Rules the run consults (#2176): the object type's own in simple mode, each import
+        // Synchronisation Rule's in advanced mode. A system that cannot be read takes the default, simple mode.
+        var matchingMode = await guardedRepository.GetObjectMatchingRuleModeAsync(connectedSystemId) ?? ObjectMatchingRuleMode.ConnectedSystem;
+
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
             BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
             uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage,
-            driftExportRules, importMappingCache, generatedValueBuiltValues, allImportRules);
+            driftExportRules, importMappingCache, generatedValueBuiltValues, allImportRules, matchingMode);
     }
 
     /// <summary>
@@ -781,6 +785,34 @@ public class SyncPreviewServer
             .ToList();
         if (importRules.Count == 0)
         {
+            // In simple mode the run joins an unjoined object through its type's own Object Matching Rules even when no
+            // import rule applies (SyncTaskProcessorBase.AttemptJoinAsync's fallback; #2176): a target directory's
+            // existing accounts join this way. Nothing flows in and no export evaluation is queued, but the run checks the
+            // newly joined object for drift, as for any object it leaves joined.
+            if (!cso.MetaverseObjectId.HasValue && context.MatchingMode == ObjectMatchingRuleMode.ConnectedSystem)
+            {
+                var typeJoin = await ProbeForJoinAsync(cso, [], objectTypes, context.MatchingMode, guardedRepository, result);
+                if (result.HasBlockingErrors)
+                    return result;
+
+                if (typeJoin?.MetaverseObject is { } typeMatchedMvo)
+                {
+                    RecordWouldJoin(inbound, typeJoin);
+                    DescribeMetaverseObject(inbound, typeMatchedMvo);
+                    var joinedRoot = new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                        TargetEntityId = typeMatchedMvo.Id,
+                        TargetEntityDescription = ObjectNaming.FirstPresent(typeMatchedMvo.Name)
+                    };
+                    CopyWouldJoinMatch(joinedRoot, inbound);
+                    result.OutcomeTree.Add(joinedRoot);
+                    if (asTheRunWould)
+                        AddDriftCorrectionRoot(result, await ProposeDriftCorrectionsAsync(result, cso, CloneForPreview(typeMatchedMvo), context));
+                    return result;
+                }
+            }
+
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.NoApplicableSyncRule,
@@ -864,16 +896,13 @@ public class SyncPreviewServer
         else
         {
             // The match a would-be join is made on (#2052), named on the inbound summary and on the Joined node.
-            var joinMatch = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, guardedRepository, result);
+            var joinMatch = await ProbeForJoinAsync(cso, inScopeRules, objectTypes, context.MatchingMode, guardedRepository, result);
             if (result.HasBlockingErrors)
                 return result;
 
             if (joinMatch?.MetaverseObject is { } matchedMvo)
             {
-                inbound.WouldJoinMetaverseObjectId = matchedMvo.Id;
-                inbound.WouldJoinObjectMatchingRuleId = joinMatch.Rule.Id > 0 ? joinMatch.Rule.Id : null;
-                inbound.WouldJoinObjectMatchingRuleDescription = joinMatch.Rule.DescribeComparison();
-                inbound.WouldJoinMatchedValue = joinMatch.MatchedValue;
+                RecordWouldJoin(inbound, joinMatch);
                 workingMvo = CloneForPreview(matchedMvo);
                 flaggedForScopeReview = matchedMvo.ScopeReviewPending;
                 DescribeMetaverseObject(inbound, matchedMvo);
@@ -1125,11 +1154,7 @@ public class SyncPreviewServer
                 SyncRuleName = rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected ? projectionSyncRule?.Name : null
             };
             if (rootType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
-            {
-                root.ObjectMatchingRuleId = inbound.WouldJoinObjectMatchingRuleId;
-                root.ObjectMatchingRuleDescriptionSnapshot = inbound.WouldJoinObjectMatchingRuleDescription;
-                root.MatchedValue = inbound.WouldJoinMatchedValue;
-            }
+                CopyWouldJoinMatch(root, inbound);
             result.OutcomeTree.Add(root);
 
             // Unique Value Generation (#242): a GeneratedValueAssigned child per
@@ -2294,7 +2319,8 @@ public class SyncPreviewServer
         List<SyncRule> DriftExportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> ImportMappingCache,
         GeneratedValueBuiltValues GeneratedValueBuiltValues,
-        List<SyncRule> AllImportRules)
+        List<SyncRule> AllImportRules,
+        ObjectMatchingRuleMode MatchingMode)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse
@@ -2391,25 +2417,30 @@ public class SyncPreviewServer
         ConnectedSystemObject cso,
         List<SyncRule> inScopeRules,
         List<ConnectedSystemObjectType> objectTypes,
+        ObjectMatchingRuleMode matchingMode,
         ISyncRepository guardedRepository,
         SyncPreviewResult result)
     {
+        // The rules the run consults, and only those (SyncTaskProcessorBase.AttemptJoinAsync; #2176): in simple mode the
+        // object type's own, each carrying its own Metaverse Object Type, whether or not an import rule applies; in
+        // advanced mode each in-scope import rule's own, never the type's, which a switch to advanced mode keeps for a
+        // later switch back.
         var candidateRuleSets = new List<List<ObjectMatchingRule>>();
-        foreach (var importRule in inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
-        {
-            var matchingRules = importRule.ObjectMatchingRules.ToList();
-            foreach (var matchingRule in matchingRules.Where(mr => mr.MetaverseObjectType == null))
-                matchingRule.MetaverseObjectType = importRule.MetaverseObjectType;
-            candidateRuleSets.Add(matchingRules);
-        }
-
-        // Simple mode fallback, as the real join path implements it: matching rules on the object type
-        // itself, each carrying its own Metaverse Object Type. In advanced mode this set is empty.
-        if (candidateRuleSets.Count == 0)
+        if (matchingMode == ObjectMatchingRuleMode.ConnectedSystem)
         {
             var typeRules = objectTypes.FirstOrDefault(ot => ot.Id == cso.TypeId)?.ObjectMatchingRules?.ToList();
             if (typeRules is { Count: > 0 })
                 candidateRuleSets.Add(typeRules);
+        }
+        else
+        {
+            foreach (var importRule in inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
+            {
+                var matchingRules = importRule.ObjectMatchingRules.ToList();
+                foreach (var matchingRule in matchingRules.Where(mr => mr.MetaverseObjectType == null))
+                    matchingRule.MetaverseObjectType = importRule.MetaverseObjectType;
+                candidateRuleSets.Add(matchingRules);
+            }
         }
 
         // The same matching engine the synchronisation uses (#2052), against the preview's read-only repository, so
@@ -2672,6 +2703,28 @@ public class SyncPreviewServer
     /// <summary>
     /// Names the Metaverse Object a preview's inbound summary is about (#1530): its type, and its name as it stands.
     /// </summary>
+    /// <summary>
+    /// Records on the inbound summary the join a match would make, and what it would be made on (#2052).
+    /// </summary>
+    private static void RecordWouldJoin(SyncPreviewInboundSummary inbound, ImportMatch match)
+    {
+        inbound.WouldJoinMetaverseObjectId = match.MetaverseObject.Id;
+        inbound.WouldJoinObjectMatchingRuleId = match.Rule.Id > 0 ? match.Rule.Id : null;
+        inbound.WouldJoinObjectMatchingRuleDescription = match.Rule.DescribeComparison();
+        inbound.WouldJoinMatchedValue = match.MatchedValue;
+    }
+
+    /// <summary>
+    /// Puts the rule and value a predicted join would be made on (#2052) on its Joined node, as the run records them on its
+    /// Joined outcome.
+    /// </summary>
+    private static void CopyWouldJoinMatch(SyncOutcomeNode joinedNode, SyncPreviewInboundSummary inbound)
+    {
+        joinedNode.ObjectMatchingRuleId = inbound.WouldJoinObjectMatchingRuleId;
+        joinedNode.ObjectMatchingRuleDescriptionSnapshot = inbound.WouldJoinObjectMatchingRuleDescription;
+        joinedNode.MatchedValue = inbound.WouldJoinMatchedValue;
+    }
+
     private static void DescribeMetaverseObject(SyncPreviewInboundSummary inbound, MetaverseObject mvo)
     {
         inbound.MetaverseObjectTypeId = mvo.Type?.Id;
