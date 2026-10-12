@@ -158,8 +158,80 @@ public class PendingExport
     /// did this export happen". Null for an export staged before this was recorded, and for the paths that
     /// stage one with no execution item in hand.
     /// </para>
+    /// <para>
+    /// The latest of <see cref="StagedByRunProfileExecutionItemIds"/>. Set only through <see cref="RecordStager"/>,
+    /// so the two cannot disagree.
+    /// </para>
     /// </summary>
-    public Guid? QueuedByRunProfileExecutionItemId { get; set; }
+    public Guid? QueuedByRunProfileExecutionItemId { get; private set; }
+
+    /// <summary>
+    /// The most runs a Pending Export records in <see cref="StagedByRunProfileExecutionItemIds"/>. An export that
+    /// cannot be sent can sit queued for weeks, gaining a stager from every run that changes its object, so the
+    /// list keeps the most recent rather than growing without bound.
+    /// </summary>
+    public const int MaxRecordedStagers = 50;
+
+    /// <summary>
+    /// Every synchronisation that staged a change into this export, oldest first (#2100).
+    /// <para>
+    /// One export can carry changes from several runs: a later run changing an object whose export is still queued
+    /// merges its change into it rather than queueing a second export. Each of those runs caused the export, so each
+    /// is recorded: the export run links back to every one of them, so each run's consequences reach the export and
+    /// its confirmation, and the Causality Explorer's Queued by panel lists them. Not foreign keys, for the same
+    /// reason as <see cref="QueuedByRunProfileExecutionItemId"/>.
+    /// </para>
+    /// <para>
+    /// Empty for an export staged before this was recorded; <see cref="Stagers"/> then falls back to
+    /// <see cref="QueuedByRunProfileExecutionItemId"/>. Recorded only through <see cref="RecordStager"/> and
+    /// <see cref="InheritStagersFrom"/>.
+    /// </para>
+    /// </summary>
+    public List<Guid> StagedByRunProfileExecutionItemIds { get; private set; } = [];
+
+    /// <summary>
+    /// Records a run as having staged a change into this export: it becomes the latest stager, and joins the list
+    /// once, however many times it stages into the same export.
+    /// </summary>
+    /// <param name="runProfileExecutionItemId">The staging run's Run Profile Execution Item.</param>
+    public void RecordStager(Guid runProfileExecutionItemId)
+    {
+        QueuedByRunProfileExecutionItemId = runProfileExecutionItemId;
+
+        if (StagedByRunProfileExecutionItemIds.Contains(runProfileExecutionItemId))
+            return;
+
+        StagedByRunProfileExecutionItemIds.Add(runProfileExecutionItemId);
+        var excess = StagedByRunProfileExecutionItemIds.Count - MaxRecordedStagers;
+        if (excess > 0)
+            StagedByRunProfileExecutionItemIds.RemoveRange(0, excess);
+    }
+
+    /// <summary>
+    /// Carries the runs that staged an export this one replaces. A later run's change merges with an export still
+    /// queued by deleting it and staging a replacement holding both, so the original's stagers are the
+    /// replacement's too. Call before recording the replacing run, which then comes last.
+    /// </summary>
+    /// <param name="replaced">The export being replaced.</param>
+    public void InheritStagersFrom(PendingExport replaced)
+    {
+        ArgumentNullException.ThrowIfNull(replaced);
+
+        foreach (var stager in replaced.Stagers())
+            RecordStager(stager);
+    }
+
+    /// <summary>
+    /// The runs that staged this export, oldest first: the recorded list, or for an export staged before the list
+    /// was recorded, its latest stager alone.
+    /// </summary>
+    public IReadOnlyList<Guid> Stagers()
+    {
+        if (StagedByRunProfileExecutionItemIds.Count > 0)
+            return StagedByRunProfileExecutionItemIds;
+
+        return QueuedByRunProfileExecutionItemId is { } latest ? [latest] : [];
+    }
 
     /// <summary>
     /// When this Pending Export was created.

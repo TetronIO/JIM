@@ -1905,7 +1905,7 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
     {
         foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
-            _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
+            _pendingExports[stamp.PendingExportId].RecordStager(stamp.QueuedByRunProfileExecutionItemId);
         return Task.CompletedTask;
     }
 

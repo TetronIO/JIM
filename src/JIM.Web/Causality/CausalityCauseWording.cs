@@ -79,10 +79,14 @@ public static class CausalityCauseWording
                 break;
 
             case CausalEdgeType.PendingExportQueueingCausedExportExecution:
+            {
                 // Keyed on what the synchronisation decided, so the verb answers create-versus-update at a
                 // glance. The system exported to is named here rather than as a chip: the chip would restate
                 // the page's own system with no role beside it (see ShowConnectedSystemChip). NotSet covers
-                // edges written before the reason codes existed and keeps their original sentence.
+                // edges written before the reason codes existed and keeps their original sentence. Several
+                // members here are several runs staging one object's export (#2100), so the object is named once
+                // and the runs are counted.
+                var stagedBy = IsStagedBySeveralRuns(cohort) ? $" in {cohort.MemberCount} synchronisations" : string.Empty;
                 parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
                 {
                     CausalReasonCode.ExportCreateStaged when !string.IsNullOrWhiteSpace(cohort.ConnectedSystemName) =>
@@ -90,12 +94,15 @@ public static class CausalityCauseWording
                     CausalReasonCode.ExportCreateStaged =>
                         $"{Subject(cohort)} was provisioned, so this run created the Connected System Object",
                     CausalReasonCode.ExportUpdateStaged =>
-                        $"{Subject(cohort)}'s Metaverse Object changed, so this run applied the changes to the Connected System Object",
+                        $"{Subject(cohort)}'s Metaverse Object changed{stagedBy}, so this run applied the changes to the Connected System Object",
                     CausalReasonCode.ExportDeleteStaged =>
                         $"The Metaverse Object {Subject(cohort)} was deleted, so this run deleted the Connected System Object",
+                    _ when IsStagedBySeveralRuns(cohort) =>
+                        $"{cohort.MemberCount} synchronisations of {Subject(cohort)} staged this change, and this run exported it",
                     _ => $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"
                 }));
                 break;
+            }
 
             case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
                 parts.Add(new CausalityCauseSentencePart(
@@ -223,7 +230,7 @@ public static class CausalityCauseWording
     public static string MembersLabel(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return $"Show the {cohort.MemberCount} {Noun(cohort)}";
+        return $"Show the {cohort.MemberCount} {MembersNoun(cohort)}";
     }
 
     /// <summary>
@@ -233,7 +240,7 @@ public static class CausalityCauseWording
     public static string HideMembersLabel(CausalChainCohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
-        return $"Hide the {cohort.MemberCount} {Noun(cohort)}";
+        return $"Hide the {cohort.MemberCount} {MembersNoun(cohort)}";
     }
 
     /// <summary>
@@ -260,7 +267,7 @@ public static class CausalityCauseWording
     /// </summary>
     private static string Subject(CausalChainCohort cohort)
     {
-        if (cohort.MemberCount == 1)
+        if (cohort.MemberCount == 1 || IsStagedBySeveralRuns(cohort))
         {
             var name = cohort.Members[0].DisplayName;
             if (!string.IsNullOrWhiteSpace(name))
@@ -269,6 +276,22 @@ public static class CausalityCauseWording
 
         return $"{cohort.MemberCount} {Noun(cohort)}";
     }
+
+    /// <summary>
+    /// Whether a cohort is one export staged by several runs (#2100): queueing members all about one object. Its
+    /// members are runs, not objects, so it names the object once and counts the runs.
+    /// </summary>
+    private static bool IsStagedBySeveralRuns(CausalChainCohort cohort) =>
+        cohort.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution
+        && cohort.MemberCount > 1
+        && cohort.Members.Select(m => (m.MetaverseObjectId, m.DisplayName)).Distinct().Count() == 1;
+
+    /// <summary>
+    /// What a cohort's members are, for the disclosure that lists them: the runs, where the cohort is one export
+    /// staged by several, otherwise the objects.
+    /// </summary>
+    private static string MembersNoun(CausalChainCohort cohort) =>
+        IsStagedBySeveralRuns(cohort) ? "synchronisations" : Noun(cohort);
 
     /// <summary>
     /// The cohort's own noun, singular or plural to match its size, falling back to a generic where the

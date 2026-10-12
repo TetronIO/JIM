@@ -3597,7 +3597,7 @@ public abstract class SyncTaskProcessorBase
             item.Id = Guid.NewGuid();
         foreach (var delete in deletes)
         {
-            delete.QueuedByRunProfileExecutionItemId = item.Id;
+            delete.RecordStager(item.Id);
             _scopeExitQueueingStamps.Add((delete.Id, item.Id));
         }
 
@@ -4718,7 +4718,7 @@ public abstract class SyncTaskProcessorBase
             queueingItem.Id = Guid.NewGuid();
 
         foreach (var pendingExport in pendingExports)
-            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
+            pendingExport.RecordStager(queueingItem.Id);
     }
 
     /// <summary>
@@ -5594,7 +5594,7 @@ public abstract class SyncTaskProcessorBase
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
                     mvoDeletedNode.Rpei.Id = Guid.NewGuid();
-                pendingExport.QueuedByRunProfileExecutionItemId = mvoDeletedNode.Rpei.Id;
+                pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
                 continue;
@@ -5644,7 +5644,7 @@ public abstract class SyncTaskProcessorBase
                         .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
-            pendingExport.QueuedByRunProfileExecutionItemId = cascadeRpei.Id;
+            pendingExport.RecordStager(cascadeRpei.Id);
             queueingStamps.Add((pendingExport.Id, cascadeRpei.Id));
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
             standaloneCount++;
@@ -5994,7 +5994,7 @@ public abstract class SyncTaskProcessorBase
             // the deleted members. The Pending Export rows were persisted pages ago, hence the set-once
             // fix-up below rather than a pre-persist stamp.
             recallQueueingStamps.Add((stagedPendingExport.Id, recallRpei.Id));
-            stagedPendingExport.QueuedByRunProfileExecutionItemId = recallRpei.Id;
+            stagedPendingExport.RecordStager(recallRpei.Id);
 
             _activity.RunProfileExecutionItems.Add(recallRpei);
         }
@@ -7271,7 +7271,7 @@ public abstract class SyncTaskProcessorBase
             if (runProfileExecutionItem.Id == Guid.Empty)
                 runProfileExecutionItem.Id = Guid.NewGuid();
             foreach (var correctiveExport in result.CorrectiveExports)
-                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
+                correctiveExport.RecordStager(runProfileExecutionItem.Id);
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

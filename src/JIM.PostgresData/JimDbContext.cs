@@ -727,6 +727,12 @@ public class JimDbContext : DbContext
         csoXmin.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
         csoXmin.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
+        // PendingExport: the runs that staged it (#2100). Defaults to an empty list so the column can be added beside
+        // exports already queued, which name only their latest stager and fall back to it.
+        modelBuilder.Entity<PendingExport>()
+            .PrimitiveCollection(pe => pe.StagedByRunProfileExecutionItemIds)
+            .HasDefaultValueSql("'{}'::uuid[]");
+
         // PendingExport: relationship to source MVO (Q1 decision)
         modelBuilder.Entity<PendingExport>()
             .HasOne(pe => pe.SourceMetaverseObject)

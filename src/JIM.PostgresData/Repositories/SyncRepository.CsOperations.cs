@@ -1089,8 +1089,10 @@ public partial class SyncRepository
     /// <summary>
     /// Names the Run Profile Execution Item that queued each Pending Export, after both exist (#1223): the
     /// set-once fix-up for the deletion-cascade and reference-recall paths, whose Pending Exports are persisted
-    /// before the item reporting each one is built. A deliberately narrow single-column statement rather than a
-    /// PendingExportBulkColumns writer, per the raw-SQL column-list rules' targeted-mutation exemption.
+    /// before the item reporting each one is built. The item becomes the latest stager and joins the export's
+    /// stagers (#2100) as <see cref="PendingExport.RecordStager"/> does in memory: once, last, and keeping only
+    /// the most recent <see cref="PendingExport.MaxRecordedStagers"/>. A deliberately narrow statement rather
+    /// than a PendingExportBulkColumns writer, per the raw-SQL column-list rules' targeted-mutation exemption.
     /// </summary>
     public async Task SetPendingExportQueueingItemsAsync(
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
@@ -1101,13 +1103,22 @@ public partial class SyncRepository
         var pendingExportIds = stamps.Select(stamp => stamp.PendingExportId).ToArray();
         var queueingItemIds = stamps.Select(stamp => stamp.QueuedByRunProfileExecutionItemId).ToArray();
 
+        // The list with the item appended unless already present, then sliced to its most recent entries:
+        // PostgreSQL arrays are 1-based, so the slice starts at max(1, length - cap + 1).
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""PendingExports"" AS pe
-              SET ""QueuedByRunProfileExecutionItemId"" = stamp.queueing_item_id
+              SET ""QueuedByRunProfileExecutionItemId"" = stamp.queueing_item_id,
+                  ""StagedByRunProfileExecutionItemIds"" = CASE
+                      WHEN stamp.queueing_item_id = ANY(pe.""StagedByRunProfileExecutionItemIds"")
+                          THEN pe.""StagedByRunProfileExecutionItemIds""
+                      ELSE (array_append(pe.""StagedByRunProfileExecutionItemIds"", stamp.queueing_item_id))
+                          [GREATEST(1, cardinality(pe.""StagedByRunProfileExecutionItemIds"") + 2 - {2}):]
+                  END
               FROM unnest({0}, {1}) AS stamp(pending_export_id, queueing_item_id)
               WHERE pe.""Id"" = stamp.pending_export_id",
             new Npgsql.NpgsqlParameter { Value = pendingExportIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
-            new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
+            new Npgsql.NpgsqlParameter { Value = queueingItemIds, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
+            new Npgsql.NpgsqlParameter { Value = PendingExport.MaxRecordedStagers, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Integer });
     }
 
     public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
@@ -1261,6 +1272,8 @@ public partial class SyncRepository
                 await writer.WriteAsync(pe.QueuedByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(pe.StagedByRunProfileExecutionItemIds.ToArray(),
+                NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid);
         }
 
         await writer.CompleteAsync();

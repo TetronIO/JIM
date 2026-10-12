@@ -1162,7 +1162,7 @@ public class Worker : BackgroundService
                                 activity, csoChangeTrackingEnabled,
                                 typeNames.ForPendingExport(deletePendingExport, syncRuleId: deprovisioningRule?.Id, metaverseObjectTypeId: mvo.Type?.Id),
                                 deprovisioningRule?.Id, deprovisioningRule?.Name);
-                            deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
+                            deletePendingExport.RecordStager(deletionItem.Id);
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
 
@@ -1212,7 +1212,7 @@ public class Worker : BackgroundService
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
-                            pendingExport.QueuedByRunProfileExecutionItemId = deprovisionItem.Id;
+                            pendingExport.RecordStager(deprovisionItem.Id);
                             queueingStamps.Add((pendingExport.Id, deprovisionItem.Id));
                             executionItems.Add(deprovisionItem);
                         }
@@ -1298,7 +1298,7 @@ public class Worker : BackgroundService
                             recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
                     }
 
-                    pendingExport.QueuedByRunProfileExecutionItemId = recallItem.Id;
+                    pendingExport.RecordStager(recallItem.Id);
                     queueingStamps.Add((pendingExport.Id, recallItem.Id));
                     executionItems.Add(recallItem);
                 }
