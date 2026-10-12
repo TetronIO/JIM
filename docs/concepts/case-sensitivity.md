@@ -1,3 +1,10 @@
+---
+title: Case Sensitivity
+description: The four questions JIM asks whenever it compares text, and how each treats upper and lower case.
+type: concept
+audience: administrator
+---
+
 # Case Sensitivity
 
 Whenever JIM compares two pieces of text, it is answering one of four questions. Each question has one rule, so once you know which question a comparison asks, you know how it treats case.

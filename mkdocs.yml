@@ -114,6 +114,7 @@ nav:
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Attribute Priority: concepts/attribute-priority.md
       - Passwords: concepts/passwords.md
+      - Password Synchronisation: concepts/password-synchronisation.md
       - Expressions: concepts/expressions.md
       - Case Sensitivity: concepts/case-sensitivity.md
       - Object Naming: concepts/object-naming.md

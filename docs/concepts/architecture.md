@@ -1,21 +1,28 @@
+---
+title: Architecture
+description: "How JIM is built: the Metaverse pattern, its containers and how they coordinate, its layers, and how it is deployed."
+type: concept
+audience: evaluator
+---
+
 # Architecture
 
-JIM is built around the **metaverse pattern**: a hub-and-spoke architecture where all identity data flows through a central authoritative repository. This page describes the pattern, the system components, and the layered software architecture.
+JIM is built around the **Metaverse pattern**: a hub-and-spoke architecture where all identity data flows through a central authoritative repository. This page describes the pattern, the system components, and the layered software architecture.
 
 ## The Metaverse Pattern
 
-At the heart of JIM is the **metaverse**: a centralised repository of identity objects. Rather than synchronising data directly between Connected Systems, every change flows through the metaverse. This provides:
+At the heart of JIM is the **Metaverse**: a centralised repository of identity objects. Rather than synchronising data directly between Connected Systems, every change flows through the Metaverse. This provides:
 
 - **Single source of truth**<br /> One authoritative record for each identity, assembled from multiple sources.
 - **Centralised governance**<br /> All data transformations, scoping decisions, and lifecycle rules are applied in one place.
-- **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the metaverse.
+- **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the Metaverse.
 - **Auditability**<br /> Every change is tracked as it passes through the hub.
 
 --8<-- "assets/diagrams/metaverse-pattern.svg"
 
 <p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
-**Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between Connected Systems.
+**Key principle**: All identity data flows through the Metaverse. JIM never synchronises directly between Connected Systems.
 
 ### Identities and the Metaverse
 
@@ -45,7 +52,7 @@ The web application provides both the **administrative user interface** (built w
 
 ### JIM.Worker
 
-The background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](passwords.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
+The background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
 
 --8<-- "assets/diagrams/worker-components.svg"
 
