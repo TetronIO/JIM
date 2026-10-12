@@ -26,14 +26,14 @@
 else if (InitiatedByType == ActivityInitiatorType.System)
 {
     <span class="@WrapperClass" data-testid="jim-initiator-system">
-        <MudIcon Icon="@Icons.Material.Filled.Dns" Class="mud-text-secondary" Size="@IconSize" />
+        <MudIcon Icon="@Helpers.GetInitiatorIcon(ActivityInitiatorType.System)" Class="mud-text-secondary" Size="@IconSize" />
         <span>System</span>
     </span>
 }
 else if (InitiatedByType == ActivityInitiatorType.User)
 {
     <span class="@WrapperClass" data-testid="jim-initiator-user">
-        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" Size="@IconSize" />
+        <MudIcon Icon="@Helpers.GetInitiatorIcon(ActivityInitiatorType.User)" Class="mud-text-secondary" Size="@IconSize" />
         @if (UserLink is { } userLink)
         {
             <MudLink Href="@userLink" Typo="Typo.inherit">@DisplayName</MudLink>
@@ -47,7 +47,7 @@ else if (InitiatedByType == ActivityInitiatorType.User)
 else if (InitiatedByType == ActivityInitiatorType.ApiKey)
 {
     <span class="@WrapperClass" data-testid="jim-initiator-api-key">
-        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mud-text-secondary" Size="@IconSize" />
+        <MudIcon Icon="@Helpers.GetInitiatorIcon(ActivityInitiatorType.ApiKey)" Class="mud-text-secondary" Size="@IconSize" />
         @if (InitiatedById is { } keyId)
         {
             <MudLink Href="@($"/admin/apikeys/{keyId}")" Typo="Typo.inherit">@(InitiatedByName ?? "API Key")</MudLink>
@@ -62,7 +62,7 @@ else if (InitiatedByType == ActivityInitiatorType.Anonymous)
 {
     @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
     <span class="@WrapperClass" data-testid="jim-initiator-anonymous">
-        <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mud-text-secondary" Size="@IconSize" />
+        <MudIcon Icon="@Helpers.GetInitiatorIcon(ActivityInitiatorType.Anonymous)" Class="mud-text-secondary" Size="@IconSize" />
         <span>Anonymous</span>
     </span>
 }
