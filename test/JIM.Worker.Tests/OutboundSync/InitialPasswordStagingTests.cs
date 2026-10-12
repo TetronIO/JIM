@@ -603,6 +603,56 @@ public class InitialPasswordStagingTests
         }
     }
 
+    /// <summary>
+    /// A delivery waits while the account has an export in flight (#2173), so the mark has to be written while the
+    /// export still is in flight: written after its Pending Export left <see cref="PendingExportStatus.Executing"/>, it
+    /// leaves a moment where the delivery reads neither the export nor the mark and enables the leaver.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateReportingItWroteTheEnabledState_MarksBeforeTheExportLeavesExecutingAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Update;
+        var owed = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+        var markedWhenTheStatusWasWritten = new List<bool>();
+        SyncRepo.OnPendingExportsUpdated = ids =>
+        {
+            if (ids.Contains(export.Id))
+                markedWhenTheStatusWasWritten.Add(SyncRepo.PendingPasswordChanges[owed.Id].EnabledStateSetByAttributeFlow);
+        };
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(markedWhenTheStatusWasWritten, Is.Not.Empty, "the export's status was written");
+            Assert.That(markedWhenTheStatusWasWritten, Has.All.True,
+                "the mark must be in place before the export stops counting as in flight");
+        }
+    }
+
+    /// <summary>
+    /// A Delete performed as a disable, against an account whose provisioning no import has confirmed yet, removes the
+    /// Connected System Object rather than leaving its export awaiting confirmation. Its owed first password is marked
+    /// all the same, before the object goes: a delivery in between would otherwise enable the account it disabled.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteDisablingAnUnconfirmedProvisionedAccount_MarksItsOwedFirstPasswordAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        export.ChangeType = PendingExportChangeType.Delete;
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var owed = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Pending, connectedSystemObjectId: cso.Id);
+
+        await ExportAsync(system, SucceededWritingTheEnabledState());
+
+        Assert.That(SyncRepo.PendingPasswordChanges[owed.Id].EnabledStateSetByAttributeFlow, Is.True);
+    }
+
     private static ConnectedSystemExportResult SucceededWritingTheEnabledState()
     {
         var result = ConnectedSystemExportResult.Succeeded();

@@ -89,6 +89,12 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Exception? FailActivityCreationWith { get; set; }
 
+    /// <summary>
+    /// Called with the ids <see cref="UpdatePendingExportsAsync"/> writes, so a test can see when an export's status is
+    /// written relative to the batch's other writes (#2173).
+    /// </summary>
+    public Action<IReadOnlyCollection<Guid>>? OnPendingExportsUpdated { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1958,8 +1964,14 @@ public class SyncRepository : ISyncRepository
     // event that makes state visible to fresh per-batch contexts in the parallel export path.
     public virtual Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
+        var written = new List<Guid>();
         foreach (var pe in pendingExports)
+        {
             _pendingExports[pe.Id] = pe;
+            written.Add(pe.Id);
+        }
+
+        OnPendingExportsUpdated?.Invoke(written);
         return Task.CompletedTask;
     }
 
@@ -2450,12 +2462,19 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(held);
     }
 
-    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId)
+    public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince)
     {
         // The stored row, not a claimed copy: that is the point of reading afresh.
         var holds = (await GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, [connectedSystemObjectId])).Contains(connectedSystemObjectId);
         var marked = _pendingPasswordChanges.TryGetValue(pendingPasswordChangeId, out var stored) && stored.EnabledStateSetByAttributeFlow;
-        return new AccountEnablementFacts(holds, marked);
+        // Read from the stored instances, which the engine mutates in memory before it persists them: closer to "now"
+        // than PostgreSQL's persisted status, so a test interleaving a delivery with an export should assert on the
+        // mark rather than on this fact.
+        var executing = GetPendingExportsForSystem(connectedSystemId)
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId && pe.Status == PendingExportStatus.Executing);
+        var stranded = executing?.LastAttemptedAt < exportsInFlightSince;
+        return new AccountEnablementFacts(holds, marked, executing != null && !stranded, stranded ? executing!.Id : null);
     }
 
     public Task<List<InitialPasswordHoldSummary>> GetInitialPasswordHoldSummariesAsync(int connectedSystemId)

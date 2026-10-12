@@ -1262,14 +1262,22 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// What a password delivery's enabled-state decision needs to know at the attempt (#2064), in one round trip:
-    /// whether the account holds an enable withheld until a password exists (as
-    /// <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> answers it), and whether the queued change
-    /// is marked as having its account's enabled state written by an export. Read afresh rather than taken from the
-    /// claimed row, because an export can mark the row, or withdraw the hold, while the lane works through the
-    /// accounts ahead of it.
+    /// What a password delivery's enabled-state decision needs to know at the attempt (#2064, #2173), in one round
+    /// trip: whether the account holds an enable withheld until a password exists (as
+    /// <see cref="GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync"/> answers it), whether the queued change is
+    /// marked as having its account's enabled state written by an export, and whether an export to the account is in
+    /// flight. Read afresh rather than taken from the claimed row, because an export can mark the row, or withdraw the
+    /// hold, while the lane works through the accounts ahead of it.
     /// </summary>
-    Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId);
+    /// <param name="connectedSystemId">The Connected System the account belongs to.</param>
+    /// <param name="pendingPasswordChangeId">The queued change being delivered.</param>
+    /// <param name="connectedSystemObjectId">The account.</param>
+    /// <param name="exportsInFlightSince">
+    /// The earliest time an export still Executing counts as in flight. One marked Executing before it has been there
+    /// longer than any batch takes, so it is reported as stranded rather than in flight.
+    /// </param>
+    Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
+        DateTime exportsInFlightSince);
 
     /// <summary>
     /// Every change on a Connected System held until an Initial Password is delivered
