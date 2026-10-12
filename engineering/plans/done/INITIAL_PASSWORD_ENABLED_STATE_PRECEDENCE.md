@@ -1,6 +1,7 @@
 # Initial Password Delivery Leaves the Enabled State to the Attribute Flows That Set It
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** Verified on Samba AD (Scenario 001 at Medium with an Initial Password: the Archived joiner stays disabled, the confirming import confirms). The Windows Active Directory lab run is still to do, together with #2039's, once the lab is reachable.
 - **Issue:** [#2064](https://github.com/TetronIO/JIM/issues/2064)
 - **Created:** 2026-10-12
 
@@ -106,22 +107,22 @@ A failed probe keeps the attempt as a transient failure; it never guesses.
 
 ## Implementation Phases
 
-### Phase 1: The decision and the row field
+### Phase 1: The decision and the row field ✅
 
 - Write the policy truth table test first (red), then `PasswordEnablementPolicy` and `AccountEnablementDecision`.
 - `PendingPasswordChange.EnabledStateSetByAttributeFlow`, `Supersede`, migration, bulk columns, UPSERT writers, and the in-memory twin.
 - `BulkInsertColumnCompletenessTests`, and a `RequiresPostgres` round trip through both UPSERTs and the mark UPDATE.
 
-### Phase 2: The export fact and stamping
+### Phase 2: The export fact and stamping ✅
 
 - LDAP Connector: Create, Update and Delete-as-Disable report `SetsAccountEnabledState` on the AD family, on both the sync and async paths.
 - `ExportExecutionServer`: the stamp at staging, and the mark for non-Create exports.
 
-### Phase 3: Delivery
+### Phase 3: Delivery ✅
 
 - `DeliverProvisionedAsync` and the Explicit/Propagated branch build `EnableAccount` from the policy, with the hold probe and the basis on the Activity.
 
-### Phase 4: Surfaces, documentation and integration
+### Phase 4: Surfaces, documentation and integration ✅
 
 - Help text on the portal, REST and PowerShell.
 - Public docs rewritten in place (MNT-1).
